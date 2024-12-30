@@ -278,35 +278,86 @@ export function registerRoutes(app: Express): Server {
 
       let response;
       if (orchestration) {
-        // Check if OpenAI client is available for orchestration
-        if (!openai) {
-          return res.status(400).json({ error: "OpenAI API key not configured for orchestration" });
+        // If OpenAI API is not configured, use Anthropic for orchestration instead
+        if (!openai && !DEEPSEEK_API_KEY) {
+          return res.status(400).json({ 
+            error: "Orchestration requires either OpenAI or DeepSeek API configuration",
+            suggestion: "Please try using single-agent mode or contact administrator to configure the APIs"
+          });
         }
 
-        // Use GPT-4 for orchestration decisions
-        const orchestrationResponse = await openai.chat.completions.create({
-          model: "gpt-4",
-          messages: [
-            {
-              role: "system",
-              content: `You are an AI orchestrator. Analyze the task and determine:
-                1. How to break it down into subtasks
-                2. Which types of agents to assign to each subtask
-                3. How the agents should coordinate
-                4. What the success criteria are for each subtask
-                Respond in JSON format with these components.`
-            },
-            {
-              role: "user",
-              content: userPrompt
+        let orchestrationPlan;
+        try {
+          if (openai) {
+            // Try OpenAI first
+            const orchestrationResponse = await openai.chat.completions.create({
+              model: "gpt-4",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are an AI orchestrator. Analyze the task and determine:
+                    1. How to break it down into subtasks
+                    2. Which types of agents to assign to each subtask
+                    3. How the agents should coordinate
+                    4. What the success criteria are for each subtask
+                    Respond in JSON format with these components.`
+                },
+                {
+                  role: "user",
+                  content: userPrompt
+                }
+              ],
+              response_format: { type: "json_object" }
+            });
+            orchestrationPlan = JSON.parse(orchestrationResponse.choices[0].message.content);
+          } else {
+            // Fallback to DeepSeek if OpenAI is not available
+            const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: "deepseek-chat",
+                messages: [
+                  {
+                    role: "system",
+                    content: `You are an AI orchestrator. Analyze the task and determine:
+                      1. How to break it down into subtasks
+                      2. Which types of agents to assign to each subtask
+                      3. How the agents should coordinate
+                      4. What the success criteria are for each subtask
+                      Respond in JSON format with these components.`
+                  },
+                  {
+                    role: "user",
+                    content: userPrompt
+                  }
+                ],
+                temperature: 0.7,
+                max_tokens: 1024
+              })
+            });
+
+            if (!deepseekResponse.ok) {
+              throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
             }
-          ],
-          response_format: { type: "json_object" }
-        });
 
-        const orchestrationPlan = JSON.parse(orchestrationResponse.choices[0].message.content);
+            const data = await deepseekResponse.json();
+            orchestrationPlan = JSON.parse(data.choices[0].message.content);
+          }
+        } catch (error) {
+          // If orchestration planning fails, inform the user and continue with single-agent mode
+          console.error('Orchestration planning failed:', error);
+          return res.status(503).json({
+            error: "Orchestration planning failed. This could be due to API rate limits or service unavailability.",
+            suggestion: "Please try again later or use single-agent mode for now.",
+            details: error.message
+          });
+        }
 
-        // Now execute the orchestration plan using the specified model
+        // Now execute the task with the specified model
         if (model === 'claude-3') {
           response = await anthropic.messages.create({
             model: "claude-3-5-sonnet-20241022",
@@ -404,7 +455,19 @@ export function registerRoutes(app: Express): Server {
       }
     } catch (error) {
       console.error('Error generating response:', error);
-      res.status(500).json({ error: "Failed to generate response" });
+      let errorMessage = "Failed to generate response";
+      let suggestion = "Please try again later";
+
+      if (error.code === "insufficient_quota") {
+        errorMessage = "API rate limit exceeded";
+        suggestion = "Please try again in a few minutes or switch to a different model";
+      }
+
+      res.status(500).json({ 
+        error: errorMessage,
+        suggestion,
+        details: error.message 
+      });
     }
   });
 

@@ -23,8 +23,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { HelpCircle } from "lucide-react";
+import { AlertCircle, HelpCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useMutation } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 const promptFormSchema = z.object({
   systemPrompt: z.string().min(1, "System prompt is required"),
@@ -39,6 +41,8 @@ type PromptForm = z.infer<typeof promptFormSchema>;
 export default function PromptPlayground() {
   const [response, setResponse] = useState<string>("");
   const [orchestrationPlan, setOrchestrationPlan] = useState<any>(null);
+  const [error, setError] = useState<{ message: string; suggestion: string } | null>(null);
+  const { toast } = useToast();
 
   const form = useForm<PromptForm>({
     resolver: zodResolver(promptFormSchema),
@@ -53,6 +57,7 @@ export default function PromptPlayground() {
 
   const generateMutation = useMutation({
     mutationFn: async (data: PromptForm) => {
+      setError(null);
       const res = await fetch("/api/prompts/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -61,9 +66,10 @@ export default function PromptPlayground() {
           orchestration: data.enableOrchestration,
         }),
       });
+
       if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error);
+        const errorData = await res.json();
+        throw new Error(JSON.stringify(errorData));
       }
       return res.json();
     },
@@ -71,9 +77,29 @@ export default function PromptPlayground() {
       setResponse(data.response);
       if (data.orchestrationPlan) {
         setOrchestrationPlan(data.orchestrationPlan);
+        toast({
+          title: "Orchestration Plan Generated",
+          description: "Task has been broken down and assigned to specialized agents.",
+        });
       } else {
         setOrchestrationPlan(null);
       }
+    },
+    onError: (error) => {
+      try {
+        const errorData = JSON.parse(error.message);
+        setError({
+          message: errorData.error,
+          suggestion: errorData.suggestion
+        });
+      } catch {
+        setError({
+          message: "An unexpected error occurred",
+          suggestion: "Please try again later"
+        });
+      }
+      setResponse("");
+      setOrchestrationPlan(null);
     },
   });
 
@@ -99,6 +125,14 @@ export default function PromptPlayground() {
         >
           <Card className="h-full">
             <CardContent className="pt-6">
+              {error && (
+                <Alert variant="destructive" className="mb-6">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>{error.message}</AlertTitle>
+                  <AlertDescription>{error.suggestion}</AlertDescription>
+                </Alert>
+              )}
+
               <Form {...form}>
                 <form
                   onSubmit={form.handleSubmit((data) =>
