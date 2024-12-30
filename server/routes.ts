@@ -1,14 +1,20 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { aiModels, companies, frameworks, workspaces, agentScripts } from "@db/schema";
+import { aiModels, companies, frameworks, workspaces, agentScripts, orchestrationPatterns } from "@db/schema";
 import { eq, like, or } from "drizzle-orm";
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from "openai";
 
 // the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+// OpenAI client for GPT-4 orchestration
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+}) : null;
 
 // DeepSeek API configuration
 const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
@@ -144,63 +150,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/prompts/generate", async (req, res) => {
-    try {
-      const { systemPrompt, userPrompt, model } = req.body;
-
-      let response;
-      if (model === 'claude-3') {
-        response = await anthropic.messages.create({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: `${systemPrompt}\n\n${userPrompt}`
-            }
-          ],
-        });
-
-        res.json({ response: response.content[0].text });
-      } else if (model === 'deepseek') {
-        const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: "deepseek-chat",
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt
-              },
-              {
-                role: "user",
-                content: userPrompt
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 1024
-          })
-        });
-
-        if (!deepseekResponse.ok) {
-          throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
-        }
-
-        const data = await deepseekResponse.json();
-        res.json({ response: data.choices[0].message.content });
-      } else {
-        res.status(400).json({ error: "Model not yet supported" });
-      }
-    } catch (error) {
-      console.error('Error generating response:', error);
-      res.status(500).json({ error: "Failed to generate response" });
-    }
-  });
-
   app.post("/api/workspaces", async (req, res) => {
     try {
       const newWorkspace = {
@@ -217,6 +166,7 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ error: "Failed to create workspace" });
     }
   });
+
 
   // Agent Scripts routes
   app.get("/api/agent-scripts", async (req, res) => {
@@ -292,6 +242,169 @@ export function registerRoutes(app: Express): Server {
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to create agent script" });
+    }
+  });
+
+  // Orchestration Patterns routes
+  app.get("/api/orchestration-patterns", async (req, res) => {
+    try {
+      const { category } = req.query;
+      let query = db.select().from(orchestrationPatterns);
+
+      if (category) {
+        query = query.where(eq(orchestrationPatterns.category, category as string));
+      }
+
+      const patterns = await query;
+      res.json(patterns);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch orchestration patterns" });
+    }
+  });
+
+  app.post("/api/orchestration-patterns", async (req, res) => {
+    try {
+      const result = await db.insert(orchestrationPatterns).values(req.body);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create orchestration pattern" });
+    }
+  });
+
+  // Enhanced prompt generation endpoint that supports agent orchestration
+  app.post("/api/prompts/generate", async (req, res) => {
+    try {
+      const { systemPrompt, userPrompt, model, orchestration } = req.body;
+
+      let response;
+      if (orchestration) {
+        // Check if OpenAI client is available for orchestration
+        if (!openai) {
+          return res.status(400).json({ error: "OpenAI API key not configured for orchestration" });
+        }
+
+        // Use GPT-4 for orchestration decisions
+        const orchestrationResponse = await openai.chat.completions.create({
+          model: "gpt-4",
+          messages: [
+            {
+              role: "system",
+              content: `You are an AI orchestrator. Analyze the task and determine:
+                1. How to break it down into subtasks
+                2. Which types of agents to assign to each subtask
+                3. How the agents should coordinate
+                4. What the success criteria are for each subtask
+                Respond in JSON format with these components.`
+            },
+            {
+              role: "user",
+              content: userPrompt
+            }
+          ],
+          response_format: { type: "json_object" }
+        });
+
+        const orchestrationPlan = JSON.parse(orchestrationResponse.choices[0].message.content);
+
+        // Now execute the orchestration plan using the specified model
+        if (model === 'claude-3') {
+          response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: 1024,
+            messages: [
+              {
+                role: 'user',
+                content: `${systemPrompt}\nOrchestration Plan: ${JSON.stringify(orchestrationPlan, null, 2)}\n\n${userPrompt}`
+              }
+            ],
+          });
+
+          res.json({ response: response.content[0].text, orchestrationPlan });
+        } else if (model === 'deepseek') {
+          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: "deepseek-chat",
+              messages: [
+                {
+                  role: "system",
+                  content: `${systemPrompt}\nOrchestration Plan: ${JSON.stringify(orchestrationPlan, null, 2)}`
+                },
+                {
+                  role: "user",
+                  content: userPrompt
+                }
+              ],
+              temperature: 0.7,
+              max_tokens: 1024
+            })
+          });
+
+          if (!deepseekResponse.ok) {
+            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+          }
+
+          const data = await deepseekResponse.json();
+          res.json({ response: data.choices[0].message.content, orchestrationPlan });
+        } else {
+          res.status(400).json({ error: "Model not yet supported" });
+        }
+      } else {
+        // Handle non-orchestration prompts as before
+        if (model === 'claude-3') {
+          response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: 1024,
+            messages: [
+              {
+                role: 'user',
+                content: `${systemPrompt}\n\n${userPrompt}`
+              }
+            ],
+          });
+
+          res.json({ response: response.content[0].text });
+        } else if (model === 'deepseek') {
+          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: "deepseek-chat",
+              messages: [
+                {
+                  role: "system",
+                  content: systemPrompt
+                },
+                {
+                  role: "user",
+                  content: userPrompt
+                }
+              ],
+              temperature: 0.7,
+              max_tokens: 1024
+            })
+          });
+
+          if (!deepseekResponse.ok) {
+            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+          }
+
+          const data = await deepseekResponse.json();
+          res.json({ response: data.choices[0].message.content });
+        } else {
+          res.status(400).json({ error: "Model not yet supported" });
+        }
+      }
+    } catch (error) {
+      console.error('Error generating response:', error);
+      res.status(500).json({ error: "Failed to generate response" });
     }
   });
 

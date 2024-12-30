@@ -61,11 +61,27 @@ export const agentScripts = pgTable("agent_scripts", {
   tags: jsonb("tags").notNull(),
 });
 
+export const orchestrationPatterns = pgTable("orchestration_patterns", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  pattern: jsonb("pattern").notNull(),
+  taskDecomposition: jsonb("task_decomposition").notNull(),
+  agentRoles: jsonb("agent_roles").notNull(),
+  coordinationRules: jsonb("coordination_rules").notNull(),
+  category: text("category").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export type AiModel = typeof aiModels.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type Framework = typeof frameworks.$inferSelect;
 export type Workspace = typeof workspaces.$inferSelect;
 export type AgentScript = typeof agentScripts.$inferSelect;
+export type OrchestrationPattern = typeof orchestrationPatterns.$inferSelect;
 
 export const insertAgentScriptSchema = createInsertSchema(agentScripts);
 export const selectAgentScriptSchema = createSelectSchema(agentScripts);
+export const insertOrchestrationPatternSchema = createInsertSchema(orchestrationPatterns);
+export const selectOrchestrationPatternSchema = createSelectSchema(orchestrationPatterns);

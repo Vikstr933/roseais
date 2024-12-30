@@ -9,6 +9,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormDescription,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useMutation } from "@tanstack/react-query";
 
 const promptFormSchema = z.object({
@@ -27,12 +29,14 @@ const promptFormSchema = z.object({
   userPrompt: z.string().min(1, "User prompt is required"),
   model: z.string().min(1, "Model selection is required"),
   temperature: z.number().min(0).max(1),
+  enableOrchestration: z.boolean().default(false),
 });
 
 type PromptForm = z.infer<typeof promptFormSchema>;
 
 export default function PromptPlayground() {
   const [response, setResponse] = useState<string>("");
+  const [orchestrationPlan, setOrchestrationPlan] = useState<any>(null);
 
   const form = useForm<PromptForm>({
     resolver: zodResolver(promptFormSchema),
@@ -41,6 +45,7 @@ export default function PromptPlayground() {
       userPrompt: "",
       model: "claude-3",
       temperature: 0.7,
+      enableOrchestration: false,
     },
   });
 
@@ -49,7 +54,10 @@ export default function PromptPlayground() {
       const res = await fetch("/api/prompts/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          orchestration: data.enableOrchestration,
+        }),
       });
       if (!res.ok) {
         const error = await res.text();
@@ -59,6 +67,11 @@ export default function PromptPlayground() {
     },
     onSuccess: (data) => {
       setResponse(data.response);
+      if (data.orchestrationPlan) {
+        setOrchestrationPlan(data.orchestrationPlan);
+      } else {
+        setOrchestrationPlan(null);
+      }
     },
   });
 
@@ -91,6 +104,29 @@ export default function PromptPlayground() {
                   )}
                   className="space-y-6"
                 >
+                  <FormField
+                    control={form.control}
+                    name="enableOrchestration"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">
+                            Enable Agent Orchestration
+                          </FormLabel>
+                          <FormDescription>
+                            Coordinate multiple AI agents to handle complex tasks
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
                   <FormField
                     control={form.control}
                     name="systemPrompt"
@@ -191,14 +227,27 @@ export default function PromptPlayground() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
         >
-          <Card className="h-full">
-            <CardContent className="pt-6">
-              <h3 className="text-lg font-semibold mb-4">Response Preview</h3>
-              <div className="bg-muted/50 rounded-lg p-4 min-h-[400px] whitespace-pre-wrap">
-                {response || "Response will appear here..."}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            {orchestrationPlan && (
+              <Card>
+                <CardContent className="pt-6">
+                  <h3 className="text-lg font-semibold mb-4">Orchestration Plan</h3>
+                  <pre className="bg-muted/50 rounded-lg p-4 overflow-auto whitespace-pre-wrap">
+                    {JSON.stringify(orchestrationPlan, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardContent className="pt-6">
+                <h3 className="text-lg font-semibold mb-4">Response Preview</h3>
+                <div className="bg-muted/50 rounded-lg p-4 min-h-[400px] whitespace-pre-wrap">
+                  {response || "Response will appear here..."}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </motion.div>
       </div>
     </div>
