@@ -643,11 +643,13 @@ export function registerRoutes(app: Express): Server {
 
   app.put("/api/agents/:id", async (req, res) => {
     try {
+      const { id: _, createdAt: __, updatedAt: ___, ...updateData } = req.body;
+
       const result = await db
         .update(agents)
         .set({
-          ...req.body,
-          updatedAt: new Date(),
+          ...updateData,
+          updatedAt: new Date(), // Ensure we're using a proper Date object
         })
         .where(eq(agents.id, parseInt(req.params.id)))
         .returning();
