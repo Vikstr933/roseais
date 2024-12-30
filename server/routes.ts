@@ -303,48 +303,76 @@ export function registerRoutes(app: Express): Server {
         Respond with only the complete HTML code.`;
 
         if (model === 'claude-3') {
-          response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 4096,
-            messages: [
-              {
-                role: 'user',
-                content: `${systemInstructions}\n\n${userPrompt}`
-              }
-            ],
-          });
-
-          res.json({ response: response.content[0].text });
-        } else if (model === 'deepseek') {
-          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: "deepseek-chat",
+          try {
+            response = await anthropic.messages.create({
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 4096,
               messages: [
                 {
-                  role: "system",
-                  content: systemInstructions
-                },
-                {
-                  role: "user",
-                  content: userPrompt
+                  role: 'user',
+                  content: `${systemInstructions}\n\n${userPrompt}`
                 }
               ],
-              temperature: 0.7,
-              max_tokens: 4096
-            })
-          });
+            });
 
-          if (!deepseekResponse.ok) {
-            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+            res.json({ response: response.content[0].text });
+          } catch (error: any) {
+            console.error('Anthropic API error:', error);
+            return res.status(503).json({
+              error: "Anthropic API temporarily unavailable",
+              suggestion: "Please try again in a few moments or switch to DeepSeek model",
+              details: error.message
+            });
           }
+        } else if (model === 'deepseek') {
+          try {
+            const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: "deepseek-chat",
+                messages: [
+                  {
+                    role: "system",
+                    content: systemInstructions
+                  },
+                  {
+                    role: "user",
+                    content: userPrompt
+                  }
+                ],
+                temperature: 0.7,
+                max_tokens: 4096
+              })
+            });
 
-          const data = await deepseekResponse.json();
-          res.json({ response: data.choices[0].message.content });
+            if (!deepseekResponse.ok) {
+              if (deepseekResponse.status === 429) {
+                throw new Error('Rate limit exceeded');
+              }
+              throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+            }
+
+            const data = await deepseekResponse.json();
+            res.json({ response: data.choices[0].message.content });
+          } catch (error: any) {
+            console.error('DeepSeek API error:', error);
+            const errorMessage = error.message.includes('Rate limit') 
+              ? "DeepSeek API rate limit exceeded" 
+              : "DeepSeek API temporarily unavailable";
+            const suggestion = error.message.includes('Rate limit')
+              ? "Please try again in a few minutes or switch to Claude model"
+              : "Please try again later or switch to Claude model";
+
+            return res.status(503).json({
+              error: errorMessage,
+              suggestion,
+              details: error.message
+            });
+          }
         } else {
           res.status(400).json({ error: "Model not yet supported" });
         }
@@ -358,155 +386,229 @@ export function registerRoutes(app: Express): Server {
 
         let orchestrationPlan;
         try {
-          // Use DeepSeek for orchestration planning
-          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: "deepseek-chat",
-              messages: [
-                {
-                  role: "system",
-                  content: `You are an AI orchestrator. Analyze the task and determine:
-                    1. How to break it down into subtasks
-                    2. Which types of agents to assign to each subtask
-                    3. How the agents should coordinate
-                    4. What the success criteria are for each subtask
-                    Respond in JSON format with these components.`
+          // Use DeepSeek for orchestration planning with retries
+          const maxRetries = 3;
+          let attempt = 0;
+          let lastError;
+
+          while (attempt < maxRetries) {
+            try {
+              const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                  'Content-Type': 'application/json',
                 },
-                {
-                  role: "user",
-                  content: userPrompt
+                body: JSON.stringify({
+                  model: "deepseek-chat",
+                  messages: [
+                    {
+                      role: "system",
+                      content: `You are an AI orchestrator. Analyze the task and determine:
+                        1. How to break it down into subtasks
+                        2. Which types of agents to assign to each subtask
+                        3. How the agents should coordinate
+                        4. What the success criteria are for each subtask
+                        Respond in JSON format with these components.`
+                    },
+                    {
+                      role: "user",
+                      content: userPrompt
+                    }
+                  ],
+                  temperature: 0.7,
+                  max_tokens: 1024
+                })
+              });
+
+              if (!deepseekResponse.ok) {
+                if (deepseekResponse.status === 429) {
+                  throw new Error('Rate limit exceeded');
                 }
-              ],
-              temperature: 0.7,
-              max_tokens: 1024
-            })
-          });
+                throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+              }
 
-          if (!deepseekResponse.ok) {
-            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+              const data = await deepseekResponse.json();
+              orchestrationPlan = JSON.parse(data.choices[0].message.content);
+              break; // Success, exit retry loop
+            } catch (error) {
+              lastError = error;
+              attempt++;
+              if (attempt === maxRetries) {
+                throw error;
+              }
+              // Wait before retrying, with exponential backoff
+              await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+            }
           }
-
-          const data = await deepseekResponse.json();
-          orchestrationPlan = JSON.parse(data.choices[0].message.content);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Orchestration planning failed:', error);
+          const isRateLimit = error.message.includes('Rate limit');
           return res.status(503).json({
-            error: "DeepSeek orchestration planning failed.",
-            suggestion: "Please try again in a few minutes or use single-agent mode for now.",
+            error: isRateLimit ? "DeepSeek API rate limit exceeded" : "DeepSeek orchestration planning failed",
+            suggestion: isRateLimit 
+              ? "Please try again in a few minutes or use single-agent mode for now"
+              : "Please try again later or use single-agent mode for now",
             details: error.message
           });
         }
 
         // Execute the task with the specified model
         if (model === 'claude-3') {
-          response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 1024,
-            messages: [
-              {
-                role: 'user',
-                content: `${systemPrompt}\nOrchestration Plan: ${JSON.stringify(orchestrationPlan, null, 2)}\n\n${userPrompt}`
-              }
-            ],
-          });
-
-          res.json({ response: response.content[0].text, orchestrationPlan });
-        } else if (model === 'deepseek') {
-          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: "deepseek-chat",
+          try {
+            response = await anthropic.messages.create({
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 1024,
               messages: [
                 {
-                  role: "system",
-                  content: `${systemPrompt}\nOrchestration Plan: ${JSON.stringify(orchestrationPlan, null, 2)}`
-                },
-                {
-                  role: "user",
-                  content: userPrompt
+                  role: 'user',
+                  content: `${systemPrompt}\nOrchestration Plan: ${JSON.stringify(orchestrationPlan, null, 2)}\n\n${userPrompt}`
                 }
               ],
-              temperature: 0.7,
-              max_tokens: 1024
-            })
-          });
+            });
 
-          if (!deepseekResponse.ok) {
-            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+            res.json({ response: response.content[0].text, orchestrationPlan });
+          } catch (error: any) {
+            console.error('Anthropic API error:', error);
+            return res.status(503).json({
+              error: "Anthropic API temporarily unavailable",
+              suggestion: "Please try again in a few moments or switch to DeepSeek model",
+              details: error.message
+            });
           }
+        } else if (model === 'deepseek') {
+          try {
+            const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: "deepseek-chat",
+                messages: [
+                  {
+                    role: "system",
+                    content: `${systemPrompt}\nOrchestration Plan: ${JSON.stringify(orchestrationPlan, null, 2)}`
+                  },
+                  {
+                    role: "user",
+                    content: userPrompt
+                  }
+                ],
+                temperature: 0.7,
+                max_tokens: 1024
+              })
+            });
 
-          const data = await deepseekResponse.json();
-          res.json({ response: data.choices[0].message.content, orchestrationPlan });
+            if (!deepseekResponse.ok) {
+              if (deepseekResponse.status === 429) {
+                throw new Error('Rate limit exceeded');
+              }
+              throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+            }
+
+            const data = await deepseekResponse.json();
+            res.json({ response: data.choices[0].message.content, orchestrationPlan });
+          } catch (error: any) {
+            console.error('DeepSeek API error:', error);
+            const errorMessage = error.message.includes('Rate limit') 
+              ? "DeepSeek API rate limit exceeded" 
+              : "DeepSeek API temporarily unavailable";
+            const suggestion = error.message.includes('Rate limit')
+              ? "Please try again in a few minutes or switch to Claude model"
+              : "Please try again later or switch to Claude model";
+
+            return res.status(503).json({
+              error: errorMessage,
+              suggestion,
+              details: error.message
+            });
+          }
         } else {
           res.status(400).json({ error: "Model not yet supported" });
         }
       } else {
         // Handle non-orchestration prompts
         if (model === 'claude-3') {
-          response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 1024,
-            messages: [
-              {
-                role: 'user',
-                content: `${systemPrompt}\n\n${userPrompt}`
-              }
-            ],
-          });
-
-          res.json({ response: response.content[0].text });
-        } else if (model === 'deepseek') {
-          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: "deepseek-chat",
+          try {
+            response = await anthropic.messages.create({
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 1024,
               messages: [
                 {
-                  role: "system",
-                  content: systemPrompt
-                },
-                {
-                  role: "user",
-                  content: userPrompt
+                  role: 'user',
+                  content: `${systemPrompt}\n\n${userPrompt}`
                 }
               ],
-              temperature: 0.7,
-              max_tokens: 1024
-            })
-          });
+            });
 
-          if (!deepseekResponse.ok) {
-            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+            res.json({ response: response.content[0].text });
+          } catch (error: any) {
+            console.error('Anthropic API error:', error);
+            return res.status(503).json({
+              error: "Anthropic API temporarily unavailable",
+              suggestion: "Please try again in a few moments or switch to DeepSeek model",
+              details: error.message
+            });
           }
+        } else if (model === 'deepseek') {
+          try {
+            const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: "deepseek-chat",
+                messages: [
+                  {
+                    role: "system",
+                    content: systemPrompt
+                  },
+                  {
+                    role: "user",
+                    content: userPrompt
+                  }
+                ],
+                temperature: 0.7,
+                max_tokens: 1024
+              })
+            });
 
-          const data = await deepseekResponse.json();
-          res.json({ response: data.choices[0].message.content });
+            if (!deepseekResponse.ok) {
+              if (deepseekResponse.status === 429) {
+                throw new Error('Rate limit exceeded');
+              }
+              throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+            }
+
+            const data = await deepseekResponse.json();
+            res.json({ response: data.choices[0].message.content });
+          } catch (error: any) {
+            console.error('DeepSeek API error:', error);
+            const errorMessage = error.message.includes('Rate limit') 
+              ? "DeepSeek API rate limit exceeded" 
+              : "DeepSeek API temporarily unavailable";
+            const suggestion = error.message.includes('Rate limit')
+              ? "Please try again in a few minutes or switch to Claude model"
+              : "Please try again later or switch to Claude model";
+
+            return res.status(503).json({
+              error: errorMessage,
+              suggestion,
+              details: error.message
+            });
+          }
         } else {
           res.status(400).json({ error: "Model not yet supported" });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating response:', error);
       let errorMessage = "Failed to generate response";
       let suggestion = "Please try again later";
-
-      if (error.message.includes('rate limit')) {
-        errorMessage = "DeepSeek API rate limit exceeded";
-        suggestion = "Please try again in a few minutes or switch to a different model";
-      }
 
       res.status(500).json({
         error: errorMessage,
