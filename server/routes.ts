@@ -21,25 +21,123 @@ type ModelStatus = {
   lastFailure?: Date;
   consecutiveFailures: number;
   averageLatency: number;
+  errorHistory: ErrorHistoryEntry[];
+};
+
+type ErrorHistoryEntry = {
+  timestamp: Date;
+  errorType: string;
+  context: string;
+  resolution?: string;
+  successful?: boolean;
+};
+
+type RecoverySuggestion = {
+  suggestion: string;
+  confidence: number;
+  alternativeAction?: string;
+  requiredWaitTime?: number;
 };
 
 const modelHealth = new Map<string, ModelStatus>();
 
-function updateModelHealth(model: string, success: boolean, latency: number) {
+function getContextualRecoverySuggestion(
+  error: Error,
+  model: string,
+  context: string
+): RecoverySuggestion {
+  const modelStatus = modelHealth.get(model);
+  const isRateLimit = error.message.toLowerCase().includes('rate limit');
+  const isTimeout = error.message.toLowerCase().includes('timeout');
+  const isAuthError = error.message.toLowerCase().includes('auth') || 
+                     error.message.toLowerCase().includes('unauthorized');
+
+  // Check recent error patterns
+  const recentErrors = modelStatus?.errorHistory.slice(-5) || [];
+  const similarErrors = recentErrors.filter(e => e.errorType === error.message);
+  const hasRepeatedErrors = similarErrors.length >= 2;
+
+  if (isRateLimit) {
+    const waitTime = hasRepeatedErrors ? 300000 : 60000; // 5 mins if repeated, 1 min otherwise
+    return {
+      suggestion: `Rate limit exceeded for ${model}. This typically requires waiting ${waitTime/1000} seconds before retrying.`,
+      confidence: 0.9,
+      alternativeAction: `Switch to ${model === 'claude-3' ? 'DeepSeek' : 'Claude-3'} model temporarily`,
+      requiredWaitTime: waitTime
+    };
+  }
+
+  if (isTimeout) {
+    return {
+      suggestion: "Request timed out. This could be due to high model load or complex prompt.",
+      confidence: 0.8,
+      alternativeAction: "Try breaking down your request into smaller parts or use a faster model",
+    };
+  }
+
+  if (isAuthError) {
+    return {
+      suggestion: "Authentication error detected. This usually indicates an API key issue or expired token.",
+      confidence: 0.95,
+      alternativeAction: "Verify API key configuration or switch to an alternative model",
+    };
+  }
+
+  // Default case - analyze historical patterns
+  if (hasRepeatedErrors) {
+    return {
+      suggestion: `${model} appears to be having persistent issues. Consider waiting or using an alternative model.`,
+      confidence: 0.7,
+      alternativeAction: `Switch to ${model === 'claude-3' ? 'DeepSeek' : 'Claude-3'} model`,
+      requiredWaitTime: 120000
+    };
+  }
+
+  return {
+    suggestion: "Temporary error occurred. This is likely a transient issue.",
+    confidence: 0.5,
+    alternativeAction: "Retry with exponential backoff",
+  };
+}
+
+function updateModelHealth(model: string, success: boolean, latency: number, error?: Error) {
   const status = modelHealth.get(model) || {
     model,
     status: 'available',
     consecutiveFailures: 0,
-    averageLatency: 0
+    averageLatency: 0,
+    errorHistory: []
   };
 
   if (success) {
     status.consecutiveFailures = 0;
     status.status = 'available';
     status.averageLatency = (status.averageLatency * 0.7) + (latency * 0.3); // Weighted average
+
+    // If there was a recent error that got resolved, mark it as successful
+    if (status.errorHistory.length > 0) {
+      const lastError = status.errorHistory[status.errorHistory.length - 1];
+      if (!lastError.successful) {
+        lastError.successful = true;
+        lastError.resolution = 'Recovered automatically';
+      }
+    }
   } else {
     status.consecutiveFailures++;
     status.lastFailure = new Date();
+
+    if (error) {
+      status.errorHistory.push({
+        timestamp: new Date(),
+        errorType: error.message,
+        context: `Attempt ${status.consecutiveFailures}`,
+      });
+
+      // Keep only last 10 errors
+      if (status.errorHistory.length > 10) {
+        status.errorHistory.shift();
+      }
+    }
 
     if (status.consecutiveFailures >= 5) {
       status.status = 'unavailable';
@@ -78,7 +176,15 @@ async function executeWithRecovery(
     } catch (error: any) {
       lastError = error;
       const latency = Date.now() - startTime;
-      updateModelHealth(currentModel, false, latency);
+      updateModelHealth(currentModel, false, latency, error);
+
+      // Get contextual recovery suggestion
+      const suggestion = getContextualRecoverySuggestion(error, currentModel, `Attempt ${attempt + 1}`);
+      console.log(`Recovery suggestion (${suggestion.confidence * 100}% confidence): ${suggestion.suggestion}`);
+
+      if (suggestion.requiredWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, suggestion.requiredWaitTime));
+      }
 
       attempt++;
       if (attempt === maxRetries) {
@@ -86,9 +192,15 @@ async function executeWithRecovery(
           // Try fallback model as last resort
           currentModel = fallbackModel;
           attempt = 0; // Reset attempts for fallback
-          console.log(`Switching to fallback model ${fallbackModel}`);
+          console.log(`Following alternative action: Switching to fallback model ${fallbackModel}`);
         } else {
-          throw error;
+          // Return a detailed error response
+          throw {
+            error: lastError.message,
+            suggestion: suggestion.suggestion,
+            alternativeAction: suggestion.alternativeAction,
+            modelStatus: modelHealth.get(currentModel)
+          };
         }
       } else {
         // Exponential backoff with jitter
