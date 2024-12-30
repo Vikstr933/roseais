@@ -3,6 +3,12 @@ import { createServer, type Server } from "http";
 import { db } from "@db";
 import { aiModels, companies, frameworks, workspaces } from "@db/schema";
 import { eq, like, or, and } from "drizzle-orm";
+import Anthropic from '@anthropic-ai/sdk';
+
+// the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
 
 export function registerRoutes(app: Express): Server {
   // GET routes
@@ -131,6 +137,38 @@ export function registerRoutes(app: Express): Server {
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to insert framework" });
+    }
+  });
+
+  app.post("/api/prompts/generate", async (req, res) => {
+    try {
+      const { systemPrompt, userPrompt, model } = req.body;
+
+      let response;
+      if (model === 'claude-3') {
+        response = await anthropic.messages.create({
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: userPrompt
+            }
+          ],
+        });
+
+        res.json({ response: response.content[0].text });
+      } else {
+        // Add other model implementations here
+        res.status(400).json({ error: "Model not yet supported" });
+      }
+    } catch (error) {
+      console.error('Error generating response:', error);
+      res.status(500).json({ error: "Failed to generate response" });
     }
   });
 

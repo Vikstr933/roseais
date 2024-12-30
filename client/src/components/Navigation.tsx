@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Brain, Code, Building2, Laptop } from "lucide-react";
+import { Brain, Code, Building2, Laptop, Terminal } from "lucide-react";
 import { Link } from "wouter";
 
 export function Navigation() {
@@ -23,6 +23,7 @@ export function Navigation() {
             <div className="hidden md:flex space-x-6">
               <NavLink href="/" icon={Brain} text="Models" />
               <NavLink href="/workspaces" icon={Laptop} text="Workspaces" />
+              <NavLink href="/playground" icon={Terminal} text="Playground" />
               <NavLink href="/companies" icon={Building2} text="Companies" />
               <NavLink href="/frameworks" icon={Code} text="Frameworks" />
             </div>
