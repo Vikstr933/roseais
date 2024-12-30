@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 export const aiModels = pgTable("ai_models", {
@@ -74,14 +74,33 @@ export const orchestrationPatterns = pgTable("orchestration_patterns", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const agents = pgTable("agents", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  role: text("role").notNull(),
+  model: text("model").notNull(),
+  systemPrompt: text("system_prompt").notNull(),
+  temperature: text("temperature").notNull(),
+  customInstructions: jsonb("custom_instructions"),
+  capabilities: jsonb("capabilities").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
 export type AiModel = typeof aiModels.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type Framework = typeof frameworks.$inferSelect;
 export type Workspace = typeof workspaces.$inferSelect;
 export type AgentScript = typeof agentScripts.$inferSelect;
 export type OrchestrationPattern = typeof orchestrationPatterns.$inferSelect;
+export type Agent = typeof agents.$inferSelect;
+export type InsertAgent = typeof agents.$inferInsert;
 
 export const insertAgentScriptSchema = createInsertSchema(agentScripts);
 export const selectAgentScriptSchema = createSelectSchema(agentScripts);
 export const insertOrchestrationPatternSchema = createInsertSchema(orchestrationPatterns);
 export const selectOrchestrationPatternSchema = createSelectSchema(orchestrationPatterns);
+export const insertAgentSchema = createInsertSchema(agents);
+export const selectAgentSchema = createSelectSchema(agents);

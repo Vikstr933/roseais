@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { aiModels, companies, frameworks, workspaces, agentScripts, orchestrationPatterns } from "@db/schema";
+import { aiModels, companies, frameworks, workspaces, agentScripts, orchestrationPatterns, agents } from "@db/schema";
 import { eq, like, or } from "drizzle-orm";
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from "openai";
@@ -405,6 +405,57 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error('Error generating response:', error);
       res.status(500).json({ error: "Failed to generate response" });
+    }
+  });
+
+  // Agent Management Routes
+  app.get("/api/agents", async (_req, res) => {
+    try {
+      const allAgents = await db.select().from(agents);
+      res.json(allAgents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch agents" });
+    }
+  });
+
+  app.post("/api/agents", async (req, res) => {
+    try {
+      const result = await db.insert(agents).values({
+        ...req.body,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create agent" });
+    }
+  });
+
+  app.put("/api/agents/:id", async (req, res) => {
+    try {
+      const result = await db
+        .update(agents)
+        .set({
+          ...req.body,
+          updatedAt: new Date(),
+        })
+        .where(eq(agents.id, parseInt(req.params.id)))
+        .returning();
+      res.json(result[0]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update agent" });
+    }
+  });
+
+  app.delete("/api/agents/:id", async (req, res) => {
+    try {
+      await db
+        .update(agents)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(agents.id, parseInt(req.params.id)));
+      res.json({ message: "Agent deactivated successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to deactivate agent" });
     }
   });
 

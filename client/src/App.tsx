@@ -3,6 +3,7 @@ import Home from "@/pages/Home";
 import Workspaces from "@/pages/Workspaces";
 import PromptPlayground from "@/pages/PromptPlayground";
 import AgentScripts from "@/pages/AgentScripts";
+import AgentManager from "@/pages/AgentManager";
 import { Navigation } from "@/components/Navigation";
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
         <Route path="/workspaces" component={Workspaces} />
         <Route path="/playground" component={PromptPlayground} />
         <Route path="/agent-scripts" component={AgentScripts} />
+        <Route path="/agent-manager" component={AgentManager} />
       </Switch>
     </div>
   );
