@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Form,
   FormControl,
@@ -20,21 +22,24 @@ import {
 } from "@/components/ui/select";
 import { useMutation } from "@tanstack/react-query";
 
-interface PromptForm {
-  systemPrompt: string;
-  userPrompt: string;
-  model: string;
-  temperature: number;
-}
+const promptFormSchema = z.object({
+  systemPrompt: z.string().min(1, "System prompt is required"),
+  userPrompt: z.string().min(1, "User prompt is required"),
+  model: z.string().min(1, "Model selection is required"),
+  temperature: z.number().min(0).max(1),
+});
+
+type PromptForm = z.infer<typeof promptFormSchema>;
 
 export default function PromptPlayground() {
   const [response, setResponse] = useState<string>("");
 
   const form = useForm<PromptForm>({
+    resolver: zodResolver(promptFormSchema),
     defaultValues: {
       systemPrompt: "You are a helpful AI assistant.",
       userPrompt: "",
-      model: "gpt-4",
+      model: "claude-3",
       temperature: 0.7,
     },
   });
@@ -46,7 +51,10 @@ export default function PromptPlayground() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to generate response");
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -134,9 +142,8 @@ export default function PromptPlayground() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="gpt-4">GPT-4</SelectItem>
                               <SelectItem value="claude-3">Claude 3</SelectItem>
-                              <SelectItem value="llama-2">LLaMA 2</SelectItem>
+                              <SelectItem value="deepseek">DeepSeek</SelectItem>
                             </SelectContent>
                           </Select>
                         </FormItem>

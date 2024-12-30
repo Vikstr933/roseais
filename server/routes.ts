@@ -2,13 +2,17 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
 import { aiModels, companies, frameworks, workspaces } from "@db/schema";
-import { eq, like, or, and } from "drizzle-orm";
+import { eq, like, or } from "drizzle-orm";
 import Anthropic from '@anthropic-ai/sdk';
 
 // the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+// DeepSeek API configuration
+const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 export function registerRoutes(app: Express): Server {
   // GET routes
@@ -151,19 +155,44 @@ export function registerRoutes(app: Express): Server {
           max_tokens: 1024,
           messages: [
             {
-              role: 'system',
-              content: systemPrompt
-            },
-            {
               role: 'user',
-              content: userPrompt
+              content: `${systemPrompt}\n\n${userPrompt}`
             }
           ],
         });
 
         res.json({ response: response.content[0].text });
+      } else if (model === 'deepseek') {
+        const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt
+              },
+              {
+                role: "user",
+                content: userPrompt
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 1024
+          })
+        });
+
+        if (!deepseekResponse.ok) {
+          throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+        }
+
+        const data = await deepseekResponse.json();
+        res.json({ response: data.choices[0].message.content });
       } else {
-        // Add other model implementations here
         res.status(400).json({ error: "Model not yet supported" });
       }
     } catch (error) {
