@@ -14,6 +14,94 @@ const anthropic = new Anthropic({
 const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
+// Recovery and orchestration utilities
+type ModelStatus = {
+  model: string;
+  status: 'available' | 'degraded' | 'unavailable';
+  lastFailure?: Date;
+  consecutiveFailures: number;
+  averageLatency: number;
+};
+
+const modelHealth = new Map<string, ModelStatus>();
+
+function updateModelHealth(model: string, success: boolean, latency: number) {
+  const status = modelHealth.get(model) || {
+    model,
+    status: 'available',
+    consecutiveFailures: 0,
+    averageLatency: 0
+  };
+
+  if (success) {
+    status.consecutiveFailures = 0;
+    status.status = 'available';
+    status.averageLatency = (status.averageLatency * 0.7) + (latency * 0.3); // Weighted average
+  } else {
+    status.consecutiveFailures++;
+    status.lastFailure = new Date();
+
+    if (status.consecutiveFailures >= 5) {
+      status.status = 'unavailable';
+    } else if (status.consecutiveFailures >= 2) {
+      status.status = 'degraded';
+    }
+  }
+
+  modelHealth.set(model, status);
+}
+
+async function executeWithRecovery(
+  primaryModel: string,
+  fallbackModel: string,
+  action: (model: string) => Promise<any>,
+  maxRetries = 3
+): Promise<any> {
+  const startTime = Date.now();
+  let currentModel = primaryModel;
+  let attempt = 0;
+  let lastError;
+
+  while (attempt < maxRetries) {
+    try {
+      // Check model health before attempting
+      const health = modelHealth.get(currentModel);
+      if (health?.status === 'unavailable') {
+        console.log(`Model ${currentModel} is unavailable, switching to ${fallbackModel}`);
+        currentModel = fallbackModel;
+      }
+
+      const result = await action(currentModel);
+      const latency = Date.now() - startTime;
+      updateModelHealth(currentModel, true, latency);
+      return result;
+    } catch (error: any) {
+      lastError = error;
+      const latency = Date.now() - startTime;
+      updateModelHealth(currentModel, false, latency);
+
+      attempt++;
+      if (attempt === maxRetries) {
+        if (currentModel === primaryModel && fallbackModel) {
+          // Try fallback model as last resort
+          currentModel = fallbackModel;
+          attempt = 0; // Reset attempts for fallback
+          console.log(`Switching to fallback model ${fallbackModel}`);
+        } else {
+          throw error;
+        }
+      } else {
+        // Exponential backoff with jitter
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 1000, 10000);
+        console.log(`Retrying ${currentModel} in ${Math.round(backoffMs)}ms (attempt ${attempt})`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export function registerRoutes(app: Express): Server {
   // GET routes
   app.get("/api/models", async (req, res) => {
@@ -270,111 +358,99 @@ export function registerRoutes(app: Express): Server {
     try {
       const { systemPrompt, userPrompt, model, orchestration } = req.body;
 
-      let response;
       if (userPrompt.toLowerCase().includes("landing page") || userPrompt.toLowerCase().includes("link in bio")) {
         const systemInstructions = `You are a web development expert. When asked to create a landing page or link-in-bio page:
-        1. Generate clean, modern HTML with inline Tailwind CSS
-        2. Use semantic HTML5 elements
-        3. Ensure the page is responsive
-        4. Include placeholder images using https://placehold.co/
-        5. Make the design visually appealing and professional
-        6. Add smooth animations using Framer Motion
-        7. Ensure proper color contrast - never use light text on light backgrounds or dark text on dark backgrounds
-        8. Use a consistent color scheme
-        9. Include proper viewport meta tags and content scaling
-        10. Only output the HTML code without any markdown or explanation
+          1. Generate clean, modern HTML with inline Tailwind CSS
+          2. Use semantic HTML5 elements
+          3. Ensure the page is responsive
+          4. Include placeholder images using https://placehold.co/
+          5. Make the design visually appealing and professional
+          6. Add smooth animations using Framer Motion
+          7. Ensure proper color contrast - never use light text on light backgrounds or dark text on dark backgrounds
+          8. Use a consistent color scheme
+          9. Include proper viewport meta tags and content scaling
+          10. Only output the HTML code without any markdown or explanation
 
-        Here's the base template to start with:
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <script src="https://unpkg.com/framer-motion@latest/dist/framer-motion.js"></script>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <style>
-              /* Ensure text contrast */
-              .text-on-dark { color: rgb(229 231 235); }
-              .text-on-light { color: rgb(17 24 39); }
-            </style>
-        </head>
-        <body>
+          Here's the base template to start with:
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <script src="https://unpkg.com/framer-motion@latest/dist/framer-motion.js"></script>
+              <script src="https://cdn.tailwindcss.com"></script>
+              <style>
+                /* Ensure text contrast */
+                .text-on-dark { color: rgb(229 231 235); }
+                .text-on-light { color: rgb(17 24 39); }
+              </style>
+          </head>
+          <body>
 
-        Respond with only the complete HTML code.`;
+          Respond with only the complete HTML code.`;
 
-        if (model === 'claude-3') {
-          try {
-            response = await anthropic.messages.create({
-              model: "claude-3-5-sonnet-20241022",
-              max_tokens: 4096,
-              messages: [
-                {
-                  role: 'user',
-                  content: `${systemInstructions}\n\n${userPrompt}`
-                }
-              ],
-            });
-
-            res.json({ response: response.content[0].text });
-          } catch (error: any) {
-            console.error('Anthropic API error:', error);
-            return res.status(503).json({
-              error: "Anthropic API temporarily unavailable",
-              suggestion: "Please try again in a few moments or switch to DeepSeek model",
-              details: error.message
-            });
-          }
-        } else if (model === 'deepseek') {
-          try {
-            const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: "deepseek-chat",
-                messages: [
-                  {
-                    role: "system",
-                    content: systemInstructions
+        try {
+          const result = await executeWithRecovery(
+            model,
+            model === 'claude-3' ? 'deepseek' : 'claude-3',
+            async (currentModel) => {
+              if (currentModel === 'claude-3') {
+                const response = await anthropic.messages.create({
+                  model: "claude-3-5-sonnet-20241022",
+                  max_tokens: 4096,
+                  messages: [
+                    {
+                      role: 'user',
+                      content: `${systemInstructions}\n\n${userPrompt}`
+                    }
+                  ],
+                });
+                return { response: response.content[0].text };
+              } else {
+                const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                    'Content-Type': 'application/json',
                   },
-                  {
-                    role: "user",
-                    content: userPrompt
+                  body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                      {
+                        role: "system",
+                        content: systemInstructions
+                      },
+                      {
+                        role: "user",
+                        content: userPrompt
+                      }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 4096
+                  })
+                });
+
+                if (!deepseekResponse.ok) {
+                  if (deepseekResponse.status === 429) {
+                    throw new Error('Rate limit exceeded');
                   }
-                ],
-                temperature: 0.7,
-                max_tokens: 4096
-              })
-            });
+                  throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+                }
 
-            if (!deepseekResponse.ok) {
-              if (deepseekResponse.status === 429) {
-                throw new Error('Rate limit exceeded');
+                const data = await deepseekResponse.json();
+                return { response: data.choices[0].message.content };
               }
-              throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
             }
+          );
 
-            const data = await deepseekResponse.json();
-            res.json({ response: data.choices[0].message.content });
-          } catch (error: any) {
-            console.error('DeepSeek API error:', error);
-            const errorMessage = error.message.includes('Rate limit') 
-              ? "DeepSeek API rate limit exceeded" 
-              : "DeepSeek API temporarily unavailable";
-            const suggestion = error.message.includes('Rate limit')
-              ? "Please try again in a few minutes or switch to Claude model"
-              : "Please try again later or switch to Claude model";
-
-            return res.status(503).json({
-              error: errorMessage,
-              suggestion,
-              details: error.message
-            });
-          }
-        } else {
-          res.status(400).json({ error: "Model not yet supported" });
+          res.json(result);
+        } catch (error: any) {
+          console.error('All recovery attempts failed:', error);
+          return res.status(503).json({
+            error: "All available models are currently unavailable",
+            suggestion: "Please try again in a few minutes",
+            details: error.message
+          });
         }
       } else if (orchestration) {
         if (!DEEPSEEK_API_KEY) {
@@ -446,7 +522,7 @@ export function registerRoutes(app: Express): Server {
           const isRateLimit = error.message.includes('Rate limit');
           return res.status(503).json({
             error: isRateLimit ? "DeepSeek API rate limit exceeded" : "DeepSeek orchestration planning failed",
-            suggestion: isRateLimit 
+            suggestion: isRateLimit
               ? "Please try again in a few minutes or use single-agent mode for now"
               : "Please try again later or use single-agent mode for now",
             details: error.message
@@ -456,7 +532,7 @@ export function registerRoutes(app: Express): Server {
         // Execute the task with the specified model
         if (model === 'claude-3') {
           try {
-            response = await anthropic.messages.create({
+            const response = await anthropic.messages.create({
               model: "claude-3-5-sonnet-20241022",
               max_tokens: 1024,
               messages: [
@@ -512,8 +588,8 @@ export function registerRoutes(app: Express): Server {
             res.json({ response: data.choices[0].message.content, orchestrationPlan });
           } catch (error: any) {
             console.error('DeepSeek API error:', error);
-            const errorMessage = error.message.includes('Rate limit') 
-              ? "DeepSeek API rate limit exceeded" 
+            const errorMessage = error.message.includes('Rate limit')
+              ? "DeepSeek API rate limit exceeded"
               : "DeepSeek API temporarily unavailable";
             const suggestion = error.message.includes('Rate limit')
               ? "Please try again in a few minutes or switch to Claude model"
@@ -532,7 +608,7 @@ export function registerRoutes(app: Express): Server {
         // Handle non-orchestration prompts
         if (model === 'claude-3') {
           try {
-            response = await anthropic.messages.create({
+            const response = await anthropic.messages.create({
               model: "claude-3-5-sonnet-20241022",
               max_tokens: 1024,
               messages: [
@@ -588,8 +664,8 @@ export function registerRoutes(app: Express): Server {
             res.json({ response: data.choices[0].message.content });
           } catch (error: any) {
             console.error('DeepSeek API error:', error);
-            const errorMessage = error.message.includes('Rate limit') 
-              ? "DeepSeek API rate limit exceeded" 
+            const errorMessage = error.message.includes('Rate limit')
+              ? "DeepSeek API rate limit exceeded"
               : "DeepSeek API temporarily unavailable";
             const suggestion = error.message.includes('Rate limit')
               ? "Please try again in a few minutes or switch to Claude model"
