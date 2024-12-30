@@ -4,17 +4,11 @@ import { db } from "@db";
 import { aiModels, companies, frameworks, workspaces, agentScripts, orchestrationPatterns, agents } from "@db/schema";
 import { eq, like, or } from "drizzle-orm";
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from "openai";
 
 // the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
-
-// OpenAI client for GPT-4 orchestration
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-}) : null;
 
 // DeepSeek API configuration
 const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
@@ -271,27 +265,31 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Enhanced prompt generation endpoint that supports agent orchestration
+  // POST endpoint for prompt generation and orchestration
   app.post("/api/prompts/generate", async (req, res) => {
     try {
       const { systemPrompt, userPrompt, model, orchestration } = req.body;
 
       let response;
       if (orchestration) {
-        // If OpenAI API is not configured, use Anthropic for orchestration instead
-        if (!openai && !DEEPSEEK_API_KEY) {
+        if (!DEEPSEEK_API_KEY) {
           return res.status(400).json({ 
-            error: "Orchestration requires either OpenAI or DeepSeek API configuration",
-            suggestion: "Please try using single-agent mode or contact administrator to configure the APIs"
+            error: "DeepSeek API configuration required for orchestration",
+            suggestion: "Please contact administrator to configure the DeepSeek API"
           });
         }
 
         let orchestrationPlan;
         try {
-          if (openai) {
-            // Try OpenAI first
-            const orchestrationResponse = await openai.chat.completions.create({
-              model: "gpt-4",
+          // Use DeepSeek for orchestration planning
+          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: "deepseek-chat",
               messages: [
                 {
                   role: "system",
@@ -307,57 +305,27 @@ export function registerRoutes(app: Express): Server {
                   content: userPrompt
                 }
               ],
-              response_format: { type: "json_object" }
-            });
-            orchestrationPlan = JSON.parse(orchestrationResponse.choices[0].message.content);
-          } else {
-            // Fallback to DeepSeek if OpenAI is not available
-            const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: "deepseek-chat",
-                messages: [
-                  {
-                    role: "system",
-                    content: `You are an AI orchestrator. Analyze the task and determine:
-                      1. How to break it down into subtasks
-                      2. Which types of agents to assign to each subtask
-                      3. How the agents should coordinate
-                      4. What the success criteria are for each subtask
-                      Respond in JSON format with these components.`
-                  },
-                  {
-                    role: "user",
-                    content: userPrompt
-                  }
-                ],
-                temperature: 0.7,
-                max_tokens: 1024
-              })
-            });
+              temperature: 0.7,
+              max_tokens: 1024
+            })
+          });
 
-            if (!deepseekResponse.ok) {
-              throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
-            }
-
-            const data = await deepseekResponse.json();
-            orchestrationPlan = JSON.parse(data.choices[0].message.content);
+          if (!deepseekResponse.ok) {
+            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
           }
+
+          const data = await deepseekResponse.json();
+          orchestrationPlan = JSON.parse(data.choices[0].message.content);
         } catch (error) {
-          // If orchestration planning fails, inform the user and continue with single-agent mode
           console.error('Orchestration planning failed:', error);
           return res.status(503).json({
-            error: "Orchestration planning failed. This could be due to API rate limits or service unavailability.",
-            suggestion: "Please try again later or use single-agent mode for now.",
+            error: "DeepSeek orchestration planning failed.",
+            suggestion: "Please try again in a few minutes or use single-agent mode for now.",
             details: error.message
           });
         }
 
-        // Now execute the task with the specified model
+        // Execute the task with the specified model
         if (model === 'claude-3') {
           response = await anthropic.messages.create({
             model: "claude-3-5-sonnet-20241022",
@@ -405,7 +373,7 @@ export function registerRoutes(app: Express): Server {
           res.status(400).json({ error: "Model not yet supported" });
         }
       } else {
-        // Handle non-orchestration prompts as before
+        // Handle non-orchestration prompts
         if (model === 'claude-3') {
           response = await anthropic.messages.create({
             model: "claude-3-5-sonnet-20241022",
@@ -458,8 +426,8 @@ export function registerRoutes(app: Express): Server {
       let errorMessage = "Failed to generate response";
       let suggestion = "Please try again later";
 
-      if (error.code === "insufficient_quota") {
-        errorMessage = "API rate limit exceeded";
+      if (error.message.includes('rate limit')) {
+        errorMessage = "DeepSeek API rate limit exceeded";
         suggestion = "Please try again in a few minutes or switch to a different model";
       }
 
