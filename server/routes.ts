@@ -271,9 +271,65 @@ export function registerRoutes(app: Express): Server {
       const { systemPrompt, userPrompt, model, orchestration } = req.body;
 
       let response;
-      if (orchestration) {
+      if (userPrompt.toLowerCase().includes("landing page") || userPrompt.toLowerCase().includes("link in bio")) {
+        const systemInstructions = `You are a web development expert. When asked to create a landing page or link-in-bio page:
+        1. Generate clean, modern HTML with inline Tailwind CSS
+        2. Use semantic HTML5 elements
+        3. Ensure the page is responsive
+        4. Include placeholder images using https://placehold.co/
+        5. Make the design visually appealing and professional
+        6. Only output the HTML code without any markdown or explanation
+        Respond with only the HTML code.`;
+
+        if (model === 'claude-3') {
+          response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: 4096,
+            messages: [
+              {
+                role: 'user',
+                content: `${systemInstructions}\n\n${userPrompt}`
+              }
+            ],
+          });
+
+          res.json({ response: response.content[0].text });
+        } else if (model === 'deepseek') {
+          const deepseekResponse = await fetch(DEEPSEEK_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: "deepseek-chat",
+              messages: [
+                {
+                  role: "system",
+                  content: systemInstructions
+                },
+                {
+                  role: "user",
+                  content: userPrompt
+                }
+              ],
+              temperature: 0.7,
+              max_tokens: 4096
+            })
+          });
+
+          if (!deepseekResponse.ok) {
+            throw new Error(`DeepSeek API error: ${deepseekResponse.statusText}`);
+          }
+
+          const data = await deepseekResponse.json();
+          res.json({ response: data.choices[0].message.content });
+        } else {
+          res.status(400).json({ error: "Model not yet supported" });
+        }
+      } else if (orchestration) {
         if (!DEEPSEEK_API_KEY) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             error: "DeepSeek API configuration required for orchestration",
             suggestion: "Please contact administrator to configure the DeepSeek API"
           });
@@ -431,10 +487,10 @@ export function registerRoutes(app: Express): Server {
         suggestion = "Please try again in a few minutes or switch to a different model";
       }
 
-      res.status(500).json({ 
+      res.status(500).json({
         error: errorMessage,
         suggestion,
-        details: error.message 
+        details: error.message
       });
     }
   });

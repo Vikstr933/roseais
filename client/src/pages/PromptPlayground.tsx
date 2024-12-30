@@ -23,10 +23,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, HelpCircle } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const promptFormSchema = z.object({
   systemPrompt: z.string().min(1, "System prompt is required"),
@@ -102,6 +103,11 @@ export default function PromptPlayground() {
       setOrchestrationPlan(null);
     },
   });
+
+  // Function to safely render HTML content
+  const createMarkup = (html: string) => {
+    return { __html: html };
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -232,7 +238,7 @@ export default function PromptPlayground() {
                         <FormControl>
                           <Textarea
                             placeholder={form.watch("enableOrchestration")
-                              ? "Example: Research and analyze the impact of AI on healthcare, including current applications, future potential, and ethical considerations."
+                              ? "Example: Create a modern landing page for a SaaS product with hero section, features, and pricing."
                               : "Enter your prompt here..."
                             }
                             className="min-h-[150px] resize-none"
@@ -335,9 +341,39 @@ export default function PromptPlayground() {
             <Card>
               <CardContent className="pt-6">
                 <h3 className="text-lg font-semibold mb-4">Response Preview</h3>
-                <div className="bg-muted/50 rounded-lg p-4 min-h-[400px] whitespace-pre-wrap">
-                  {response || "Response will appear here..."}
-                </div>
+                <Tabs defaultValue="raw">
+                  <TabsList className="mb-4">
+                    <TabsTrigger value="raw" className="flex items-center gap-2">
+                      <Code className="h-4 w-4" />
+                      Raw
+                    </TabsTrigger>
+                    <TabsTrigger value="preview" className="flex items-center gap-2">
+                      <Eye className="h-4 w-4" />
+                      Preview
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="raw">
+                    <div className="bg-muted/50 rounded-lg p-4 min-h-[400px] whitespace-pre-wrap">
+                      {response || "Response will appear here..."}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="preview">
+                    <div className="bg-white rounded-lg min-h-[400px] border">
+                      {response ? (
+                        <div
+                          className="w-full h-full"
+                          dangerouslySetInnerHTML={createMarkup(response)}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+                          Preview will appear here...
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </div>
