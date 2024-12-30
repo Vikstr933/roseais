@@ -597,7 +597,23 @@ export function registerRoutes(app: Express): Server {
                         2. Which types of agents to assign to each subtask
                         3. How the agents should coordinate
                         4. What the success criteria are for each subtask
-                        Respond in JSON format with these components.`
+
+                        Respond in JSON format with these components:
+                        {
+                          "subtasks": [
+                            {
+                              "task": "Description of the subtask",
+                              "agent": "Type of specialized agent (e.g., 'Research Agent', 'Code Generator')",
+                              "dependencies": ["Task IDs this subtask depends on"],
+                              "status": "pending",
+                              "success_criteria": "What defines successful completion"
+                            }
+                          ],
+                          "coordination": {
+                            "type": "sequential|parallel",
+                            "communication_protocol": "How agents should share information"
+                          }
+                        }`
                     },
                     {
                       role: "user",

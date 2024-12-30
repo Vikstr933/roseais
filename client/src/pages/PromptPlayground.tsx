@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code, RefreshCw } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, RefreshCw, Network } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -108,6 +108,59 @@ export default function PromptPlayground() {
   // Function to safely render HTML content with a unique key for forcing refresh
   const createMarkup = (html: string) => {
     return { __html: html };
+  };
+
+  // Function to render the agent workflow visualization
+  const renderAgentWorkflow = (plan: any) => {
+    if (!plan) return null;
+
+    return (
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Network className="h-5 w-5" />
+            <h3 className="text-lg font-semibold">Agent Workflow Visualization</h3>
+          </div>
+          <div className="bg-muted/50 rounded-lg p-4">
+            <div className="grid gap-4">
+              {plan.subtasks?.map((subtask: any, index: number) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-card p-4 rounded-lg border"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-medium mb-1">Agent {index + 1}: {subtask.agent}</h4>
+                      <p className="text-sm text-muted-foreground">{subtask.task}</p>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {subtask.status && (
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          subtask.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          subtask.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {subtask.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {subtask.dependencies?.length > 0 && (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      <span className="font-medium">Dependencies:</span>{" "}
+                      {subtask.dependencies.join(", ")}
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -323,21 +376,7 @@ export default function PromptPlayground() {
           animate={{ opacity: 1, x: 0 }}
         >
           <div className="space-y-6">
-            {orchestrationPlan && (
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Orchestration Plan</h3>
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      This plan shows how your task has been broken down and distributed among specialized AI agents:
-                    </p>
-                    <pre className="overflow-auto whitespace-pre-wrap">
-                      {JSON.stringify(orchestrationPlan, null, 2)}
-                    </pre>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {orchestrationPlan && renderAgentWorkflow(orchestrationPlan)}
 
             <Card>
               <CardContent className="pt-6">
