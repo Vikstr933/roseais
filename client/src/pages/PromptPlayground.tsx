@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +44,7 @@ export default function PromptPlayground() {
   const [orchestrationPlan, setOrchestrationPlan] = useState<any>(null);
   const [error, setError] = useState<{ message: string; suggestion: string } | null>(null);
   const { toast } = useToast();
+  const [previewKey, setPreviewKey] = useState<number>(0);
 
   const form = useForm<PromptForm>({
     resolver: zodResolver(promptFormSchema),
@@ -104,7 +105,7 @@ export default function PromptPlayground() {
     },
   });
 
-  // Function to safely render HTML content
+  // Function to safely render HTML content with a unique key for forcing refresh
   const createMarkup = (html: string) => {
     return { __html: html };
   };
@@ -360,9 +361,20 @@ export default function PromptPlayground() {
                   </TabsContent>
 
                   <TabsContent value="preview">
-                    <div className="bg-white rounded-lg min-h-[400px] border">
+                    <div className="bg-white rounded-lg min-h-[400px] border relative">
+                      <div className="absolute top-2 right-2 z-10">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPreviewKey(prev => prev + 1)}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Refresh Preview
+                        </Button>
+                      </div>
                       {response ? (
                         <div
+                          key={previewKey}
                           className="w-full h-full"
                           dangerouslySetInnerHTML={createMarkup(response)}
                         />

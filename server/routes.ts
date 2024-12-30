@@ -278,8 +278,29 @@ export function registerRoutes(app: Express): Server {
         3. Ensure the page is responsive
         4. Include placeholder images using https://placehold.co/
         5. Make the design visually appealing and professional
-        6. Only output the HTML code without any markdown or explanation
-        Respond with only the HTML code.`;
+        6. Add smooth animations using Framer Motion
+        7. Ensure proper color contrast - never use light text on light backgrounds or dark text on dark backgrounds
+        8. Use a consistent color scheme
+        9. Include proper viewport meta tags and content scaling
+        10. Only output the HTML code without any markdown or explanation
+
+        Here's the base template to start with:
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <script src="https://unpkg.com/framer-motion@latest/dist/framer-motion.js"></script>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              /* Ensure text contrast */
+              .text-on-dark { color: rgb(229 231 235); }
+              .text-on-light { color: rgb(17 24 39); }
+            </style>
+        </head>
+        <body>
+
+        Respond with only the complete HTML code.`;
 
         if (model === 'claude-3') {
           response = await anthropic.messages.create({
