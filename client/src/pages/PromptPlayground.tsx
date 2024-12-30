@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 
 const promptFormSchema = z.object({
@@ -108,21 +110,49 @@ export default function PromptPlayground() {
                     control={form.control}
                     name="enableOrchestration"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-base">
-                            Enable Agent Orchestration
-                          </FormLabel>
-                          <FormDescription>
-                            Coordinate multiple AI agents to handle complex tasks
-                          </FormDescription>
+                      <FormItem className="flex flex-col space-y-4 rounded-lg border p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <FormLabel className="text-base">
+                                Enable Agent Orchestration
+                              </FormLabel>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs">
+                                      When enabled, your task will be divided into subtasks and handled by multiple specialized AI agents working together.
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            <FormDescription>
+                              Break down complex tasks into manageable subtasks, each handled by specialized AI agents. Perfect for tasks like:
+                              <ul className="list-disc pl-5 mt-2 space-y-1">
+                                <li>Research and analysis requiring multiple perspectives</li>
+                                <li>Creative projects needing different expertise</li>
+                                <li>Problem-solving requiring step-by-step reasoning</li>
+                              </ul>
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked);
+                                if (checked) {
+                                  form.setValue("systemPrompt", 
+                                    "You are a collaborative AI assistant capable of breaking down complex tasks and coordinating with other specialized agents. Analyze tasks thoroughly and create detailed plans for execution."
+                                  );
+                                }
+                              }}
+                            />
+                          </FormControl>
                         </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
                       </FormItem>
                     )}
                   />
@@ -133,6 +163,10 @@ export default function PromptPlayground() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>System Prompt</FormLabel>
+                        <FormDescription>
+                          Define the AI's role and behavior. {form.watch("enableOrchestration") && 
+                            "With orchestration enabled, this sets the context for how agents should collaborate."}
+                        </FormDescription>
                         <FormControl>
                           <Textarea
                             placeholder="Enter system instructions..."
@@ -150,9 +184,18 @@ export default function PromptPlayground() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>User Prompt</FormLabel>
+                        <FormDescription>
+                          {form.watch("enableOrchestration") 
+                            ? "Describe your complex task. The system will break it down and assign specialized agents."
+                            : "Enter your prompt or question here."
+                          }
+                        </FormDescription>
                         <FormControl>
                           <Textarea
-                            placeholder="Enter your prompt here..."
+                            placeholder={form.watch("enableOrchestration") 
+                              ? "Example: Research and analyze the impact of AI on healthcare, including current applications, future potential, and ethical considerations."
+                              : "Enter your prompt here..."
+                            }
                             className="min-h-[150px] resize-none"
                             {...field}
                           />
@@ -168,6 +211,9 @@ export default function PromptPlayground() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Model</FormLabel>
+                          <FormDescription>
+                            Select the AI model to use
+                          </FormDescription>
                           <Select
                             onValueChange={field.onChange}
                             defaultValue={field.value}
@@ -192,6 +238,9 @@ export default function PromptPlayground() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Temperature</FormLabel>
+                          <FormDescription>
+                            Controls response randomness (0 = focused, 1 = creative)
+                          </FormDescription>
                           <FormControl>
                             <input
                               type="range"
@@ -232,9 +281,14 @@ export default function PromptPlayground() {
               <Card>
                 <CardContent className="pt-6">
                   <h3 className="text-lg font-semibold mb-4">Orchestration Plan</h3>
-                  <pre className="bg-muted/50 rounded-lg p-4 overflow-auto whitespace-pre-wrap">
-                    {JSON.stringify(orchestrationPlan, null, 2)}
-                  </pre>
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      This plan shows how your task has been broken down and distributed among specialized AI agents:
+                    </p>
+                    <pre className="overflow-auto whitespace-pre-wrap">
+                      {JSON.stringify(orchestrationPlan, null, 2)}
+                    </pre>
+                  </div>
                 </CardContent>
               </Card>
             )}
