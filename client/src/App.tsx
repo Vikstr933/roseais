@@ -1,5 +1,6 @@
 import { Switch, Route } from "wouter";
 import Home from "@/pages/Home";
+import Workspaces from "@/pages/Workspaces";
 import { Navigation } from "@/components/Navigation";
 
 function App() {
@@ -8,6 +9,7 @@ function App() {
       <Navigation />
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/workspaces" component={Workspaces} />
       </Switch>
     </div>
   );

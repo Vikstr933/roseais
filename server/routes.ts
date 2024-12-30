@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { aiModels, companies, frameworks } from "@db/schema";
+import { aiModels, companies, frameworks, workspaces } from "@db/schema";
 import { eq, like, or, and } from "drizzle-orm";
 
 export function registerRoutes(app: Express): Server {
@@ -22,6 +22,33 @@ export function registerRoutes(app: Express): Server {
       res.json(models);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch models" });
+    }
+  });
+
+  app.get("/api/workspaces", async (req, res) => {
+    try {
+      const workspacesList = await db.select().from(workspaces);
+      res.json(workspacesList);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch workspaces" });
+    }
+  });
+
+  app.get("/api/workspaces/:id", async (req, res) => {
+    try {
+      const workspace = await db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.id, parseInt(req.params.id)))
+        .limit(1);
+
+      if (!workspace[0]) {
+        return res.status(404).json({ error: "Workspace not found" });
+      }
+
+      res.json(workspace[0]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch workspace" });
     }
   });
 
@@ -104,6 +131,23 @@ export function registerRoutes(app: Express): Server {
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to insert framework" });
+    }
+  });
+
+  app.post("/api/workspaces", async (req, res) => {
+    try {
+      const newWorkspace = {
+        ...req.body,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        collaborators: req.body.collaborators || [],
+        status: 'active'
+      };
+
+      const result = await db.insert(workspaces).values(newWorkspace);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create workspace" });
     }
   });
 

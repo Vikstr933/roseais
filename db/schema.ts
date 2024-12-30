@@ -34,6 +34,19 @@ export const frameworks = pgTable("frameworks", {
   features: jsonb("features").notNull(),
 });
 
+export const workspaces = pgTable("workspaces", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  agentConfig: jsonb("agent_config").notNull(),
+  testCases: jsonb("test_cases"),
+  collaborators: jsonb("collaborators").notNull(),
+  status: text("status").notNull(),
+});
+
 export type AiModel = typeof aiModels.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type Framework = typeof frameworks.$inferSelect;
+export type Workspace = typeof workspaces.$inferSelect;
