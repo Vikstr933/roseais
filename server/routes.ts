@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "@db";
-import { aiModels, companies, frameworks, workspaces } from "@db/schema";
+import { aiModels, companies, frameworks, workspaces, agentScripts } from "@db/schema";
 import { eq, like, or } from "drizzle-orm";
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -215,6 +215,83 @@ export function registerRoutes(app: Express): Server {
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to create workspace" });
+    }
+  });
+
+  // Agent Scripts routes
+  app.get("/api/agent-scripts", async (req, res) => {
+    try {
+      const { category, language } = req.query;
+      let query = db.select().from(agentScripts);
+
+      if (category) {
+        query = query.where(eq(agentScripts.category, category as string));
+      }
+      if (language) {
+        query = query.where(eq(agentScripts.language, language as string));
+      }
+
+      const scripts = await query;
+      res.json(scripts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch agent scripts" });
+    }
+  });
+
+  app.get("/api/agent-scripts/:id", async (req, res) => {
+    try {
+      const script = await db
+        .select()
+        .from(agentScripts)
+        .where(eq(agentScripts.id, parseInt(req.params.id)))
+        .limit(1);
+
+      if (!script[0]) {
+        return res.status(404).json({ error: "Agent script not found" });
+      }
+
+      res.json(script[0]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch agent script" });
+    }
+  });
+
+  app.get("/api/agent-scripts/:id/download", async (req, res) => {
+    try {
+      const [script] = await db
+        .select()
+        .from(agentScripts)
+        .where(eq(agentScripts.id, parseInt(req.params.id)))
+        .limit(1);
+
+      if (!script) {
+        return res.status(404).json({ error: "Agent script not found" });
+      }
+
+      // Generate the script with the user's configuration
+      const config = req.query.config ? JSON.parse(req.query.config as string) : {};
+      const generatedScript = script.scriptTemplate.replace(
+        "{{CONFIG}}",
+        JSON.stringify(config, null, 2)
+      );
+
+      res.setHeader("Content-Type", "text/plain");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${script.name.toLowerCase().replace(/\s+/g, "-")}.py`
+      );
+      res.send(generatedScript);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to download agent script" });
+    }
+  });
+
+  app.post("/api/agent-scripts", async (req, res) => {
+    try {
+      const result = await db.insert(agentScripts).values(req.body);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create agent script" });
     }
   });
 

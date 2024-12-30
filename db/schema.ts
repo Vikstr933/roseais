@@ -46,7 +46,26 @@ export const workspaces = pgTable("workspaces", {
   status: text("status").notNull(),
 });
 
+export const agentScripts = pgTable("agent_scripts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  language: text("language").notNull(),
+  version: text("version").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  scriptTemplate: text("script_template").notNull(),
+  configSchema: jsonb("config_schema").notNull(),
+  requirements: jsonb("requirements").notNull(),
+  category: text("category").notNull(),
+  tags: jsonb("tags").notNull(),
+});
+
 export type AiModel = typeof aiModels.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type Framework = typeof frameworks.$inferSelect;
 export type Workspace = typeof workspaces.$inferSelect;
+export type AgentScript = typeof agentScripts.$inferSelect;
+
+export const insertAgentScriptSchema = createInsertSchema(agentScripts);
+export const selectAgentScriptSchema = createSelectSchema(agentScripts);
