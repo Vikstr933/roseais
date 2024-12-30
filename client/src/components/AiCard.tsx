@@ -20,6 +20,7 @@ interface AiCardProps {
       prompt_patterns?: string[];
       reasoning_steps?: string[];
       memory_types?: string[];
+      code_examples?: Record<string, string>;
     };
     category: string;
     imageUrl?: string;
@@ -65,54 +66,58 @@ export function AiCard({ model }: AiCardProps) {
           </div>
 
           {model.parameters && (
-            <Accordion type="single" collapsible className="w-full">
+            <div className="space-y-4">
               {model.parameters.implementation_guides && (
-                <AccordionItem value="implementation">
-                  <AccordionTrigger className="text-sm">
-                    Implementation Guides
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-2">
-                      {Object.entries(model.parameters.implementation_guides).map(([key, value]) => (
-                        <div key={key} className="text-sm">
-                          <span className="font-semibold">{key}:</span> {value}
-                        </div>
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold mb-2">Implementation Guide</h4>
+                  <div className="space-y-2">
+                    {Object.entries(model.parameters.implementation_guides).map(([key, value]) => (
+                      <div key={key} className="text-sm">
+                        <span className="font-semibold">{key}:</span> {value}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {model.parameters.code_examples && (
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold mb-2">Code Examples</h4>
+                  <div className="space-y-4">
+                    {Object.entries(model.parameters.code_examples).map(([title, code]) => (
+                      <div key={title} className="space-y-2">
+                        <h5 className="font-medium text-sm">{title}</h5>
+                        <pre className="bg-muted p-2 rounded-md overflow-x-auto">
+                          <code className="text-xs whitespace-pre-wrap">{code}</code>
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {model.parameters.prompt_patterns && (
-                <AccordionItem value="patterns">
-                  <AccordionTrigger className="text-sm">
-                    Prompt Patterns
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ul className="list-disc pl-4 space-y-1">
-                      {model.parameters.prompt_patterns.map((pattern, index) => (
-                        <li key={index} className="text-sm">{pattern}</li>
-                      ))}
-                    </ul>
-                  </AccordionContent>
-                </AccordionItem>
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold mb-2">Prompt Patterns</h4>
+                  <ul className="list-disc pl-4 space-y-1">
+                    {model.parameters.prompt_patterns.map((pattern, index) => (
+                      <li key={index} className="text-sm">{pattern}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               {model.parameters.memory_types && (
-                <AccordionItem value="memory">
-                  <AccordionTrigger className="text-sm">
-                    Memory Systems
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ul className="list-disc pl-4 space-y-1">
-                      {model.parameters.memory_types.map((type, index) => (
-                        <li key={index} className="text-sm">{type}</li>
-                      ))}
-                    </ul>
-                  </AccordionContent>
-                </AccordionItem>
+                <div className="border rounded-lg p-4">
+                  <h4 className="text-sm font-semibold mb-2">Memory Systems</h4>
+                  <ul className="list-disc pl-4 space-y-1">
+                    {model.parameters.memory_types.map((type, index) => (
+                      <li key={index} className="text-sm">{type}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
-            </Accordion>
+            </div>
           )}
 
           {model.documentationUrl && (
