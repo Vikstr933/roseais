@@ -63,6 +63,13 @@ export default function AgentManager() {
         description: "Agent created successfully",
       });
     },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const updateMutation = useMutation({
@@ -83,6 +90,13 @@ export default function AgentManager() {
         description: "Agent updated successfully",
       });
     },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const toggleActiveMutation = useMutation({
@@ -92,14 +106,40 @@ export default function AgentManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...agent, isActive: !agent.isActive }),
       });
-      if (!res.ok) throw new Error("Failed to toggle agent status");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to toggle agent status");
+      }
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (agent) => {
+      // Optimistic update
+      await queryClient.cancelQueries({ queryKey: ["/api/agents"] });
+      const previousAgents = queryClient.getQueryData<Agent[]>(["/api/agents"]);
+
+      queryClient.setQueryData<Agent[]>(["/api/agents"], (old) =>
+        old?.map((a) =>
+          a.id === agent.id ? { ...a, isActive: !a.isActive } : a
+        )
+      );
+
+      return { previousAgents };
+    },
+    onError: (err, agent, context) => {
+      queryClient.setQueryData(["/api/agents"], context?.previousAgents);
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+    },
+    onSuccess: (data) => {
       toast({
         title: "Success",
-        description: "Agent status updated successfully",
+        description: `Agent ${data.isActive ? 'activated' : 'deactivated'} successfully`,
       });
     },
   });
@@ -270,6 +310,7 @@ export default function AgentManager() {
                     size="icon"
                     variant="ghost"
                     onClick={() => toggleActiveMutation.mutate(agent)}
+                    disabled={toggleActiveMutation.isPending}
                   >
                     {agent.isActive ? (
                       <Power className="h-4 w-4" />
