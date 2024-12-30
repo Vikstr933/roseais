@@ -14,7 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -130,14 +130,19 @@ export default function PromptPlayground() {
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
-                            <FormDescription>
-                              Break down complex tasks into manageable subtasks, each handled by specialized AI agents. Perfect for tasks like:
-                              <ul className="list-disc pl-5 mt-2 space-y-1">
-                                <li>Research and analysis requiring multiple perspectives</li>
-                                <li>Creative projects needing different expertise</li>
-                                <li>Problem-solving requiring step-by-step reasoning</li>
-                              </ul>
-                            </FormDescription>
+                            <div className="space-y-2">
+                              <FormDescription>
+                                Break down complex tasks into manageable subtasks, each handled by specialized AI agents.
+                              </FormDescription>
+                              <div className="text-sm text-muted-foreground">
+                                Perfect for tasks like:
+                                <ul className="list-disc pl-5 mt-2 space-y-1">
+                                  <li>Research and analysis requiring multiple perspectives</li>
+                                  <li>Creative projects needing different expertise</li>
+                                  <li>Problem-solving requiring step-by-step reasoning</li>
+                                </ul>
+                              </div>
+                            </div>
                           </div>
                           <FormControl>
                             <Switch
@@ -145,7 +150,7 @@ export default function PromptPlayground() {
                               onCheckedChange={(checked) => {
                                 field.onChange(checked);
                                 if (checked) {
-                                  form.setValue("systemPrompt", 
+                                  form.setValue("systemPrompt",
                                     "You are a collaborative AI assistant capable of breaking down complex tasks and coordinating with other specialized agents. Analyze tasks thoroughly and create detailed plans for execution."
                                   );
                                 }
@@ -164,7 +169,7 @@ export default function PromptPlayground() {
                       <FormItem>
                         <FormLabel>System Prompt</FormLabel>
                         <FormDescription>
-                          Define the AI's role and behavior. {form.watch("enableOrchestration") && 
+                          Define the AI's role and behavior. {form.watch("enableOrchestration") &&
                             "With orchestration enabled, this sets the context for how agents should collaborate."}
                         </FormDescription>
                         <FormControl>
@@ -185,14 +190,14 @@ export default function PromptPlayground() {
                       <FormItem>
                         <FormLabel>User Prompt</FormLabel>
                         <FormDescription>
-                          {form.watch("enableOrchestration") 
+                          {form.watch("enableOrchestration")
                             ? "Describe your complex task. The system will break it down and assign specialized agents."
                             : "Enter your prompt or question here."
                           }
                         </FormDescription>
                         <FormControl>
                           <Textarea
-                            placeholder={form.watch("enableOrchestration") 
+                            placeholder={form.watch("enableOrchestration")
                               ? "Example: Research and analyze the impact of AI on healthcare, including current applications, future potential, and ethical considerations."
                               : "Enter your prompt here..."
                             }
