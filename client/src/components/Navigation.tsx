@@ -12,13 +12,15 @@ export function Navigation() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-8">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="flex items-center text-primary"
-            >
-              <Brain className="w-6 h-6 mr-2" />
-              <span className="font-bold">AI Library</span>
-            </motion.div>
+            <Link href="/">
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                className="flex items-center text-primary cursor-pointer"
+              >
+                <Brain className="w-6 h-6 mr-2" />
+                <span className="font-bold">AI Library</span>
+              </motion.div>
+            </Link>
 
             <div className="hidden md:flex space-x-6">
               <NavLink href="/" icon={Brain} text="Models" />
@@ -39,13 +41,13 @@ export function Navigation() {
 function NavLink({ href, icon: Icon, text }: { href: string; icon: any; text: string }) {
   return (
     <Link href={href}>
-      <motion.a
+      <motion.div
         whileHover={{ scale: 1.05 }}
         className="flex items-center space-x-2 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
       >
         <Icon className="w-4 h-4" />
         <span>{text}</span>
-      </motion.a>
+      </motion.div>
     </Link>
   );
 }

@@ -1,0 +1,71 @@
+Warning: validateDOMNesting(...): <a> cannot appear as a descendant of &lt;a&gt;.
+    at a
+    at MotionComponent (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/framer-motion.js?v=fe64f986:6536:40)
+    at a
+    at https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/wouter.js?v=fe64f986:337:18
+    at NavLink (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/Navigation.tsx:121:20)
+    at div
+    at div
+    at div
+    at div
+    at nav
+    at MotionComponent (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/framer-motion.js?v=fe64f986:6536:40)
+    at Navigation
+    at div
+    at App
+    at QueryClientProvider (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/@tanstack_react-query.js?v=fe64f986:2805:3)
+Warning: validateDOMNesting(...): <ul> cannot appear as a descendant of &lt;p&gt;.
+    at ul
+    at p
+    at https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/form.tsx:160:6
+    at div
+    at div
+    at div
+    at https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/form.tsx:71:6
+    at Controller (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/chunk-RBMNEPGM.js?v=fe64f986:313:35)
+    at FormField (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/form.tsx:32:6)
+    at form
+    at FormProvider (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/chunk-RBMNEPGM.js?v=fe64f986:102:11)
+    at div
+    at _c9 (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/card.tsx:106:12)
+    at div
+    at _c (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/card.tsx:20:11)
+    at div
+    at MotionComponent (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/framer-motion.js?v=fe64f986:6536:40)
+    at div
+    at div
+    at PromptPlayground (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/pages/PromptPlayground.tsx:54:35)
+    at Route (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/wouter.js?v=fe64f986:323:16)
+    at Switch (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/wouter.js?v=fe64f986:379:17)
+    at div
+    at App
+    at QueryClientProvider (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/@tanstack_react-query.js?v=fe64f986:2805:3)
+at ul
+at p
+at https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/form.tsx:160:6
+at div
+at div
+at div
+at https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/form.tsx:71:6
+at Controller (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/chunk-RBMNEPGM.js?v=fe64f986:313:35)
+at FormField (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/form.tsx:32:6)
+at form
+at FormProvider (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/chunk-RBMNEPGM.js?v=fe64f986:102:11)
+at div
+at _c9 (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/card.tsx:106:12)
+at div
+at _c (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/components/ui/card.tsx:20:11)
+at div
+at MotionComponent (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/framer-motion.js?v=fe64f986:6536:40)
+at div
+at div
+at PromptPlayground (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/src/pages/PromptPlayground.tsx:54:35)
+at Route (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/wouter.js?v=fe64f986:323:16)
+at Switch (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/wouter.js?v=fe64f986:379:17)
+at div
+at App
+at QueryClientProvider (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/@fs/home/runner/AIAgentLibrary/node_modules/.vite/deps/@tanstack_react-query.js?v=fe64f986:2805:3)
+at t.value (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://c8a9eb70-f697-4cec-a354-59a87c1e7191-00-26n37ar7bnc4k.worf.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
