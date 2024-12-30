@@ -528,8 +528,14 @@ export function registerRoutes(app: Express): Server {
         })
         .where(eq(agents.id, parseInt(req.params.id)))
         .returning();
+
+      if (!result[0]) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
       res.json(result[0]);
     } catch (error) {
+      console.error('Failed to update agent:', error);
       res.status(500).json({ error: "Failed to update agent" });
     }
   });
