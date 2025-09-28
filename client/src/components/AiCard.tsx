@@ -11,18 +11,16 @@ import {
 
 interface AiCardProps {
   model: {
+    id: string;
     name: string;
-    creator: string;
+    provider: string;
+    
     description: string;
-    capabilities: string[];
-    parameters: {
-      implementation_guides?: Record<string, string>;
-      prompt_patterns?: string[];
-      reasoning_steps?: string[];
-      memory_types?: string[];
-      code_examples?: Record<string, string>;
-    };
-    category: string;
+    contextWindow?: number;
+    maxTokens?: number;
+    releaseDate: string;
+    strengths?: string[];
+    category?: string;
     imageUrl?: string;
     documentationUrl?: string;
   };
@@ -41,9 +39,9 @@ export function AiCard({ model }: AiCardProps) {
             <h3 className="text-xl font-semibold">{model.name}</h3>
           </div>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{model.creator}</p>
+            <p className="text-sm text-muted-foreground">{model.provider}</p>
             <Badge variant="secondary" className="bg-primary/10 text-primary">
-              {model.category}
+              {model.category || 'AI Model'}
             </Badge>
           </div>
         </CardHeader>
@@ -51,74 +49,42 @@ export function AiCard({ model }: AiCardProps) {
           <p className="mb-4 text-sm">{model.description}</p>
 
           <div className="mb-4">
-            <h4 className="text-sm font-semibold mb-2">Capabilities:</h4>
+            <h4 className="text-sm font-semibold mb-2">Key Features:</h4>
             <div className="flex flex-wrap gap-2">
-              {model.capabilities.map((capability, index) => (
+              {(model.strengths || []).map((strength, index) => (
                 <Badge
                   key={index}
                   variant="secondary"
                   className="bg-primary/10 text-primary"
                 >
-                  {capability}
+                  {strength}
                 </Badge>
               ))}
             </div>
           </div>
 
-          {model.parameters && (
-            <div className="space-y-4">
-              {model.parameters.implementation_guides && (
-                <div className="border rounded-lg p-4">
-                  <h4 className="text-sm font-semibold mb-2">Implementation Guide</h4>
-                  <div className="space-y-2">
-                    {Object.entries(model.parameters.implementation_guides).map(([key, value]) => (
-                      <div key={key} className="text-sm">
-                        <span className="font-semibold">{key}:</span> {value}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {model.parameters.code_examples && (
-                <div className="border rounded-lg p-4">
-                  <h4 className="text-sm font-semibold mb-2">Code Examples</h4>
-                  <div className="space-y-4">
-                    {Object.entries(model.parameters.code_examples).map(([title, code]) => (
-                      <div key={title} className="space-y-2">
-                        <h5 className="font-medium text-sm">{title}</h5>
-                        <pre className="bg-muted p-2 rounded-md overflow-x-auto">
-                          <code className="text-xs whitespace-pre-wrap">{code}</code>
-                        </pre>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {model.parameters.prompt_patterns && (
-                <div className="border rounded-lg p-4">
-                  <h4 className="text-sm font-semibold mb-2">Prompt Patterns</h4>
-                  <ul className="list-disc pl-4 space-y-1">
-                    {model.parameters.prompt_patterns.map((pattern, index) => (
-                      <li key={index} className="text-sm">{pattern}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {model.parameters.memory_types && (
-                <div className="border rounded-lg p-4">
-                  <h4 className="text-sm font-semibold mb-2">Memory Systems</h4>
-                  <ul className="list-disc pl-4 space-y-1">
-                    {model.parameters.memory_types.map((type, index) => (
-                      <li key={index} className="text-sm">{type}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            {model.contextWindow && (
+              <div>
+                <p className="text-xs text-muted-foreground">Context Window</p>
+                <p className="text-sm font-medium">{model.contextWindow.toLocaleString()} tokens</p>
+              </div>
+            )}
+            {model.maxTokens && (
+              <div>
+                <p className="text-xs text-muted-foreground">Max Output</p>
+                <p className="text-sm font-medium">{model.maxTokens.toLocaleString()} tokens</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-muted-foreground">Release Date</p>
+              <p className="text-sm font-medium">{new Date(model.releaseDate).toLocaleDateString()}</p>
             </div>
-          )}
+            <div>
+              <p className="text-xs text-muted-foreground">Provider</p>
+              <p className="text-sm font-medium">{model.provider}</p>
+            </div>
+          </div>
 
           {model.documentationUrl && (
             <a

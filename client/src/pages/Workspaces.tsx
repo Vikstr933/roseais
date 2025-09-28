@@ -11,9 +11,12 @@ export default function Workspaces() {
     queryKey: ["/api/workspaces"],
   });
 
-  const filteredWorkspaces = workspaces.filter(workspace => 
+  const filteredWorkspaces = workspaces.filter(workspace =>
     workspace.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    workspace.description.toLowerCase().includes(searchTerm.toLowerCase())
+    workspace.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (workspace.use_cases && workspace.use_cases.some((useCase: string) =>
+      useCase.toLowerCase().includes(searchTerm.toLowerCase())
+    ))
   );
 
   return (

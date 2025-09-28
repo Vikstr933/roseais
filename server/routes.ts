@@ -2,22 +2,106 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { type InsertAgent, agents } from "@db/schema";
+import path from "path";
+import { promises as fs } from "fs";
+import { 
+  type InsertAgent, 
+  agents, 
+  promptTemplates, 
+  promptChains,
+  chainExecutions,
+  type PromptChain
+} from "@db/schema";
 import { db } from "@db";
 import { eq } from "drizzle-orm";
+import serverRoutes from './routes/server';
+import componentsRouter from './routes/components';
+import sessionsRouter from './routes/sessions';
+import promptsRouter from './routes/prompts';
+import sseRouter from './routes/sse';
+
+// Utility function to generate component content based on file path
+async function generateComponentContent(filePath: string): Promise<string> {
+  const componentName = path.basename(filePath, path.extname(filePath));
+  
+  if (filePath.includes('Form/')) {
+    return `
+      import React from 'react';
+      
+      export default function ${componentName}() {
+        return (
+          <div className="${componentName.toLowerCase()}">
+            <h2>${componentName}</h2>
+            {/* Form content will be generated here */}
+          </div>
+        );
+      }
+    `;
+  }
+
+  if (filePath.includes('hooks/')) {
+    return `
+      import { useState, useEffect } from 'react';
+      
+      export default function ${componentName}() {
+        const [data, setData] = useState(null);
+        
+        useEffect(() => {
+          // Hook implementation will be generated here
+        }, []);
+        
+        return data;
+      }
+    `;
+  }
+
+  return `
+    import React from 'react';
+    
+    export default function ${componentName}() {
+      return (
+        <div className="${componentName.toLowerCase()}">
+          <h2>${componentName}</h2>
+          {/* Component content will be generated here */}
+        </div>
+      );
+    }
+  `;
+}
 
 // the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// Schema for prompt generation request
+// Schema for template variables validation
+const templateVariableSchema = z.object({
+  name: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'array', 'object']),
+  description: z.string(),
+  required: z.boolean(),
+  defaultValue: z.any().optional(),
+});
+
+// Schema for chain step configuration
+const chainStepSchema = z.object({
+  templateId: z.number(),
+  name: z.string(),
+  description: z.string(),
+  variableMapping: z.record(z.string(), z.string()),
+  retryConfig: z.object({
+    maxAttempts: z.number().min(1),
+    backoffMs: z.number().min(0),
+  }).optional(),
+});
+
 const generatePromptSchema = z.object({
   systemPrompt: z.string(),
   userPrompt: z.string(),
   model: z.string(),
   temperature: z.number().min(0).max(1),
   enableOrchestration: z.boolean().default(false),
+  projectType: z.enum(['react', 'vue', 'node', 'python']),
 });
 
 function validateColorContrast(colors: { background: string; text: string }): boolean {
@@ -53,97 +137,337 @@ function validateColorContrast(colors: { background: string; text: string }): bo
 }
 
 export function registerRoutes(app: Express): Server {
-  // Route for generating responses with optional orchestration
-  app.post("/api/prompts/generate", async (req, res) => {
+  // Register workspace routes first to ensure they take precedence
+  app.post('/api/workspaces/save', async (req, res) => {
+    console.log('Workspace save endpoint hit'); // Add logging
+    console.log('Request body:', req.body); // Log incoming request
     try {
-      const validatedData = generatePromptSchema.parse(req.body);
+      const { workspaceId, files } = req.body;
+      if (!workspaceId) {
+        return res.status(400).json({ error: 'Workspace ID is required' });
+      }
+      
+      // Construct workspace path
+      const workspacePath = path.join(process.cwd(), 'workspaces', workspaceId.toString());
+      
+      // Clear existing workspace
+      try {
+        await fs.rm(workspacePath, { recursive: true, force: true });
+      } catch (error) {
+        // Ignore if directory doesn't exist
+      }
+      await fs.mkdir(workspacePath, { recursive: true });
 
-      let response: string;
-      let orchestrationPlan = null;
+      // Ensure required directories exist
+      await fs.mkdir(path.join(workspacePath, 'src'), { recursive: true });
+      await fs.mkdir(path.join(workspacePath, 'src/components'), { recursive: true });
+      await fs.mkdir(path.join(workspacePath, 'src/components/Form'), { recursive: true });
 
-      if (validatedData.enableOrchestration) {
-        // Generate orchestration plan first
-        const planResponse = await anthropic.messages.create({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 1024,
-          messages: [{
-            role: "user",
-            content: `Please analyze this task and create a detailed orchestration plan. Break it down into subtasks and specify dependencies. Task: ${validatedData.userPrompt}`
-          }],
+      // Save each file with proper path structure
+      const savePromises = files.map(async (file: any) => {
+        // Normalize path to ensure consistent structure
+        const normalizedPath = file.path.replace(/^\/+/, ''); // Remove leading slashes
+        const filePath = path.join(workspacePath, normalizedPath);
+        const dir = path.dirname(filePath);
+        
+        // Create directory if it doesn't exist
+        await fs.mkdir(dir, { recursive: true });
+        
+        // Write file content
+        await fs.writeFile(filePath, file.content, 'utf8');
+      });
+
+      // Ensure all required files are present
+      const requiredFiles = [
+        'src/main.tsx',
+        'src/index.css',
+        'src/components/Form/PhotoUploadForm.tsx',
+        'src/components/LoadingSpinner/index.tsx',
+        'src/hooks/useBlogPosts.ts'
+      ];
+
+      // Check if all required files are in the generated files
+      const missingFiles = requiredFiles.filter(reqFile => 
+        !files.some((f: any) => f.path.includes(reqFile))
+      );
+
+      if (missingFiles.length > 0) {
+        // Generate missing files using the component generator
+        const generatePromises = missingFiles.map(async (filePath) => {
+          const content = await generateComponentContent(filePath);
+          const fullPath = path.join(workspacePath, filePath);
+          await fs.mkdir(path.dirname(fullPath), { recursive: true });
+          await fs.writeFile(fullPath, content, 'utf8');
         });
 
-        try {
-          orchestrationPlan = {
-            subtasks: JSON.parse(planResponse.content[0].text.match(/\{[\s\S]*\}/)?.[0] || "[]")
-          };
-        } catch (e) {
-          return res.status(503).json({
-            error: "DeepSeek orchestration planning failed",
-            suggestion: "Please try again in a few minutes or use single-agent mode for now"
-          });
-        }
+        await Promise.all(generatePromises);
       }
 
-      // Generate the main response
-      const messageResponse = await anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 2048,
-        messages: [
-          {
-            role: "system",
-            content: validatedData.systemPrompt
+      await Promise.all(savePromises);
+
+      // Create package.json if it doesn't exist
+      const packageJsonPath = path.join(workspacePath, 'package.json');
+      try {
+        await fs.access(packageJsonPath);
+      } catch {
+        await fs.writeFile(packageJsonPath, JSON.stringify({
+          name: "generated-app",
+          version: "1.0.0",
+          scripts: {
+            dev: "vite",
+            build: "vite build",
+            preview: "vite preview"
           },
-          {
-            role: "user",
-            content: validatedData.userPrompt
+          dependencies: {
+            "react": "^18.2.0",
+            "react-dom": "^18.2.0"
+          },
+          devDependencies: {
+            "vite": "^5.0.0",
+            "@vitejs/plugin-react": "^4.0.0",
+            "typescript": "^5.0.0"
           }
-        ],
-      });
-
-      response = messageResponse.content[0].text;
-
-      // If it's a landing page request, validate color contrast
-      if (validatedData.userPrompt.toLowerCase().includes("landing page")) {
-        const colorMatches = response.match(/#[a-f0-9]{6}/gi) || [];
-        const colors = {
-          background: colorMatches[0] || "#ffffff",
-          text: colorMatches[1] || "#000000"
-        };
-
-        if (!validateColorContrast(colors)) {
-          // Adjust colors for better contrast
-          const adjustedResponse = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 1024,
-            messages: [
-              {
-                role: "system",
-                content: "You are a design expert. Please adjust the colors in the landing page to ensure proper contrast for accessibility (WCAG AA compliance)."
-              },
-              {
-                role: "user",
-                content: response
-              }
-            ],
-          });
-          response = adjustedResponse.content[0].text;
-        }
+        }, null, 2));
       }
 
-      res.json({
-        response,
-        orchestrationPlan
-      });
-    } catch (error: any) {
-      console.error("Error in /api/prompts/generate:", error);
-      res.status(400).json({
-        error: error.message,
-        suggestion: "Please check your input and try again"
-      });
+      // Create default Component.tsx if it doesn't exist
+      const componentPath = path.join(workspacePath, 'src', 'Component.tsx');
+      try {
+        await fs.access(componentPath);
+      } catch {
+        await fs.writeFile(componentPath, `
+          import React from 'react';
+
+          export default function Component() {
+            return (
+              <div className="container">
+                <h1>Generated Component</h1>
+                <p>Edit this component to get started</p>
+              </div>
+            );
+          }
+        `);
+      }
+      
+      res.json({ success: true, workspacePath });
+    } catch (error) {
+      console.error('Error saving workspace:', error);
+      res.status(500).json({ error: 'Failed to save workspace' });
     }
   });
 
-  // Route for updating agent status
+  // Register server control routes
+  app.use('/api/server', serverRoutes);
+  app.use('/api', componentsRouter);
+  app.use('/api/sessions', sessionsRouter);
+  app.use('/api', promptsRouter);
+  app.use('/api', sseRouter);
+
+  app.post('/api/server/start', async (req, res) => {
+    try {
+      const { workspaceId, withDependencies } = req.body;
+      const workspacePath = path.join(process.cwd(), 'workspaces', workspaceId.toString());
+
+      // Verify workspace exists
+      await fs.access(workspacePath);
+
+      // Create a basic Vite config for the workspace if it doesn't exist
+      const viteConfigPath = path.join(workspacePath, 'vite.config.ts');
+      try {
+        await fs.access(viteConfigPath);
+      } catch {
+        await fs.writeFile(viteConfigPath, `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: ${3000 + parseInt(workspaceId.toString().slice(-2))}, // Use different ports for different workspaces
+    host: true
+  }
+});`);
+      }
+
+      // Create index.html if it doesn't exist
+      const indexPath = path.join(workspacePath, 'index.html');
+      try {
+        await fs.access(indexPath);
+      } catch {
+        await fs.writeFile(indexPath, `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generated App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>`);
+      }
+
+      // The server is conceptually "started" - in a real implementation this would
+      // spawn a Vite dev server process for the workspace
+      res.json({
+        success: true,
+        message: 'Server started',
+        previewUrl: `http://localhost:${3000 + parseInt(workspaceId.toString().slice(-2))}`
+      });
+    } catch (error) {
+      console.error('Error starting server:', error);
+      res.status(500).json({ error: 'Failed to start server' });
+    }
+  });
+
+  app.get('/api/workspaces', async (req, res) => {
+    try {
+      const workspacesDir = path.join(process.cwd(), 'workspaces');
+      const workspaces = await fs.readdir(workspacesDir);
+      res.json(workspaces.filter((w: string) => !w.includes('.')));
+    } catch (error) {
+      console.error('Error reading workspaces:', error);
+      res.status(500).json({ error: 'Failed to read workspaces' });
+    }
+  });
+
+
+
+  // Create a new prompt template
+  app.post("/api/templates", async (req, res) => {
+    try {
+      const [template] = await db.insert(promptTemplates).values(req.body).returning();
+      res.json(template);
+    } catch (error: any) {
+      console.error("Error creating template:", error);
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
+  // Create a new prompt chain
+  app.post("/api/chains", async (req, res) => {
+    try {
+      const [chain] = await db.insert(promptChains).values(req.body).returning();
+      res.json(chain);
+    } catch (error: any) {
+      console.error("Error creating chain:", error);
+      res.status(500).json({ error: "Failed to create chain" });
+    }
+  });
+
+  // Execute a prompt chain
+  app.post("/api/chains/:id/execute", async (req, res) => {
+    try {
+      const chainId = parseInt(req.params.id);
+      const chain = await db.query.promptChains.findFirst({
+        where: eq(promptChains.id, chainId)
+      });
+
+      if (!chain) {
+        return res.status(404).json({ error: "Chain not found" });
+      }
+
+      // Create execution record
+      const [execution] = await db.insert(chainExecutions).values({
+        chainId,
+        status: "running",
+        input: req.body,
+        stepResults: [],
+      }).returning();
+
+      // Execute each step in the chain
+      let currentInput = req.body;
+      const stepResults = [];
+
+      for (const step of chain.steps as any[]) {
+        try {
+          // Get template for this step
+          const template = await db.query.promptTemplates.findFirst({
+            where: eq(promptTemplates.id, step.templateId)
+          });
+
+          if (!template) {
+            throw new Error(`Template ${step.templateId} not found`);
+          }
+
+          // Map variables from previous steps
+          const mappedInput = Object.entries(step.variableMapping as Record<string, string>).reduce((acc, [key, value]) => {
+            acc[key] = value.startsWith("$") ? 
+              (currentInput as Record<string, string>)[value.slice(1)] : 
+              value;
+            return acc;
+          }, {} as Record<string, string>);
+
+          // Generate prompt using template
+          const prompt = template.template.replace(
+            /\{\{(\w+)\}\}/g,
+            (_, key) => mappedInput[key] || ""
+          );
+
+          // Call Anthropic API
+          const response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: chain.maxTokens || 2048,
+            messages: [{ role: "user", content: prompt }],
+          });
+
+          const content = response.content[0].type === 'text' ? response.content[0].text : '';
+          const stepResult = {
+            templateId: step.templateId,
+            input: mappedInput,
+            output: content,
+            status: "completed" as const,
+          };
+
+          stepResults.push(stepResult);
+          currentInput = { ...currentInput, [step.name]: content };
+
+        } catch (stepError: any) {
+          // Handle step failure based on retry strategy
+          const retryConfig = step.retryConfig || chain.retryStrategy;
+          
+          if (retryConfig && stepResults.length < retryConfig.maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, retryConfig.backoffMs));
+            continue;
+          }
+
+          // Update execution with error
+          await db.update(chainExecutions)
+            .set({
+              status: "failed",
+              completedAt: new Date(),
+              error: { message: stepError.message, step: step.name },
+              stepResults,
+            })
+            .where(eq(chainExecutions.id, execution.id));
+
+          return res.status(500).json({
+            error: "Chain execution failed",
+            step: step.name,
+            message: stepError.message
+          });
+        }
+      }
+
+      // Update execution record with results
+      const [updatedExecution] = await db.update(chainExecutions)
+        .set({
+          status: "completed",
+          completedAt: new Date(),
+          output: currentInput,
+          stepResults,
+        })
+        .where(eq(chainExecutions.id, execution.id))
+        .returning();
+
+      res.json(updatedExecution);
+
+    } catch (error: any) {
+      console.error("Error executing chain:", error);
+      res.status(500).json({ error: "Failed to execute chain" });
+    }
+  });
+
   app.patch("/api/agents/:id", async (req, res) => {
     try {
       const agentId = parseInt(req.params.id);

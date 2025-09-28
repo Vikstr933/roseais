@@ -1,15 +1,13 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import ws from "ws";
-import * as schema from "@db/schema";
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
+import * as schema from './schema';
+import * as dotenv from 'dotenv';
+import path from 'path';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
+dotenv.config();
 
-export const db = drizzle({
-  connection: process.env.DATABASE_URL,
-  schema,
-  ws: ws,
-});
+// Use SQLite database file
+const sqlite = new Database(path.join(process.cwd(), 'db', 'db.sqlite'));
+
+// Create the db instance
+export const db = drizzle(sqlite, { schema });

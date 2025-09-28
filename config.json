@@ -1,0 +1,36 @@
+{
+  "agentManagement": {
+    "basePath": "agents",
+    "activeAgents": [],
+    "inactiveAgents": []
+  },
+  "workflowConfig": {
+    "maxConcurrentWorkflows": 5,
+    "defaultTimeout": 30000,
+    "retryPolicy": {
+      "maxRetries": 3,
+      "retryDelay": 1000
+    }
+  },
+  "databaseSync": {
+    "enabled": true,
+    "syncInterval": 60000,
+    "tables": [
+      "agents",
+      "prompts",
+      "workflows",
+      "templates"
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "filePath": "logs/agent_framework.log",
+    "maxSize": "10MB"
+  },
+  "messageQueue": {
+    "type": "in-memory",
+    "maxMessages": 1000,
+    "retentionPeriod": 3600000
+  }
+}

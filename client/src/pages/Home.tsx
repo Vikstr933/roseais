@@ -12,9 +12,11 @@ export default function Home() {
     queryKey: ["/api/models"],
   });
 
-  const filteredModels = models.filter(model => 
+  const filteredModels = models.filter(model =>
     model.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    model.description.toLowerCase().includes(searchTerm.toLowerCase())
+    model.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    model.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (model.strengths && model.strengths.some((strength: string) => strength.toLowerCase().includes(searchTerm.toLowerCase())))
   );
 
   return (

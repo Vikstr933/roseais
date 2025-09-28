@@ -22,6 +22,7 @@ interface WorkspaceProps {
     }[];
     collaborators: string[];
     status: string;
+    use_cases?: string[];
   };
 }
 
@@ -69,6 +70,23 @@ export function WorkspaceCard({ workspace }: WorkspaceProps) {
               )}
             </div>
           </div>
+
+          {workspace.use_cases && workspace.use_cases.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold mb-2">Use Cases:</h4>
+              <div className="space-y-2">
+                {workspace.use_cases.map((useCase, idx) => (
+                  <div key={idx} className="text-sm text-muted-foreground">
+                    {useCase.startsWith("Not suitable for:") ? (
+                      <span className="text-destructive">❌ {useCase}</span>
+                    ) : (
+                      <span className="text-green-600">✅ {useCase}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-4 mt-6">
             <div className="flex items-center gap-1">

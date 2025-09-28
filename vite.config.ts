@@ -11,13 +11,38 @@ export default defineConfig({
   plugins: [react(), runtimeErrorOverlay(), themePlugin()],
   resolve: {
     alias: {
-      "@db": path.resolve(__dirname, "db"),
       "@": path.resolve(__dirname, "client", "src"),
+      "@db": path.resolve(__dirname, "db"),
+      "@lib": path.resolve(__dirname, "client", "src", "lib"),
+      "@hooks": path.resolve(__dirname, "client", "src", "hooks"),
+      "@components": path.resolve(__dirname, "client", "src", "components"),
+    },
+  },
+  optimizeDeps: {
+    exclude: ['@monaco-editor/react'],
+    include: ['react', 'react-dom'],
+  },
+  css: {
+    modules: {
+      localsConvention: 'camelCase',
+      generateScopedName: '[name]__[local]__[hash:base64:5]',
     },
   },
   root: path.resolve(__dirname, "client"),
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+    fs: {
+      strict: false,
+      allow: ['..'],
+    },
   },
 });

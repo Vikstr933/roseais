@@ -1,27 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Edit2, Power, PowerOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Plus, Edit2, Power, PowerOff, Wand2 } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Card, CardHeader, CardContent } from "../components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+} from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+} from "../components/ui/select";
+import { Badge } from "../components/ui/badge";
+import { useToast } from "../hooks/use-toast";
 
 type Agent = {
   id: number;
@@ -31,18 +31,108 @@ type Agent = {
   model: string;
   systemPrompt: string;
   temperature: string;
-  capabilities: string[];
+  capabilities: Record<string, boolean>;
+  expertise: Record<string, string>;
+  frameworks: Record<string, boolean>;
+  libraries: Record<string, boolean>;
+  bestPractices: Record<string, boolean>;
   isActive: boolean;
 };
 
 export default function AgentManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [generatedConfig, setGeneratedConfig] = useState<Omit<Agent, "id"> | null>(null);
+  const [filterRole, setFilterRole] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "inactive">("all");
+  const [sortBy, setSortBy] = useState<"name" | "role" | "status">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: agents = [] } = useQuery<Agent[]>({
+  const { data: agents = [], error: queryError } = useQuery<Agent[]>({
     queryKey: ["/api/agents"],
+    queryFn: async () => {
+      console.log("Fetching agents...");
+      const response = await fetch("/api/agents");
+      if (!response.ok) {
+        throw new Error("Failed to fetch agents");
+      }
+      const data = await response.json();
+      
+      // Data is already in correct format from server
+      console.log("Agents data from server:", data);
+      return data;
+    }
+  });
+
+  // Filter and sort agents
+  const filteredAndSortedAgents = useMemo(() => {
+    return (agents || [])
+      .filter(agent => {
+        const matchesRole = filterRole === "all" || agent.role === filterRole;
+        const matchesStatus = filterStatus === "all" || 
+          (filterStatus === "active" ? agent.isActive : !agent.isActive);
+        const matchesSearch = !searchQuery || 
+          agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          agent.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          agent.role.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesRole && matchesStatus && matchesSearch;
+      })
+      .sort((a, b) => {
+        let comparison = 0;
+        switch (sortBy) {
+          case "name":
+            comparison = a.name.localeCompare(b.name);
+            break;
+          case "role":
+            comparison = a.role.localeCompare(b.role);
+            break;
+          case "status":
+            comparison = Number(b.isActive) - Number(a.isActive);
+            break;
+        }
+        return sortOrder === "asc" ? comparison : -comparison;
+      });
+  }, [agents, filterRole, filterStatus, sortBy, sortOrder, searchQuery]);
+
+  useEffect(() => {
+    if (queryError) {
+      console.error("Query error:", queryError);
+      toast({
+        title: "Error",
+        description: "Failed to fetch agents",
+        variant: "destructive",
+      });
+    }
+  }, [queryError, toast]);
+
+
+  const generateMutation = useMutation({
+    mutationFn: async (prompt: string) => {
+      const res = await fetch("/api/agents/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) throw new Error("Failed to generate agent configuration");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedConfig(data);
+      setIsPromptDialogOpen(false);
+      setIsDialogOpen(true);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const createMutation = useMutation({
@@ -58,6 +148,7 @@ export default function AgentManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
       setIsDialogOpen(false);
+      setGeneratedConfig(null);
       toast({
         title: "Success",
         description: "Agent created successfully",
@@ -77,9 +168,27 @@ export default function AgentManager() {
       const res = await fetch(`/api/agents/${agent.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(agent),
+        body: JSON.stringify({
+          name: agent.name,
+          description: agent.description,
+          role: agent.role,
+          model: agent.model,
+          systemPrompt: agent.systemPrompt,
+          temperature: agent.temperature,
+          capabilities: agent.capabilities,
+          expertise: agent.expertise,
+          frameworks: agent.frameworks,
+          libraries: agent.libraries,
+          bestPractices: agent.bestPractices,
+          isActive: agent.isActive
+        }),
       });
-      if (!res.ok) throw new Error("Failed to update agent");
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to update agent");
+      }
+      
       return res.json();
     },
     onSuccess: () => {
@@ -91,9 +200,18 @@ export default function AgentManager() {
       });
     },
     onError: (error) => {
+      // Extract error details from the error message
+      let errorMessage = "Failed to update agent";
+      try {
+        const errorData = JSON.parse(error.message);
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -101,19 +219,26 @@ export default function AgentManager() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: async (agent: Agent) => {
+      console.log('Toggling agent status:', agent.id, 'from', agent.isActive, 'to', !agent.isActive);
+      
       const res = await fetch(`/api/agents/${agent.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...agent, isActive: !agent.isActive }),
+        body: JSON.stringify({ 
+          isActive: !agent.isActive 
+        }),
       });
+
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Failed to toggle agent status");
       }
-      return res.json();
+
+      const updatedAgent = await res.json();
+      console.log('Toggle response:', updatedAgent);
+      return updatedAgent;
     },
     onMutate: async (agent) => {
-      // Optimistic update
       await queryClient.cancelQueries({ queryKey: ["/api/agents"] });
       const previousAgents = queryClient.getQueryData<Agent[]>(["/api/agents"]);
 
@@ -127,20 +252,30 @@ export default function AgentManager() {
     },
     onError: (err, agent, context) => {
       queryClient.setQueryData(["/api/agents"], context?.previousAgents);
+      
+      // Extract error details from the error message
+      let errorMessage = "Failed to update agent status";
+      try {
+        const errorData = JSON.parse(err.message);
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {
+        errorMessage = err.message;
+      }
+      
       toast({
         title: "Error",
-        description: err.message,
+        description: errorMessage,
         variant: "destructive",
       });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
     },
     onSuccess: (data) => {
       toast({
         title: "Success",
         description: `Agent ${data.isActive ? 'activated' : 'deactivated'} successfully`,
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
     },
   });
 
@@ -160,16 +295,70 @@ export default function AgentManager() {
               Create, configure, and manage your AI agents
             </p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button
-                onClick={() => setSelectedAgent(null)}
-                className="gap-2"
+          <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                setIsPromptDialogOpen(true);
+                setPrompt("");
+              }}
+              className="gap-2"
+              variant="secondary"
+            >
+              <Wand2 className="w-4 h-4" />
+              AI Create
+            </Button>
+            <Button
+              onClick={() => {
+                setSelectedAgent(null);
+                setGeneratedConfig(null);
+                setIsDialogOpen(true);
+              }}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Agent
+            </Button>
+          </div>
+
+          <Dialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Create Agent with AI</DialogTitle>
+              </DialogHeader>
+              <form
+                onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
+                  e.preventDefault();
+                  generateMutation.mutate(prompt);
+                }}
+                className="space-y-4"
               >
-                <Plus className="w-4 h-4" />
-                New Agent
-              </Button>
-            </DialogTrigger>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">What kind of AI Agent do you need?</label>
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="e.g., An AI Agent that can help me write newsletters and design them"
+                    required
+                    className="min-h-[100px]"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsPromptDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={generateMutation.isPending}>
+                    {generateMutation.isPending ? "Generating..." : "Generate"}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>
@@ -177,9 +366,23 @@ export default function AgentManager() {
                 </DialogTitle>
               </DialogHeader>
               <form
-                onSubmit={(e) => {
+                onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
                   e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
+                  const formData = new FormData(e.currentTarget as HTMLFormElement);
+                  // Helper function to clean and split array fields
+                  const processRecordField = (value: string, isExpertise = false) => {
+                    const items = value.split(',').map(item => item.trim()).filter(Boolean);
+                    return items.reduce((acc, item) => {
+                      if (isExpertise) {
+                        const [skill, level = 'expert'] = item.split(':').map(s => s.trim());
+                        acc[skill] = level;
+                      } else {
+                        acc[item] = true;
+                      }
+                      return acc;
+                    }, {} as Record<string, any>);
+                  };
+
                   const agentData = {
                     name: formData.get("name") as string,
                     description: formData.get("description") as string,
@@ -187,7 +390,11 @@ export default function AgentManager() {
                     model: formData.get("model") as string,
                     systemPrompt: formData.get("systemPrompt") as string,
                     temperature: formData.get("temperature") as string,
-                    capabilities: (formData.get("capabilities") as string).split(",").map(c => c.trim()),
+                    capabilities: processRecordField(formData.get("capabilities") as string),
+                    expertise: processRecordField(formData.get("expertise") as string, true),
+                    frameworks: processRecordField(formData.get("frameworks") as string),
+                    libraries: processRecordField(formData.get("libraries") as string),
+                    bestPractices: processRecordField(formData.get("bestPractices") as string),
                   };
 
                   if (selectedAgent) {
@@ -202,7 +409,7 @@ export default function AgentManager() {
                   <label className="text-sm font-medium">Name</label>
                   <Input
                     name="name"
-                    defaultValue={selectedAgent?.name}
+                    defaultValue={generatedConfig?.name || selectedAgent?.name}
                     required
                   />
                 </div>
@@ -210,7 +417,7 @@ export default function AgentManager() {
                   <label className="text-sm font-medium">Description</label>
                   <Textarea
                     name="description"
-                    defaultValue={selectedAgent?.description}
+                    defaultValue={generatedConfig?.description || selectedAgent?.description}
                     required
                   />
                 </div>
@@ -218,7 +425,7 @@ export default function AgentManager() {
                   <label className="text-sm font-medium">Role</label>
                   <Input
                     name="role"
-                    defaultValue={selectedAgent?.role}
+                    defaultValue={generatedConfig?.role || selectedAgent?.role}
                     required
                   />
                 </div>
@@ -226,15 +433,15 @@ export default function AgentManager() {
                   <label className="text-sm font-medium">Model</label>
                   <Select
                     name="model"
-                    defaultValue={selectedAgent?.model}
+                    defaultValue={generatedConfig?.model || selectedAgent?.model}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a model" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="claude-3">Claude 3</SelectItem>
-                      <SelectItem value="deepseek">DeepSeek</SelectItem>
-                      <SelectItem value="gpt-4">GPT-4</SelectItem>
+                      <SelectItem value="claude-3-sonnet-20240229">Claude 3 Sonnet</SelectItem>
+                      <SelectItem value="gpt-4-turbo-preview">GPT-4 Turbo</SelectItem>
+                      <SelectItem value="deepseek-coder-33b-instruct">DeepSeek Coder</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -242,7 +449,7 @@ export default function AgentManager() {
                   <label className="text-sm font-medium">System Prompt</label>
                   <Textarea
                     name="systemPrompt"
-                    defaultValue={selectedAgent?.systemPrompt}
+                    defaultValue={generatedConfig?.systemPrompt || selectedAgent?.systemPrompt}
                     required
                     className="min-h-[100px]"
                   />
@@ -255,7 +462,7 @@ export default function AgentManager() {
                     min="0"
                     max="1"
                     step="0.1"
-                    defaultValue={selectedAgent?.temperature ?? "0.7"}
+                    defaultValue={generatedConfig?.temperature || selectedAgent?.temperature || "0.7"}
                     required
                   />
                 </div>
@@ -263,7 +470,41 @@ export default function AgentManager() {
                   <label className="text-sm font-medium">Capabilities (comma-separated)</label>
                   <Input
                     name="capabilities"
-                    defaultValue={selectedAgent?.capabilities.join(", ")}
+                    defaultValue={generatedConfig?.capabilities ? Object.keys(generatedConfig.capabilities).join(", ") : selectedAgent ? Object.keys(selectedAgent.capabilities).join(", ") : ""}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Expertise (comma-separated)</label>
+                  <Input
+                    name="expertise"
+                    defaultValue={generatedConfig?.expertise ? Object.entries(generatedConfig.expertise).map(([skill, level]) => `${skill}: ${level}`).join(", ") : selectedAgent ? Object.entries(selectedAgent.expertise).map(([skill, level]) => `${skill}: ${level}`).join(", ") : ""}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Frameworks (comma-separated)</label>
+                  <Input
+                    name="frameworks"
+                    defaultValue={generatedConfig?.frameworks ? Object.keys(generatedConfig.frameworks).join(", ") : selectedAgent ? Object.keys(selectedAgent.frameworks).join(", ") : ""}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Libraries (comma-separated)</label>
+                  <Input
+                    name="libraries"
+                    defaultValue={generatedConfig?.libraries ? Object.keys(generatedConfig.libraries).join(", ") : selectedAgent ? Object.keys(selectedAgent.libraries).join(", ") : ""}
+                    placeholder="jest, react-testing-library, axios"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Best Practices (comma-separated)</label>
+                  <Input
+                    name="bestPractices"
+                    defaultValue={generatedConfig?.bestPractices ? Object.keys(generatedConfig.bestPractices).join(", ") : selectedAgent ? Object.keys(selectedAgent.bestPractices).join(", ") : ""}
+                    placeholder="SOLID, DRY, Clean Code"
                     required
                   />
                 </div>
@@ -271,7 +512,10 @@ export default function AgentManager() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
+                    onClick={() => {
+                      setIsDialogOpen(false);
+                      setGeneratedConfig(null);
+                    }}
                   >
                     Cancel
                   </Button>
@@ -285,8 +529,73 @@ export default function AgentManager() {
         </div>
       </motion.div>
 
+      {/* Search input */}
+      <div className="mb-6">
+        <Input
+          placeholder="Search agents..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="max-w-md"
+        />
+      </div>
+
+      {/* Filtering and Sorting Controls */}
+      <div className="mb-6 flex flex-wrap gap-4 items-center">
+        <Select
+          value={filterRole}
+          onValueChange={setFilterRole}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter by role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            {Array.from(new Set(agents.map(agent => agent.role))).map(role => (
+              <SelectItem key={role} value={role}>{role}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filterStatus}
+          onValueChange={(value: "all" | "active" | "inactive") => setFilterStatus(value)}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={sortBy}
+          onValueChange={(value: "name" | "role" | "status") => setSortBy(value)}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name">Name</SelectItem>
+            <SelectItem value="role">Role</SelectItem>
+            <SelectItem value="status">Status</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button
+          variant="outline"
+          onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+          className="gap-2"
+        >
+          {sortOrder === "asc" ? "↑" : "↓"}
+          {sortOrder === "asc" ? "Ascending" : "Descending"}
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {agents.map((agent) => (
+        {filteredAndSortedAgents.map((agent) => (
           <motion.div
             key={agent.id}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -301,6 +610,7 @@ export default function AgentManager() {
                     variant="ghost"
                     onClick={() => {
                       setSelectedAgent(agent);
+                      setGeneratedConfig(null);
                       setIsDialogOpen(true);
                     }}
                   >
@@ -340,15 +650,102 @@ export default function AgentManager() {
                   <div>
                     <p className="text-sm font-medium">Capabilities</p>
                     <div className="flex flex-wrap gap-2 mt-1">
-                      {agent.capabilities.map((capability, index) => (
-                        <Badge
-                          key={index}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {capability}
-                        </Badge>
-                      ))}
+                      {(Array.isArray(agent.capabilities) ? agent.capabilities : Object.entries(agent.capabilities)
+                        .filter(([_, enabled]) => enabled)
+                        .map(([capability]) => capability))
+                        .map((capability) => (
+                          <Badge
+                            key={capability}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {capability}
+                          </Badge>
+                        ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Expertise</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {(Array.isArray(agent.expertise) ? agent.expertise : Object.entries(agent.expertise))
+                        .map((item, index) => {
+                          if (Array.isArray(agent.expertise)) {
+                            // Handle array format: ["React: expert", "TypeScript: expert"]
+                            const [skill, level] = item.split(': ');
+                            return (
+                              <Badge
+                                key={index}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {skill}: {level}
+                              </Badge>
+                            );
+                          } else {
+                            // Handle object format: {React: "expert", TypeScript: "expert"}
+                            const [skill, level] = item;
+                            return (
+                              <Badge
+                                key={skill}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {skill}: {level}
+                              </Badge>
+                            );
+                          }
+                        })}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Frameworks</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {(Array.isArray(agent.frameworks) ? agent.frameworks : Object.entries(agent.frameworks)
+                        .filter(([_, enabled]) => enabled)
+                        .map(([framework]) => framework))
+                        .map((framework) => (
+                          <Badge
+                            key={framework}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {framework}
+                          </Badge>
+                        ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Libraries</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {(Array.isArray(agent.libraries) ? agent.libraries : Object.entries(agent.libraries)
+                        .filter(([_, enabled]) => enabled)
+                        .map(([lib]) => lib))
+                        .map((lib) => (
+                          <Badge
+                            key={lib}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {lib}
+                          </Badge>
+                        ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Best Practices</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {(Array.isArray(agent.bestPractices) ? agent.bestPractices : Object.entries(agent.bestPractices)
+                        .filter(([_, enabled]) => enabled)
+                        .map(([practice]) => practice))
+                        .map((practice) => (
+                          <Badge
+                            key={practice}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {practice}
+                          </Badge>
+                        ))}
                     </div>
                   </div>
                   <div>
