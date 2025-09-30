@@ -7,6 +7,7 @@ import { Card, CardHeader, CardContent } from "../components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -324,6 +325,9 @@ export default function AgentManager() {
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create Agent with AI</DialogTitle>
+                <DialogDescription>
+                  Describe what kind of AI agent you need and we'll generate a configuration for you.
+                </DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
@@ -364,6 +368,9 @@ export default function AgentManager() {
                 <DialogTitle>
                   {selectedAgent ? "Edit Agent" : "Create New Agent"}
                 </DialogTitle>
+                <DialogDescription>
+                  {selectedAgent ? "Update the agent configuration and settings." : "Configure a new AI agent with custom settings and capabilities."}
+                </DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={(e: React.FormEvent<HTMLFormElement>) => {

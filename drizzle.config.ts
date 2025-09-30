@@ -5,15 +5,10 @@ dotenv.config();
 export default {
   schema: "./db/schema.ts",
   out: "./drizzle/migrations",
-  dialect: "postgresql",
+  dialect: "sqlite",
   verbose: true,
   strict: true,
   dbCredentials: {
-    host: 'localhost',
-    port: 5432,
-    database: 'postgres',
-    user: 'postgres',
-    password: 'postgres',
-    ssl: false
+    url: "./db/db.sqlite"
   }
 } satisfies Config;
