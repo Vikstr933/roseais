@@ -2,8 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from './ui/alert-dialog';
 import { Search, Trash2, Clock, Filter } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
@@ -76,14 +92,18 @@ export default function SessionHistory() {
 
   const filteredSessions = sessions
     .filter(session => {
-      const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          session.inputPrompt.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = filterStatus === 'all' || session.status === filterStatus;
+      const matchesSearch =
+        session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        session.inputPrompt.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus =
+        filterStatus === 'all' || session.status === filterStatus;
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
       if (sortBy === 'date') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
       }
       return a.title.localeCompare(b.title);
     });
@@ -123,11 +143,14 @@ export default function SessionHistory() {
             <Input
               placeholder="Search sessions..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={e => setSearchTerm(e.target.value)}
               className="pl-9 w-[200px]"
             />
           </div>
-          <Select value={sortBy} onValueChange={(value: 'date' | 'title') => setSortBy(value)}>
+          <Select
+            value={sortBy}
+            onValueChange={(value: 'date' | 'title') => setSortBy(value)}
+          >
             <SelectTrigger className="w-[140px]">
               <Clock className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Sort by" />
@@ -164,7 +187,7 @@ export default function SessionHistory() {
               </div>
             ) : (
               <div className="p-4 space-y-3">
-                {paginatedSessions.map((session) => (
+                {paginatedSessions.map(session => (
                   <div
                     key={session.id}
                     className={`p-4 rounded-lg cursor-pointer transition-colors ${
@@ -176,17 +199,24 @@ export default function SessionHistory() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium truncate">{session.title}</h4>
-                      <Badge variant={
-                        session.status === 'completed' ? 'success' :
-                        session.status === 'in_progress' ? 'warning' :
-                        'destructive'
-                      }>
+                      <Badge
+                        variant={
+                          session.status === 'completed'
+                            ? 'success'
+                            : session.status === 'in_progress'
+                              ? 'warning'
+                              : 'destructive'
+                        }
+                      >
                         {session.status}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground flex items-center">
                       <Clock className="h-4 w-4 mr-2" />
-                      {format(new Date(session.createdAt), 'MMM d, yyyy h:mm a')}
+                      {format(
+                        new Date(session.createdAt),
+                        'MMM d, yyyy h:mm a'
+                      )}
                     </p>
                   </div>
                 ))}
@@ -207,7 +237,9 @@ export default function SessionHistory() {
               </span>
               <Button
                 variant="outline"
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                onClick={() =>
+                  setCurrentPage(prev => Math.min(totalPages, prev + 1))
+                }
                 disabled={currentPage === totalPages}
               >
                 Next
@@ -224,7 +256,9 @@ export default function SessionHistory() {
             {selectedSession ? (
               <div className="p-4 space-y-6">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-lg">{selectedSession.title}</h4>
+                  <h4 className="font-medium text-lg">
+                    {selectedSession.title}
+                  </h4>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="ghost" size="icon">
@@ -235,7 +269,8 @@ export default function SessionHistory() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Session</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Are you sure you want to delete this session? This action cannot be undone.
+                          Are you sure you want to delete this session? This
+                          action cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -252,7 +287,9 @@ export default function SessionHistory() {
                 </div>
 
                 {selectedSession.description && (
-                  <p className="text-muted-foreground">{selectedSession.description}</p>
+                  <p className="text-muted-foreground">
+                    {selectedSession.description}
+                  </p>
                 )}
 
                 <div>
@@ -270,7 +307,7 @@ export default function SessionHistory() {
                     customStyle={{
                       padding: '1rem',
                       borderRadius: '0.5rem',
-                      fontSize: '0.875rem'
+                      fontSize: '0.875rem',
                     }}
                   >
                     {selectedSession.generatedCode}
@@ -281,7 +318,7 @@ export default function SessionHistory() {
                   <Button
                     onClick={() => {
                       const event = new CustomEvent('continueSession', {
-                        detail: selectedSession
+                        detail: selectedSession,
                       });
                       window.dispatchEvent(event);
                     }}

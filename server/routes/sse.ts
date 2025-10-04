@@ -11,7 +11,7 @@ logger.initialize().catch(console.error);
 const clients = new Set<{ send: (data: string) => void }>();
 
 // Forward log events to all connected clients
-logger.on('log', (logEntry) => {
+logger.on('log', logEntry => {
   try {
     const data = JSON.stringify(logEntry);
     clients.forEach(client => {
@@ -31,10 +31,12 @@ logger.on('log', (logEntry) => {
 logger.on('initialized', () => {
   clients.forEach(client => {
     try {
-      client.send(JSON.stringify({
-        type: 'SYSTEM',
-        message: 'Logger initialized successfully'
-      }));
+      client.send(
+        JSON.stringify({
+          type: 'SYSTEM',
+          message: 'Logger initialized successfully',
+        })
+      );
     } catch (error) {
       console.error('Error sending initialization message:', error);
     }
@@ -54,7 +56,7 @@ router.get('/logs', (req, res) => {
   const client = {
     send: (data: string) => {
       res.write(`data: ${data}\n\n`);
-    }
+    },
   };
 
   // Add client to Set
@@ -96,6 +98,34 @@ router.get('/logs/recent', async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 100;
     const recentLogs = await logger.getRecentLogs(limit);
     res.json(recentLogs);
+  } catch (error) {
+    const err = error as Error;
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Receive client logs endpoint
+router.post('/logs/client', async (req, res) => {
+  try {
+    const { logs, sessionId, userId } = req.body;
+    const serverLogger = req.app.locals.logger;
+
+    if (!Array.isArray(logs)) {
+      return res.status(400).json({ error: 'Logs must be an array' });
+    }
+
+    // Process each client log
+    for (const clientLog of logs) {
+      await serverLogger?.info('Client', clientLog.message, {
+        ...clientLog,
+        sessionId,
+        userId,
+        source: 'CLIENT',
+        timestamp: clientLog.timestamp || new Date().toISOString(),
+      });
+    }
+
+    res.json({ success: true, processed: logs.length });
   } catch (error) {
     const err = error as Error;
     res.status(500).json({ error: err.message });

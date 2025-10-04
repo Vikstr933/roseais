@@ -28,7 +28,7 @@ export class AgentManager {
       agents: path.join(this.baseDir, 'agents'),
       templates: path.join(this.baseDir, 'templates'),
       shared: path.join(this.baseDir, 'shared'),
-      logs: path.join(this.baseDir, 'logs')
+      logs: path.join(this.baseDir, 'logs'),
     };
     this.activeAgents = new Map();
     this.versionControl = new AgentVersionControl(baseDirectory);
@@ -42,7 +42,7 @@ export class AgentManager {
     try {
       // Create main directories if they don't exist
       await Promise.all(
-        Object.values(this.structure).map(dir => 
+        Object.values(this.structure).map(dir =>
           fs.mkdir(dir, { recursive: true })
         )
       );
@@ -53,13 +53,11 @@ export class AgentManager {
         state: path.join(this.structure.agents, 'state'),
         backups: path.join(this.structure.agents, 'backups'),
         communication: path.join(this.structure.shared, 'communication'),
-        resources: path.join(this.structure.shared, 'resources')
+        resources: path.join(this.structure.shared, 'resources'),
       };
 
       await Promise.all(
-        Object.values(subdirs).map(dir => 
-          fs.mkdir(dir, { recursive: true })
-        )
+        Object.values(subdirs).map(dir => fs.mkdir(dir, { recursive: true }))
       );
 
       // Initialize version control
@@ -69,17 +67,22 @@ export class AgentManager {
       await this.syncWithDatabase();
 
       // Initialize default agent if no agents exist
-      const activeAgents = await db.select().from(agents).where(eq(agents.isActive, true));
+      const activeAgents = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.isActive, 1));
       if (activeAgents.length === 0) {
         await this.initializeDefaultAgent();
       }
 
       await this.logger.info('AgentManager', 'Initialized successfully', {
-        directories: Object.keys(this.structure)
+        directories: Object.keys(this.structure),
       });
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentManager', 'Failed to initialize', { error: err.message });
+      await this.logger.error('AgentManager', 'Failed to initialize', {
+        error: err.message,
+      });
       throw error;
     }
   }
@@ -94,18 +97,31 @@ export class AgentManager {
     author?: string
   ): Promise<string> {
     try {
-      const versionId = await this.versionControl.saveVersion(agentId, config, message, author);
-      await this.logger.info('AgentManager', `Saved new version for agent ${agentId}`, {
-        versionId,
+      const versionId = await this.versionControl.saveVersion(
+        agentId,
+        config,
         message,
         author
-      });
+      );
+      await this.logger.info(
+        'AgentManager',
+        `Saved new version for agent ${agentId}`,
+        {
+          versionId,
+          message,
+          author,
+        }
+      );
       return versionId;
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentManager', `Failed to save version for agent ${agentId}`, {
-        error: err.message
-      });
+      await this.logger.error(
+        'AgentManager',
+        `Failed to save version for agent ${agentId}`,
+        {
+          error: err.message,
+        }
+      );
       throw error;
     }
   }
@@ -133,22 +149,30 @@ export class AgentManager {
    */
   async revertAgent(agentId: number, versionId: string): Promise<void> {
     try {
-      const version = await this.versionControl.revertToVersion(agentId, versionId);
-      
-      // Update agent in database with reverted configuration
-      await db
-        .update(agents)
-        .set(version.config)
-        .where(eq(agents.id, agentId));
+      const version = await this.versionControl.revertToVersion(
+        agentId,
+        versionId
+      );
 
-      await this.logger.info('AgentManager', `Reverted agent ${agentId} to version ${versionId}`, {
-        config: version.config
-      });
+      // Update agent in database with reverted configuration
+      await db.update(agents).set(version.config).where(eq(agents.id, agentId));
+
+      await this.logger.info(
+        'AgentManager',
+        `Reverted agent ${agentId} to version ${versionId}`,
+        {
+          config: version.config,
+        }
+      );
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentManager', `Failed to revert agent ${agentId} to version ${versionId}`, {
-        error: err.message
-      });
+      await this.logger.error(
+        'AgentManager',
+        `Failed to revert agent ${agentId} to version ${versionId}`,
+        {
+          error: err.message,
+        }
+      );
       throw error;
     }
   }
@@ -182,10 +206,7 @@ export class AgentManager {
   /**
    * Get all versions with a specific tag
    */
-  async getAgentVersionsByTag(
-    agentId: number,
-    tag: string
-  ): Promise<any[]> {
+  async getAgentVersionsByTag(agentId: number, tag: string): Promise<any[]> {
     return this.versionControl.getVersionsByTag(agentId, tag);
   }
 
@@ -197,37 +218,46 @@ export class AgentManager {
       const projectDir = path.join(this.structure.workspaces, projectName);
       await fs.mkdir(projectDir, { recursive: true });
 
-    // Create standard project structure
-    const subdirs = [
-      'src',
-      'src/components',
-      'src/utils',
-      'src/hooks',
-      'src/styles',
-      'src/types',
-      'tests',
-      'docs'
-    ];
+      // Create standard project structure
+      const subdirs = [
+        'src',
+        'src/components',
+        'src/utils',
+        'src/hooks',
+        'src/styles',
+        'src/types',
+        'tests',
+        'docs',
+      ];
 
-    await Promise.all(
-      subdirs.map(dir => fs.mkdir(path.join(projectDir, dir), { recursive: true }))
-    );
+      await Promise.all(
+        subdirs.map(dir =>
+          fs.mkdir(path.join(projectDir, dir), { recursive: true })
+        )
+      );
 
-      await this.logger.info('AgentManager', `Created new project directory: ${projectName}`, {
-        path: projectDir,
-        subdirectories: subdirs
-      });
+      await this.logger.info(
+        'AgentManager',
+        `Created new project directory: ${projectName}`,
+        {
+          path: projectDir,
+          subdirectories: subdirs,
+        }
+      );
 
       return projectDir;
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentManager', `Failed to create project directory: ${projectName}`, {
-        error: err.message
-      });
+      await this.logger.error(
+        'AgentManager',
+        `Failed to create project directory: ${projectName}`,
+        {
+          error: err.message,
+        }
+      );
       throw error;
     }
   }
-
 
   /**
    * Sync with database
@@ -235,8 +265,11 @@ export class AgentManager {
   private async syncWithDatabase(): Promise<void> {
     try {
       // Get all active agents from database
-      const activeAgents = await db.select().from(agents).where(eq(agents.isActive, true));
-      
+      const activeAgents = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.isActive, 1));
+
       // Update active agents map
       this.activeAgents.clear();
       activeAgents.forEach(agent => {
@@ -246,13 +279,19 @@ export class AgentManager {
       // Ensure each active agent has a state directory
       await Promise.all(
         activeAgents.map(async agent => {
-          const stateDir = path.join(this.structure.agents, 'state', agent.id.toString());
+          const stateDir = path.join(
+            this.structure.agents,
+            'state',
+            agent.id.toString()
+          );
           await fs.mkdir(stateDir, { recursive: true });
         })
       );
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentManager', 'Failed to sync with database', { error: err.message });
+      await this.logger.error('AgentManager', 'Failed to sync with database', {
+        error: err.message,
+      });
       throw error;
     }
   }
@@ -280,41 +319,53 @@ export class AgentManager {
         name: 'Default Component Generator',
         description: 'Default agent for generating React components',
         role: 'Component Generator',
-        model: 'claude-3-sonnet-20240229',
+        model: 'claude-3-5-sonnet-20241022',
         systemPrompt: `You are a specialized agent for generating React components. You focus on:
 - Creating clean, maintainable React components
 - Implementing TypeScript types and interfaces
 - Following React best practices
 - Ensuring code quality and readability`,
         temperature: '0.7',
-        capabilities: ['component generation', 'typescript', 'react'],
-        expertise: ['React', 'TypeScript', 'Component Design'],
-        frameworks: ['React'],
-        libraries: ['react-dom'],
-        bestPractices: [
+        capabilities: JSON.stringify([
+          'component generation',
+          'typescript',
+          'react',
+        ]),
+        expertise: JSON.stringify(['React', 'TypeScript', 'Component Design']),
+        frameworks: JSON.stringify(['React']),
+        libraries: JSON.stringify(['react-dom']),
+        bestPractices: JSON.stringify([
           'Clean Code',
           'Type Safety',
           'Component Composition',
-          'React Hooks'
-        ],
-        isActive: true
+          'React Hooks',
+        ]),
+        isActive: 1,
       };
 
       const [agent] = await db.insert(agents).values(defaultAgent).returning();
-      
+
       // Create state directory for the new agent
-      const stateDir = path.join(this.structure.agents, 'state', agent.id.toString());
+      const stateDir = path.join(
+        this.structure.agents,
+        'state',
+        agent.id.toString()
+      );
       await fs.mkdir(stateDir, { recursive: true });
 
       await this.logger.info('AgentManager', 'Initialized default agent', {
         agentId: agent.id,
-        name: agent.name
+        name: agent.name,
       });
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentManager', 'Failed to initialize default agent', {
-        error: err.message
-      });
+      await this.logger.error(
+        'AgentManager',
+        'Failed to initialize default agent',
+        {
+          error: err.message,
+        }
+      );
       throw error;
     }
   }
@@ -322,7 +373,9 @@ export class AgentManager {
   /**
    * Clean up old workspaces
    */
-  async cleanupOldWorkspaces(maxAge: number = 7 * 24 * 60 * 60 * 1000): Promise<void> {
+  async cleanupOldWorkspaces(
+    maxAge: number = 7 * 24 * 60 * 60 * 1000
+  ): Promise<void> {
     try {
       const workspaces = await fs.readdir(this.structure.workspaces);
       const now = Date.now();
@@ -332,7 +385,7 @@ export class AgentManager {
         workspaces.map(async workspace => {
           const workspacePath = path.join(this.structure.workspaces, workspace);
           const stats = await fs.stat(workspacePath);
-          
+
           if (now - stats.ctimeMs > maxAge) {
             await fs.rm(workspacePath, { recursive: true, force: true });
             deletedWorkspaces.push(workspace);
@@ -343,14 +396,18 @@ export class AgentManager {
       if (deletedWorkspaces.length > 0) {
         await this.logger.info('AgentManager', 'Cleaned up old workspaces', {
           deletedCount: deletedWorkspaces.length,
-          deletedWorkspaces
+          deletedWorkspaces,
         });
       }
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentManager', 'Failed to cleanup old workspaces', {
-        error: err.message
-      });
+      await this.logger.error(
+        'AgentManager',
+        'Failed to cleanup old workspaces',
+        {
+          error: err.message,
+        }
+      );
       throw error;
     }
   }

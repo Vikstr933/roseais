@@ -22,14 +22,14 @@ interface FileValidation {
 }
 
 export async function validateComponent(
-  workspacePath: string, 
+  workspacePath: string,
   features: ComponentFeatures,
   testResults?: string
 ): Promise<ValidationResult> {
   const result: ValidationResult = {
     isValid: true,
     errors: [],
-    warnings: []
+    warnings: [],
   };
 
   // Define required files and their validation rules
@@ -37,27 +37,27 @@ export async function validateComponent(
     {
       path: 'src/main.tsx',
       required: true,
-      validate: validateMainFile
+      validate: validateMainFile,
     },
     {
       path: `src/${features.name}.tsx`,
       required: true,
-      validate: (content) => validateComponentFile(content, features)
+      validate: content => validateComponentFile(content, features),
     },
     {
       path: 'package.json',
       required: true,
-      validate: validatePackageJson
+      validate: validatePackageJson,
     },
     {
       path: 'index.html',
       required: true,
-      validate: validateIndexHtml
+      validate: validateIndexHtml,
     },
     {
       path: 'tsconfig.json',
-      required: true
-    }
+      required: true,
+    },
   ];
 
   // Check each required file
@@ -91,7 +91,7 @@ export async function validateComponent(
     try {
       const parsedTests = parseTestResults(testResults);
       result.testResults = parsedTests;
-      
+
       // Add warnings for missing test categories
       if (!parsedTests.unitTests.length) {
         result.warnings.push('No unit tests found in test results');
@@ -119,12 +119,12 @@ function parseTestResults(testResults: string) {
     unitTests: [] as string[],
     integrationTests: [] as string[],
     accessibilityTests: [] as string[],
-    performanceTests: [] as string[]
+    performanceTests: [] as string[],
   };
 
   // Split the test results into sections
   const sections = testResults.split(/\d\.\s+/);
-  
+
   sections.forEach(section => {
     if (section.toLowerCase().includes('unit test')) {
       parsed.unitTests = extractTestCases(section);
@@ -138,10 +138,11 @@ function parseTestResults(testResults: string) {
   });
 
   // Check if any test sections are empty
-  parsed.passed = parsed.unitTests.length > 0 &&
-                 parsed.integrationTests.length > 0 &&
-                 parsed.accessibilityTests.length > 0 &&
-                 parsed.performanceTests.length > 0;
+  parsed.passed =
+    parsed.unitTests.length > 0 &&
+    parsed.integrationTests.length > 0 &&
+    parsed.accessibilityTests.length > 0 &&
+    parsed.performanceTests.length > 0;
 
   return parsed;
 }
@@ -167,14 +168,17 @@ function validateMainFile(content: string): string[] {
   }
 
   // Check for root element rendering
-  if (!content.includes('createRoot(document.getElementById(\'root\')')) {
+  if (!content.includes("createRoot(document.getElementById('root')")) {
     errors.push('Main file missing root element rendering');
   }
 
   return errors;
 }
 
-function validateComponentFile(content: string, features: ComponentFeatures): string[] {
+function validateComponentFile(
+  content: string,
+  features: ComponentFeatures
+): string[] {
   const errors: string[] = [];
 
   // Basic structural validation
@@ -184,21 +188,28 @@ function validateComponentFile(content: string, features: ComponentFeatures): st
 
   // Dynamic import validation
   const usedFeatures = new Set<string>();
-  
+
   // Collect used features from the code
   if (content.includes('useState')) usedFeatures.add('state management');
   if (content.includes('useEffect')) usedFeatures.add('side effects');
   if (content.includes('useContext')) usedFeatures.add('context');
   if (content.includes('useRef')) usedFeatures.add('refs');
-  if (content.includes('fetch') || content.includes('axios')) usedFeatures.add('api');
-  
+  if (content.includes('fetch') || content.includes('axios'))
+    usedFeatures.add('api');
+
   // Validate imports for used features
   usedFeatures.forEach(feature => {
-    const importPattern = feature === 'state management' ? 'useState' :
-                         feature === 'side effects' ? 'useEffect' :
-                         feature === 'context' ? 'useContext' :
-                         feature === 'refs' ? 'useRef' : '';
-                         
+    const importPattern =
+      feature === 'state management'
+        ? 'useState'
+        : feature === 'side effects'
+          ? 'useEffect'
+          : feature === 'context'
+            ? 'useContext'
+            : feature === 'refs'
+              ? 'useRef'
+              : '';
+
     if (importPattern && !content.includes(`import { ${importPattern} }`)) {
       errors.push(`Missing import for ${feature} feature: ${importPattern}`);
     }
@@ -249,7 +260,11 @@ function validateIndexHtml(content: string): string[] {
   return errors;
 }
 
-async function validateComponentType(workspacePath: string, features: ComponentFeatures, result: ValidationResult) {
+async function validateComponentType(
+  workspacePath: string,
+  features: ComponentFeatures,
+  result: ValidationResult
+) {
   try {
     const componentPath = path.join(workspacePath, `src/${features.name}.tsx`);
     const content = await fs.readFile(componentPath, 'utf-8');
@@ -266,7 +281,9 @@ async function validateComponentType(workspacePath: string, features: ComponentF
     }
 
     if (content.includes('any')) {
-      result.warnings.push('Component contains "any" types - consider adding proper type definitions');
+      result.warnings.push(
+        'Component contains "any" types - consider adding proper type definitions'
+      );
     }
   } catch (error) {
     result.errors.push(`Unable to validate component type: ${error}`);
@@ -274,11 +291,13 @@ async function validateComponentType(workspacePath: string, features: ComponentF
 }
 
 // Runtime verification test
-export async function verifyRuntime(workspacePath: string): Promise<ValidationResult> {
+export async function verifyRuntime(
+  workspacePath: string
+): Promise<ValidationResult> {
   const result: ValidationResult = {
     isValid: true,
     errors: [],
-    warnings: []
+    warnings: [],
   };
 
   try {

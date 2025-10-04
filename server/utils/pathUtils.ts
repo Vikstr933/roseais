@@ -34,14 +34,14 @@ export class PathUtils {
 
   async getGeneratedFiles() {
     const files: Array<{ path: string; content: string }> = [];
-    
+
     const walkDirectory = async (dir: string) => {
       const items = await fs.readdir(dir);
-      
+
       for (const item of items) {
         const fullPath = path.join(dir, item);
         const stat = await fs.stat(fullPath);
-        
+
         if (stat.isDirectory()) {
           await walkDirectory(fullPath);
         } else if (stat.isFile()) {
@@ -49,12 +49,12 @@ export class PathUtils {
           const content = await fs.readFile(fullPath, 'utf-8');
           files.push({
             path: relativePath,
-            content
+            content,
           });
         }
       }
     };
-    
+
     await walkDirectory(this.workspacePath);
     return files;
   }

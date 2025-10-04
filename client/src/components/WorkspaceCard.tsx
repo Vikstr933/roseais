@@ -1,7 +1,7 @@
-import { motion } from "framer-motion";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Code2, Users, PlayCircle } from "lucide-react";
+import { motion } from 'framer-motion';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Code2, Users, PlayCircle } from 'lucide-react';
 
 interface WorkspaceProps {
   workspace: {
@@ -28,10 +28,7 @@ interface WorkspaceProps {
 
 export function WorkspaceCard({ workspace }: WorkspaceProps) {
   return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      className="h-full"
-    >
+    <motion.div whileHover={{ scale: 1.02 }} className="h-full">
       <Card className="h-full backdrop-blur-sm bg-card/80 border border-primary/20 shadow-lg hover:shadow-primary/10">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -54,7 +51,8 @@ export function WorkspaceCard({ workspace }: WorkspaceProps) {
             <h4 className="text-sm font-semibold mb-2">Agent Configuration:</h4>
             <div className="space-y-2">
               <div className="text-sm">
-                <span className="font-semibold">Model:</span> {workspace.agentConfig.model}
+                <span className="font-semibold">Model:</span>{' '}
+                {workspace.agentConfig.model}
               </div>
               {workspace.agentConfig.prompts && (
                 <div className="border rounded-lg p-4">
@@ -77,7 +75,7 @@ export function WorkspaceCard({ workspace }: WorkspaceProps) {
               <div className="space-y-2">
                 {workspace.use_cases.map((useCase, idx) => (
                   <div key={idx} className="text-sm text-muted-foreground">
-                    {useCase.startsWith("Not suitable for:") ? (
+                    {useCase.startsWith('Not suitable for:') ? (
                       <span className="text-destructive">❌ {useCase}</span>
                     ) : (
                       <span className="text-green-600">✅ {useCase}</span>

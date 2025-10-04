@@ -5,7 +5,10 @@ interface PromptSidebarProps {
   onPromptChange: (prompt: string) => void;
 }
 
-export const PromptSidebar = ({ prompt, onPromptChange }: PromptSidebarProps) => {
+export const PromptSidebar = ({
+  prompt,
+  onPromptChange,
+}: PromptSidebarProps) => {
   const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     onPromptChange(e.target.value);
   };
@@ -21,7 +24,9 @@ export const PromptSidebar = ({ prompt, onPromptChange }: PromptSidebarProps) =>
       />
       <button
         className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        onClick={() => {/* Handle prompt submission */}}
+        onClick={() => {
+          /* Handle prompt submission */
+        }}
       >
         Generate
       </button>

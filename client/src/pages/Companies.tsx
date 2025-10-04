@@ -1,10 +1,10 @@
-import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
-import { SearchBar } from "@/components/SearchBar";
-import { Building2, Globe, Calendar } from "lucide-react";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { SearchBar } from '@/components/SearchBar';
+import { Building2, Globe, Calendar } from 'lucide-react';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useState } from 'react';
 
 interface Company {
   id: number;
@@ -18,16 +18,23 @@ interface Company {
 }
 
 export default function Companies() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const { data: companies = [], isLoading, error } = useQuery<Company[]>({
-    queryKey: ["/api/companies"],
+  const {
+    data: companies = [],
+    isLoading,
+    error,
+  } = useQuery<Company[]>({
+    queryKey: ['/api/companies'],
   });
 
-  const filteredCompanies = companies.filter(company =>
-    company.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    company.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    company.products.some(product => product.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredCompanies = companies.filter(
+    company =>
+      company.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      company.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      company.products.some(product =>
+        product.toLowerCase().includes(searchTerm.toLowerCase())
+      )
   );
 
   if (isLoading) {
@@ -93,7 +100,9 @@ export default function Companies() {
                 <p className="mb-4 text-sm">{company.description}</p>
 
                 <div className="mb-4">
-                  <h4 className="text-sm font-semibold mb-2">Products & Services:</h4>
+                  <h4 className="text-sm font-semibold mb-2">
+                    Products & Services:
+                  </h4>
                   <div className="flex flex-wrap gap-2">
                     {company.products.map((product, idx) => (
                       <Badge
@@ -112,9 +121,14 @@ export default function Companies() {
                     <h4 className="text-sm font-semibold mb-2">Use Cases:</h4>
                     <div className="space-y-2">
                       {company.use_cases.map((useCase, idx) => (
-                        <div key={idx} className="text-sm text-muted-foreground">
-                          {useCase.startsWith("Not suitable for:") ? (
-                            <span className="text-destructive">❌ {useCase}</span>
+                        <div
+                          key={idx}
+                          className="text-sm text-muted-foreground"
+                        >
+                          {useCase.startsWith('Not suitable for:') ? (
+                            <span className="text-destructive">
+                              ❌ {useCase}
+                            </span>
                           ) : (
                             <span className="text-green-600">✅ {useCase}</span>
                           )}

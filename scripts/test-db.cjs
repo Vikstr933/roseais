@@ -5,7 +5,7 @@ const client = new Client({
   port: 5432,
   user: 'postgres',
   password: 'postgres',
-  database: 'postgres'
+  database: 'postgres',
 });
 
 async function testConnection() {
@@ -13,7 +13,7 @@ async function testConnection() {
     await client.connect();
     const result = await client.query('SELECT NOW()');
     console.log('Database connection successful:', result.rows[0]);
-    
+
     // Test if the agents table exists
     const tableResult = await client.query(`
       SELECT EXISTS (
@@ -23,7 +23,6 @@ async function testConnection() {
       );
     `);
     console.log('Agents table exists:', tableResult.rows[0].exists);
-    
   } catch (err) {
     console.error('Error connecting to database:', err);
   } finally {

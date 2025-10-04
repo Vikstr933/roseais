@@ -42,10 +42,17 @@ export class AgentVersionControl {
       try {
         await fs.access(this.versionFile);
       } catch {
-        await fs.writeFile(this.versionFile, JSON.stringify({
-          agents: {},
-          lastUpdate: new Date().toISOString()
-        }, null, 2));
+        await fs.writeFile(
+          this.versionFile,
+          JSON.stringify(
+            {
+              agents: {},
+              lastUpdate: new Date().toISOString(),
+            },
+            null,
+            2
+          )
+        );
       }
 
       console.log('Agent Version Control initialized successfully');
@@ -80,14 +87,12 @@ export class AgentVersionControl {
       hash,
       author,
       message,
-      tags
+      tags,
     };
 
     try {
       // Read current versions
-      const versions = JSON.parse(
-        await fs.readFile(this.versionFile, 'utf-8')
-      );
+      const versions = JSON.parse(await fs.readFile(this.versionFile, 'utf-8'));
 
       if (!versions.agents[agentId]) {
         versions.agents[agentId] = [];
@@ -100,7 +105,7 @@ export class AgentVersionControl {
         hash,
         author,
         message,
-        tags
+        tags,
       });
 
       // Keep only last 10 versions in the main file
@@ -111,30 +116,21 @@ export class AgentVersionControl {
       versions.lastUpdate = timestamp;
 
       // Save version metadata
-      await fs.writeFile(
-        this.versionFile,
-        JSON.stringify(versions, null, 2)
-      );
+      await fs.writeFile(this.versionFile, JSON.stringify(versions, null, 2));
 
       // Save full version data
       const versionPath = path.join(
         this.versionsDir,
         `${agentId}_${versionId}.json`
       );
-      await fs.writeFile(
-        versionPath,
-        JSON.stringify(version, null, 2)
-      );
+      await fs.writeFile(versionPath, JSON.stringify(version, null, 2));
 
       // Create backup
       const backupPath = path.join(
         this.backupDir,
         `${agentId}_${versionId}_backup.json`
       );
-      await fs.writeFile(
-        backupPath,
-        JSON.stringify(version, null, 2)
-      );
+      await fs.writeFile(backupPath, JSON.stringify(version, null, 2));
 
       return versionId;
     } catch (error) {
@@ -145,9 +141,7 @@ export class AgentVersionControl {
 
   async getVersions(agentId: number): Promise<VersionMetadata[]> {
     try {
-      const versions = JSON.parse(
-        await fs.readFile(this.versionFile, 'utf-8')
-      );
+      const versions = JSON.parse(await fs.readFile(this.versionFile, 'utf-8'));
       return versions.agents[agentId] || [];
     } catch (error) {
       console.error('Failed to get versions:', error);
@@ -155,7 +149,10 @@ export class AgentVersionControl {
     }
   }
 
-  async getVersion(agentId: number, versionId: string): Promise<Version | null> {
+  async getVersion(
+    agentId: number,
+    versionId: string
+  ): Promise<Version | null> {
     try {
       const versionPath = path.join(
         this.versionsDir,
@@ -201,21 +198,18 @@ export class AgentVersionControl {
     const added = Array.from(keys2).filter(k => !keys1.has(k));
     const removed = Array.from(keys1).filter(k => !keys2.has(k));
     const common = Array.from(keys1).filter(k => keys2.has(k));
-    const modified = common.filter(k => 
-      JSON.stringify(v1.config[k]) !== JSON.stringify(v2.config[k])
+    const modified = common.filter(
+      k => JSON.stringify(v1.config[k]) !== JSON.stringify(v2.config[k])
     );
 
     return {
       added,
       removed,
-      modified
+      modified,
     };
   }
 
-  async revertToVersion(
-    agentId: number,
-    versionId: string
-  ): Promise<Version> {
+  async revertToVersion(agentId: number, versionId: string): Promise<Version> {
     const version = await this.getVersion(agentId, versionId);
     if (!version) {
       throw new Error(`Version ${versionId} not found`);
@@ -238,9 +232,7 @@ export class AgentVersionControl {
     versionId: string,
     tag: string
   ): Promise<void> {
-    const versions = JSON.parse(
-      await fs.readFile(this.versionFile, 'utf-8')
-    );
+    const versions = JSON.parse(await fs.readFile(this.versionFile, 'utf-8'));
 
     const versionIndex = versions.agents[agentId]?.findIndex(
       (v: VersionMetadata) => v.id === versionId
@@ -258,10 +250,7 @@ export class AgentVersionControl {
       versions.agents[agentId][versionIndex].tags.push(tag);
     }
 
-    await fs.writeFile(
-      this.versionFile,
-      JSON.stringify(versions, null, 2)
-    );
+    await fs.writeFile(this.versionFile, JSON.stringify(versions, null, 2));
   }
 
   async getVersionsByTag(

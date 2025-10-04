@@ -13,9 +13,11 @@ export const Playground = () => {
       <div className="bg-gray-800 p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-white text-xl">Component Playground</h1>
-          <button 
+          <button
             className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            onClick={() => {/* Generate component */}}
+            onClick={() => {
+              /* Generate component */
+            }}
           >
             Generate Component
           </button>
@@ -36,10 +38,7 @@ export const Playground = () => {
 
         {/* Prompt Sidebar */}
         <div className="w-1/3 border-l border-gray-200">
-          <PromptSidebar 
-            prompt={prompt}
-            onPromptChange={setPrompt}
-          />
+          <PromptSidebar prompt={prompt} onPromptChange={setPrompt} />
         </div>
       </div>
     </div>

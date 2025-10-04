@@ -29,15 +29,15 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
       const response = await fetch('/api/components/save', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           componentName,
           files: files.map(file => ({
             path: file.path,
-            content: editedFiles[file.path] || file.content
-          }))
-        })
+            content: editedFiles[file.path] || file.content,
+          })),
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to save files');
@@ -46,25 +46,26 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
       const serverResponse = await fetch('/api/components/start-server', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ componentName })
+        body: JSON.stringify({ componentName }),
       });
 
       if (!serverResponse.ok) throw new Error('Failed to start server');
 
       const { url } = await serverResponse.json();
       setPreviewUrl(url);
-      
+
       toast({
-        title: "Development Server Started",
+        title: 'Development Server Started',
         description: `Preview available at ${url}`,
       });
     } catch (error) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to start server",
-        variant: "destructive"
+        title: 'Error',
+        description:
+          error instanceof Error ? error.message : 'Failed to start server',
+        variant: 'destructive',
       });
     }
   }, [componentName, editedFiles, toast]);
@@ -74,24 +75,25 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
       const response = await fetch('/api/components/stop-server', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ componentName })
+        body: JSON.stringify({ componentName }),
       });
 
       if (!response.ok) throw new Error('Failed to stop server');
 
       setPreviewUrl(null);
-      
+
       toast({
-        title: "Server Stopped",
-        description: "Development server has been stopped",
+        title: 'Server Stopped',
+        description: 'Development server has been stopped',
       });
     } catch (error) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to stop server",
-        variant: "destructive"
+        title: 'Error',
+        description:
+          error instanceof Error ? error.message : 'Failed to stop server',
+        variant: 'destructive',
       });
     }
   }, [componentName, toast]);
@@ -105,17 +107,17 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
     setEditedFiles(initialContent);
   }, [files]);
 
-  // Handle server lifecycle
+  // Auto-start server when component is loaded
   useEffect(() => {
-    if (serverStatus === 'running') {
+    if (files.length > 0 && !previewUrl) {
       handleStartServer();
     }
-  }, [serverStatus, handleStartServer]);
+  }, [files, previewUrl, handleStartServer]);
 
   const handleFileEdit = (path: string, content: string) => {
     setEditedFiles(prev => ({
       ...prev,
-      [path]: content
+      [path]: content,
     }));
   };
 
@@ -124,15 +126,15 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
       const response = await fetch('/api/components/download', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           componentName,
           files: files.map(file => ({
             path: file.path,
-            content: editedFiles[file.path] || file.content
-          }))
-        })
+            content: editedFiles[file.path] || file.content,
+          })),
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to generate download');
@@ -148,14 +150,15 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
       document.body.removeChild(a);
 
       toast({
-        title: "Download Started",
-        description: "Your component files are being downloaded",
+        title: 'Download Started',
+        description: 'Your component files are being downloaded',
       });
     } catch (error) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to download files",
-        variant: "destructive"
+        title: 'Error',
+        description:
+          error instanceof Error ? error.message : 'Failed to download files',
+        variant: 'destructive',
       });
     }
   }, [componentName, editedFiles, toast]);
@@ -179,7 +182,7 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
           Download
         </Button>
       </div>
-      
+
       <div className="flex-1">
         {previewUrl ? (
           <iframe

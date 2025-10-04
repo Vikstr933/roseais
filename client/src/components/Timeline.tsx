@@ -1,18 +1,19 @@
-import { motion } from "framer-motion";
+import { motion } from 'framer-motion';
 
 interface TimelineProps {
   items: any[];
 }
 
 export function Timeline({ items }: TimelineProps) {
-  const sortedItems = [...items].sort((a, b) => 
-    new Date(a.releaseDate).getTime() - new Date(b.releaseDate).getTime()
+  const sortedItems = [...items].sort(
+    (a, b) =>
+      new Date(a.releaseDate).getTime() - new Date(b.releaseDate).getTime()
   );
 
   return (
     <div className="relative">
       <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 h-full bg-primary/20" />
-      
+
       {sortedItems.map((item, index) => (
         <motion.div
           key={item.id}
@@ -20,7 +21,7 @@ export function Timeline({ items }: TimelineProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.1 }}
           className={`relative flex items-center mb-8 ${
-            index % 2 === 0 ? "flex-row" : "flex-row-reverse"
+            index % 2 === 0 ? 'flex-row' : 'flex-row-reverse'
           }`}
         >
           <div className="w-1/2 px-8">
@@ -32,7 +33,7 @@ export function Timeline({ items }: TimelineProps) {
               <p className="mt-2 text-sm">{item.description}</p>
             </div>
           </div>
-          
+
           <div className="absolute left-1/2 transform -translate-x-1/2 w-4 h-4">
             <div className="w-full h-full rounded-full bg-primary" />
           </div>

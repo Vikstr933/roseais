@@ -1,5 +1,12 @@
-import React, { useState } from "react";
-import { Folder, File, FileText, FileCode, FileJson, FileImage } from "lucide-react";
+import React, { useState } from 'react';
+import {
+  Folder,
+  File,
+  FileText,
+  FileCode,
+  FileJson,
+  FileImage,
+} from 'lucide-react';
 
 export interface FileExplorerProps {
   workspacePath: string;
@@ -12,27 +19,41 @@ export interface FileExplorerProps {
 }
 
 const FileExplorer: React.FC<FileExplorerProps> = ({
-  files,
+  files = [],
   onSelectFile,
-  selectedFileIndex
+  selectedFileIndex,
 }) => {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set(['src']) // Auto-expand src folder by default
+  );
 
   // Convert flat file list to directory tree structure
   const buildTree = (files: { path: string }[]) => {
     const tree: Record<string, any> = {};
-    
+
+    if (!files || files.length === 0) {
+      return tree;
+    }
+
     files.forEach(file => {
-      const parts = file.path.split('/');
-      let currentLevel = tree;
+      if (!file || !file.path) return; // Skip invalid files
       
+      const parts = file.path.split('/').filter(p => p); // Remove empty parts
+      let currentLevel = tree;
+
       parts.forEach((part, index) => {
+        const isLastPart = index === parts.length - 1;
+        
         if (!currentLevel[part]) {
-          currentLevel[part] = index === parts.length - 1 ? 
-            { type: 'file', path: file.path } : 
-            { type: 'folder', children: {} };
+          currentLevel[part] = isLastPart
+            ? { type: 'file', path: file.path }
+            : { type: 'folder', children: {} };
         }
-        currentLevel = currentLevel[part].children || {};
+        
+        // Only traverse deeper if this is a folder and not the last part
+        if (!isLastPart && currentLevel[part].children) {
+          currentLevel = currentLevel[part].children;
+        }
       });
     });
 
@@ -42,7 +63,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const renderTree = (tree: Record<string, any>, path = '') => {
     return Object.entries(tree).map(([name, node]) => {
       const fullPath = path ? `${path}/${name}` : name;
-      
+
       if (node.type === 'folder') {
         return (
           <div key={fullPath}>
@@ -64,9 +85,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               {name}
             </div>
             {expandedFolders.has(fullPath) && (
-              <div className="pl-4">
-                {renderTree(node.children, fullPath)}
-              </div>
+              <div className="pl-4">{renderTree(node.children, fullPath)}</div>
             )}
           </div>
         );
@@ -74,7 +93,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
       const fileIndex = files.findIndex(f => f.path === node.path);
       const isSelected = selectedFileIndex === fileIndex;
-      
+
       return (
         <div
           key={fullPath}
@@ -113,12 +132,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   };
 
+  if (!files || files.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground text-sm">
+        <p>No files yet</p>
+        <p className="text-xs mt-2">Generate code to see files here</p>
+      </div>
+    );
+  }
+
   const tree = buildTree(files);
-  return (
-    <div className="space-y-1">
-      {renderTree(tree)}
-    </div>
-  );
+  return <div className="space-y-1">{renderTree(tree)}</div>;
 };
 
 export default FileExplorer;

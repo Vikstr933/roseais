@@ -5,10 +5,11 @@ async function seedAgentScripts() {
   try {
     const scripts = [
       {
-        name: "React Component Generator",
-        description: "Autonomous agent that generates complete React components with TypeScript",
-        language: "TypeScript",
-        version: "1.0.0",
+        name: 'React Component Generator',
+        description:
+          'Autonomous agent that generates complete React components with TypeScript',
+        language: 'TypeScript',
+        version: '1.0.0',
         scriptTemplate: `import React, { useState, useEffect } from 'react';
 
 interface {{componentName}}Props {
@@ -26,20 +27,21 @@ export const {{componentName}}: React.FC<{{componentName}}Props> = ({}) => {
 
 export default {{componentName}};`,
         configSchema: {
-          componentName: "string",
-          props: "object",
-          styling: "string",
-          testing: "boolean"
+          componentName: 'string',
+          props: 'object',
+          styling: 'string',
+          testing: 'boolean',
         },
-        requirements: ["Node.js 16+", "React 18+", "TypeScript"],
-        category: "frontend",
-        tags: ["react", "typescript", "components", "automation"]
+        requirements: ['Node.js 16+', 'React 18+', 'TypeScript'],
+        category: 'frontend',
+        tags: ['react', 'typescript', 'components', 'automation'],
       },
       {
-        name: "API Endpoint Builder",
-        description: "Creates RESTful API endpoints with validation and documentation",
-        language: "TypeScript",
-        version: "1.2.0",
+        name: 'API Endpoint Builder',
+        description:
+          'Creates RESTful API endpoints with validation and documentation',
+        language: 'TypeScript',
+        version: '1.2.0',
         scriptTemplate: `import express from 'express';
 import { body, validationResult } from 'express-validator';
 
@@ -73,20 +75,20 @@ router.{{method}}('{{route}}', [
 
 export default router;`,
         configSchema: {
-          endpoints: "array",
-          validation: "object",
-          database: "string",
-          authentication: "boolean"
+          endpoints: 'array',
+          validation: 'object',
+          database: 'string',
+          authentication: 'boolean',
         },
-        requirements: ["Node.js 16+", "Express.js", "Joi/Zod"],
-        category: "backend",
-        tags: ["api", "express", "validation", "documentation"]
+        requirements: ['Node.js 16+', 'Express.js', 'Joi/Zod'],
+        category: 'backend',
+        tags: ['api', 'express', 'validation', 'documentation'],
       },
       {
-        name: "Database Schema Manager",
-        description: "Manages database schemas, migrations, and relationships",
-        language: "Python",
-        version: "2.1.0",
+        name: 'Database Schema Manager',
+        description: 'Manages database schemas, migrations, and relationships',
+        language: 'Python',
+        version: '2.1.0',
         scriptTemplate: `from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -118,15 +120,15 @@ def get_db():
     finally:
         db.close()`,
         configSchema: {
-          databaseType: "string",
-          tables: "array",
-          relationships: "array",
-          indexes: "array"
+          databaseType: 'string',
+          tables: 'array',
+          relationships: 'array',
+          indexes: 'array',
         },
-        requirements: ["Python 3.8+", "SQLAlchemy", "Alembic"],
-        category: "database",
-        tags: ["database", "schema", "migrations", "sql"]
-      }
+        requirements: ['Python 3.8+', 'SQLAlchemy', 'Alembic'],
+        category: 'database',
+        tags: ['database', 'schema', 'migrations', 'sql'],
+      },
     ];
 
     for (const script of scripts) {

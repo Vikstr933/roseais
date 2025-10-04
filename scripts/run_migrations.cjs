@@ -8,15 +8,15 @@ const migrationsPath = path.join(__dirname, '../drizzle/migrations');
 console.log('Migrations path:', migrationsPath);
 
 const client = new Client({
-  connectionString: 'postgresql://postgres:postgres@localhost:5432/postgres'
+  connectionString: 'postgresql://postgres:postgres@localhost:5432/postgres',
 });
 
 (async () => {
   try {
     await client.connect();
     const db = drizzle(client);
-    await migrate(db, { 
-      migrationsFolder: migrationsPath
+    await migrate(db, {
+      migrationsFolder: migrationsPath,
     });
     console.log('Migrations applied successfully');
   } catch (err) {

@@ -1,5 +1,6 @@
 import { BaseAgent } from './BaseAgent';
 import { ToolRegistry } from '../utils/ToolRegistry';
+import { aiCodeGenerator } from '../services/AICodeGenerator';
 
 export class CodeGeneratorAgent extends BaseAgent {
   constructor() {
@@ -11,76 +12,169 @@ export class CodeGeneratorAgent extends BaseAgent {
   }
 
   async executeTask(task: string): Promise<{
-    files: { path: string; content: string }[]
+    files: { path: string; content: string }[];
   }> {
-    this.logger.info(`Generating code for: ${task}`);
+    this.logger.info(`Generating intelligent code for: ${task}`);
 
     const files = [];
+    const componentName = this.getComponentName(task);
+    const features = this.extractFeatures(task);
 
-    // Generate main component file
-    const mainComponent = await this.generateMainComponent(task, null);
-    files.push({
-      path: `src/${this.getComponentName(task)}.tsx`,
-      content: mainComponent
-    });
-
-    // Generate hooks if needed
-    const hooks = await this.generateHooks(task);
-    if (hooks) {
-      files.push({
-        path: `src/hooks/use${this.getComponentName(task)}.ts`,
-        content: hooks
+    try {
+      // Use AI to generate the main component
+      const aiResponse = await aiCodeGenerator.generateComponent({
+        prompt: task,
+        componentName,
+        features,
+        styling: {
+          animations: task.toLowerCase().includes('animation'),
+          theme: task.toLowerCase().includes('dark') ? 'dark' : 'light',
+        },
       });
-    }
 
-    // Generate types
-    const types = await this.generateTypes(task);
-    if (types) {
+      if (aiResponse.success) {
+        // Add the AI-generated main component
+        files.push({
+          path: `src/${componentName}.tsx`,
+          content: aiResponse.code,
+        });
+
+        // Generate additional files using AI
+        const hooks = await aiCodeGenerator.generateHooks(componentName, features);
+        if (hooks) {
+          files.push({
+            path: `src/hooks/use${componentName}.ts`,
+            content: hooks,
+          });
+        }
+
+        const types = await aiCodeGenerator.generateTypes(componentName, features);
+        if (types) {
+          files.push({
+            path: 'src/types.ts',
+            content: types,
+          });
+        }
+      } else {
+        // Fallback to template if AI fails
+        this.logger.warn('AI generation failed, using fallback template', { error: aiResponse.error });
+        const fallbackComponent = await this.generateMainComponent(task, null);
+        files.push({
+          path: `src/${componentName}.tsx`,
+          content: fallbackComponent,
+        });
+      }
+
+      // Generate supporting files
+      const utils = await this.generateUtils(task);
+      if (utils) {
+        files.push({
+          path: 'src/utils.ts',
+          content: utils,
+        });
+      }
+
+      // Generate main entry file
+      const mainEntry = await this.generateMainEntry(componentName);
       files.push({
-        path: 'src/types.ts',
-        content: types
+        path: 'src/main.tsx',
+        content: mainEntry,
       });
-    }
 
-    // Generate utilities
-    const utils = await this.generateUtils(task);
-    if (utils) {
+      // Generate CSS
+      const styles = await this.generateBasicStyles();
       files.push({
-        path: 'src/utils.ts',
-        content: utils
+        path: 'src/index.css',
+        content: styles,
       });
+
+      return { files };
+    } catch (error) {
+      this.logger.error('Code generation failed', error as Error);
+      // Return minimal fallback
+      return {
+        files: [
+          {
+            path: `src/${componentName}.tsx`,
+            content: await this.generateMainComponent(task, null),
+          },
+          {
+            path: 'src/main.tsx',
+            content: await this.generateMainEntry(componentName),
+          },
+          {
+            path: 'src/index.css',
+            content: await this.generateBasicStyles(),
+          },
+        ],
+      };
     }
-
-    // Generate main entry file
-    const mainEntry = await this.generateMainEntry(this.getComponentName(task));
-    files.push({
-      path: 'src/main.tsx',
-      content: mainEntry
-    });
-
-    // Generate CSS
-    const styles = await this.generateBasicStyles();
-    files.push({
-      path: 'src/index.css',
-      content: styles
-    });
-
-    return { files };
   }
 
   private getComponentName(task: string): string {
-    if (task.toLowerCase().includes('todo')) return 'TodoApp';
-    if (task.toLowerCase().includes('calculator')) return 'Calculator';
-    if (task.toLowerCase().includes('form')) return 'FormApp';
-    if (task.toLowerCase().includes('dashboard')) return 'Dashboard';
-    if (task.toLowerCase().includes('chat')) return 'ChatApp';
-    if (task.toLowerCase().includes('weather')) return 'WeatherApp';
-    if (task.toLowerCase().includes('timer')) return 'Timer';
-    if (task.toLowerCase().includes('counter')) return 'Counter';
-    return 'App';
+    // Generate a more intelligent component name based on the task
+    const words = task.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !['create', 'make', 'build', 'generate', 'app', 'platform', 'like'].includes(word))
+      .slice(0, 3);
+    
+    if (words.length === 0) return 'GeneratedApp';
+    
+    return words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('') + 'App';
   }
 
-  private async generateMainComponent(task: string, uiDesign?: any): Promise<string> {
+  private extractFeatures(task: string): string[] {
+    const features: string[] = [];
+    const taskLower = task.toLowerCase();
+    
+    // Extract features based on keywords
+    if (taskLower.includes('streaming') || taskLower.includes('twitch') || taskLower.includes('live')) {
+      features.push('streaming', 'video-player', 'chat', 'real-time');
+    }
+    if (taskLower.includes('dashboard') || taskLower.includes('analytics')) {
+      features.push('dashboard', 'charts', 'metrics');
+    }
+    if (taskLower.includes('social') || taskLower.includes('community')) {
+      features.push('social', 'user-profiles', 'interactions');
+    }
+    if (taskLower.includes('ecommerce') || taskLower.includes('shop') || taskLower.includes('store')) {
+      features.push('ecommerce', 'shopping-cart', 'payments');
+    }
+    if (taskLower.includes('game') || taskLower.includes('gaming')) {
+      features.push('gaming', 'interactive', 'scoreboard');
+    }
+    if (taskLower.includes('music') || taskLower.includes('audio')) {
+      features.push('music', 'audio-player', 'playlist');
+    }
+    if (taskLower.includes('video') || taskLower.includes('media')) {
+      features.push('video-player', 'media-gallery');
+    }
+    if (taskLower.includes('chat') || taskLower.includes('messaging')) {
+      features.push('chat', 'messaging', 'real-time');
+    }
+    if (taskLower.includes('form') || taskLower.includes('input')) {
+      features.push('forms', 'validation');
+    }
+    if (taskLower.includes('dark') || taskLower.includes('theme')) {
+      features.push('dark-mode', 'theming');
+    }
+    if (taskLower.includes('animation') || taskLower.includes('transition')) {
+      features.push('animations', 'transitions');
+    }
+    
+    // Default features if none detected
+    if (features.length === 0) {
+      features.push('interactive', 'responsive');
+    }
+    
+    return features;
+  }
+
+  private async generateMainComponent(
+    task: string,
+    uiDesign?: any
+  ): Promise<string> {
     const componentName = this.getComponentName(task);
     const taskLower = task.toLowerCase();
 

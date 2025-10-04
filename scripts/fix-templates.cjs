@@ -5,19 +5,19 @@ const pool = new Pool({
   port: 5432,
   user: 'postgres',
   password: 'postgres',
-  database: 'postgres'
+  database: 'postgres',
 });
 
 async function fixTemplates() {
   const client = await pool.connect();
-  
+
   try {
     // Start transaction
     await client.query('BEGIN');
-    
+
     // Clear existing templates
     await client.query('TRUNCATE prompt_templates');
-    
+
     // Insert required templates
     const templates = [
       {
@@ -35,7 +35,7 @@ Provide:
 6. Error Handling Requirements
 7. Performance Considerations
 8. Accessibility Requirements`,
-        description: 'Template for analyzing component requirements'
+        description: 'Template for analyzing component requirements',
       },
       {
         name: 'Component Architecture Design',
@@ -52,7 +52,7 @@ Provide a detailed technical specification including:
 6. Sub-components (if needed)
 7. External Dependencies
 8. Performance Optimizations`,
-        description: 'Template for designing component architecture'
+        description: 'Template for designing component architecture',
       },
       {
         name: 'Component Implementation',
@@ -67,7 +67,7 @@ Follow these guidelines:
 - Ensure proper error handling
 - Consider accessibility
 - Optimize performance where possible`,
-        description: 'Template for implementing React components'
+        description: 'Template for implementing React components',
       },
       {
         name: 'Component Testing',
@@ -99,36 +99,40 @@ Include:
 - Event handler efficiency
 
 Use React Testing Library and Jest best practices.`,
-        description: 'Template for generating component tests'
-      }
+        description: 'Template for generating component tests',
+      },
     ];
 
     // Insert templates
     for (const template of templates) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO prompt_templates (name, template, description, variables, category, tags, best_practices, version)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [
-        template.name,
-        template.template,
-        template.description,
-        {}, // empty variables object
-        'component', // category
-        [], // empty tags array
-        {}, // empty best practices
-        '1.0.0' // version
-      ]);
+      `,
+        [
+          template.name,
+          template.template,
+          template.description,
+          {}, // empty variables object
+          'component', // category
+          [], // empty tags array
+          {}, // empty best practices
+          '1.0.0', // version
+        ]
+      );
     }
-    
+
     // Commit transaction
     await client.query('COMMIT');
-    
+
     console.log('Templates fixed successfully');
-    
+
     // Verify templates
-    const result = await client.query('SELECT name, description FROM prompt_templates ORDER BY name');
+    const result = await client.query(
+      'SELECT name, description FROM prompt_templates ORDER BY name'
+    );
     console.log('\nCurrent templates:', result.rows);
-    
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error fixing templates:', err);

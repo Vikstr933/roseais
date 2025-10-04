@@ -1,7 +1,15 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Folder, File, FileText, FileCode, FileJson, FileImage, Plus } from "lucide-react";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Folder,
+  File,
+  FileText,
+  FileCode,
+  FileJson,
+  FileImage,
+  Plus,
+} from 'lucide-react';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 
 export interface FileExplorerProps {
   workspacePath: string;
@@ -14,27 +22,29 @@ export interface FileExplorerProps {
   onFileCreate?: (path: string) => void;
 }
 
-const FileExplorer: React.FC<FileExplorerProps> = ({ 
-  files, 
-  onSelectFile, 
+const FileExplorer: React.FC<FileExplorerProps> = ({
+  files,
+  onSelectFile,
   selectedFileIndex,
   onFileCreate,
-  workspacePath 
+  workspacePath,
 }) => {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set()
+  );
   const [creatingFile, setCreatingFile] = useState(false);
-  const [newFilePath, setNewFilePath] = useState("");
+  const [newFilePath, setNewFilePath] = useState('');
 
   // Rebuild tree whenever files change with error handling
   const [tree, setTree] = useState(() => buildTree(files, workspacePath));
   const [loading, setLoading] = useState(false);
-  
+
   useEffect(() => {
     if (!files || files.length === 0) {
       setTree({});
       return;
     }
-    
+
     try {
       setLoading(true);
       const newTree = buildTree(files, workspacePath);
@@ -64,54 +74,64 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   }
 
   // Convert flat file list to directory tree structure
-  const buildTree = useCallback((files: { path: string }[], basePath: string) => {
-    const tree: Record<string, any> = {};
-    
-    // Filter out empty files
-    const validFiles = files.filter(file => file.path && file.path.trim() !== '');
-    
-    validFiles.forEach(file => {
-      // Normalize path by removing workspace prefix
-      const normalizedPath = file.path.replace(new RegExp(`^${basePath}\/?`), '');
-      const parts = normalizedPath.split('/');
-      let currentLevel = tree;
-      
-      parts.forEach((part, index) => {
-        if (part) { // Skip empty parts
-          if (!currentLevel[part]) {
-            currentLevel[part] = index === parts.length - 1 ? 
-              { type: 'file', path: file.path } : 
-              { type: 'folder', children: {} };
+  const buildTree = useCallback(
+    (files: { path: string }[], basePath: string) => {
+      const tree: Record<string, any> = {};
+
+      // Filter out empty files
+      const validFiles = files.filter(
+        file => file.path && file.path.trim() !== ''
+      );
+
+      validFiles.forEach(file => {
+        // Normalize path by removing workspace prefix
+        const normalizedPath = file.path.replace(
+          new RegExp(`^${basePath}\/?`),
+          ''
+        );
+        const parts = normalizedPath.split('/');
+        let currentLevel = tree;
+
+        parts.forEach((part, index) => {
+          if (part) {
+            // Skip empty parts
+            if (!currentLevel[part]) {
+              currentLevel[part] =
+                index === parts.length - 1
+                  ? { type: 'file', path: file.path }
+                  : { type: 'folder', children: {} };
+            }
+            currentLevel = currentLevel[part].children || {};
           }
-          currentLevel = currentLevel[part].children || {};
-        }
-      });
-    });
-
-    // Remove empty folders
-    const removeEmptyFolders = (node: any) => {
-      if (node.type === 'folder') {
-        Object.keys(node.children).forEach(key => {
-          removeEmptyFolders(node.children[key]);
         });
-        
-        if (Object.keys(node.children).length === 0) {
-          delete node.children;
-        }
-      }
-    };
-    
-    Object.keys(tree).forEach(key => {
-      removeEmptyFolders(tree[key]);
-    });
+      });
 
-    return tree;
-  }, []);
+      // Remove empty folders
+      const removeEmptyFolders = (node: any) => {
+        if (node.type === 'folder') {
+          Object.keys(node.children).forEach(key => {
+            removeEmptyFolders(node.children[key]);
+          });
+
+          if (Object.keys(node.children).length === 0) {
+            delete node.children;
+          }
+        }
+      };
+
+      Object.keys(tree).forEach(key => {
+        removeEmptyFolders(tree[key]);
+      });
+
+      return tree;
+    },
+    []
+  );
 
   const renderTree = (tree: Record<string, any>, path = '') => {
     return Object.entries(tree).map(([name, node]) => {
       const fullPath = path ? `${path}/${name}` : name;
-      
+
       if (node.type === 'folder') {
         return (
           <div key={fullPath}>
@@ -133,9 +153,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               {name}
             </div>
             {expandedFolders.has(fullPath) && (
-              <div className="pl-4">
-                {renderTree(node.children, fullPath)}
-              </div>
+              <div className="pl-4">{renderTree(node.children, fullPath)}</div>
             )}
           </div>
         );
@@ -143,7 +161,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
       const fileIndex = files.findIndex(f => f.path === node.path);
       const isSelected = selectedFileIndex === fileIndex;
-      
+
       return (
         <div
           key={fullPath}
@@ -190,7 +208,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           <div className="flex items-center gap-2">
             <Input
               value={newFilePath}
-              onChange={(e) => setNewFilePath(e.target.value)}
+              onChange={e => setNewFilePath(e.target.value)}
               placeholder="New file name"
               className="h-8"
             />
@@ -201,7 +219,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 if (newFilePath.trim()) {
                   onFileCreate?.(newFilePath);
                   setCreatingFile(false);
-                  setNewFilePath("");
+                  setNewFilePath('');
                 }
               }}
             >
@@ -221,4 +239,4 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       </Button>
     </div>
   );
-}
+};

@@ -55,12 +55,16 @@ function createTables() {
     console.log('✅ Database tables created successfully');
 
     // Check if tables exist
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
-    console.log('Tables in database:', tables.map(t => t.name));
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all();
+    console.log(
+      'Tables in database:',
+      tables.map(t => t.name)
+    );
 
     db.close();
     console.log('🎉 Database setup completed!');
-
   } catch (error) {
     console.error('❌ Error setting up database:', error);
   }

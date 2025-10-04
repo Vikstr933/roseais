@@ -6,7 +6,7 @@ export enum LogLevel {
   INFO = 'INFO',
   WARNING = 'WARNING',
   ERROR = 'ERROR',
-  DEBUG = 'DEBUG'
+  DEBUG = 'DEBUG',
 }
 
 export interface LogEntry {
@@ -49,18 +49,18 @@ export class Logger extends EventEmitter {
   private async _initialize(): Promise<void> {
     try {
       await fs.mkdir(this.logDir, { recursive: true });
-      
+
       // Write an initialization marker to verify file access
       const initEntry: LogEntry = {
         timestamp: new Date().toISOString(),
         level: LogLevel.INFO,
         category: 'Logger',
-        message: 'Logger initialized successfully'
+        message: 'Logger initialized successfully',
       };
-      
+
       await this.writeToLog(initEntry);
       this.initialized = true;
-      
+
       // Emit initialization success
       this.emit('initialized');
     } catch (error) {
@@ -77,30 +77,30 @@ export class Logger extends EventEmitter {
     }
 
     const logLine = `[${entry.timestamp}] ${entry.level} [${entry.category}] ${entry.message} ${entry.code ? `\n\`\`\`\n${entry.code}\n\`\`\`\n` : ''}\n`;
-    
+
     try {
       // Ensure log directory exists (in case it was deleted)
       await fs.mkdir(this.logDir, { recursive: true });
-      
+
       // Write to log file
       await fs.appendFile(this.logFile, logLine);
-      
+
       // Emit the log entry for real-time monitoring
       this.emit('log', {
         ...entry,
-        timestamp: entry.timestamp || new Date().toISOString()
+        timestamp: entry.timestamp || new Date().toISOString(),
       });
-      
+
       // Also log to console for development visibility
       console.log(logLine.trim());
     } catch (error) {
       const err = error instanceof Error ? error.message : String(error);
       console.error('Failed to write log entry:', err);
-      
+
       // Even if file write fails, still emit the event for real-time monitoring
       this.emit('log', {
         ...entry,
-        timestamp: entry.timestamp || new Date().toISOString()
+        timestamp: entry.timestamp || new Date().toISOString(),
       });
     }
   }
@@ -118,25 +118,41 @@ export class Logger extends EventEmitter {
       category,
       message,
       metadata,
-      code
+      code,
     };
 
     await this.writeToLog(entry);
   }
 
-  async info(category: string, message: string, metadata?: Record<string, any>): Promise<void> {
+  async info(
+    category: string,
+    message: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
     await this.log(LogLevel.INFO, category, message, metadata);
   }
 
-  async warning(category: string, message: string, metadata?: Record<string, any>): Promise<void> {
+  async warning(
+    category: string,
+    message: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
     await this.log(LogLevel.WARNING, category, message, metadata);
   }
 
-  async error(category: string, message: string, metadata?: Record<string, any>): Promise<void> {
+  async error(
+    category: string,
+    message: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
     await this.log(LogLevel.ERROR, category, message, metadata);
   }
 
-  async debug(category: string, message: string, metadata?: Record<string, any>): Promise<void> {
+  async debug(
+    category: string,
+    message: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
     await this.log(LogLevel.DEBUG, category, message, metadata);
   }
 
@@ -159,7 +175,7 @@ export class Logger extends EventEmitter {
               timestamp: match[1],
               level: match[2] as LogLevel,
               category: match[3],
-              message: match[4]
+              message: match[4],
             };
           }
           return null;

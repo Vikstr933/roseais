@@ -5,24 +5,28 @@ A comprehensive AI development platform with agent orchestration, knowledge base
 ## ✨ Features
 
 ### 🎯 **Agent Orchestration**
+
 - **11 Specialized AI Agents** for different development tasks
 - **Multi-agent coordination** for complex application generation
 - **Real-time progress tracking** and live preview
 - **Intelligent task distribution** across specialized agents
 
 ### 📚 **Knowledge Base**
+
 - **14 AI Companies & Platforms** (OpenAI, Anthropic, Hugging Face, etc.)
 - **8 Development Frameworks** (React, Vue, Angular, FastAPI, etc.)
 - **6 Workspace Templates** for common AI development scenarios
 - **Latest AI Models** (Claude 3.5, GPT-4o, Llama 3.1, etc.)
 
 ### 🎨 **Professional UI**
+
 - **Modern React interface** with Tailwind CSS
 - **Real-time search** across all knowledge bases
 - **Visual indicators** for use cases and limitations
 - **Responsive design** for all devices
 
 ### 🚀 **Development Features**
+
 - **Live component generation** with instant preview
 - **Multi-agent collaboration** for complex tasks
 - **Session management** and history tracking
@@ -44,6 +48,7 @@ A comprehensive AI development platform with agent orchestration, knowledge base
 ## 🛠️ **Technology Stack**
 
 ### Frontend
+
 - **React 18** with TypeScript
 - **Vite** for fast development
 - **Tailwind CSS** for styling
@@ -51,6 +56,7 @@ A comprehensive AI development platform with agent orchestration, knowledge base
 - **React Query** for state management
 
 ### Backend
+
 - **Node.js** with Express
 - **TypeScript** for type safety
 - **SQLite** with Drizzle ORM
@@ -58,6 +64,7 @@ A comprehensive AI development platform with agent orchestration, knowledge base
 - **Better SQLite3** for database operations
 
 ### AI Agents
+
 - **11 Specialized Agents** for different tasks
 - **Multi-agent orchestration** system
 - **Agent communication** and coordination
@@ -66,23 +73,27 @@ A comprehensive AI development platform with agent orchestration, knowledge base
 ## 🚀 **Getting Started**
 
 ### Prerequisites
+
 - Node.js 18+
 - npm or yarn
 
 ### Installation
 
 1. **Clone the repository**
+
 ```bash
 git clone https://github.com/YOUR_USERNAME/ai-library.git
 cd ai-library
 ```
 
 2. **Install dependencies**
+
 ```bash
 npm install
 ```
 
 3. **Set up database**
+
 ```bash
 # Run database migrations
 npm run db:migrate
@@ -92,6 +103,7 @@ npm run db:seed
 ```
 
 4. **Start development servers**
+
 ```bash
 # Start both client and server
 npm run dev
@@ -102,6 +114,7 @@ npm run dev:server  # Express API server (port 3001)
 ```
 
 5. **Open your browser**
+
 ```
 Client: http://localhost:5173
 API: http://localhost:3001
@@ -112,18 +125,21 @@ API: http://localhost:3001
 ### 🎯 **Core Features**
 
 #### **AI Agent Orchestration**
+
 1. Go to **Playground** (`/playground`)
 2. Enter your project requirements
 3. Watch multiple AI agents collaborate in real-time
 4. Get complete, runnable applications
 
 #### **Knowledge Base**
+
 - **Companies**: Research AI platforms and services
 - **Frameworks**: Find the right tools for your project
 - **Workspaces**: Use pre-built project templates
 - **Models**: Explore latest AI capabilities
 
 #### **Development Workspaces**
+
 - **Multi-Agent Code Review**: Automated quality assessment
 - **AI Content Generation**: Blog posts, social media, marketing
 - **ML Model Development**: Complete ML pipelines
@@ -153,15 +169,15 @@ ai-library/
 
 ## 🔧 **API Endpoints**
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/agents` | List all AI agents |
-| `GET /api/models` | Available AI models |
-| `GET /api/companies` | AI companies database |
-| `GET /api/frameworks` | Development frameworks |
-| `GET /api/workspaces` | Development workspaces |
-| `GET /api/sessions` | Code generation sessions |
-| `POST /api/prompts/generate` | Generate applications |
+| Endpoint                     | Description              |
+| ---------------------------- | ------------------------ |
+| `GET /api/agents`            | List all AI agents       |
+| `GET /api/models`            | Available AI models      |
+| `GET /api/companies`         | AI companies database    |
+| `GET /api/frameworks`        | Development frameworks   |
+| `GET /api/workspaces`        | Development workspaces   |
+| `GET /api/sessions`          | Code generation sessions |
+| `POST /api/prompts/generate` | Generate applications    |
 
 ## 🤝 **Contributing**
 

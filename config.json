@@ -15,12 +15,7 @@
   "databaseSync": {
     "enabled": true,
     "syncInterval": 60000,
-    "tables": [
-      "agents",
-      "prompts",
-      "workflows",
-      "templates"
-    ]
+    "tables": ["agents", "prompts", "workflows", "templates"]
   },
   "logging": {
     "level": "info",

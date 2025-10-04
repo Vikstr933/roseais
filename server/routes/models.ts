@@ -8,11 +8,17 @@ const models = [
     id: 'claude-3-5-sonnet-20241022',
     name: 'Claude 3.5 Sonnet',
     provider: 'Anthropic',
-    description: 'Latest Claude model with improved reasoning and coding capabilities',
+    description:
+      'Latest Claude model with improved reasoning and coding capabilities',
     contextWindow: 200000,
     maxTokens: 8192,
     releaseDate: '2024-10-22',
-    strengths: ['Advanced reasoning', 'Code generation', 'Long context', 'Multimodal']
+    strengths: [
+      'Advanced reasoning',
+      'Code generation',
+      'Long context',
+      'Multimodal',
+    ],
   },
   {
     id: 'gpt-4o-2024-11-20',
@@ -22,7 +28,12 @@ const models = [
     contextWindow: 128000,
     maxTokens: 16384,
     releaseDate: '2024-11-20',
-    strengths: ['General purpose', 'Fast inference', 'Cost effective', 'Vision capabilities']
+    strengths: [
+      'General purpose',
+      'Fast inference',
+      'Cost effective',
+      'Vision capabilities',
+    ],
   },
   {
     id: 'gpt-4-turbo-2024-04-09',
@@ -32,7 +43,7 @@ const models = [
     contextWindow: 128000,
     maxTokens: 4096,
     releaseDate: '2024-04-09',
-    strengths: ['Large context', 'Good for analysis', 'Reliable performance']
+    strengths: ['Large context', 'Good for analysis', 'Reliable performance'],
   },
   {
     id: 'deepseek-coder-33b-instruct',
@@ -42,7 +53,12 @@ const models = [
     contextWindow: 16384,
     maxTokens: 8192,
     releaseDate: '2024-01-01',
-    strengths: ['Code generation', 'Programming tasks', 'Technical writing', 'Debugging']
+    strengths: [
+      'Code generation',
+      'Programming tasks',
+      'Technical writing',
+      'Debugging',
+    ],
   },
   {
     id: 'deepseek-chat-67b',
@@ -52,17 +68,22 @@ const models = [
     contextWindow: 32768,
     maxTokens: 8192,
     releaseDate: '2024-01-01',
-    strengths: ['Conversational AI', 'Reasoning', 'Analysis', 'Creative tasks']
+    strengths: ['Conversational AI', 'Reasoning', 'Analysis', 'Creative tasks'],
   },
   {
     id: 'llama-3-1-70b-instruct',
     name: 'Llama 3.1 70B Instruct',
     provider: 'Meta',
-    description: 'Meta\'s latest instruction-tuned model',
+    description: "Meta's latest instruction-tuned model",
     contextWindow: 131072,
     maxTokens: 8192,
     releaseDate: '2024-07-23',
-    strengths: ['Instruction following', 'Large context', 'Open source', 'Customizable']
+    strengths: [
+      'Instruction following',
+      'Large context',
+      'Open source',
+      'Customizable',
+    ],
   },
   {
     id: 'llama-3-1-8b-instruct',
@@ -72,18 +93,24 @@ const models = [
     contextWindow: 131072,
     maxTokens: 8192,
     releaseDate: '2024-07-23',
-    strengths: ['Fast inference', 'Lower resource usage', 'Good performance', 'Open source']
+    strengths: [
+      'Fast inference',
+      'Lower resource usage',
+      'Good performance',
+      'Open source',
+    ],
   },
   {
     id: 'qwen2-5-72b-instruct',
     name: 'Qwen2.5 72B Instruct',
     provider: 'Alibaba Cloud',
-    description: 'Alibaba\'s latest instruction-tuned model with strong performance',
+    description:
+      "Alibaba's latest instruction-tuned model with strong performance",
     contextWindow: 32768,
     maxTokens: 8192,
     releaseDate: '2024-09-01',
-    strengths: ['Strong reasoning', 'Good coding', 'Multilingual', 'Efficient']
-  }
+    strengths: ['Strong reasoning', 'Good coding', 'Multilingual', 'Efficient'],
+  },
 ];
 
 // GET /api/models - Get list of available models

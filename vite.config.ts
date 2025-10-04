@@ -7,8 +7,23 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Custom plugin to ensure Cross-Origin Isolation headers for WebContainer
+function crossOriginIsolation() {
+  return {
+    name: 'cross-origin-isolation',
+    configureServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), runtimeErrorOverlay(), themePlugin()],
+  plugins: [react(), runtimeErrorOverlay(), themePlugin(), crossOriginIsolation()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "client", "src"),
@@ -36,8 +51,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
+        secure: false,
       },
     },
     fs: {

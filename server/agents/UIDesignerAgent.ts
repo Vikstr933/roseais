@@ -10,7 +10,9 @@ export class UIDesignerAgent extends BaseAgent {
     this.logger.info('UI Designer Agent initialized');
   }
 
-  async executeTask(task: string): Promise<{ components: string[], styles: string, structure: string }> {
+  async executeTask(
+    task: string
+  ): Promise<{ components: string[]; styles: string; structure: string }> {
     this.logger.info(`Designing UI for: ${task}`);
 
     // Analyze the requirement for UI components
@@ -25,23 +27,23 @@ export class UIDesignerAgent extends BaseAgent {
     // Create cohesive styling
     const styles = await this.generateStyles(analysis);
 
-    return { 
+    return {
       components,
       styles,
-      structure
+      structure,
     };
   }
 
   private async analyzeUIRequirements(task: string): Promise<{
-    componentTypes: string[],
-    interactions: string[],
-    layout: string,
-    theme: string
+    componentTypes: string[];
+    interactions: string[];
+    layout: string;
+    theme: string;
   }> {
     const componentTypes = [];
     const interactions = [];
     let layout = 'flexbox';
-    let theme = 'modern';
+    const theme = 'modern';
 
     // Analyze task to determine UI requirements
     const taskLower = task.toLowerCase();
@@ -71,7 +73,7 @@ export class UIDesignerAgent extends BaseAgent {
       componentTypes,
       interactions,
       layout,
-      theme
+      theme,
     };
   }
 
@@ -259,7 +261,9 @@ body {
   border-bottom: none;
 }
 
-${analysis.layout === 'grid' ? `
+${
+  analysis.layout === 'grid'
+    ? `
 .grid {
   display: grid;
   gap: var(--spacing-md);
@@ -272,7 +276,8 @@ ${analysis.layout === 'grid' ? `
   border-radius: var(--border-radius);
   padding: var(--spacing-lg);
 }
-` : `
+`
+    : `
 .container {
   display: flex;
   flex-direction: column;
@@ -281,6 +286,7 @@ ${analysis.layout === 'grid' ? `
   margin: 0 auto;
   padding: var(--spacing-lg);
 }
-`}`;
+`
+}`;
   }
 }

@@ -5,6 +5,7 @@
 Your project has been successfully committed to Git with all the latest changes. To set up GitHub integration:
 
 ### Step 1: Create GitHub Repository
+
 1. Go to [GitHub.com](https://github.com)
 2. Click "New repository"
 3. Name it: `ai-library` (or your preferred name)
@@ -13,6 +14,7 @@ Your project has been successfully committed to Git with all the latest changes.
 6. Click "Create repository"
 
 ### Step 2: Connect Local Repository to GitHub
+
 After creating the repository, GitHub will show you commands like:
 
 ```bash
@@ -24,7 +26,9 @@ git push -u origin main
 Copy and run those commands in your terminal.
 
 ### Step 3: Verify Setup
+
 Your repository should now contain:
+
 - ✅ Complete AI Library application
 - ✅ Knowledge base with 14 AI companies
 - ✅ 8 development frameworks
@@ -34,6 +38,7 @@ Your repository should now contain:
 - ✅ Full API backend
 
 ### 📁 Repository Structure
+
 ```
 ai-library/
 ├── client/          # React frontend
@@ -45,6 +50,7 @@ ai-library/
 ```
 
 ### 🎯 Ready to Use
+
 - **Development server**: `npm run dev`
 - **Production build**: `npm run build`
 - **Database setup**: Scripts in `/scripts/` directory

@@ -9,7 +9,10 @@ declare module 'better-sqlite3' {
   interface Statement {
     all(...params: any[]): any[];
     get(...params: any[]): any;
-    run(...params: any[]): { changes: number; lastInsertRowid: number | bigint };
+    run(...params: any[]): {
+      changes: number;
+      lastInsertRowid: number | bigint;
+    };
     bind(...params: any[]): this;
   }
 

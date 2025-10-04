@@ -5,18 +5,22 @@ export type ServerStatus = 'running' | 'stopped' | 'error';
 
 export function useServerStatus() {
   const [status, setStatus] = useState<ServerStatus>('stopped');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // Changed from true
   const { toast } = useToast();
 
   const checkStatus = async () => {
     try {
       const response = await fetch('/api/server/status');
-      if (!response.ok) throw new Error('Failed to fetch server status');
+      if (!response.ok) {
+        // If API doesn't exist, assume stopped
+        setStatus('stopped');
+        return;
+      }
       const data = await response.json();
-      setStatus(data.status);
+      setStatus(data.status || 'stopped');
     } catch (error) {
       console.error('Server status check failed:', error);
-      setStatus('error');
+      setStatus('stopped'); // Default to stopped on error
     } finally {
       setIsLoading(false);
     }
@@ -29,13 +33,13 @@ export function useServerStatus() {
       if (!response.ok) throw new Error('Failed to start server');
       const data = await response.json();
       setStatus(data.status);
-      toast({ title: "Server Started" });
+      toast({ title: 'Server Started' });
     } catch (error) {
       console.error('Failed to start server:', error);
-      toast({ 
-        title: "Error", 
-        description: "Failed to start server",
-        variant: "destructive"
+      toast({
+        title: 'Error',
+        description: 'Failed to start server',
+        variant: 'destructive',
       });
       setStatus('error');
     } finally {
@@ -50,13 +54,13 @@ export function useServerStatus() {
       if (!response.ok) throw new Error('Failed to stop server');
       const data = await response.json();
       setStatus(data.status);
-      toast({ title: "Server Stopped" });
+      toast({ title: 'Server Stopped' });
     } catch (error) {
       console.error('Failed to stop server:', error);
-      toast({ 
-        title: "Error", 
-        description: "Failed to stop server",
-        variant: "destructive"
+      toast({
+        title: 'Error',
+        description: 'Failed to stop server',
+        variant: 'destructive',
       });
       setStatus('error');
     } finally {
@@ -69,7 +73,7 @@ export function useServerStatus() {
 
     const pollStatus = async () => {
       if (!mounted) return;
-      
+
       try {
         await checkStatus();
       } catch (error) {
@@ -82,7 +86,7 @@ export function useServerStatus() {
 
     // Set up polling with a longer interval
     const interval = setInterval(pollStatus, 10000);
-    
+
     // Cleanup
     return () => {
       mounted = false;
@@ -95,6 +99,6 @@ export function useServerStatus() {
     isLoading,
     startServer,
     stopServer,
-    checkStatus
+    checkStatus,
   };
 }

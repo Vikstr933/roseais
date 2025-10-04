@@ -19,7 +19,10 @@ router.get('/', async (req, res) => {
       founded: company.founded,
       website: company.website,
       logoUrl: company.logoUrl,
-      products: typeof company.products === 'string' ? JSON.parse(company.products) : company.products
+      products:
+        typeof company.products === 'string'
+          ? JSON.parse(company.products)
+          : company.products,
     }));
 
     console.log(`Fetched ${transformedCompanies.length} companies`);
@@ -34,7 +37,11 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const companyId = parseInt(req.params.id);
-    const company = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+    const company = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1);
 
     if (!company || company.length === 0) {
       return res.status(404).json({ error: 'Company not found' });
@@ -50,7 +57,10 @@ router.get('/:id', async (req, res) => {
       founded: companyData.founded,
       website: companyData.website,
       logoUrl: companyData.logoUrl,
-      products: typeof companyData.products === 'string' ? JSON.parse(companyData.products) : companyData.products
+      products:
+        typeof companyData.products === 'string'
+          ? JSON.parse(companyData.products)
+          : companyData.products,
     };
 
     res.json(transformedCompany);
@@ -66,17 +76,22 @@ router.post('/', async (req, res) => {
     const { name, description, founded, website, logoUrl, products } = req.body;
 
     if (!name || !description || !website) {
-      return res.status(400).json({ error: 'Name, description, and website are required' });
+      return res
+        .status(400)
+        .json({ error: 'Name, description, and website are required' });
     }
 
-    const newCompany = await db.insert(companies).values({
-      name,
-      description,
-      founded,
-      website,
-      logoUrl,
-      products: JSON.stringify(products || [])
-    }).returning();
+    const newCompany = await db
+      .insert(companies)
+      .values({
+        name,
+        description,
+        founded,
+        website,
+        logoUrl,
+        products: JSON.stringify(products || []),
+      })
+      .returning();
 
     console.log('Created company:', newCompany[0]);
     res.status(201).json(newCompany[0]);
@@ -101,7 +116,8 @@ router.put('/:id', async (req, res) => {
     if (logoUrl) updateData.logoUrl = logoUrl;
     if (products) updateData.products = JSON.stringify(products);
 
-    const updatedCompany = await db.update(companies)
+    const updatedCompany = await db
+      .update(companies)
       .set(updateData)
       .where(eq(companies.id, companyId))
       .returning();
@@ -123,7 +139,8 @@ router.delete('/:id', async (req, res) => {
   try {
     const companyId = parseInt(req.params.id);
 
-    const deletedCompany = await db.delete(companies)
+    const deletedCompany = await db
+      .delete(companies)
       .where(eq(companies.id, companyId))
       .returning();
 

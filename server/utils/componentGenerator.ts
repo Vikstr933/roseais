@@ -12,7 +12,11 @@ interface GeneratedComponent {
 }
 
 // Export the static method directly for use in other files
-export const generateReactComponent = async (prompt: string, aiResponse: string): Promise<GeneratedComponent> => {
+export const generateReactComponent = async (
+  prompt: string,
+  aiResponse: string,
+  onFileGenerated?: (file: { path: string; content: string }, index: number, total: number) => void
+): Promise<GeneratedComponent> => {
   try {
     await logger.info('ComponentGenerator', 'Starting component generation', {
       prompt,
@@ -20,31 +24,57 @@ export const generateReactComponent = async (prompt: string, aiResponse: string)
 
     // Parse files from AI response
     const files: { path: string; content: string }[] = [];
-    const fileRegex = /\*\*(.*?)\*\*\s*```(?:typescript|tsx|css|json)\s*([\s\S]*?)```/g;
+    const fileRegex =
+      /\*\*(.*?)\*\*\s*```(?:typescript|tsx|ts|jsx|css|json|html|js)\s*([\s\S]*?)```/g;
     let match;
 
     // Sanitize file paths to remove invalid characters and ensure proper directory structure
     const sanitizePath = (path: string) => {
       // Remove invalid characters and trim whitespace
-      const sanitized = path.replace(/[<>:"|?*]/g, '-').trim();
-      // Ensure path starts with src/ if it doesn't already
+      let sanitized = path.replace(/[<>:"|?*]/g, '-').trim();
+      
+      // Handle root-level files (index.html, package.json, etc.)
+      const rootFiles = ['index.html', 'package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js', 'tailwind.config.js', 'postcss.config.js'];
+      const fileName = sanitized.split('/').pop() || '';
+      
+      if (rootFiles.includes(fileName) && !sanitized.startsWith('src/')) {
+        return fileName; // Keep root files at root
+      }
+      
+      // Ensure other files start with src/ if they don't already
       return sanitized.startsWith('src/') ? sanitized : `src/${sanitized}`;
     };
 
+    // First pass: collect all files
+    const tempFiles: { path: string; content: string }[] = [];
     while ((match = fileRegex.exec(aiResponse)) !== null) {
       const [, filePath, content] = match;
       if (filePath && content) {
         const sanitizedPath = sanitizePath(filePath);
-        files.push({
+        tempFiles.push({
           path: sanitizedPath,
-          content: content.trim()
+          content: content.trim(),
         });
+      }
+    }
+
+    // Second pass: stream files with callback
+    const totalFiles = tempFiles.length;
+    for (let i = 0; i < tempFiles.length; i++) {
+      const file = tempFiles[i];
+      files.push(file);
+      
+      // Call the callback to stream this file to the client
+      if (onFileGenerated) {
+        onFileGenerated(file, i + 1, totalFiles);
       }
     }
 
     // If no files were found in the AI response, create a default component
     if (files.length === 0) {
-      const componentName = prompt.toLowerCase().includes('todo') ? 'TodoList' : 'CustomComponent';
+      const componentName = prompt.toLowerCase().includes('todo')
+        ? 'TodoList'
+        : 'CustomComponent';
       files.push({
         path: `src/${componentName}.tsx`,
         content: `import React from 'react';
@@ -55,7 +85,7 @@ export default function ${componentName}() {
       <h1>${componentName}</h1>
     </div>
   );
-}`
+}`,
       });
     }
 
@@ -63,20 +93,24 @@ export default function ${componentName}() {
     await logger.info('ComponentGenerator', 'Component generation completed', {
       generatedFiles: files.map(f => ({
         path: f.path,
-        content: f.content
-      }))
+        content: f.content,
+      })),
     });
 
     return {
       text: aiResponse,
-      files
+      files,
     };
   } catch (error) {
-    await logger.error('ComponentGenerator', 'Error during component generation', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      prompt,
-      aiResponse
-    });
+    await logger.error(
+      'ComponentGenerator',
+      'Error during component generation',
+      {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        prompt,
+        aiResponse,
+      }
+    );
     throw error;
   }
 };
@@ -87,7 +121,7 @@ export class ComponentGenerator {
   async generateFileStructure(): Promise<{ files: GeneratedFile[] }> {
     await logger.info('ComponentGenerator', 'Generating file structure', {
       componentName: this.features.name,
-      features: this.features.features
+      features: this.features.features,
     });
 
     const baseStructure: GeneratedFile[] = [
@@ -97,7 +131,7 @@ export class ComponentGenerator {
 import ReactDOM from 'react-dom';
 import App from './App';
 
-ReactDOM.render(<App />, document.getElementById('root'));`
+ReactDOM.render(<App />, document.getElementById('root'));`,
       },
       {
         path: 'src/App.tsx',
@@ -109,24 +143,28 @@ export default function App() {
       <h1>${this.features.name}</h1>
     </div>
   );
-}`
+}`,
       },
       {
         path: 'package.json',
-        content: JSON.stringify({
-          name: this.features.name.toLowerCase(),
-          version: '1.0.0',
-          scripts: {
-            start: 'react-scripts start',
-            build: 'react-scripts build',
-            test: 'react-scripts test'
+        content: JSON.stringify(
+          {
+            name: this.features.name.toLowerCase(),
+            version: '1.0.0',
+            scripts: {
+              start: 'react-scripts start',
+              build: 'react-scripts build',
+              test: 'react-scripts test',
+            },
+            dependencies: {
+              react: '^18.2.0',
+              'react-dom': '^18.2.0',
+              'react-scripts': '5.0.1',
+            },
           },
-          dependencies: {
-            react: '^18.2.0',
-            'react-dom': '^18.2.0',
-            'react-scripts': '5.0.1'
-          }
-        }, null, 2)
+          null,
+          2
+        ),
       },
       {
         path: 'tailwind.config.ts',
@@ -139,8 +177,8 @@ module.exports = {
     extend: {},
   },
   plugins: [],
-}`
-      }
+}`,
+      },
     ];
 
     // Add feature-specific files
@@ -158,13 +196,17 @@ export default function Router() {
       </Routes>
     </BrowserRouter>
   );
-}`
+}`,
       });
     }
 
-    await logger.info('ComponentGenerator', 'File structure generation completed', {
-      generatedFiles: baseStructure.map(f => f.path)
-    });
+    await logger.info(
+      'ComponentGenerator',
+      'File structure generation completed',
+      {
+        generatedFiles: baseStructure.map(f => f.path),
+      }
+    );
 
     return { files: baseStructure };
   }
@@ -172,11 +214,11 @@ export default function Router() {
   async generateCode(): Promise<{ files: GeneratedFile[] }> {
     await logger.info('ComponentGenerator', 'Starting code generation', {
       componentName: this.features.name,
-      features: this.features.features
+      features: this.features.features,
     });
 
     const files: GeneratedFile[] = [];
-    
+
     // Generate main component
     files.push({
       path: `src/components/${this.features.name}.tsx`,
@@ -188,7 +230,7 @@ export default function ${this.features.name}() {
       ${this.features.features.map((f: string) => `<${f} />`).join('\n      ')}
     </div>
   );
-}`
+}`,
     });
 
     // Generate feature components
@@ -203,16 +245,16 @@ export default function ${feature}() {
       ${feature} Component
     </div>
   );
-}`
+}`,
       });
     });
 
     await logger.info('ComponentGenerator', 'Code generation completed', {
       generatedFiles: files.map(f => ({
         path: f.path,
-        content: f.content // Log full generated code
+        content: f.content, // Log full generated code
       })),
-      dependencies: this.features.features // Log dependencies
+      dependencies: this.features.features, // Log dependencies
     });
 
     return { files };

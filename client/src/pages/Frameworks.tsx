@@ -1,10 +1,10 @@
-import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
-import { SearchBar } from "@/components/SearchBar";
-import { Code, Github, Book, Star } from "lucide-react";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { SearchBar } from '@/components/SearchBar';
+import { Code, Github, Book, Star } from 'lucide-react';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useState } from 'react';
 
 interface Framework {
   id: number;
@@ -18,17 +18,24 @@ interface Framework {
 }
 
 export default function Frameworks() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const { data: frameworks = [], isLoading, error } = useQuery<Framework[]>({
-    queryKey: ["/api/frameworks"],
+  const {
+    data: frameworks = [],
+    isLoading,
+    error,
+  } = useQuery<Framework[]>({
+    queryKey: ['/api/frameworks'],
   });
 
-  const filteredFrameworks = frameworks.filter(framework =>
-    framework.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    framework.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    framework.language.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    framework.features.some(feature => feature.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredFrameworks = frameworks.filter(
+    framework =>
+      framework.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      framework.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      framework.language.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      framework.features.some(feature =>
+        feature.toLowerCase().includes(searchTerm.toLowerCase())
+      )
   );
 
   if (isLoading) {
@@ -84,7 +91,10 @@ export default function Frameworks() {
                   <div>
                     <h3 className="text-xl font-semibold">{framework.name}</h3>
                     <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      <Badge
+                        variant="secondary"
+                        className="bg-primary/10 text-primary"
+                      >
                         {framework.language}
                       </Badge>
                     </div>
@@ -98,11 +108,7 @@ export default function Frameworks() {
                   <h4 className="text-sm font-semibold mb-2">Key Features:</h4>
                   <div className="flex flex-wrap gap-2">
                     {framework.features.map((feature, idx) => (
-                      <Badge
-                        key={idx}
-                        variant="outline"
-                        className="text-xs"
-                      >
+                      <Badge key={idx} variant="outline" className="text-xs">
                         {feature}
                       </Badge>
                     ))}
@@ -114,9 +120,14 @@ export default function Frameworks() {
                     <h4 className="text-sm font-semibold mb-2">Use Cases:</h4>
                     <div className="space-y-2">
                       {framework.use_cases.map((useCase, idx) => (
-                        <div key={idx} className="text-sm text-muted-foreground">
-                          {useCase.startsWith("Not suitable for:") ? (
-                            <span className="text-destructive">❌ {useCase}</span>
+                        <div
+                          key={idx}
+                          className="text-sm text-muted-foreground"
+                        >
+                          {useCase.startsWith('Not suitable for:') ? (
+                            <span className="text-destructive">
+                              ❌ {useCase}
+                            </span>
                           ) : (
                             <span className="text-green-600">✅ {useCase}</span>
                           )}

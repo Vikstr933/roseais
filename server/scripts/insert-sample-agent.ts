@@ -5,7 +5,8 @@ async function insertWebDevAgent() {
   try {
     const webDevAgent = {
       name: 'Web Development Assistant',
-      description: 'An AI agent specialized in creating modern web components and applications',
+      description:
+        'An AI agent specialized in creating modern web components and applications',
       role: 'Web Developer',
       model: 'claude-3-sonnet-20240229',
       systemPrompt: `You are an expert web developer specialized in creating modern web applications. Your capabilities include:
@@ -31,35 +32,30 @@ When generating code:
         'responsive design',
         'animation implementation',
         'state management',
-        'TypeScript integration'
+        'TypeScript integration',
       ],
       expertise: [
         'React',
         'TypeScript',
         'CSS/SCSS',
         'Animation',
-        'Responsive Design'
+        'Responsive Design',
       ],
-      frameworks: [
-        'React',
-        'Next.js',
-        'Tailwind CSS',
-        'Framer Motion'
-      ],
+      frameworks: ['React', 'Next.js', 'Tailwind CSS', 'Framer Motion'],
       libraries: [
         'styled-components',
         'react-query',
         'zustand',
-        'react-hook-form'
+        'react-hook-form',
       ],
       bestPractices: [
         'Component composition',
         'Custom hooks',
         'Performance optimization',
         'Accessibility (a11y)',
-        'Progressive enhancement'
+        'Progressive enhancement',
       ],
-      isActive: true
+      isActive: true,
     };
 
     const result = await db.insert(agents).values(webDevAgent).returning();

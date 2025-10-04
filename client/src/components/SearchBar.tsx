@@ -1,6 +1,6 @@
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
-import { motion } from "framer-motion";
+import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface SearchBarProps {
   onSearch: (term: string) => void;
@@ -19,7 +19,7 @@ export function SearchBar({ onSearch }: SearchBarProps) {
           type="text"
           placeholder="Search AI models, companies, or frameworks..."
           className="pl-10 bg-card/80 backdrop-blur-sm border-primary/20"
-          onChange={(e) => onSearch(e.target.value)}
+          onChange={e => onSearch(e.target.value)}
         />
       </div>
     </motion.div>

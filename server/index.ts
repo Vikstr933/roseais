@@ -2,20 +2,42 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { Logger } from './utils/Logger';
+import { sentryService } from './services/SentryService';
+import { 
+  sentryRequestHandler, 
+  sentryTracingHandler, 
+  sentryErrorHandler,
+  errorLogger,
+  errorResponder 
+} from './middleware/sentry';
 import agentsRouter from './routes/agents';
 import promptsRouter from './routes/prompts';
 import workspacesRouter from './routes/workspaces';
 import componentsRouter from './routes/components';
 import companiesRouter from './routes/companies';
 import frameworksRouter from './routes/frameworks';
+import knowledgeRouter from './routes/knowledge';
+import githubKnowledgeRouter from './routes/github-knowledge';
+import apiKeysRouter from './routes/api-keys';
+import monetizationRouter from './routes/monetization';
+import billingRouter from './routes/billing';
+import relevanceRouter from './routes/relevance';
+import terminalRouter from './routes/terminal';
 import sseRouter from './routes/sse';
 import serverRouter from './routes/server';
 import modelsRouter from './routes/models';
 import sessionsRouter from './routes/sessions';
+import authRouter from './routes/auth.js';
+import oauthRouter from './routes/oauth';
+import testRouter from './routes/test';
+import { lockCleanupService } from './utils/lockCleanup';
 
 import * as dotenv from 'dotenv';
 import { sql } from 'drizzle-orm';
 dotenv.config();
+
+// Initialize Sentry FIRST
+sentryService.initialize();
 
 const PORT = process.env.PORT || 3001;
 const logger = new Logger(process.cwd());
@@ -32,55 +54,32 @@ const initializeApp = async () => {
       console.error('Logger initialization failed:', error);
       throw error;
     }
-    
-    // Test database connection
-    try {
-      console.log('Current working directory:', process.cwd());
-      console.log('Environment variables:', {
-        DATABASE_URL: process.env.DATABASE_URL,
-        NODE_ENV: process.env.NODE_ENV
-      });
-      
-      // Test SQLite connection
-      const Database = await import('better-sqlite3');
-      const path = await import('path');
 
-      const dbPath = path.join(process.cwd(), 'db', 'db.sqlite');
-      console.log('Using SQLite database at:', dbPath);
+    // Database connection is tested automatically in db/index.ts
+    // The connection test happens when the db module is imported
+    await logger.info('Server', 'Database connection successful');
 
-      const sqlite = new Database.default(dbPath);
-      console.log('SQLite database opened');
-
-      // Test the connection
-      const result = sqlite.prepare('SELECT 1 as test').get();
-      console.log('Test query executed, result:', result);
-
-      sqlite.close();
-      console.log('SQLite connection closed');
-      await logger.info('Server', 'Database connection successful');
-    } catch (dbError) {
-      console.error('Database connection error details:', {
-        error: dbError,
-        stack: dbError instanceof Error ? dbError.stack : undefined,
-        message: dbError instanceof Error ? dbError.message : String(dbError)
-      });
-      await logger.error('Server', 'Database connection failed', {
-        error: dbError instanceof Error ? dbError.message : String(dbError)
-      });
-      throw new Error(`Failed to connect to database: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
-    }
-    
     // Initialize SSE clients Set
     app.locals.sseClients = new Set();
     app.locals.logger = logger; // Make logger available throughout the app
 
+    // Sentry request handler - MUST be first middleware
+    app.use(sentryRequestHandler());
+    app.use(sentryTracingHandler());
+
     // Global CORS configuration
-    app.use(cors({
-      origin: ['http://localhost:5173', 'http://localhost:5174', new RegExp('http://localhost:5[0-9]{3}')],
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-      credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization']
-    }));
+    app.use(
+      cors({
+        origin: [
+          'http://localhost:5173',
+          'http://localhost:5174',
+          new RegExp('http://localhost:5[0-9]{3}'),
+        ],
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization'],
+      })
+    );
 
     // Special CORS handling for SSE endpoints
     app.use('/api/sse', (req, res, next) => {
@@ -91,14 +90,70 @@ const initializeApp = async () => {
 
     app.use(express.json({ limit: '50mb' }));
 
-    // Add logging middleware
+    // Add enhanced logging middleware
     app.use(async (req, res, next) => {
-      await logger.info('Server', `Incoming request`, {
+      const startTime = Date.now();
+      const requestId = Math.random().toString(36).substr(2, 9);
+
+      // Determine log category based on request path
+      let category = 'Server';
+      if (req.path.startsWith('/api/agents')) category = 'AgentAPI';
+      else if (req.path.startsWith('/api/auth')) category = 'AuthAPI';
+      else if (req.path.startsWith('/api/logs')) category = 'LogAPI';
+      else if (req.path.startsWith('/api/sse')) category = 'SSE';
+      else if (req.path.startsWith('/api/')) category = 'API';
+
+      // Log incoming request with detailed information
+      await logger.info(category, `[${requestId}] ${req.method} ${req.url}`, {
+        requestId,
         method: req.method,
         url: req.url,
-        query: req.query,
-        body: req.method !== 'GET' ? req.body : undefined
+        path: req.path,
+        query: Object.keys(req.query).length > 0 ? req.query : undefined,
+        headers: {
+          'user-agent': req.get('User-Agent'),
+          'content-type': req.get('Content-Type'),
+          'content-length': req.get('Content-Length'),
+          authorization: req.get('Authorization') ? '[REDACTED]' : undefined,
+          'x-forwarded-for': req.get('X-Forwarded-For'),
+          'x-real-ip': req.get('X-Real-IP'),
+        },
+        ip: req.ip || req.connection.remoteAddress,
+        body:
+          req.method !== 'GET' && req.body
+            ? req.body.password || req.body.token
+              ? '[REDACTED]'
+              : req.body
+            : undefined,
+        timestamp: new Date().toISOString(),
       });
+
+      // Override res.end to log response details
+      const originalEnd = res.end;
+      res.end = function (chunk?: any, encoding?: any, cb?: any) {
+        const duration = Date.now() - startTime;
+        const responseSize =
+          res.get('Content-Length') || (chunk ? chunk.length : 0);
+
+        // Log response details
+        logger
+          .info(category, `[${requestId}] Response ${res.statusCode}`, {
+            requestId,
+            statusCode: res.statusCode,
+            duration: `${duration}ms`,
+            responseSize: responseSize ? `${responseSize} bytes` : undefined,
+            headers: {
+              'content-type': res.get('Content-Type'),
+              'content-length': res.get('Content-Length'),
+            },
+            timestamp: new Date().toISOString(),
+          })
+          .catch(console.error);
+
+        // Call original end method with proper return
+        return originalEnd.call(this, chunk, encoding, cb);
+      };
+
       next();
     });
 
@@ -112,29 +167,43 @@ const initializeApp = async () => {
       // For task-related endpoints that use agents, ensure agent is active
       if (req.body.agentId) {
         try {
-          const response = await fetch(`http://localhost:${PORT}/api/agents/validate/${req.body.agentId}`);
+          const response = await fetch(
+            `http://localhost:${PORT}/api/agents/validate/${req.body.agentId}`
+          );
           if (!response.ok) {
             const error = await response.json();
             return res.status(response.status).json(error);
           }
         } catch (error) {
           await logger.error('Server', 'Error validating agent', {
-            error: error instanceof Error ? error.message : String(error)
+            error: error instanceof Error ? error.message : String(error),
           });
-          return res.status(500).json({ error: 'Failed to validate agent status' });
+          return res
+            .status(500)
+            .json({ error: 'Failed to validate agent status' });
         }
       }
-      
+
       next();
     });
 
     // Routes
+    app.use('/api/auth', authRouter);
+    app.use('/api/auth', oauthRouter); // OAuth routes
+    app.use('/api', testRouter); // Test endpoints
     app.use('/api', agentsRouter);
     app.use('/api', promptsRouter);
     app.use('/api/workspaces', workspacesRouter);
     app.use('/api', componentsRouter);
     app.use('/api/companies', companiesRouter);
     app.use('/api/frameworks', frameworksRouter);
+    app.use('/api/knowledge', knowledgeRouter);
+    app.use('/api/github-knowledge', githubKnowledgeRouter);
+    app.use('/api/api-keys', apiKeysRouter);
+    app.use('/api/monetization', monetizationRouter);
+    app.use('/api/billing', billingRouter);
+    app.use('/api/knowledge', relevanceRouter);
+    app.use('/api/terminal', terminalRouter);
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
     app.use('/api/server', serverRouter);
     app.use('/api/models', modelsRouter);
@@ -155,11 +224,37 @@ const initializeApp = async () => {
     // Serve static files from client directory
     app.use(express.static(path.join(process.cwd(), 'client')));
 
+    // Sentry error handler - MUST be after routes but BEFORE error handlers
+    app.use(sentryErrorHandler());
+    app.use(errorLogger);
+
     // Error handling
     app.use(async (err: any, req: any, res: any, next: any) => {
       const error = err instanceof Error ? err.message : String(err);
-      await logger.error('Server', 'Unhandled error', { error });
-      res.status(500).json({ error });
+      const stack = err instanceof Error ? err.stack : undefined;
+
+      await logger.error('Server', `Error in ${req.method} ${req.url}`, {
+        error,
+        stack,
+        method: req.method,
+        url: req.url,
+        path: req.path,
+        query: req.query,
+        body: req.body,
+        headers: {
+          'user-agent': req.get('User-Agent'),
+          'content-type': req.get('Content-Type'),
+          authorization: req.get('Authorization') ? '[REDACTED]' : undefined,
+        },
+        ip: req.ip || req.connection.remoteAddress,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(500).json({
+        error: 'Internal server error',
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] || 'unknown',
+      });
     });
 
     // Start server and wait for it to be ready
@@ -167,14 +262,22 @@ const initializeApp = async () => {
     await new Promise<void>((resolve, reject) => {
       const server = app.listen(PORT, async () => {
         try {
-          await logger.info('Server', `Server is ready and listening on port ${PORT}`);
+          await logger.info(
+            'Server',
+            `Server is ready and listening on port ${PORT}`
+          );
+
+          // Start the lock cleanup service
+          lockCleanupService.start();
+          console.log('Lock cleanup service started');
+
           resolve();
         } catch (err) {
           reject(err);
         }
       });
 
-      server.on('error', (err) => {
+      server.on('error', err => {
         reject(err);
       });
     });
@@ -186,3 +289,16 @@ const initializeApp = async () => {
 
 // Start the application
 initializeApp();
+
+// Graceful shutdown handling
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  lockCleanupService.stop();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully...');
+  lockCleanupService.stop();
+  process.exit(0);
+});

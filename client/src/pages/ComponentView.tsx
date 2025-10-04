@@ -17,10 +17,16 @@ export default function ComponentView() {
   const [location] = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [componentData, setComponentData] = useState<ComponentData | null>(null);
+  const [componentData, setComponentData] = useState<ComponentData | null>(
+    null
+  );
 
   // Extract component name from URL
-  const componentName = location.split('/').pop()?.replace(/-(preview|editor)$/, '') || '';
+  const componentName =
+    location
+      .split('/')
+      .pop()
+      ?.replace(/-(preview|editor)$/, '') || '';
   const isPreview = location.endsWith('-preview');
 
   useEffect(() => {
@@ -64,9 +70,7 @@ export default function ComponentView() {
   if (error || !componentData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-red-500">
-          {error || 'Component not found'}
-        </div>
+        <div className="text-red-500">{error || 'Component not found'}</div>
       </div>
     );
   }

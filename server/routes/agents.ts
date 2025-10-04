@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { db } from '../../db';
 import { agents } from '../../db/schema';
 import { eq } from 'drizzle-orm';
+import { authenticateUser, optionalAuth } from '../middleware/auth';
 
-import { Anthropic } from "@anthropic-ai/sdk";
+import { Anthropic } from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -26,7 +27,7 @@ Return ONLY a JSON object with these fields, no markdown formatting or additiona
   "name": "string - a clear, descriptive name",
   "description": "string - detailed description of the agent's purpose",
   "role": "string - specific role/function of the agent",
-  "model": "string - one of: claude-3-sonnet-20240229, gpt-4-turbo-preview, or deepseek-coder-33b-instruct",
+  "model": "string - one of: claude-3-5-sonnet-20241022, gpt-4-turbo-preview, or deepseek-coder-33b-instruct",
   "systemPrompt": "string - clear instructions for the agent's behavior",
   "temperature": "string - value between 0 and 1",
   "capabilities": ["string array - key capabilities"],
@@ -40,45 +41,57 @@ Important: Return ONLY the JSON object, no markdown formatting, no explanations,
 
   try {
     const message = await anthropic.messages.create({
-      model: "claude-3-sonnet-20240229",
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 2000,
       temperature: 0.7,
       system: systemPrompt,
-      messages: [{
-        role: "user",
-        content: `Generate an AI agent configuration for this request: ${prompt}`
-      }]
+      messages: [
+        {
+          role: 'user',
+          content: `Generate an AI agent configuration for this request: ${prompt}`,
+        },
+      ],
     });
 
     // Extract the response text from the message content
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    const responseText =
+      message.content[0].type === 'text' ? message.content[0].text : '';
     if (!responseText) {
       throw new Error('Failed to get valid response from Claude');
     }
 
     // Extract JSON content from the response, handling potential markdown formatting
-    const jsonMatch = responseText.match(/```json\s*(\{[\s\S]*?\})\s*```/) || 
-                     responseText.match(/\{[\s\S]*\}/);
-                     
+    const jsonMatch =
+      responseText.match(/```json\s*(\{[\s\S]*?\})\s*```/) ||
+      responseText.match(/\{[\s\S]*\}/);
+
     if (!jsonMatch) {
       throw new Error('Could not find valid JSON in the response');
     }
 
     const jsonContent = jsonMatch[1] || jsonMatch[0];
-    
+
     let config;
     try {
       config = JSON.parse(jsonContent);
     } catch (error) {
-      console.error("Error parsing JSON:", error);
-      throw new Error("Failed to parse agent configuration");
+      console.error('Error parsing JSON:', error);
+      throw new Error('Failed to parse agent configuration');
     }
 
     // Ensure all required fields are present
     const requiredFields = [
-      "name", "description", "role", "model", "systemPrompt",
-      "temperature", "capabilities", "expertise", "frameworks",
-      "libraries", "bestPractices"
+      'name',
+      'description',
+      'role',
+      'model',
+      'systemPrompt',
+      'temperature',
+      'capabilities',
+      'expertise',
+      'frameworks',
+      'libraries',
+      'bestPractices',
     ];
 
     for (const field of requiredFields) {
@@ -89,28 +102,36 @@ Important: Return ONLY the JSON object, no markdown formatting, no explanations,
 
     // Validate model selection
     const validModels = [
-      "claude-3-sonnet-20240229",
-      "gpt-4-turbo-preview",
-      "deepseek-coder-33b-instruct"
+      'claude-3-5-sonnet-20241022',
+      'gpt-4-turbo-preview',
+      'deepseek-coder-33b-instruct',
     ];
     if (!validModels.includes(config.model)) {
-      config.model = "claude-3-sonnet-20240229"; // Default to Claude if invalid
+      config.model = 'claude-3-5-sonnet-20241022'; // Default to Claude if invalid
     }
 
     // Validate temperature
     const temp = parseFloat(config.temperature);
     if (isNaN(temp) || temp < 0 || temp > 1) {
-      config.temperature = "0.7"; // Default temperature if invalid
+      config.temperature = '0.7'; // Default temperature if invalid
     }
 
     // Convert arrays to Record<string, boolean> format for capabilities, frameworks, libraries, bestPractices
-    const booleanFields = ["capabilities", "frameworks", "libraries", "bestPractices"];
+    const booleanFields = [
+      'capabilities',
+      'frameworks',
+      'libraries',
+      'bestPractices',
+    ];
     for (const field of booleanFields) {
       if (Array.isArray(config[field])) {
-        config[field] = config[field].reduce((acc: Record<string, boolean>, item: string) => {
-          acc[item.trim()] = true;
-          return acc;
-        }, {});
+        config[field] = config[field].reduce(
+          (acc: Record<string, boolean>, item: string) => {
+            acc[item.trim()] = true;
+            return acc;
+          },
+          {}
+        );
       } else if (typeof config[field] === 'string') {
         config[field] = config[field]
           .split(',')
@@ -125,10 +146,13 @@ Important: Return ONLY the JSON object, no markdown formatting, no explanations,
 
     // Handle expertise separately as it's Record<string, string>
     if (Array.isArray(config.expertise)) {
-      config.expertise = config.expertise.reduce((acc: Record<string, string>, item: string) => {
-        acc[item.trim()] = 'expert';
-        return acc;
-      }, {});
+      config.expertise = config.expertise.reduce(
+        (acc: Record<string, string>, item: string) => {
+          acc[item.trim()] = 'expert';
+          return acc;
+        },
+        {}
+      );
     } else if (typeof config.expertise === 'string') {
       config.expertise = config.expertise
         .split(',')
@@ -142,14 +166,13 @@ Important: Return ONLY the JSON object, no markdown formatting, no explanations,
 
     return {
       ...config,
-      isActive: true
+      isActive: true,
     };
   } catch (error) {
-    console.error("Error generating agent configuration:", error);
-    throw new Error("Failed to generate agent configuration");
+    console.error('Error generating agent configuration:', error);
+    throw new Error('Failed to generate agent configuration');
   }
 }
-
 
 // Middleware to check if agent is active
 const checkAgentStatus = async (req: any, res: any, next: any) => {
@@ -157,16 +180,20 @@ const checkAgentStatus = async (req: any, res: any, next: any) => {
     const agentId = req.params.id || req.body.agentId;
     if (!agentId) return next();
 
-    const agent = await db.select().from(agents).where(eq(agents.id, Number(agentId)));
-    
+    const agent = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, Number(agentId)));
+
     if (agent.length === 0) {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
     if (!agent[0].isActive) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Agent is inactive',
-        message: 'This agent has been deactivated and cannot be used in tasks. Please activate the agent first.'
+        message:
+          'This agent has been deactivated and cannot be used in tasks. Please activate the agent first.',
       });
     }
 
@@ -178,25 +205,47 @@ const checkAgentStatus = async (req: any, res: any, next: any) => {
 
 const router = Router();
 
-// GET /api/agents - Get all agents
-router.get('/agents', async (req, res) => {
+// GET /api/agents - Get all agents (default system agents available to all users)
+router.get('/agents', optionalAuth, async (req, res) => {
   try {
     console.log('GET /api/agents - Fetching all agents');
     const allAgents = await db.select().from(agents);
-    
+
     // Transform the data to match the frontend format
     const transformedAgents = allAgents.map(agent => ({
       ...agent,
-      capabilities: typeof agent.capabilities === 'string' ? JSON.parse(agent.capabilities) : agent.capabilities,
-      expertise: typeof agent.expertise === 'string' ? JSON.parse(agent.expertise) : agent.expertise,
-      frameworks: typeof agent.frameworks === 'string' ? JSON.parse(agent.frameworks) : agent.frameworks,
-      libraries: typeof agent.libraries === 'string' ? JSON.parse(agent.libraries) : agent.libraries,
-      bestPractices: typeof agent.bestPractices === 'string' ? JSON.parse(agent.bestPractices) : agent.bestPractices,
-      customInstructions: agent.customInstructions ? (typeof agent.customInstructions === 'string' ? JSON.parse(agent.customInstructions) : agent.customInstructions) : null,
-      isActive: Boolean(agent.isActive)
+      capabilities:
+        typeof agent.capabilities === 'string'
+          ? JSON.parse(agent.capabilities)
+          : agent.capabilities,
+      expertise:
+        typeof agent.expertise === 'string'
+          ? JSON.parse(agent.expertise)
+          : agent.expertise,
+      frameworks:
+        typeof agent.frameworks === 'string'
+          ? JSON.parse(agent.frameworks)
+          : agent.frameworks,
+      libraries:
+        typeof agent.libraries === 'string'
+          ? JSON.parse(agent.libraries)
+          : agent.libraries,
+      bestPractices:
+        typeof agent.bestPractices === 'string'
+          ? JSON.parse(agent.bestPractices)
+          : agent.bestPractices,
+      customInstructions: agent.customInstructions
+        ? typeof agent.customInstructions === 'string'
+          ? JSON.parse(agent.customInstructions)
+          : agent.customInstructions
+        : null,
+      isActive: Boolean(agent.isActive),
     }));
-    
-    console.log('Fetched agents:', transformedAgents);
+
+    console.log(
+      `Fetched ${transformedAgents.length} agents for user:`,
+      req.user?.id || 'anonymous'
+    );
     res.json(transformedAgents);
   } catch (error) {
     console.error('Error fetching agents:', error);
@@ -204,8 +253,62 @@ router.get('/agents', async (req, res) => {
   }
 });
 
+// GET /api/agents/:id - Get single agent by ID
+router.get('/agents/:id', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`GET /api/agents/${id} - Fetching agent`);
+
+    const agent = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, Number(id)));
+
+    if (agent.length === 0) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Transform the data to match the frontend format
+    const transformedAgent = {
+      ...agent[0],
+      capabilities:
+        typeof agent[0].capabilities === 'string'
+          ? JSON.parse(agent[0].capabilities)
+          : agent[0].capabilities,
+      expertise:
+        typeof agent[0].expertise === 'string'
+          ? JSON.parse(agent[0].expertise)
+          : agent[0].expertise,
+      frameworks:
+        typeof agent[0].frameworks === 'string'
+          ? JSON.parse(agent[0].frameworks)
+          : agent[0].frameworks,
+      libraries:
+        typeof agent[0].libraries === 'string'
+          ? JSON.parse(agent[0].libraries)
+          : agent[0].libraries,
+      bestPractices:
+        typeof agent[0].bestPractices === 'string'
+          ? JSON.parse(agent[0].bestPractices)
+          : agent[0].bestPractices,
+      customInstructions: agent[0].customInstructions
+        ? typeof agent[0].customInstructions === 'string'
+          ? JSON.parse(agent[0].customInstructions)
+          : agent[0].customInstructions
+        : null,
+      isActive: Boolean(agent[0].isActive),
+    };
+
+    console.log('Fetched agent:', transformedAgent);
+    res.json(transformedAgent);
+  } catch (error) {
+    console.error('Error fetching agent:', error);
+    res.status(500).json({ error: 'Failed to fetch agent' });
+  }
+});
+
 // POST /api/agents/generate - Generate agent from prompt
-router.post('/agents/generate', async (req, res) => {
+router.post('/agents/generate', authenticateUser, async (req, res) => {
   try {
     const { prompt } = req.body;
     if (!prompt) {
@@ -224,7 +327,7 @@ router.post('/agents/generate', async (req, res) => {
 router.post('/agents', async (req, res) => {
   try {
     console.log('POST /api/agents - Creating new agent:', req.body);
-    
+
     // Validate and transform the data
     const {
       name,
@@ -255,24 +358,36 @@ router.post('/agents', async (req, res) => {
       frameworks: typeof frameworks === 'object' ? frameworks : {},
       libraries: typeof libraries === 'object' ? libraries : {},
       bestPractices: typeof bestPractices === 'object' ? bestPractices : {},
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      isActive: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     // Validate required fields
-    const requiredFields = ['name', 'description', 'role', 'model', 'systemPrompt', 'temperature'] as const;
-    const missingFields = requiredFields.filter(field => !transformedData[field]);
-    
+    const requiredFields = [
+      'name',
+      'description',
+      'role',
+      'model',
+      'systemPrompt',
+      'temperature',
+    ] as const;
+    const missingFields = requiredFields.filter(
+      field => !transformedData[field]
+    );
+
     if (missingFields.length > 0) {
       return res.status(400).json({
         error: 'Missing required fields',
-        fields: missingFields
+        fields: missingFields,
       });
     }
 
-    const newAgent = await db.insert(agents).values(transformedData).returning();
-    
+    const newAgent = await db
+      .insert(agents)
+      .values(transformedData)
+      .returning();
+
     console.log('Created new agent:', newAgent[0]);
     res.json(newAgent[0]);
   } catch (error) {
@@ -285,8 +400,20 @@ router.post('/agents', async (req, res) => {
 router.put('/agents/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const logger = req.app.locals.logger;
+
+    await logger?.info('AgentManager', `Updating agent ${id}`, {
+      agentId: id,
+      updateFields: Object.keys(req.body),
+      isActiveChange:
+        req.body.isActive !== undefined
+          ? `from ${req.body.isActive ? 'active' : 'inactive'} to ${!req.body.isActive ? 'active' : 'inactive'}`
+          : undefined,
+      timestamp: new Date().toISOString(),
+    });
+
     console.log(`PUT /api/agents/${id} - Updating agent:`, req.body);
-    
+
     // If we're deactivating an agent, check for any active tasks
     if (req.body.isActive === false) {
       // Here you would add logic to check if the agent is currently being used in any tasks
@@ -308,11 +435,11 @@ router.put('/agents/:id', async (req, res) => {
       frameworks,
       libraries,
       bestPractices,
-      isActive
+      isActive,
     } = req.body;
 
     const updateData: Partial<typeof agents.$inferInsert> = {
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString(),
     };
 
     // Transform and include fields that are present in the request
@@ -322,11 +449,13 @@ router.put('/agents/:id', async (req, res) => {
     if (model !== undefined) updateData.model = model;
     if (systemPrompt !== undefined) updateData.systemPrompt = systemPrompt;
     if (temperature !== undefined) updateData.temperature = temperature;
-    if (customInstructions !== undefined) updateData.customInstructions = customInstructions;
-    
+    if (customInstructions !== undefined)
+      updateData.customInstructions = customInstructions;
+
     // Transform Record fields to ensure correct format
     if (capabilities !== undefined) {
-      updateData.capabilities = typeof capabilities === 'object' ? capabilities : {};
+      updateData.capabilities =
+        typeof capabilities === 'object' ? capabilities : {};
     }
     if (expertise !== undefined) {
       updateData.expertise = typeof expertise === 'object' ? expertise : {};
@@ -338,9 +467,15 @@ router.put('/agents/:id', async (req, res) => {
       updateData.libraries = typeof libraries === 'object' ? libraries : {};
     }
     if (bestPractices !== undefined) {
-      updateData.bestPractices = typeof bestPractices === 'object' ? bestPractices : {};
+      updateData.bestPractices =
+        typeof bestPractices === 'object' ? bestPractices : {};
     }
-    if (isActive !== undefined) updateData.isActive = isActive;
+    if (isActive !== undefined) {
+      updateData.isActive = isActive ? 1 : 0;
+      console.log(`Setting isActive to ${updateData.isActive} for agent ${id}`);
+    }
+
+    console.log('Update data:', updateData);
 
     const updatedAgent = await db
       .update(agents)
@@ -349,28 +484,67 @@ router.put('/agents/:id', async (req, res) => {
       .returning();
 
     if (updatedAgent.length === 0) {
+      await logger?.warning(
+        'AgentManager',
+        `Agent ${id} not found for update`,
+        {
+          agentId: id,
+          timestamp: new Date().toISOString(),
+        }
+      );
       return res.status(404).json({ error: 'Agent not found' });
     }
+
+    await logger?.info('AgentManager', `Successfully updated agent ${id}`, {
+      agentId: id,
+      agentName: updatedAgent[0].name,
+      updatedFields: Object.keys(updateData),
+      timestamp: new Date().toISOString(),
+    });
 
     res.json(updatedAgent[0]);
   } catch (error) {
     console.error('Error updating agent:', error);
     let errorMessage = 'Failed to update agent';
-    
+
     // Check if it's a database error
     if (error instanceof Error) {
       console.error('Error details:', error.message);
       if (error.message.includes('violates foreign key constraint')) {
-        errorMessage = 'Cannot update agent: it is being referenced by other components';
+        errorMessage =
+          'Cannot update agent: it is being referenced by other components';
       } else if (error.message.includes('invalid input syntax')) {
         errorMessage = 'Invalid data format provided';
       }
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: errorMessage,
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+});
+
+// DELETE /api/agents/:id - Delete an agent
+router.delete('/agents/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`DELETE /api/agents/${id} - Deleting agent`);
+
+    const deletedAgent = await db
+      .delete(agents)
+      .where(eq(agents.id, Number(id)))
+      .returning();
+
+    if (deletedAgent.length === 0) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    console.log('Deleted agent:', deletedAgent[0]);
+    res.json({ message: 'Agent deleted successfully', agent: deletedAgent[0] });
+  } catch (error) {
+    console.error('Error deleting agent:', error);
+    res.status(500).json({ error: 'Failed to delete agent' });
   }
 });
 

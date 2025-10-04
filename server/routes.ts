@@ -1,29 +1,33 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
-import path from "path";
-import { promises as fs } from "fs";
-import { 
-  type InsertAgent, 
-  agents, 
-  promptTemplates, 
+import type { Express } from 'express';
+import { createServer, type Server } from 'http';
+import Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
+import path from 'path';
+import { promises as fs } from 'fs';
+import {
+  type InsertAgent,
+  agents,
+  promptTemplates,
   promptChains,
   chainExecutions,
-  type PromptChain
-} from "@db/schema";
-import { db } from "@db";
-import { eq } from "drizzle-orm";
+  type PromptChain,
+} from '@db/schema';
+import { db } from '@db';
+import { eq } from 'drizzle-orm';
 import serverRoutes from './routes/server';
 import componentsRouter from './routes/components';
 import sessionsRouter from './routes/sessions';
 import promptsRouter from './routes/prompts';
 import sseRouter from './routes/sse';
+import activityRouter from './routes/activity';
+import terminalRouter from './routes/terminal';
+import authRouter from './routes/auth';
+import deploymentsRouter from './routes/deployments';
 
 // Utility function to generate component content based on file path
 async function generateComponentContent(filePath: string): Promise<string> {
   const componentName = path.basename(filePath, path.extname(filePath));
-  
+
   if (filePath.includes('Form/')) {
     return `
       import React from 'react';
@@ -89,10 +93,12 @@ const chainStepSchema = z.object({
   name: z.string(),
   description: z.string(),
   variableMapping: z.record(z.string(), z.string()),
-  retryConfig: z.object({
-    maxAttempts: z.number().min(1),
-    backoffMs: z.number().min(0),
-  }).optional(),
+  retryConfig: z
+    .object({
+      maxAttempts: z.number().min(1),
+      backoffMs: z.number().min(0),
+    })
+    .optional(),
 });
 
 const generatePromptSchema = z.object({
@@ -104,15 +110,20 @@ const generatePromptSchema = z.object({
   projectType: z.enum(['react', 'vue', 'node', 'python']),
 });
 
-function validateColorContrast(colors: { background: string; text: string }): boolean {
+function validateColorContrast(colors: {
+  background: string;
+  text: string;
+}): boolean {
   // Convert hex to RGB
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : null;
+    return result
+      ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16),
+        }
+      : null;
   };
 
   // Calculate relative luminance
@@ -146,10 +157,14 @@ export function registerRoutes(app: Express): Server {
       if (!workspaceId) {
         return res.status(400).json({ error: 'Workspace ID is required' });
       }
-      
+
       // Construct workspace path
-      const workspacePath = path.join(process.cwd(), 'workspaces', workspaceId.toString());
-      
+      const workspacePath = path.join(
+        process.cwd(),
+        'workspaces',
+        workspaceId.toString()
+      );
+
       // Clear existing workspace
       try {
         await fs.rm(workspacePath, { recursive: true, force: true });
@@ -160,8 +175,12 @@ export function registerRoutes(app: Express): Server {
 
       // Ensure required directories exist
       await fs.mkdir(path.join(workspacePath, 'src'), { recursive: true });
-      await fs.mkdir(path.join(workspacePath, 'src/components'), { recursive: true });
-      await fs.mkdir(path.join(workspacePath, 'src/components/Form'), { recursive: true });
+      await fs.mkdir(path.join(workspacePath, 'src/components'), {
+        recursive: true,
+      });
+      await fs.mkdir(path.join(workspacePath, 'src/components/Form'), {
+        recursive: true,
+      });
 
       // Save each file with proper path structure
       const savePromises = files.map(async (file: any) => {
@@ -169,10 +188,10 @@ export function registerRoutes(app: Express): Server {
         const normalizedPath = file.path.replace(/^\/+/, ''); // Remove leading slashes
         const filePath = path.join(workspacePath, normalizedPath);
         const dir = path.dirname(filePath);
-        
+
         // Create directory if it doesn't exist
         await fs.mkdir(dir, { recursive: true });
-        
+
         // Write file content
         await fs.writeFile(filePath, file.content, 'utf8');
       });
@@ -183,17 +202,17 @@ export function registerRoutes(app: Express): Server {
         'src/index.css',
         'src/components/Form/PhotoUploadForm.tsx',
         'src/components/LoadingSpinner/index.tsx',
-        'src/hooks/useBlogPosts.ts'
+        'src/hooks/useBlogPosts.ts',
       ];
 
       // Check if all required files are in the generated files
-      const missingFiles = requiredFiles.filter(reqFile => 
-        !files.some((f: any) => f.path.includes(reqFile))
+      const missingFiles = requiredFiles.filter(
+        reqFile => !files.some((f: any) => f.path.includes(reqFile))
       );
 
       if (missingFiles.length > 0) {
         // Generate missing files using the component generator
-        const generatePromises = missingFiles.map(async (filePath) => {
+        const generatePromises = missingFiles.map(async filePath => {
           const content = await generateComponentContent(filePath);
           const fullPath = path.join(workspacePath, filePath);
           await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -210,24 +229,31 @@ export function registerRoutes(app: Express): Server {
       try {
         await fs.access(packageJsonPath);
       } catch {
-        await fs.writeFile(packageJsonPath, JSON.stringify({
-          name: "generated-app",
-          version: "1.0.0",
-          scripts: {
-            dev: "vite",
-            build: "vite build",
-            preview: "vite preview"
-          },
-          dependencies: {
-            "react": "^18.2.0",
-            "react-dom": "^18.2.0"
-          },
-          devDependencies: {
-            "vite": "^5.0.0",
-            "@vitejs/plugin-react": "^4.0.0",
-            "typescript": "^5.0.0"
-          }
-        }, null, 2));
+        await fs.writeFile(
+          packageJsonPath,
+          JSON.stringify(
+            {
+              name: 'generated-app',
+              version: '1.0.0',
+              scripts: {
+                dev: 'vite',
+                build: 'vite build',
+                preview: 'vite preview',
+              },
+              dependencies: {
+                react: '^18.2.0',
+                'react-dom': '^18.2.0',
+              },
+              devDependencies: {
+                vite: '^5.0.0',
+                '@vitejs/plugin-react': '^4.0.0',
+                typescript: '^5.0.0',
+              },
+            },
+            null,
+            2
+          )
+        );
       }
 
       // Create default Component.tsx if it doesn't exist
@@ -235,7 +261,9 @@ export function registerRoutes(app: Express): Server {
       try {
         await fs.access(componentPath);
       } catch {
-        await fs.writeFile(componentPath, `
+        await fs.writeFile(
+          componentPath,
+          `
           import React from 'react';
 
           export default function Component() {
@@ -246,9 +274,10 @@ export function registerRoutes(app: Express): Server {
               </div>
             );
           }
-        `);
+        `
+        );
       }
-      
+
       res.json({ success: true, workspacePath });
     } catch (error) {
       console.error('Error saving workspace:', error);
@@ -262,11 +291,19 @@ export function registerRoutes(app: Express): Server {
   app.use('/api/sessions', sessionsRouter);
   app.use('/api', promptsRouter);
   app.use('/api', sseRouter);
+  app.use('/api/activity', activityRouter);
+  app.use('/api', terminalRouter);
+  app.use('/api/auth', authRouter);
+  app.use('/api/deployments', deploymentsRouter);
 
   app.post('/api/server/start', async (req, res) => {
     try {
       const { workspaceId, withDependencies } = req.body;
-      const workspacePath = path.join(process.cwd(), 'workspaces', workspaceId.toString());
+      const workspacePath = path.join(
+        process.cwd(),
+        'workspaces',
+        workspaceId.toString()
+      );
 
       // Verify workspace exists
       await fs.access(workspacePath);
@@ -276,7 +313,9 @@ export function registerRoutes(app: Express): Server {
       try {
         await fs.access(viteConfigPath);
       } catch {
-        await fs.writeFile(viteConfigPath, `import { defineConfig } from 'vite';
+        await fs.writeFile(
+          viteConfigPath,
+          `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
@@ -285,7 +324,8 @@ export default defineConfig({
     port: ${3000 + parseInt(workspaceId.toString().slice(-2))}, // Use different ports for different workspaces
     host: true
   }
-});`);
+});`
+        );
       }
 
       // Create index.html if it doesn't exist
@@ -293,7 +333,9 @@ export default defineConfig({
       try {
         await fs.access(indexPath);
       } catch {
-        await fs.writeFile(indexPath, `<!DOCTYPE html>
+        await fs.writeFile(
+          indexPath,
+          `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -304,7 +346,8 @@ export default defineConfig({
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
-</html>`);
+</html>`
+        );
       }
 
       // The server is conceptually "started" - in a real implementation this would
@@ -312,7 +355,7 @@ export default defineConfig({
       res.json({
         success: true,
         message: 'Server started',
-        previewUrl: `http://localhost:${3000 + parseInt(workspaceId.toString().slice(-2))}`
+        previewUrl: `http://localhost:${3000 + parseInt(workspaceId.toString().slice(-2))}`,
       });
     } catch (error) {
       console.error('Error starting server:', error);
@@ -331,59 +374,67 @@ export default defineConfig({
     }
   });
 
-
-
   // Create a new prompt template
-  app.post("/api/templates", async (req, res) => {
+  app.post('/api/templates', async (req, res) => {
     try {
-      const [template] = await db.insert(promptTemplates).values(req.body).returning();
+      const [template] = await db
+        .insert(promptTemplates)
+        .values(req.body)
+        .returning();
       res.json(template);
     } catch (error: any) {
-      console.error("Error creating template:", error);
-      res.status(500).json({ error: "Failed to create template" });
+      console.error('Error creating template:', error);
+      res.status(500).json({ error: 'Failed to create template' });
     }
   });
 
   // Create a new prompt chain
-  app.post("/api/chains", async (req, res) => {
+  app.post('/api/chains', async (req, res) => {
     try {
-      const [chain] = await db.insert(promptChains).values(req.body).returning();
+      const [chain] = await db
+        .insert(promptChains)
+        .values(req.body)
+        .returning();
       res.json(chain);
     } catch (error: any) {
-      console.error("Error creating chain:", error);
-      res.status(500).json({ error: "Failed to create chain" });
+      console.error('Error creating chain:', error);
+      res.status(500).json({ error: 'Failed to create chain' });
     }
   });
 
   // Execute a prompt chain
-  app.post("/api/chains/:id/execute", async (req, res) => {
+  app.post('/api/chains/:id/execute', async (req, res) => {
     try {
       const chainId = parseInt(req.params.id);
       const chain = await db.query.promptChains.findFirst({
-        where: eq(promptChains.id, chainId)
+        where: eq(promptChains.id, chainId),
       });
 
       if (!chain) {
-        return res.status(404).json({ error: "Chain not found" });
+        return res.status(404).json({ error: 'Chain not found' });
       }
 
       // Create execution record
-      const [execution] = await db.insert(chainExecutions).values({
-        chainId,
-        status: "running",
-        input: req.body,
-        stepResults: [],
-      }).returning();
+      const [execution] = await db
+        .insert(chainExecutions)
+        .values({
+          id: crypto.randomUUID(),
+          chainId,
+          status: 'running',
+          input: JSON.stringify(req.body),
+          stepResults: JSON.stringify([]),
+        })
+        .returning();
 
       // Execute each step in the chain
       let currentInput = req.body;
       const stepResults = [];
 
-      for (const step of chain.steps as any[]) {
+      for (const step of JSON.parse(chain.steps) as any[]) {
         try {
           // Get template for this step
           const template = await db.query.promptTemplates.findFirst({
-            where: eq(promptTemplates.id, step.templateId)
+            where: eq(promptTemplates.id, step.templateId),
           });
 
           if (!template) {
@@ -391,84 +442,95 @@ export default defineConfig({
           }
 
           // Map variables from previous steps
-          const mappedInput = Object.entries(step.variableMapping as Record<string, string>).reduce((acc, [key, value]) => {
-            acc[key] = value.startsWith("$") ? 
-              (currentInput as Record<string, string>)[value.slice(1)] : 
-              value;
-            return acc;
-          }, {} as Record<string, string>);
+          const mappedInput = Object.entries(
+            step.variableMapping as Record<string, string>
+          ).reduce(
+            (acc, [key, value]) => {
+              acc[key] = value.startsWith('$')
+                ? (currentInput as Record<string, string>)[value.slice(1)]
+                : value;
+              return acc;
+            },
+            {} as Record<string, string>
+          );
 
           // Generate prompt using template
           const prompt = template.template.replace(
             /\{\{(\w+)\}\}/g,
-            (_, key) => mappedInput[key] || ""
+            (_, key) => mappedInput[key] || ''
           );
 
           // Call Anthropic API
           const response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
+            model: 'claude-3-5-sonnet-20241022',
             max_tokens: chain.maxTokens || 2048,
-            messages: [{ role: "user", content: prompt }],
+            messages: [{ role: 'user', content: prompt }],
           });
 
-          const content = response.content[0].type === 'text' ? response.content[0].text : '';
+          const content =
+            response.content[0].type === 'text' ? response.content[0].text : '';
           const stepResult = {
             templateId: step.templateId,
             input: mappedInput,
             output: content,
-            status: "completed" as const,
+            status: 'completed' as const,
           };
 
           stepResults.push(stepResult);
           currentInput = { ...currentInput, [step.name]: content };
-
         } catch (stepError: any) {
           // Handle step failure based on retry strategy
           const retryConfig = step.retryConfig || chain.retryStrategy;
-          
+
           if (retryConfig && stepResults.length < retryConfig.maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, retryConfig.backoffMs));
+            await new Promise(resolve =>
+              setTimeout(resolve, retryConfig.backoffMs)
+            );
             continue;
           }
 
           // Update execution with error
-          await db.update(chainExecutions)
+          await db
+            .update(chainExecutions)
             .set({
-              status: "failed",
-              completedAt: new Date(),
-              error: { message: stepError.message, step: step.name },
-              stepResults,
+              status: 'failed',
+              completedAt: new Date().toISOString(),
+              error: JSON.stringify({
+                message: stepError.message,
+                step: step.name,
+              }),
+              stepResults: JSON.stringify(stepResults),
             })
             .where(eq(chainExecutions.id, execution.id));
 
           return res.status(500).json({
-            error: "Chain execution failed",
+            error: 'Chain execution failed',
             step: step.name,
-            message: stepError.message
+            message: stepError.message,
           });
         }
       }
 
       // Update execution record with results
-      const [updatedExecution] = await db.update(chainExecutions)
+      const [updatedExecution] = await db
+        .update(chainExecutions)
         .set({
-          status: "completed",
-          completedAt: new Date(),
-          output: currentInput,
-          stepResults,
+          status: 'completed',
+          completedAt: new Date().toISOString(),
+          output: JSON.stringify(currentInput),
+          stepResults: JSON.stringify(stepResults),
         })
         .where(eq(chainExecutions.id, execution.id))
         .returning();
 
       res.json(updatedExecution);
-
     } catch (error: any) {
-      console.error("Error executing chain:", error);
-      res.status(500).json({ error: "Failed to execute chain" });
+      console.error('Error executing chain:', error);
+      res.status(500).json({ error: 'Failed to execute chain' });
     }
   });
 
-  app.patch("/api/agents/:id", async (req, res) => {
+  app.patch('/api/agents/:id', async (req, res) => {
     try {
       const agentId = parseInt(req.params.id);
       const { isActive } = req.body;
@@ -480,13 +542,13 @@ export default defineConfig({
         .returning();
 
       if (!updatedAgent) {
-        return res.status(404).json({ error: "Agent not found" });
+        return res.status(404).json({ error: 'Agent not found' });
       }
 
       res.json(updatedAgent);
     } catch (error: any) {
-      console.error("Error in /api/agents/:id:", error);
-      res.status(500).json({ error: "Failed to update agent status" });
+      console.error('Error in /api/agents/:id:', error);
+      res.status(500).json({ error: 'Failed to update agent status' });
     }
   });
 

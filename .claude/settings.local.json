@@ -1,9 +1,6 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(netstat:*)",
-      "Bash(findstr:*)"
-    ],
+    "allow": ["Bash(netstat:*)", "Bash(findstr:*)"],
     "deny": [],
     "ask": []
   }

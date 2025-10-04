@@ -5,7 +5,7 @@ const sql = postgres({
   port: 5432,
   database: 'postgres',
   username: 'postgres',
-  password: 'postgres'
+  password: 'postgres',
 });
 
 async function testConnection() {

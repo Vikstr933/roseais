@@ -6,21 +6,22 @@ async function updateModelNames() {
     console.log('Updating model names...');
 
     // Update all agents to use the Claude model
-    await db.update(agents)
-      .set({ 
-        model: 'claude-3-5-sonnet-20241022',
-        updatedAt: new Date()
-      });
+    await db.update(agents).set({
+      model: 'claude-3-5-sonnet-20241022',
+      updatedAt: new Date(),
+    });
 
     console.log('Model names updated successfully');
 
     // Verify the updates
     const updatedAgents = await db.select().from(agents);
-    console.log('Updated agents:', updatedAgents.map(a => ({ 
-      name: a.name, 
-      model: a.model 
-    })));
-
+    console.log(
+      'Updated agents:',
+      updatedAgents.map(a => ({
+        name: a.name,
+        model: a.model,
+      }))
+    );
   } catch (error) {
     console.error('Error updating model names:', error);
   } finally {

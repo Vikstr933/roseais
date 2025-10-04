@@ -19,7 +19,10 @@ router.get('/', async (req, res) => {
       language: framework.language,
       githubUrl: framework.githubUrl,
       documentation: framework.documentation,
-      features: typeof framework.features === 'string' ? JSON.parse(framework.features) : framework.features
+      features:
+        typeof framework.features === 'string'
+          ? JSON.parse(framework.features)
+          : framework.features,
     }));
 
     console.log(`Fetched ${transformedFrameworks.length} frameworks`);
@@ -34,7 +37,11 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const frameworkId = parseInt(req.params.id);
-    const framework = await db.select().from(frameworks).where(eq(frameworks.id, frameworkId)).limit(1);
+    const framework = await db
+      .select()
+      .from(frameworks)
+      .where(eq(frameworks.id, frameworkId))
+      .limit(1);
 
     if (!framework || framework.length === 0) {
       return res.status(404).json({ error: 'Framework not found' });
@@ -50,7 +57,10 @@ router.get('/:id', async (req, res) => {
       language: frameworkData.language,
       githubUrl: frameworkData.githubUrl,
       documentation: frameworkData.documentation,
-      features: typeof frameworkData.features === 'string' ? JSON.parse(frameworkData.features) : frameworkData.features
+      features:
+        typeof frameworkData.features === 'string'
+          ? JSON.parse(frameworkData.features)
+          : frameworkData.features,
     };
 
     res.json(transformedFramework);
@@ -63,20 +73,26 @@ router.get('/:id', async (req, res) => {
 // POST /api/frameworks - Create new framework
 router.post('/', async (req, res) => {
   try {
-    const { name, description, language, githubUrl, documentation, features } = req.body;
+    const { name, description, language, githubUrl, documentation, features } =
+      req.body;
 
     if (!name || !description || !language) {
-      return res.status(400).json({ error: 'Name, description, and language are required' });
+      return res
+        .status(400)
+        .json({ error: 'Name, description, and language are required' });
     }
 
-    const newFramework = await db.insert(frameworks).values({
-      name,
-      description,
-      language,
-      githubUrl,
-      documentation,
-      features: JSON.stringify(features || [])
-    }).returning();
+    const newFramework = await db
+      .insert(frameworks)
+      .values({
+        name,
+        description,
+        language,
+        githubUrl,
+        documentation,
+        features: JSON.stringify(features || []),
+      })
+      .returning();
 
     console.log('Created framework:', newFramework[0]);
     res.status(201).json(newFramework[0]);
@@ -90,7 +106,8 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const frameworkId = parseInt(req.params.id);
-    const { name, description, language, githubUrl, documentation, features } = req.body;
+    const { name, description, language, githubUrl, documentation, features } =
+      req.body;
 
     const updateData: any = {};
 
@@ -101,7 +118,8 @@ router.put('/:id', async (req, res) => {
     if (documentation) updateData.documentation = documentation;
     if (features) updateData.features = JSON.stringify(features);
 
-    const updatedFramework = await db.update(frameworks)
+    const updatedFramework = await db
+      .update(frameworks)
       .set(updateData)
       .where(eq(frameworks.id, frameworkId))
       .returning();
@@ -123,7 +141,8 @@ router.delete('/:id', async (req, res) => {
   try {
     const frameworkId = parseInt(req.params.id);
 
-    const deletedFramework = await db.delete(frameworks)
+    const deletedFramework = await db
+      .delete(frameworks)
       .where(eq(frameworks.id, frameworkId))
       .returning();
 

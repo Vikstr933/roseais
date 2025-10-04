@@ -20,16 +20,68 @@ export class SandboxManager {
     this.config = {
       maxMemory: '512M',
       timeout: 30000,
-      allowedModules: ['react', 'react-dom', '@testing-library/react'],
+      allowedModules: [
+        // Core React
+        'react',
+        'react-dom',
+        '@types/react',
+        '@types/react-dom',
+
+        // Testing
+        '@testing-library/react',
+        '@testing-library/jest-dom',
+        'jest',
+
+        // Build tools
+        '@vitejs/plugin-react',
+        'typescript',
+        'vite',
+        'tailwindcss',
+        'autoprefixer',
+        'postcss',
+
+        // UI Libraries
+        'framer-motion',
+        'lucide-react',
+        'clsx',
+        'tailwind-merge',
+        'class-variance-authority',
+
+        // Routing
+        'react-router-dom',
+        '@types/react-router-dom',
+
+        // State Management
+        '@reduxjs/toolkit',
+        'react-redux',
+        '@types/react-redux',
+
+        // Forms
+        'react-hook-form',
+        'zod',
+        '@hookform/resolvers',
+
+        // Utilities
+        'date-fns',
+        'lodash',
+        '@types/lodash',
+        'uuid',
+        '@types/uuid',
+      ],
       environment: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
       },
-      ...config
+      ...config,
     };
   }
 
-  async createSandbox(workspacePath: string, sessionId?: string): Promise<string> {
-    const sandboxId = sessionId ? `sandbox-${sessionId}` : `sandbox-${Date.now()}`;
+  async createSandbox(
+    workspacePath: string,
+    sessionId?: string
+  ): Promise<string> {
+    const sandboxId = sessionId
+      ? `sandbox-${sessionId}`
+      : `sandbox-${Date.now()}`;
     const sandboxPath = path.join(workspacePath, sandboxId);
 
     try {
@@ -45,17 +97,21 @@ export class SandboxManager {
         // Create sandbox configuration
         await fs.writeFile(
           path.join(sandboxPath, 'sandbox.config.json'),
-          JSON.stringify({
-            ...this.config,
-            workspacePath: sandboxPath
-          }, null, 2)
+          JSON.stringify(
+            {
+              ...this.config,
+              workspacePath: sandboxPath,
+            },
+            null,
+            2
+          )
         );
       }
 
       await logger.info('SandboxManager', 'Created sandbox environment', {
         sandboxId,
         sandboxPath,
-        config: this.config
+        config: this.config,
       });
 
       return sandboxPath;
@@ -64,7 +120,7 @@ export class SandboxManager {
       await logger.error('SandboxManager', 'Failed to create sandbox', {
         error: err,
         sandboxId,
-        workspacePath
+        workspacePath,
       });
       throw error;
     }
@@ -76,14 +132,18 @@ export class SandboxManager {
     args: string[] = []
   ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const childProcess = spawn(command, args, {
+      // On Windows, use shell: true to find npm in PATH
+      const spawnOptions = {
         cwd: sandboxPath,
         env: {
           ...this.config.environment,
-          PATH: process.env.PATH
+          PATH: process.env.PATH,
         },
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
+        stdio: ['pipe', 'pipe', 'pipe'] as const,
+        shell: process.platform === 'win32',
+      };
+
+      const childProcess = spawn(command, args, spawnOptions);
 
       let stdout = '';
       let stderr = '';
@@ -118,20 +178,65 @@ export class SandboxManager {
     });
   }
 
-  async validateDependencies(dependencies: Record<string, string>): Promise<boolean> {
+  async validateDependencies(
+    dependencies: Record<string, string>
+  ): Promise<boolean> {
+    console.log('Validating dependencies:', Object.keys(dependencies));
+
     const allowedModules = new Set(this.config.allowedModules);
-    
+
+    // Allow common React ecosystem packages
+    const allowedPrefixes = [
+      'react',
+      '@types/react',
+      '@testing-library',
+      '@vitejs',
+      'typescript',
+      'vite',
+      'tailwind',
+      'framer-motion',
+      'lucide-react',
+      'clsx',
+      'class-variance',
+      'react-router',
+      '@reduxjs',
+      'react-redux',
+      'react-hook-form',
+      'zod',
+      '@hookform',
+      'date-fns',
+      'lodash',
+      'uuid',
+    ];
+
     for (const dep of Object.keys(dependencies)) {
-      if (!allowedModules.has(dep)) {
+      // Check if it's explicitly allowed
+      if (allowedModules.has(dep)) {
+        console.log(`Dependency ${dep} is explicitly allowed`);
+        continue;
+      }
+
+      // Check if it matches any allowed prefix
+      const isAllowed = allowedPrefixes.some(prefix => dep.startsWith(prefix));
+
+      if (!isAllowed) {
+        console.log(
+          `Dependency ${dep} is NOT allowed. Allowed prefixes:`,
+          allowedPrefixes
+        );
         await logger.info('SandboxManager', 'Blocked unauthorized dependency', {
           dependency: dep,
           allowedModules: this.config.allowedModules,
-          level: 'warn'
+          allowedPrefixes,
+          level: 'warn',
         });
         return false;
+      } else {
+        console.log(`Dependency ${dep} is allowed by prefix`);
       }
     }
 
+    console.log('All dependencies validated successfully');
     return true;
   }
 
@@ -141,18 +246,22 @@ export class SandboxManager {
       if (!sandboxPath.includes('sandbox-session-')) {
         await fs.rm(sandboxPath, { recursive: true, force: true });
         await logger.info('SandboxManager', 'Cleaned up sandbox', {
-          sandboxPath
+          sandboxPath,
         });
       } else {
-        await logger.info('SandboxManager', 'Skipped cleanup of session sandbox', {
-          sandboxPath
-        });
+        await logger.info(
+          'SandboxManager',
+          'Skipped cleanup of session sandbox',
+          {
+            sandboxPath,
+          }
+        );
       }
     } catch (error) {
       const err = error instanceof Error ? error.message : String(error);
       await logger.error('SandboxManager', 'Failed to cleanup sandbox', {
         error: err,
-        sandboxPath
+        sandboxPath,
       });
       throw error;
     }

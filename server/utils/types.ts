@@ -62,6 +62,7 @@ export interface AgentResult {
   content?: string;
   errors?: string[];
   files?: GeneratedFile[];
+  componentName?: string;
   metadata?: {
     executionTime: number;
     resourceUsage: {

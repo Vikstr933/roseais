@@ -42,27 +42,42 @@ export class AgentCommunicationManager extends EventEmitter {
     try {
       // Initialize logger
       await this.logger.initialize();
-      
+
       // Create communication directory if it doesn't exist
       await fs.mkdir(this.communicationDir, { recursive: true });
 
       // Create subdirectories for different message types
-      const subdirs = ['requests', 'responses', 'events', 'logs', 'acknowledged'];
+      const subdirs = [
+        'requests',
+        'responses',
+        'events',
+        'logs',
+        'acknowledged',
+      ];
       await Promise.all(
-        subdirs.map(dir => 
+        subdirs.map(dir =>
           fs.mkdir(path.join(this.communicationDir, dir), { recursive: true })
         )
       );
 
-      await this.logger.info('AgentCommunicationManager', 'Initialized successfully');
+      await this.logger.info(
+        'AgentCommunicationManager',
+        'Initialized successfully'
+      );
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentCommunicationManager', 'Failed to initialize', { error: err.message });
+      await this.logger.error(
+        'AgentCommunicationManager',
+        'Failed to initialize',
+        { error: err.message }
+      );
       throw error;
     }
   }
 
-  async sendMessage(message: Omit<AgentMessage, 'id' | 'timestamp'>): Promise<string> {
+  async sendMessage(
+    message: Omit<AgentMessage, 'id' | 'timestamp'>
+  ): Promise<string> {
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const timestamp = new Date().toISOString();
 
@@ -76,17 +91,14 @@ export class AgentCommunicationManager extends EventEmitter {
       // Store message in appropriate directory
       const typeDir = path.join(this.communicationDir, `${message.type}s`);
       const messagePath = path.join(typeDir, `${messageId}.json`);
-      
-      await fs.writeFile(
-        messagePath,
-        JSON.stringify(fullMessage, null, 2)
-      );
+
+      await fs.writeFile(messagePath, JSON.stringify(fullMessage, null, 2));
 
       // Add to message queue
       this.messageQueue.set(messageId, {
         message: fullMessage,
         attempts: 0,
-        lastAttempt: new Date()
+        lastAttempt: new Date(),
       });
 
       // Add to message log
@@ -96,11 +108,15 @@ export class AgentCommunicationManager extends EventEmitter {
       this.messageLog.get(message.from)!.push(fullMessage);
 
       // Log the message
-      await this.logger.info('AgentCommunicationManager', `Message sent from ${message.from} to ${message.to}`, {
-        messageId,
-        type: message.type,
-        content: message.content
-      });
+      await this.logger.info(
+        'AgentCommunicationManager',
+        `Message sent from ${message.from} to ${message.to}`,
+        {
+          messageId,
+          type: message.type,
+          content: message.content,
+        }
+      );
 
       // Emit message event
       this.emit('message', fullMessage);
@@ -108,7 +124,11 @@ export class AgentCommunicationManager extends EventEmitter {
       return messageId;
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentCommunicationManager', 'Failed to send message', { error: err.message });
+      await this.logger.error(
+        'AgentCommunicationManager',
+        'Failed to send message',
+        { error: err.message }
+      );
       throw error;
     }
   }
@@ -122,7 +142,11 @@ export class AgentCommunicationManager extends EventEmitter {
       // Search in all message type directories
       const dirs = ['requests', 'responses', 'events'];
       for (const dir of dirs) {
-        const messagePath = path.join(this.communicationDir, dir, `${messageId}.json`);
+        const messagePath = path.join(
+          this.communicationDir,
+          dir,
+          `${messageId}.json`
+        );
         try {
           const content = await fs.readFile(messagePath, 'utf-8');
           return JSON.parse(content);
@@ -134,7 +158,11 @@ export class AgentCommunicationManager extends EventEmitter {
       return null;
     } catch (error) {
       const err = error as Error;
-      await this.logger.error('AgentCommunicationManager', 'Failed to get message', { error: err.message });
+      await this.logger.error(
+        'AgentCommunicationManager',
+        'Failed to get message',
+        { error: err.message }
+      );
       throw error;
     }
   }
@@ -143,7 +171,7 @@ export class AgentCommunicationManager extends EventEmitter {
     const queueItem = this.messageQueue.get(messageId);
     if (queueItem) {
       this.messageQueue.delete(messageId);
-      
+
       // Move message to acknowledged directory
       const originalPath = path.join(
         this.communicationDir,
@@ -155,20 +183,26 @@ export class AgentCommunicationManager extends EventEmitter {
         'acknowledged',
         `${messageId}.json`
       );
-      
+
       try {
         await fs.rename(originalPath, acknowledgedPath);
       } catch (error) {
         const err = error as Error;
-        await this.logger.error('AgentCommunicationManager', 'Failed to move acknowledged message', { 
-          messageId,
-          error: err.message 
-        });
+        await this.logger.error(
+          'AgentCommunicationManager',
+          'Failed to move acknowledged message',
+          {
+            messageId,
+            error: err.message,
+          }
+        );
       }
     }
   }
 
-  async cleanupOldMessages(maxAge: number = 7 * 24 * 60 * 60 * 1000): Promise<void> {
+  async cleanupOldMessages(
+    maxAge: number = 7 * 24 * 60 * 60 * 1000
+  ): Promise<void> {
     const now = Date.now();
     const dirs = ['requests', 'responses', 'events', 'acknowledged'];
 
@@ -187,14 +221,17 @@ export class AgentCommunicationManager extends EventEmitter {
         );
       } catch (error) {
         const err = error as Error;
-        await this.logger.error('AgentCommunicationManager', `Failed to cleanup directory ${dir}`, { error: err.message });
+        await this.logger.error(
+          'AgentCommunicationManager',
+          `Failed to cleanup directory ${dir}`,
+          { error: err.message }
+        );
       }
     }
   }
 
   async getUnacknowledgedMessages(): Promise<AgentMessage[]> {
-    return Array.from(this.messageQueue.values())
-      .map(item => item.message);
+    return Array.from(this.messageQueue.values()).map(item => item.message);
   }
 
   async retryFailedMessages(
@@ -214,7 +251,11 @@ export class AgentCommunicationManager extends EventEmitter {
           item.lastAttempt = new Date();
         } catch (error) {
           const err = error as Error;
-          await this.logger.error('AgentCommunicationManager', `Failed to retry message ${messageId}`, { error: err.message });
+          await this.logger.error(
+            'AgentCommunicationManager',
+            `Failed to retry message ${messageId}`,
+            { error: err.message }
+          );
         }
       }
     }
