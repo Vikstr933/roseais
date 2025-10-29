@@ -36,6 +36,7 @@ import testRouter from './routes/test';
 import stripeRouter from './routes/stripe';
 import pluginsRouter from './routes/plugins';
 import workspaceSessionsRouter from './routes/workspace';
+import healthRouter from './routes/health';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 
@@ -234,6 +235,7 @@ const initializeApp = async () => {
     });
 
     // Routes
+    app.use('/api/health', healthRouter); // Health check endpoints (no auth required)
     app.use('/api/auth', authRouter);
     app.use('/api/auth', oauthRouter); // OAuth routes
     app.use('/api', testRouter); // Test endpoints
