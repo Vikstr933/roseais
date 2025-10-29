@@ -75,12 +75,27 @@ const initializeApp = async () => {
     app.use(sentryRequestHandler());
     app.use(sentryTracingHandler());
 
+    // Build allowed origins from environment variables
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      new RegExp('http://localhost:5[0-9]{3}'),
+    ];
+
+    // Add production origins if set
+    if (process.env.ALLOWED_ORIGINS) {
+      const prodOrigins = process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
+      allowedOrigins.push(...prodOrigins);
+    }
+
+    // Fallback to FRONTEND_URL if no ALLOWED_ORIGINS
+    if (process.env.FRONTEND_URL && !process.env.ALLOWED_ORIGINS) {
+      allowedOrigins.push(process.env.FRONTEND_URL);
+    }
+
     // Advanced Security Middleware
     app.use(securityMiddleware.securityHeaders({
-      allowedOrigins: [
-        'http://localhost:5173',
-        'http://localhost:5174'
-      ]
+      allowedOrigins: allowedOrigins.filter(origin => typeof origin === 'string')
     }));
     app.use(securityMiddleware.requestMonitoring());
     app.use(securityMiddleware.inputValidation());
@@ -94,12 +109,8 @@ const initializeApp = async () => {
     // Global CORS configuration (now using secure CORS)
     app.use(
       cors({
-        origin: [
-          'http://localhost:5173',
-          'http://localhost:5174',
-          new RegExp('http://localhost:5[0-9]{3}'),
-        ],
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+        origin: allowedOrigins,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         credentials: true,
         allowedHeaders: ['Content-Type', 'Authorization'],
       })
@@ -107,7 +118,15 @@ const initializeApp = async () => {
 
     // Special CORS handling for SSE endpoints
     app.use('/api/sse', (req, res, next) => {
-      res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+      const origin = req.headers.origin;
+      if (origin && allowedOrigins.some(allowed =>
+        typeof allowed === 'string' ? allowed === origin : allowed.test(origin)
+      )) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else {
+        // Fallback to first allowed origin for development
+        res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:5173');
+      }
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       next();
     });

@@ -1,39 +1,37 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "vite build",
   "outputDirectory": "dist/public",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    }
-  ],
-  "functions": {
-    "api/**/*.js": {
-      "maxDuration": 60
-    },
-    "dist/index.js": {
-      "maxDuration": 60,
-      "runtime": "nodejs20.x"
-    }
-  },
+  "installCommand": "npm install",
+  "framework": null,
   "headers": [
     {
-      "source": "/api/(.*)",
+      "source": "/(.*)",
       "headers": [
         {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "credentialless"
         },
         {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
         }
       ]
+    }
+  ],
+  "routes": [
+    {
+      "src": "/assets/(.*)",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
