@@ -26,7 +26,7 @@ import { useToast } from '../hooks/use-toast';
 import { AuthGuard } from '../components/AuthGuard';
 
 type Agent = {
-  id: number;
+  id: number | string;
   name: string;
   description: string;
   role: string;
@@ -38,8 +38,18 @@ type Agent = {
   frameworks: Record<string, boolean>;
   libraries: Record<string, boolean>;
   bestPractices: Record<string, boolean>;
+  enabledPlugins?: string[];
   isActive: boolean;
 };
+
+// Available plugins for selection
+const AVAILABLE_PLUGINS = [
+  { id: 'gmail', name: 'Gmail', description: 'Access and manage emails' },
+  { id: 'google-calendar', name: 'Google Calendar', description: 'Manage calendar events' },
+  { id: 'google-maps', name: 'Google Maps', description: 'Location services and mapping' },
+  { id: 'github', name: 'GitHub', description: 'Repository and code management' },
+  { id: 'slack', name: 'Slack', description: 'Team communication' },
+];
 
 export default function AgentManager() {
   return (
@@ -65,6 +75,7 @@ function AgentManagerContent() {
   const [sortBy, setSortBy] = useState<'name' | 'role' | 'status'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPlugins, setSelectedPlugins] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -77,6 +88,15 @@ function AgentManagerContent() {
       sortOrder,
     });
   }, []);
+
+  // Initialize selectedPlugins when opening dialog with agent
+  useEffect(() => {
+    if (isDialogOpen && selectedAgent) {
+      setSelectedPlugins(selectedAgent.enabledPlugins || []);
+    } else if (!isDialogOpen) {
+      setSelectedPlugins([]);
+    }
+  }, [isDialogOpen, selectedAgent]);
 
   const { data: agents = [], error: queryError } = useQuery<Agent[]>({
     queryKey: ['/api/agents'],
@@ -361,6 +381,7 @@ function AgentManagerContent() {
               onClick={() => {
                 setSelectedAgent(null);
                 setGeneratedConfig(null);
+                setSelectedPlugins([]);
                 setIsDialogOpen(true);
               }}
               className="gap-2"
@@ -474,6 +495,7 @@ function AgentManagerContent() {
                     bestPractices: processRecordField(
                       formData.get('bestPractices') as string
                     ),
+                    enabledPlugins: selectedPlugins,
                   };
 
                   if (selectedAgent) {
@@ -519,21 +541,18 @@ function AgentManagerContent() {
                   <Select
                     name="model"
                     defaultValue={
-                      generatedConfig?.model || selectedAgent?.model
+                      generatedConfig?.model || selectedAgent?.model || 'claude-sonnet-4-5-20250929'
                     }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a model" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="claude-3-sonnet-20240229">
-                        Claude 3 Sonnet
+                      <SelectItem value="claude-sonnet-4-5-20250929">
+                        Claude 4.5 Sonnet (Latest)
                       </SelectItem>
-                      <SelectItem value="gpt-4-turbo-preview">
-                        GPT-4 Turbo
-                      </SelectItem>
-                      <SelectItem value="deepseek-coder-33b-instruct">
-                        DeepSeek Coder
+                      <SelectItem value="claude-3-5-sonnet-20241022">
+                        Claude 3.5 Sonnet
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -652,13 +671,52 @@ function AgentManagerContent() {
                     required
                   />
                 </div>
-                <div className="flex justify-end gap-2">
+
+                {/* Plugin/Skill Selection */}
+                <div className="space-y-3 border-t pt-4">
+                  <label className="text-sm font-medium block">
+                    Enabled Skills/Plugins
+                  </label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Select which plugins this agent can access
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {AVAILABLE_PLUGINS.map(plugin => (
+                      <label
+                        key={plugin.id}
+                        className="flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={selectedPlugins.includes(plugin.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPlugins(prev => [...prev, plugin.id]);
+                            } else {
+                              setSelectedPlugins(prev => prev.filter(id => id !== plugin.id));
+                            }
+                          }}
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{plugin.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {plugin.description}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => {
                       setIsDialogOpen(false);
                       setGeneratedConfig(null);
+                      setSelectedPlugins([]);
                     }}
                   >
                     Cancel

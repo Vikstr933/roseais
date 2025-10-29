@@ -27,7 +27,7 @@ Return ONLY a JSON object with these fields, no markdown formatting or additiona
   "name": "string - a clear, descriptive name",
   "description": "string - detailed description of the agent's purpose",
   "role": "string - specific role/function of the agent",
-  "model": "string - one of: claude-3-5-sonnet-20241022, gpt-4-turbo-preview, or deepseek-coder-33b-instruct",
+  "model": "string - one of: claude-sonnet-4-5-20250929, claude-3-5-sonnet-20241022 (only current Claude models)",
   "systemPrompt": "string - clear instructions for the agent's behavior",
   "temperature": "string - value between 0 and 1",
   "capabilities": ["string array - key capabilities"],
@@ -41,7 +41,7 @@ Important: Return ONLY the JSON object, no markdown formatting, no explanations,
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 2000,
       temperature: 0.7,
       system: systemPrompt,
@@ -100,14 +100,13 @@ Important: Return ONLY the JSON object, no markdown formatting, no explanations,
       }
     }
 
-    // Validate model selection
+    // Validate model selection - only current Claude models
     const validModels = [
+      'claude-sonnet-4-5-20250929',
       'claude-3-5-sonnet-20241022',
-      'gpt-4-turbo-preview',
-      'deepseek-coder-33b-instruct',
     ];
     if (!validModels.includes(config.model)) {
-      config.model = 'claude-3-5-sonnet-20241022'; // Default to Claude if invalid
+      config.model = 'claude-sonnet-4-5-20250929'; // Default to Claude 4.5 if invalid
     }
 
     // Validate temperature
@@ -239,6 +238,10 @@ router.get('/agents', optionalAuth, async (req, res) => {
           ? JSON.parse(agent.customInstructions)
           : agent.customInstructions
         : null,
+      enabledPlugins:
+        typeof agent.enabledPlugins === 'string'
+          ? JSON.parse(agent.enabledPlugins)
+          : agent.enabledPlugins || [],
       isActive: Boolean(agent.isActive),
     }));
 
@@ -253,16 +256,69 @@ router.get('/agents', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/agents/personal-assistant - Get Personal Assistant agent
+router.get('/agents/personal-assistant', optionalAuth, async (req, res) => {
+  try {
+    console.log('GET /api/agents/personal-assistant - Fetching Personal Assistant agent');
+
+    const agent = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, 'personal-assistant'));
+
+    if (agent.length === 0) {
+      return res.status(404).json({ error: 'Personal Assistant agent not found' });
+    }
+
+    // Transform the data to match the frontend format
+    const transformedAgent = {
+      ...agent[0],
+      capabilities:
+        typeof agent[0].capabilities === 'string'
+          ? JSON.parse(agent[0].capabilities)
+          : agent[0].capabilities,
+      expertise:
+        typeof agent[0].expertise === 'string'
+          ? JSON.parse(agent[0].expertise)
+          : agent[0].expertise,
+      frameworks:
+        typeof agent[0].frameworks === 'string'
+          ? JSON.parse(agent[0].frameworks)
+          : agent[0].frameworks,
+      libraries:
+        typeof agent[0].libraries === 'string'
+          ? JSON.parse(agent[0].libraries)
+          : agent[0].libraries,
+      bestPractices:
+        typeof agent[0].bestPractices === 'string'
+          ? JSON.parse(agent[0].bestPractices)
+          : agent[0].bestPractices,
+      enabledPlugins:
+        typeof agent[0].enabledPlugins === 'string'
+          ? JSON.parse(agent[0].enabledPlugins)
+          : agent[0].enabledPlugins || [],
+      isActive: Boolean(agent[0].isActive),
+    };
+
+    console.log('Fetched Personal Assistant agent:', transformedAgent);
+    res.json(transformedAgent);
+  } catch (error) {
+    console.error('Error fetching Personal Assistant agent:', error);
+    res.status(500).json({ error: 'Failed to fetch Personal Assistant agent' });
+  }
+});
+
 // GET /api/agents/:id - Get single agent by ID
 router.get('/agents/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`GET /api/agents/${id} - Fetching agent`);
 
+    // Support both numeric and text IDs
     const agent = await db
       .select()
       .from(agents)
-      .where(eq(agents.id, Number(id)));
+      .where(eq(agents.id, isNaN(Number(id)) ? id : Number(id)));
 
     if (agent.length === 0) {
       return res.status(404).json({ error: 'Agent not found' });
@@ -296,6 +352,10 @@ router.get('/agents/:id', optionalAuth, async (req, res) => {
           ? JSON.parse(agent[0].customInstructions)
           : agent[0].customInstructions
         : null,
+      enabledPlugins:
+        typeof agent[0].enabledPlugins === 'string'
+          ? JSON.parse(agent[0].enabledPlugins)
+          : agent[0].enabledPlugins || [],
       isActive: Boolean(agent[0].isActive),
     };
 

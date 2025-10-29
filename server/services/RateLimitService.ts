@@ -18,8 +18,48 @@ export class RateLimitService {
   constructor() {
     // Try to connect to Redis if available, otherwise use in-memory
     try {
-      // Prefer Upstash Redis for serverless environments
-      if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      // Check for standard Redis URL first (Redis Cloud, self-hosted, etc.)
+      if (process.env.REDIS_URL) {
+        console.log('🔄 Connecting to Redis Cloud...');
+        this.redis = new IORedis(process.env.REDIS_URL);
+        
+        this.redis.on('connect', () => {
+          console.log('✅ Redis Cloud connected successfully');
+        });
+        
+        this.redis.on('error', (err) => {
+          console.error('❌ Redis connection error:', err);
+        });
+
+        // Create Redis-based rate limiters
+        this.aiCallLimiter = new RateLimiterRedis({
+          storeClient: this.redis,
+          keyPrefix: 'rl:ai',
+          points: 100, // 100 requests
+          duration: 3600, // per hour
+          blockDuration: 300, // block for 5 minutes
+        });
+
+        this.buildLimiter = new RateLimiterRedis({
+          storeClient: this.redis,
+          keyPrefix: 'rl:build',
+          points: 10, // 10 builds
+          duration: 60, // per minute
+          blockDuration: 60, // block for 1 minute
+        });
+
+        this.apiLimiter = new RateLimiterRedis({
+          storeClient: this.redis,
+          keyPrefix: 'rl:api',
+          points: 100, // 100 requests
+          duration: 60, // per minute
+          blockDuration: 60, // block for 1 minute
+        });
+
+        console.log('✅ Redis-based rate limiting configured');
+      }
+      // Fallback to Upstash Redis for serverless environments
+      else if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
         console.log('🔄 Connecting to Upstash Redis (serverless)...');
         this.upstashRedis = new Redis({
           url: process.env.UPSTASH_REDIS_REST_URL,
@@ -83,11 +123,14 @@ export class RateLimitService {
   /**
    * Check if AI call is allowed
    * @param userId - User identifier (IP address or user ID)
+   * @param tier - User subscription tier (free, pro, enterprise)
    * @returns Promise<boolean> - True if allowed, throws error if blocked
    */
-  async checkAICall(userId: string): Promise<void> {
+  async checkAICall(userId: string, tier: string = 'free'): Promise<void> {
     try {
-      await this.aiCallLimiter.consume(userId, 1);
+      // Use tier-specific rate limits
+      const limiter = await this.getAILimiterForTier(tier);
+      await limiter.consume(userId, 1);
     } catch (error: any) {
       if (error.msBeforeNext) {
         throw new Error(
@@ -95,6 +138,35 @@ export class RateLimitService {
         );
       }
       throw error;
+    }
+  }
+
+  /**
+   * Get AI rate limiter based on user tier
+   */
+  private async getAILimiterForTier(tier: string): Promise<RateLimiterRedis | RateLimiterMemory> {
+    const limits = {
+      free: { points: 50, duration: 3600 }, // 50 requests/hour
+      pro: { points: 500, duration: 3600 }, // 500 requests/hour
+      enterprise: { points: 2000, duration: 3600 }, // 2000 requests/hour
+    };
+
+    const config = limits[tier as keyof typeof limits] || limits.free;
+
+    if (this.redis) {
+      return new RateLimiterRedis({
+        storeClient: this.redis,
+        keyPrefix: `rl:ai:${tier}`,
+        points: config.points,
+        duration: config.duration,
+        blockDuration: 300,
+      });
+    } else {
+      return new RateLimiterMemory({
+        points: config.points,
+        duration: config.duration,
+        blockDuration: 300,
+      });
     }
   }
 

@@ -219,7 +219,9 @@ export class KnowledgeService {
         type: 'workspace' as const,
         name: workspace.name,
         description: workspace.description,
-        data: JSON.parse(workspace.agentConfig || '{}'),
+        data: typeof workspace.agentConfig === 'string'
+          ? JSON.parse(workspace.agentConfig || '{}')
+          : workspace.agentConfig || {},
         relevanceScore: 1.0, // High relevance for system knowledge
       }));
     } catch (error) {

@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+﻿import { motion } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -29,15 +29,23 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../com
 import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
+import { ChatMessage } from "../components/ChatMessage";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "../hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import Editor from "@monaco-editor/react";
 import { ComponentPreview } from "../components/ComponentPreview/ComponentPreview";
 import FileExplorer from "../components/FileExplorer/FileExplorer";
+import { EnhancedFileExplorer } from "../components/EnhancedFileExplorer";
 import SessionHistory from "../components/SessionHistory";
 import { ChatAutocomplete } from "../components/ChatAutocomplete";
+import { AgentMonitorPanel } from "../components/AgentMonitor/AgentMonitorPanel";
+import { ComponentLibrary } from "../components/ComponentLibrary";
+import { ProjectSharing } from "../components/ProjectSharing";
+import { ProductionDeployment } from "../components/ProductionDeployment";
+import { AdvancedPreview } from "../components/AdvancedPreview";
 import { useAuth, getAuthHeaders } from "../contexts/AuthContext";
+import { useWorkspace } from "../contexts/WorkspaceContext";
 import { useRoute } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
 
@@ -77,21 +85,24 @@ interface Session {
   status: string;
 }
 
-const SYSTEM_PROMPT = `You are an AI orchestrator specialized in coordinating multiple AI agents to generate complete, functional React applications.
+const SYSTEM_PROMPT = `Hey! I'm your AI development assistant - think of me as your friendly coding buddy who helps bring your ideas to life.
 
-Your role is to:
-1. Analyze user requirements and break them down into actionable tasks
-2. Coordinate with specialized agents (UI Designer, Code Generator, etc.)
-3. Generate production-ready React applications with proper file structure
-4. Ensure applications are functional, well-designed, and follow best practices
+I work with a team of specialized AI agents to build complete, production-ready apps for you:
+- Requirements Agent - figures out exactly what you want
+- UI Designer - makes it look amazing
+- Code Architect - plans the structure
+- Style Generator - adds beautiful styling
+- Code Generator - writes the actual code
+- QA Agent - makes sure everything works perfectly
 
-When generating applications, always provide:
-- Complete, functional React components
-- Proper TypeScript typing
-- Modern React patterns (hooks, functional components)
-- Clean, readable code with proper error handling
-- Responsive design and good UX
-- Multiple files structured correctly
+Just tell me what you want to build in plain English! I'll:
+âœ¨ Understand your idea and ask questions if needed
+ðŸŽ¨ Design a beautiful, modern UI
+âš¡ Write clean, production-ready React code
+ðŸ“± Make it responsive and user-friendly
+ðŸš€ Ensure it works flawlessly
+
+Don't worry about technical details - I've got you covered! Just describe your app like you're talking to a friend.
 
 Output format for files:
 **src/App.tsx**
@@ -108,7 +119,7 @@ Generate applications that users can actually interact with and that demonstrate
 
 const promptFormSchema = z.object({
   userPrompt: z.string().min(1, "User prompt is required"),
-  model: z.string().default("claude-3-5-sonnet-20241022"),
+  model: z.string().default("claude-sonnet-4-5-20250929"),
   temperature: z.number().min(0).max(1).default(0.7),
   projectType: z.enum(['react', 'vue', 'node', 'python']).default('react'),
 });
@@ -144,9 +155,18 @@ const getFileLanguage = (filename: string): string => {
 
 export default function PromptPlayground() {
   const { user, sessionToken, isSuperAdmin } = useAuth();
+  const {
+    currentSession,
+    createSession,
+    addChatMessage,
+    updateGeneratedFiles,
+    isSaving,
+    lastSaved
+  } = useWorkspace();
+
   const [match, params] = useRoute('/playground/:projectId');
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'process' | 'sessions' | 'settings'>('editor');
+  const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'agents' | 'sessions' | 'settings'>('editor');
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [response, setResponse] = useState<string | AIResponse | null>(null);
@@ -155,27 +175,60 @@ export default function PromptPlayground() {
   const [overallProgress, setOverallProgress] = useState<number>(0);
   const [error, setError] = useState<{ message: string; suggestion: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [chatHistory, setChatHistory] = useState<Array<{
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: number;
-    files?: Array<{
-      path: string;
-      content: string;
-    }>;
-  }>>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+  // Use workspace context for chat history (persists across navigation)
+  const chatHistory = currentSession?.chatHistory || [];
+  const currentSessionId = currentSession?.id || null;
   const [relevanceScore, setRelevanceScore] = useState<number>(0);
   const [relevanceData, setRelevanceData] = useState<any[]>([]);
   const [currentComponentName, setCurrentComponentName] = useState<string>('');
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
   const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string } | null>(null);
-  
+  const [agentsActive, setAgentsActive] = useState(false); // Track if agents are currently working
+
+  // Refs
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
+
   // WebContainer state
   const [webContainerReady, setWebContainerReady] = useState(false);
   const [webContainerBooting, setWebContainerBooting] = useState(false);
   const [useWebContainer, setUseWebContainer] = useState(true); // Toggle for fallback
   const { toast } = useToast();
+
+  // Initialize workspace session
+  useEffect(() => {
+    if (user && !currentSession) {
+      // Create a new playground session
+      createSession('playground', 'Playground Session');
+    }
+  }, [user, currentSession, createSession]);
+
+  // Restore generated files from workspace session
+  useEffect(() => {
+    if (currentSession?.generatedFiles && currentSession.generatedFiles.length > 0 && !response) {
+      // Restore files from workspace session
+      setResponse({
+        type: 'component',
+        text: '',
+        files: currentSession.generatedFiles
+      });
+
+      // Set the first file as selected
+      setSelectedFileIndex(0);
+      if (currentSession.generatedFiles[0]) {
+        setEditorLanguage(getFileLanguage(currentSession.generatedFiles[0].path));
+      }
+
+      console.log(`✅ Restored ${currentSession.generatedFiles.length} files from workspace session`);
+    }
+  }, [currentSession, response]);
+
+  // Auto-scroll to bottom when chat history changes
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatHistory]);
 
   // Handle prompt from URL (from homepage)
   useEffect(() => {
@@ -200,26 +253,26 @@ export default function PromptPlayground() {
     async function initWebContainer() {
       // Check if WebContainer is supported
       if (!useWebContainer) {
-        console.log('⚠️ WebContainer disabled, using server-side deployment');
+        console.log('âš ï¸ WebContainer disabled, using server-side deployment');
         return;
       }
 
       try {
         setWebContainerBooting(true);
-        console.log('🚀 Booting WebContainer...');
+        console.log('ðŸš€ Booting WebContainer...');
         
         await webContainerService.boot();
         
         setWebContainerReady(true);
         setWebContainerBooting(false);
-        console.log('✅ WebContainer ready!');
+        console.log('âœ… WebContainer ready!');
         
         toast({
           title: "WebContainer Ready",
           description: "Browser-based preview is now available for instant updates!",
         });
       } catch (error) {
-        console.error('❌ Failed to boot WebContainer:', error);
+        console.error('âŒ Failed to boot WebContainer:', error);
         setWebContainerBooting(false);
         setWebContainerReady(false);
         setUseWebContainer(false); // Fallback to server-side
@@ -260,7 +313,7 @@ export default function PromptPlayground() {
             description: project.description
           });
           
-          console.log('✅ Loaded project:', project.name);
+          console.log('âœ… Loaded project:', project.name);
         })
         .catch(err => {
           console.error('Failed to load project:', err);
@@ -282,25 +335,25 @@ export default function PromptPlayground() {
               content: msg.message.message,
               timestamp: new Date(msg.message.createdAt).getTime()
             }));
-            setChatHistory(history);
-            console.log(`✅ Loaded ${history.length} chat messages`);
+            history.forEach((msg: any) => addChatMessage(msg));
+            console.log(`âœ… Loaded ${history.length} chat messages`);
           } else {
             // No history, add welcome message
-            setChatHistory([{
+            addChatMessage({
               role: 'assistant',
-              content: `👋 Welcome back! I'm ready to help you work on this project. What would you like to build or modify?`,
+              content: `ðŸ‘‹ Welcome back! I'm ready to help you work on this project. What would you like to build or modify?`,
               timestamp: Date.now()
-            }]);
+            });
           }
         })
         .catch(err => {
           console.error('Failed to load chat history:', err);
           // Add welcome message on error
-          setChatHistory([{
+          addChatMessage({
             role: 'assistant',
-            content: `👋 Welcome back! I'm ready to help you work on this project. What would you like to build or modify?`,
+            content: `ðŸ‘‹ Welcome back! I'm ready to help you work on this project. What would you like to build or modify?`,
             timestamp: Date.now()
-          }]);
+          });
         });
       
       // Load project files
@@ -329,7 +382,7 @@ export default function PromptPlayground() {
               text: '',
               files: fileList
             });
-            console.log(`✅ Loaded ${fileList.length} project files`);
+            console.log(`âœ… Loaded ${fileList.length} project files`);
             
             // Set the first file as selected
             if (fileList.length > 0) {
@@ -370,20 +423,20 @@ export default function PromptPlayground() {
 
           // Detect Vite ready lines and extract preview URL
           // Example lines from Vite:
-          //   ➜  Local:   http://localhost:5173/
+          //   âžœ  Local:   http://localhost:5173/
           // Example lines from DeploymentService:
-          //   ✅ Development server started at http://localhost:3002
+          //   âœ… Development server started at http://localhost:3002
           const localUrlMatch = line.match(/(?:Local:\s+|started at\s+)(https?:\/\/[^\s]+)/i);
           if (localUrlMatch && localUrlMatch[1]) {
             const url = localUrlMatch[1];
             setLivePreviewUrl(url);
             // Auto-switch to preview when dev server is ready
             setActiveTab('preview');
-            setChatHistory(prev => [...prev, {
+            addChatMessage({
               role: 'assistant',
-              content: `🔌 Dev server ready at ${url}. Switching to Preview…`,
+              content: `ðŸ”Œ Dev server ready at ${url}. Switching to Previewâ€¦`,
               timestamp: Date.now()
-            }]);
+            });
           }
         }
       } catch {
@@ -412,7 +465,7 @@ export default function PromptPlayground() {
                     const url = localUrlMatch[1];
                     setLivePreviewUrl(url);
                     setActiveTab('preview');
-                    setChatHistory(prev => [...prev, { role: 'assistant', content: `🔌 Dev server ready at ${url}. Switching to Preview…`, timestamp: Date.now() }]);
+                    addChatMessage({ role: 'assistant', content: `ðŸ”Œ Dev server ready at ${url}. Switching to Previewâ€¦`, timestamp: Date.now() });
                   }
                 }
               } catch {}
@@ -442,25 +495,23 @@ export default function PromptPlayground() {
   useEffect(() => {
     const handleContinueSession = (event: CustomEvent<Session>) => {
       const session = event.detail;
-      setCurrentSessionId(session.id);
-      
+
       // Parse the generated code back into files
       const files = JSON.parse(session.generatedCode);
-      
-      // Set up chat history
-      setChatHistory([
-        {
-      role: 'user',
-          content: session.inputPrompt,
-          timestamp: new Date(session.createdAt).getTime()
-        },
-        {
-          role: 'assistant',
-          content: session.title,
-          timestamp: new Date(session.createdAt).getTime(),
-          files
-        }
-      ]);
+
+      // Add messages to workspace context
+      addChatMessage({
+        role: 'user',
+        content: session.inputPrompt,
+        timestamp: new Date(session.createdAt).getTime()
+      });
+
+      addChatMessage({
+        role: 'assistant',
+        content: session.title,
+        timestamp: new Date(session.createdAt).getTime(),
+        files
+      });
 
       // Set the response
       setResponse({
@@ -468,18 +519,118 @@ export default function PromptPlayground() {
         text: session.title,
         files
       });
+
+      // Update generated files in workspace
+      updateGeneratedFiles(files);
     };
 
     window.addEventListener('continueSession', handleContinueSession as EventListener);
     return () => {
       window.removeEventListener('continueSession', handleContinueSession as EventListener);
     };
-  }, []);
+  }, [addChatMessage, updateGeneratedFiles]);
 
   // Set up SSE connections
   useEffect(() => {
     const eventsSource = new EventSource('/api/events');
     const logsSource = new EventSource('/api/logs');
+    const agentActivitySource = new EventSource('/api/sse/agent-activity');
+
+    // ðŸ¤– Agent Activity Stream - Real-time updates
+    agentActivitySource.onmessage = (event) => {
+      const agentData = JSON.parse(event.data);
+      
+      switch (agentData.type) {
+        case 'orchestration:start':
+          setAgentsActive(true);
+          addChatMessage({
+            role: 'assistant',
+            content: `Awesome! ðŸš€ Let me get the team together to build this for you...`,
+            timestamp: Date.now()
+          });
+          break;
+
+        case 'phase:start':
+          const phaseAgents = agentData.agentsInPhase || [];
+          const phaseAgentNames = phaseAgents.map((a: string) =>
+            a.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+          );
+          const phaseMsg = phaseAgentNames.length > 0
+            ? `Time for ${phaseAgentNames.join(' and ')} to jump in! ðŸ’ª`
+            : `Moving to the next step...`;
+          addChatMessage({
+            role: 'assistant',
+            content: phaseMsg,
+            timestamp: Date.now()
+          });
+          break;
+
+        case 'agent:start':
+          if (agentData.agentId) {
+            const agentMessages: Record<string, string> = {
+              'requirements-analyst': "Figuring out exactly what you need... ðŸ¤”",
+              'ui-designer': "Designing something beautiful for you... ðŸŽ¨",
+              'component-architect': "Planning the perfect structure... ðŸ—ï¸",
+              'style-generator': "Making it look stunning... âœ¨",
+              'code-generator': "Writing the code now... ðŸ’»",
+              'completion': "Just doing a final quality check... ðŸ”"
+            };
+            const message = agentMessages[agentData.agentId] || "Working on it... âš¡";
+            addChatMessage({
+              role: 'assistant',
+              content: message,
+              timestamp: Date.now()
+            });
+          }
+          break;
+
+        case 'agent:complete':
+          if (agentData.agentId) {
+            const completeMessages: Record<string, string> = {
+              'requirements-analyst': "Got it! I know exactly what we need to build âœ…",
+              'ui-designer': "Design is ready and looking great! âœ…",
+              'component-architect': "Architecture planned out perfectly âœ…",
+              'style-generator': "Styling is all set! âœ…",
+              'code-generator': "Code is written and ready! âœ…",
+              'completion': "Everything looks perfect! âœ…"
+            };
+            const message = completeMessages[agentData.agentId] || "Done! âœ…";
+            addChatMessage({
+              role: 'assistant',
+              content: message,
+              timestamp: Date.now()
+            });
+          }
+          break;
+
+        case 'phase:complete':
+          addChatMessage({
+            role: 'assistant',
+            content: `Great progress! Moving forward... ðŸŽ¯`,
+            timestamp: Date.now()
+          });
+          break;
+          
+        case 'orchestration:complete':
+          setAgentsActive(false);
+          addChatMessage({
+            role: 'assistant',
+            content: `Almost done! Just putting the finishing touches on everything... ðŸŽ¨`,
+            timestamp: Date.now()
+          });
+          break;
+
+        case 'agent:error':
+          if (agentData.error) {
+            addChatMessage({
+              role: 'assistant',
+              content: `Hmm, hit a small snag: ${agentData.error}. Let me try a different approach...`,
+              timestamp: Date.now()
+            });
+          }
+          break;
+      }
+    };
 
     eventsSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -489,25 +640,18 @@ export default function PromptPlayground() {
     setIsLoading(true);
           setError(null);
           // Keep current response and steps to support iterative edits
-          toast({
-            title: "Generation Started",
-            description: data.data.message
-          });
           break;
 
         case 'PROJECT_CONTEXT_LOADED':
-          setChatHistory(prev => [...prev, {
+          addChatMessage({
             role: 'assistant',
-            content: `📂 ${data.data.message}`,
+            content: `Got your project loaded! ðŸ“‚`,
             timestamp: Date.now()
-          }]);
+          });
           break;
 
         case 'ORCHESTRATION_START':
-          toast({
-            title: "Orchestration Started",
-            description: data.data.message
-          });
+          // Silently start - we show friendly messages via agent events
           break;
 
         case 'STEP_START':
@@ -528,9 +672,10 @@ export default function PromptPlayground() {
 
         case 'GENERATION_COMPLETE':
           setIsLoading(false);
-          toast({
-            title: "Generation Complete",
-            description: data.data.message
+          addChatMessage({
+            role: 'assistant',
+            content: `All done! ðŸŽ‰ Your app is ready - check out the Editor and Preview tabs!`,
+            timestamp: Date.now()
           });
           break;
 
@@ -540,10 +685,10 @@ export default function PromptPlayground() {
             message: data.data.error,
             suggestion: data.data.suggestion
           });
-          toast({
-            title: "Generation Error",
-            description: data.data.error,
-            variant: "destructive"
+          addChatMessage({
+            role: 'assistant',
+            content: `Oops, something went wrong: ${data.data.error}\n\nðŸ’¡ ${data.data.suggestion}`,
+            timestamp: Date.now()
           });
           break;
       }
@@ -588,20 +733,21 @@ export default function PromptPlayground() {
     return () => {
       eventsSource.close();
       logsSource.close();
+      agentActivitySource.close();
     };
   }, [toast]);
 
-  // 🚀 Deploy to WebContainer or fallback to server-side
+  // ðŸš€ Deploy to WebContainer or fallback to server-side
   async function deployToRuntime(files: Array<{ path: string; content: string }>, componentName: string) {
     try {
       if (webContainerReady && useWebContainer) {
-        console.log('🚀 Deploying to WebContainer...');
+        console.log('ðŸš€ Deploying to WebContainer...');
         
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `🌐 Deploying to browser-based WebContainer for instant preview...`,
+          content: `ðŸŒ Deploying to browser-based WebContainer for instant preview...`,
           timestamp: Date.now()
-        }]);
+        });
 
         // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
         const fixedFiles = files.map(file => {
@@ -609,7 +755,7 @@ export default function PromptPlayground() {
           const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
           
           if (isConfigFile && file.path.startsWith('src/')) {
-            console.log(`📦 Moving ${file.path} → ${filename} (root level)`);
+            console.log(`ðŸ“¦ Moving ${file.path} â†’ ${filename} (root level)`);
             return { ...file, path: filename };
           }
           return file;
@@ -617,61 +763,61 @@ export default function PromptPlayground() {
 
         // Write files to WebContainer
         await webContainerService.writeFiles(fixedFiles);
-        console.log('✅ Files written to WebContainer');
+        console.log('âœ… Files written to WebContainer');
 
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `📦 Installing npm dependencies in browser...`,
+          content: `ðŸ“¦ Installing npm dependencies in browser...`,
           timestamp: Date.now()
-        }]);
+        });
 
         // Install dependencies
         await webContainerService.installDependencies((msg) => {
           if (msg.includes('added') || msg.includes('dependencies')) {
-            setChatHistory(prev => [...prev, {
+            addChatMessage({
               role: 'assistant',
-              content: `✅ ${msg}`,
+              content: `âœ… ${msg}`,
               timestamp: Date.now()
-            }]);
+            });
           }
         });
 
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `🚀 Starting Vite dev server in browser...`,
+          content: `ðŸš€ Starting Vite dev server in browser...`,
           timestamp: Date.now()
-        }]);
+        });
 
         // Start dev server
         const devServerUrl = await webContainerService.startDevServer((msg) => {
           if (msg.includes('ready') || msg.includes('Local:')) {
-            setChatHistory(prev => [...prev, {
+            addChatMessage({
               role: 'assistant',
-              content: `✅ ${msg}`,
+              content: `âœ… ${msg}`,
               timestamp: Date.now()
-            }]);
+            });
           }
         });
 
-        console.log('✅ WebContainer dev server URL:', devServerUrl);
+        console.log('âœ… WebContainer dev server URL:', devServerUrl);
         setLivePreviewUrl(devServerUrl);
         setActiveTab('preview');
 
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `🎉 Preview is ready at: ${devServerUrl}`,
+          content: `ðŸŽ‰ Preview is ready at: ${devServerUrl}`,
           timestamp: Date.now()
-        }]);
+        });
 
       } else {
         // Fallback to server-side deployment
-        console.log('📡 Deploying to server...');
+        console.log('ðŸ“¡ Deploying to server...');
         
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `📡 Deploying to server (WebContainer unavailable)...`,
+          content: `ðŸ“¡ Deploying to server (WebContainer unavailable)...`,
           timestamp: Date.now()
-        }]);
+        });
 
         // Call existing server-side deployment
       const response = await fetch('/api/components/generate', {
@@ -690,21 +836,21 @@ export default function PromptPlayground() {
             setLivePreviewUrl(result.deploymentUrl);
             setActiveTab('preview');
 
-            setChatHistory(prev => [...prev, {
+            addChatMessage({
         role: 'assistant',
-              content: `✅ Server deployment complete! Preview available at: ${result.deploymentUrl}`,
+              content: `âœ… Server deployment complete! Preview available at: ${result.deploymentUrl}`,
               timestamp: Date.now()
-            }]);
+            });
           }
         }
       }
     } catch (error) {
-      console.error('❌ Deployment failed:', error);
-      setChatHistory(prev => [...prev, {
+      console.error('âŒ Deployment failed:', error);
+      addChatMessage({
         role: 'assistant',
-        content: `❌ Deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        content: `âŒ Deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
         timestamp: Date.now()
-      }]);
+      });
     }
   }
 
@@ -712,7 +858,7 @@ export default function PromptPlayground() {
     resolver: zodResolver(promptFormSchema),
     defaultValues: {
       userPrompt: "",
-      model: "claude-3-5-sonnet-20241022",
+      model: "claude-sonnet-4-5-20250929",
       temperature: 0.7,
       projectType: 'react',
     },
@@ -724,23 +870,31 @@ export default function PromptPlayground() {
       // Preserve existing response and terminal logs for iterative workflow
 
       // Add user message to chat history
-      setChatHistory(prev => [...prev, {
+      addChatMessage({
         role: 'user',
         content: data.userPrompt,
         timestamp: Date.now()
-      }]);
+      });
 
-      // ✨ Bolt.new-style: Auto-switch to Editor tab FIRST (before loading state)
-      console.log('🎨 Switching to Editor tab');
+      // Clear the form input after sending
+      form.reset({
+        userPrompt: "",
+        model: data.model,
+        temperature: data.temperature,
+        projectType: data.projectType
+      });
+
+      // âœ¨ Bolt.new-style: Auto-switch to Editor tab FIRST (before loading state)
+      console.log('ðŸŽ¨ Switching to Editor tab');
       setActiveTab('editor');
 
       // Small delay to let the tab switch be visible, then start loading
       await new Promise(resolve => setTimeout(resolve, 100));
       
       setIsLoading(true);
-      console.log('⏳ Loading started - glow effect should be visible');
+      console.log('â³ Loading started - glow effect should be visible');
 
-      // ✨ Calculate relevance score for the prompt
+      // âœ¨ Calculate relevance score for the prompt
       try {
         const relevanceRes = await fetch('/api/knowledge/calculate-relevance', {
           method: 'POST',
@@ -763,7 +917,7 @@ export default function PromptPlayground() {
         console.error('Failed to calculate relevance:', err);
       }
 
-      // ✨ Bolt.new-style: Add immediate AI greeting with more personality
+      // âœ¨ Bolt.new-style: Add immediate AI greeting with more personality
       const appType = data.userPrompt.toLowerCase().includes('timer') ? 'timer' :
                       data.userPrompt.toLowerCase().includes('todo') ? 'todo list' :
                       data.userPrompt.toLowerCase().includes('calculator') ? 'calculator' : 
@@ -773,41 +927,41 @@ export default function PromptPlayground() {
       
       const isExistingProject = currentProject?.id;
       
-      setChatHistory(prev => [...prev, {
+      addChatMessage({
         role: 'assistant',
         content: isExistingProject 
-          ? `Perfect! I'll enhance your ${appType} with those changes. Let me get to work! ✨`
-          : `I'll get started on your ${appType} right away! 🎯`,
+          ? `Perfect! I'll enhance your ${appType} with those changes. Let me get to work! âœ¨`
+          : `I'll get started on your ${appType} right away! ðŸŽ¯`,
         timestamp: Date.now()
-      }]);
+      });
 
-      // Add progressive analysis updates with more detail
+      // Add progressive analysis updates with more personality
       setTimeout(() => {
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
           content: isExistingProject
-            ? `📂 Loading your existing project files to understand the current implementation...`
-            : `📋 Analyzing your requirements and planning the architecture...`,
+            ? `Let me check out your current project first... ðŸ“‚`
+            : `Thinking about what you need... ðŸ¤”`,
           timestamp: Date.now()
-        }]);
+        });
       }, 500);
-      
+
       setTimeout(() => {
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
           content: isExistingProject
-            ? `🔄 Identifying what needs to be modified and what can stay the same...`
-            : `🔍 Identifying core features, UI components, and dependencies needed...`,
+            ? `Figuring out what to change and what to keep... ðŸ”„`
+            : `Breaking this down into features and components... ðŸ’¡`,
           timestamp: Date.now()
-        }]);
+        });
       }, 1200);
 
       setTimeout(() => {
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `🎨 Assembling our specialized AI agents to collaborate on your project...`,
+          content: `Getting the specialized agents ready to help... ðŸŽ¨`,
           timestamp: Date.now()
-        }]);
+        });
       }, 1800);
 
       // Reset progress tracking
@@ -863,7 +1017,7 @@ export default function PromptPlayground() {
                     
                     // Handle different SSE event types
                     if (data.type === 'STEP_START') {
-                    console.log('📍 Step started:', data.data);
+                    console.log('ðŸ“ Step started:', data.data);
                     setCurrentStep(data.data.details || '');
                     setOverallProgress(data.data.progress || 0);
                     
@@ -887,13 +1041,13 @@ export default function PromptPlayground() {
                     });
 
                     // Add chat message
-                    setChatHistory(prev => [...prev, {
+                    addChatMessage({
                       role: 'assistant',
                       content: `${data.data.details || 'Processing...'}`,
                       timestamp: Date.now()
-                    }]);
+                    });
                   } else if (data.type === 'STEP_COMPLETE') {
-                    console.log('✅ Step completed:', data.data);
+                    console.log('âœ… Step completed:', data.data);
                     setOverallProgress(data.data.progress || 0);
                     
                     // Mark step as completed
@@ -904,14 +1058,14 @@ export default function PromptPlayground() {
                     ));
 
                     // Add completion message
-                    setChatHistory(prev => [...prev, {
+                    addChatMessage({
                       role: 'assistant',
-                      content: `✅ ${data.data.result || 'Step completed'}`,
+                      content: `âœ… ${data.data.result || 'Step completed'}`,
                       timestamp: Date.now()
-                    }]);
+                    });
                   } else if (data.type === 'FILE_GENERATED') {
-                    console.log('📄 File generated:', data.data.file.path);
-                    
+                    console.log('ðŸ“„ File generated:', data.data.file.path);
+
                     // Add file to response in real-time!
                     setResponse(prev => {
                       if (!prev || typeof prev === 'string') {
@@ -921,7 +1075,7 @@ export default function PromptPlayground() {
                           files: [{ path: data.data.file.path, content: data.data.file.content }]
                         };
                       }
-                      
+
                       // Check if file already exists (avoid duplicates)
                       const existingIndex = prev.files?.findIndex(f => f.path === data.data.file.path);
                       if (existingIndex !== undefined && existingIndex >= 0 && prev.files) {
@@ -943,37 +1097,44 @@ export default function PromptPlayground() {
                       setSelectedFileIndex(0);
                       setActiveTab('editor');
                       setEditorLanguage(getFileLanguage(data.data.file.path));
-                      
+
                       // Add a glow animation to the editor tab
-                      setChatHistory(prev => [...prev, {
+                      addChatMessage({
                         role: 'assistant',
-                        content: `✨ Watch the magic happen! Code is being generated in real-time...`,
+                        content: `âœ¨ Watch the magic happen! Code is being generated in real-time...`,
                         timestamp: Date.now()
-                      }]);
+                      });
                     }
+
+                    // Show real-time file generation progress
+                    addChatMessage({
+                      role: 'assistant',
+                      content: `ðŸ“ Generated ${data.data.file.path} (${data.data.index}/${data.data.total})`,
+                      timestamp: Date.now()
+                    });
 
                     // Add chat message for first and last file
                     if (data.data.index === 1) {
-                      setChatHistory(prev => [...prev, {
+                      addChatMessage({
                         role: 'assistant',
-                        content: `📝 Writing ${data.data.total} files to your project...`,
+                        content: `ðŸ“ Writing ${data.data.total} files to your project...`,
                         timestamp: Date.now()
-                      }]);
+                      });
                     } else if (data.data.index === data.data.total) {
-                      setChatHistory(prev => [...prev, {
+                      addChatMessage({
                         role: 'assistant',
-                        content: `✅ All ${data.data.total} files generated!`,
+                        content: `âœ… All ${data.data.total} files generated!`,
                         timestamp: Date.now()
-                      }]);
+                      });
                     }
                   } else if (data.type === 'PROJECT_CONTEXT_LOADED') {
-                    setChatHistory(prev => [...prev, {
+                    addChatMessage({
                       role: 'assistant',
                       content: data.data.message || 'Loaded project context',
                       timestamp: Date.now()
-                    }]);
+                    });
                   } else if (data.type === 'COMPLETE' || data.type === 'GENERATION_COMPLETE') {
-                    console.log('🎉 Generation complete');
+                    console.log('ðŸŽ‰ Generation complete');
                     finalResult = data.data;
                   }
                 } catch (e) {
@@ -991,22 +1152,22 @@ export default function PromptPlayground() {
         return finalResult || { response: { type: 'text', text: 'Generation completed but no response received', files: [] } };
       } else {
         // Regular JSON response (backend didn't send SSE)
-        console.log('📦 Received regular JSON response (not SSE)');
+        console.log('ðŸ“¦ Received regular JSON response (not SSE)');
         return await res.json();
       }
     },
     onSuccess: async (data: GenerateResponse) => {
-      console.log('🎯 Generation response received:', data);
-      console.log('📁 Files in response:', data.response?.files);
+      console.log('ðŸŽ¯ Generation response received:', data);
+      console.log('ðŸ“ Files in response:', data.response?.files);
       
       if (data.response.type === 'component' && data.response.files) {
-        // ✨ Display files one by one with animation - BOLT.NEW STYLE!
+        // âœ¨ Display files one by one with animation - BOLT.NEW STYLE!
         const displayFiles = data.response.files.map(file => ({
           ...file,
           path: file.path.replace(/^workspaces\/[^/]+\//, '').replace(/^\/workspaces\/[^/]+\//, '')
         }));
         
-        console.log('📂 Files to display:', displayFiles.length);
+        console.log('ðŸ“‚ Files to display:', displayFiles.length);
         
         // Extract a better component name from the user's prompt
         const promptText = form.getValues('userPrompt');
@@ -1025,7 +1186,7 @@ export default function PromptPlayground() {
         }
         
         setCurrentComponentName(componentName);
-        console.log('🏷️ Component name set:', componentName);
+        console.log('ðŸ·ï¸ Component name set:', componentName);
         
         // Fix file paths: move config files to root for display (matches deployment)
         const fixedDisplayFiles = displayFiles.map(file => {
@@ -1033,14 +1194,14 @@ export default function PromptPlayground() {
           const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
           
           if (isConfigFile && file.path.startsWith('src/')) {
-            console.log(`📦 Moving ${file.path} → ${filename} (root level for display)`);
+            console.log(`ðŸ“¦ Moving ${file.path} â†’ ${filename} (root level for display)`);
             return { ...file, path: filename };
           }
           return file;
         });
 
         // Log what files were generated for debugging
-        console.log('📦 Files generated by AI:', fixedDisplayFiles.map(f => f.path));
+        console.log('ðŸ“¦ Files generated by AI:', fixedDisplayFiles.map(f => f.path));
         
         // Validate critical files exist (LOG ERRORS but don't add fallbacks)
         const requiredFiles = ['index.html', 'package.json', 'tsconfig.json', 'src/App.tsx', 'src/main.tsx'];
@@ -1049,46 +1210,49 @@ export default function PromptPlayground() {
         );
         
         if (missingFiles.length > 0) {
-          console.error('❌ MISSING REQUIRED FILES:', missingFiles);
+          console.error('âŒ MISSING REQUIRED FILES:', missingFiles);
           console.error('Generated files:', fixedDisplayFiles.map(f => f.path));
           
-          setChatHistory(prev => [...prev, {
+          addChatMessage({
             role: 'assistant',
-            content: `⚠️ Warning: AI missed some files: ${missingFiles.join(', ')}. The app might not work correctly. You may need to regenerate.`,
+            content: `âš ï¸ Warning: AI missed some files: ${missingFiles.join(', ')}. The app might not work correctly. You may need to regenerate.`,
             timestamp: Date.now()
-          }]);
+          });
         }
         
-        // ✅ INSTANT FILE DISPLAY - Show all files immediately for better UX
+        // âœ… INSTANT FILE DISPLAY - Show all files immediately for better UX
         setResponse({
           type: 'component',
           text: data.response.text,
           files: fixedDisplayFiles // Show all files at once with corrected paths
         });
 
+        // Update generated files in workspace context for persistence
+        updateGeneratedFiles(fixedDisplayFiles);
+
         // Add summary chat message
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `🎉 All ${displayFiles.length} files created successfully! Installing dependencies and starting development server...`,
+          content: `ðŸŽ‰ All ${displayFiles.length} files created successfully! Installing dependencies and starting development server...`,
           timestamp: Date.now()
-        }]);
+        });
         
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `🚀 Development server is spinning up. This usually takes 10-15 seconds...`,
+          content: `ðŸš€ Development server is spinning up. This usually takes 10-15 seconds...`,
           timestamp: Date.now()
-        }]);
+        });
         
-        setChatHistory(prev => [...prev, {
+        addChatMessage({
           role: 'assistant',
-          content: `✨ Almost ready! I'll automatically switch to the preview tab once the server is live.`,
+          content: `âœ¨ Almost ready! I'll automatically switch to the preview tab once the server is live.`,
           timestamp: Date.now()
-        }]);
+        });
         
         setIsLoading(false);
-        console.log('✅ All files displayed!');
+        console.log('âœ… All files displayed!');
         
-        // 🚀 Deploy to WebContainer or server immediately
+        // ðŸš€ Deploy to WebContainer or server immediately
         setTimeout(() => {
           deployToRuntime(displayFiles, componentName);
         }, 500); // Small delay for UI to update
@@ -1132,14 +1296,14 @@ export default function PromptPlayground() {
                 componentName: componentName
               })
             })
-              .then(() => console.log('✅ Files saved to project'))
+              .then(() => console.log('âœ… Files saved to project'))
               .catch(err => console.error('Failed to save files to project:', err));
           }, 600); // Small delay after files are displayed
         }
       } else {
         // Merge text responses into chat without resetting state
         if (data.response?.type === 'text') {
-          setChatHistory(prev => [...prev, { role: 'assistant', content: data.response.text, timestamp: Date.now() }]);
+          addChatMessage({ role: 'assistant', content: data.response.text, timestamp: Date.now() });
         } else {
           setResponse(prev => {
             if (prev && typeof prev === 'object' && 'files' in prev && data.response?.files) {
@@ -1169,7 +1333,7 @@ export default function PromptPlayground() {
         });
       }
       // Do not clear response on error; append error to chat
-      setChatHistory(prev => [...prev, { role: 'assistant', content: '❌ Generation failed. Please try again.', timestamp: Date.now() }]);
+      addChatMessage({ role: 'assistant', content: 'âŒ Generation failed. Please try again.', timestamp: Date.now() });
     },
   });
 
@@ -1227,14 +1391,85 @@ export default function PromptPlayground() {
             </div>
           )}
         </div>
-              </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <ComponentLibrary
+            onSelectComponent={(component) => {
+              // Add component code to current file or create new file
+              const componentFile = {
+                path: `src/components/${component.name}.tsx`,
+                content: component.code
+              };
+
+              if (response && typeof response === 'object' && response.files) {
+                setResponse(prev => ({
+                  ...prev as AIResponse,
+                  files: [...(prev as AIResponse).files!, componentFile]
+                }));
+              } else {
+                setResponse({
+                  type: 'component',
+                  text: `Added ${component.name} component`,
+                  files: [componentFile]
+                });
+              }
+
+              toast({
+                title: "Component Added!",
+                description: `${component.name} has been added to your project.`,
+              });
+            }}
+            onSelectTemplate={(template) => {
+              setResponse({
+                type: 'component',
+                text: `Loaded ${template.name} template`,
+                files: template.files
+              });
+
+              toast({
+                title: "Template Loaded!",
+                description: `${template.name} template has been loaded.`,
+              });
+            }}
+          />
+
+          {response && typeof response === 'object' && response.files && (
+            <>
+              <ProjectSharing
+                projectId={currentProject?.id?.toString() || 'temp'}
+                projectName={currentProject?.name || currentComponentName || 'My App'}
+                files={response.files}
+                isPublic={false}
+                onUpdateSharing={(settings) => {
+                  console.log('Sharing settings updated:', settings);
+                }}
+              />
+
+              <ProductionDeployment
+                files={response.files}
+                projectName={currentProject?.name || currentComponentName || 'My App'}
+                onDeployment={(result) => {
+                  if (result.success) {
+                    addChatMessage({
+                      role: 'assistant',
+                      content: `ðŸš€ Your app is now live! Visit: ${result.vercelUrl}`,
+                      timestamp: Date.now()
+                    });
+                  }
+                }}
+              />
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Main Content - Bolt.new Style Layout - No scroll container */}
       <div className="flex-1 overflow-hidden flex relative z-10">
-          {/* Chat Panel - Left Side (30%) */}
-          <div className="w-[30%] min-w-[320px] max-w-[480px] border-r border-border flex flex-col bg-card overflow-hidden">
+          {/* Chat Panel - Left Side - Responsive sizing */}
+          <div className="w-[25%] min-w-[280px] max-w-[400px] lg:w-[28%] xl:w-[30%] border-r border-border flex flex-col bg-card relative">
           {/* Chat Header */}
-          <div className="p-4 border-b border-border flex-shrink-0">
+          <div className="p-4 border-b border-border flex-shrink-0 bg-card relative z-10">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Brain className="h-5 w-5" />
               AI Assistant
@@ -1245,7 +1480,11 @@ export default function PromptPlayground() {
                   </div>
 
                       {/* Chat Messages - Scrollable area that takes remaining space */}
-          <div className="flex-1 overflow-y-auto p-3">
+          <div
+            ref={chatMessagesRef}
+            className="flex-1 overflow-y-auto p-3 min-h-0 relative"
+            style={{ maxHeight: 'calc(100vh - 220px)' }}
+          >
             <div className="space-y-4">
               {chatHistory.length === 0 && (
                 <div className="text-center py-12">
@@ -1260,32 +1499,12 @@ export default function PromptPlayground() {
               )}
 
                           {chatHistory.map((message, index) => (
-                            <motion.div
+                            <ChatMessage
                               key={index}
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                  className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  {message.role === 'assistant' && (
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                      <Brain className="h-4 w-4 text-primary-foreground" />
-                    </div>
-                  )}
-                  
-                  <div className={`rounded-lg px-4 py-2 max-w-[80%] ${
-                                  message.role === 'user'
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted'
-                  }`}>
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                                </div>
-
-                  {message.role === 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                      <MessageSquare className="h-4 w-4" />
-                                </div>
-                  )}
-                            </motion.div>
+                              role={message.role}
+                              content={message.content}
+                              timestamp={message.timestamp}
+                            />
                           ))}
 
               {/* Generation Status */}
@@ -1299,7 +1518,7 @@ export default function PromptPlayground() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-sm">
                         <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-                        <span>I'll get started on your app right away! 🎯</span>
+                        <span>I'll get started on your app right away! ðŸŽ¯</span>
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Watch the Editor tab light up as code appears!
@@ -1312,7 +1531,7 @@ export default function PromptPlayground() {
                       </div>
 
                       {/* Chat Input - Always visible at bottom */}
-          <div className="p-2 border-t border-border flex-shrink-0 bg-card">
+          <div className="p-2 border-t border-border flex-shrink-0 bg-card relative z-20">
                         <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => generateMutation.mutate(data))} className="space-y-1">
                             <FormField
@@ -1397,15 +1616,21 @@ export default function PromptPlayground() {
                 )}
               </button>
               <button
-                onClick={() => setActiveTab('process')}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'process'
+                onClick={() => setActiveTab('agents')}
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors relative ${
+                  activeTab === 'agents'
                     ? 'bg-background text-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
                 <Brain className="h-4 w-4" />
-                Process
+                Agents
+                {agentsActive && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setActiveTab('sessions')}
@@ -1435,7 +1660,7 @@ export default function PromptPlayground() {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Tab: {activeTab}</span>
                 <span>|</span>
-                <span>Loading: {isLoading ? '✓' : '✗'}</span>
+                <span>Loading: {isLoading ? 'âœ“' : 'âœ—'}</span>
                 <span>|</span>
                 <span>Files: {response && typeof response === 'object' && response.files ? response.files.length : 0}</span>
                           </div>
@@ -1447,9 +1672,9 @@ export default function PromptPlayground() {
             <div className="flex-1 min-h-0 overflow-hidden">
             {/* Editor Tab */}
             {activeTab === 'editor' && (
-              <ResizablePanelGroup direction="horizontal" className="h-full min-h-0">
-                {/* File Explorer */}
-                <ResizablePanel defaultSize={5} minSize={4} maxSize={15} className="bg-muted/30 min-h-0">
+              <div className="h-full min-h-0 flex">
+                {/* File Explorer - Fixed Width */}
+                <div className="w-[240px] bg-muted/30 min-h-0 border-r border-border flex-shrink-0">
           <div className="h-full min-h-0 flex flex-col">
             <div className="px-2 py-1.5 border-b flex items-center justify-between">
               <h2 className="text-xs font-semibold">EXPLORER</h2>
@@ -1459,10 +1684,10 @@ export default function PromptPlayground() {
                 {(() => {
                   const isComponent = typeof response === 'object' && response !== null && response.type === 'component';
                   const fileCount = isComponent ? (response.files?.length || 0) : 0;
-                  console.log('🔍 FileExplorer check - response type:', typeof response, 'is component:', isComponent, 'files count:', fileCount);
+                  console.log('ðŸ” FileExplorer check - response type:', typeof response, 'is component:', isComponent, 'files count:', fileCount);
                   return isComponent && fileCount > 0;
                 })() ? (
-                    <FileExplorer 
+                    <EnhancedFileExplorer
                     workspacePath="/workspaces"
                     files={(response as AIResponse).files?.map((file: any) => ({
                       ...file,
@@ -1476,6 +1701,48 @@ export default function PromptPlayground() {
                       }
                     }}
                     selectedFileIndex={selectedFileIndex}
+                    onCreateFile={(path: string, content: string) => {
+                      const newFile = { path, content };
+                      if (response && typeof response === 'object' && response.files) {
+                        setResponse(prev => ({
+                          ...prev as AIResponse,
+                          files: [...(prev as AIResponse).files!, newFile]
+                        }));
+                      }
+                    }}
+                    onDeleteFile={(path: string) => {
+                      if (response && typeof response === 'object' && response.files) {
+                        setResponse(prev => ({
+                          ...prev as AIResponse,
+                          files: (prev as AIResponse).files!.filter(f => f.path !== path)
+                        }));
+                      }
+                    }}
+                    onRenameFile={(oldPath: string, newPath: string) => {
+                      if (response && typeof response === 'object' && response.files) {
+                        setResponse(prev => ({
+                          ...prev as AIResponse,
+                          files: (prev as AIResponse).files!.map(f =>
+                            f.path === oldPath ? { ...f, path: newPath } : f
+                          )
+                        }));
+                      }
+                    }}
+                    onDuplicateFile={(path: string) => {
+                      if (response && typeof response === 'object' && response.files) {
+                        const originalFile = (response as AIResponse).files!.find(f => f.path === path);
+                        if (originalFile) {
+                          const duplicatedFile = {
+                            ...originalFile,
+                            path: path.replace(/(\.[^.]+)$/, '_copy$1')
+                          };
+                          setResponse(prev => ({
+                            ...prev as AIResponse,
+                            files: [...(prev as AIResponse).files!, duplicatedFile]
+                          }));
+                        }
+                      }
+                    }}
                   />
                 ) : (
                   <div className="text-center py-8 text-muted-foreground text-sm">
@@ -1494,12 +1761,10 @@ export default function PromptPlayground() {
                     </div>
             </ScrollArea>
                         </div>
-        </ResizablePanel>
-
-        <ResizableHandle />
+                </div>
 
         {/* Main Editor Area */}
-        <ResizablePanel defaultSize={95}>
+        <div className="flex-1 min-h-0">
           <div className="h-full min-h-0 overflow-hidden">
               {typeof response === 'object' && 
                response?.type === 'component' && 
@@ -1511,6 +1776,18 @@ export default function PromptPlayground() {
                           language={editorLanguage}
                           value={response.files[selectedFileIndex].content}
                           theme={editorTheme}
+                          onChange={(value) => {
+                            // Update the file content in local state
+                            if (value !== undefined && response && typeof response === 'object' && response.files) {
+                              const updatedFiles = response.files.map((file, idx) =>
+                                idx === selectedFileIndex ? { ...file, content: value } : file
+                              );
+                              setResponse({ ...response, files: updatedFiles });
+
+                              // Sync to workspace for persistence
+                              updateGeneratedFiles(updatedFiles);
+                            }
+                          }}
                           options={{
                             minimap: { enabled: true },
                             fontSize: 14,
@@ -1542,8 +1819,8 @@ export default function PromptPlayground() {
                         </div>
                       )}
                     </div>
-        </ResizablePanel>
-          </ResizablePanelGroup>
+        </div>
+              </div>
             )}
 
             {/* Preview Tab */}
@@ -1553,205 +1830,11 @@ export default function PromptPlayground() {
                  response?.type === 'component' &&
                  response.files &&
                  response.files.length > 0 ? (
-                  <div className="h-full flex flex-col bg-background">
-              <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30">
-                      <h4 className="text-sm font-medium">Live Preview</h4>
-                      <div className="flex items-center text-xs text-muted-foreground">
-                        <div className={`w-2 h-2 rounded-full mr-2 ${currentComponentName ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                        {currentComponentName ? 'Ready' : 'Waiting...'}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-h-0 overflow-hidden p-2">
-                      {livePreviewUrl ? (
-                        <iframe
-                          key={livePreviewUrl}
-                          src={livePreviewUrl}
-                          className="w-full h-full border-0 rounded-lg bg-white"
-                          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                          allow="cross-origin-isolated"
-                          title="WebContainer Preview"
-                        />
-                      ) : (
-                      <iframe
-                        srcDoc={`
-                          <!DOCTYPE html>
-                          <html>
-                            <head>
-                              <meta charset="UTF-8">
-                              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                              <title>Component Preview</title>
-                              <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-                              <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-                              <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-                              <style>
-                                body {
-                                  margin: 0;
-                                  padding: 20px;
-                                  font-family: system-ui, -apple-system, sans-serif;
-                                  background: white;
-                                  min-height: 100vh;
-                                }
-                                * { box-sizing: border-box; }
-                                ${response.files.find(f => f.path.includes('.css'))?.content || `
-                                  .app {
-                                    max-width: 800px;
-                                    margin: 0 auto;
-                                    padding: 2rem;
-                                  }
-                                  .button {
-                                    background: #3b82f6;
-                                    color: white;
-                                    border: none;
-                                    padding: 0.5rem 1rem;
-                                    border-radius: 0.5rem;
-                                    cursor: pointer;
-                                    margin: 0.25rem;
-                                  }
-                                  .button:hover {
-                                    background: #2563eb;
-                                  }
-                                  input, textarea {
-                                    padding: 0.5rem;
-                                    border: 1px solid #d1d5db;
-                                    border-radius: 0.25rem;
-                                    margin: 0.25rem;
-                                  }
-                                `}
-                              </style>
-                            </head>
-                            <body>
-                              <div id="root"></div>
-                              <script type="text/babel">
-                                try {
-                                  const { useState, useEffect, useCallback, createContext, useContext } = React;
-
-                                  ${(() => {
-                                    // Get all component files (including those in components/ folder)
-                                    const componentFiles = response.files?.filter(f => 
-                                      (f.path.endsWith('.tsx') || f.path.endsWith('.jsx')) && 
-                                      !f.path.includes('main.tsx') &&
-                                      !f.path.includes('main.jsx')
-                                    ) || [];
-                                    
-                                    console.log('Preview: Found component files:', componentFiles.map(f => f.path));
-                                    
-                                    if (componentFiles.length === 0) {
-                                      return 'function App() { return React.createElement("div", {className: "app"}, "Component generated successfully!"); }';
-                                    }
-                                    
-                                    // Function to remove TypeScript syntax (more aggressive)
-                                    function removeTypeScript(code: string): string {
-                                      // Remove ALL import statements (including multiline)
-                                      code = code.replace(/import\\s+[\\s\\S]*?;/g, '');
-                                      code = code.replace(/import\\s+[\\s\\S]*?from\\s+['"][^'"]+['"]/g, '');
-                                      // Remove export statements
-                                      code = code.replace(/export\\s+default\\s+/g, '');
-                                      code = code.replace(/export\\s+(const|function|interface|type|enum)\\s+/g, '$1 ');
-                                      // CRITICAL: Remove ALL interface and type definitions (including nested braces)
-                                      code = code.replace(/interface\\s+\\w+\\s*\\{[^}]*\\}/gs, '');
-                                      code = code.replace(/type\\s+\\w+\\s*=\\s*[^;]+;/gs, '');
-                                      code = code.replace(/enum\\s+\\w+\\s*\\{[^}]*\\}/gs, '');
-                                      // Remove type annotations from function parameters
-                                      code = code.replace(/\\([^)]*\\)\\s*:\\s*[\\w<>\\[\\]]+/g, (match: string) => {
-                                        return match.replace(/:\\s*[\\w<>\\[\\]]+/g, '');
-                                      });
-                                      // Remove generic type parameters
-                                      code = code.replace(/useState<[^>]+>/g, 'useState');
-                                      code = code.replace(/useRef<[^>]+>/g, 'useRef');
-                                      code = code.replace(/useEffect<[^>]+>/g, 'useEffect');
-                                      code = code.replace(/useMemo<[^>]+>/g, 'useMemo');
-                                      code = code.replace(/useCallback<[^>]+>/g, 'useCallback');
-                                      code = code.replace(/createContext<[^>]+>/g, 'createContext');
-                                      code = code.replace(/React\\.createContext<[^>]+>/g, 'React.createContext');
-                                      code = code.replace(/<[A-Z]\\w+<[^>]+>>/g, (match: string) => match.split('<').slice(0, 2).join('<') + '>');
-                                      // Remove type annotations from variable declarations
-                                      code = code.replace(/const\\s+(\\w+)\\s*:\\s*[^=]+=/g, 'const $1 =');
-                                      code = code.replace(/let\\s+(\\w+)\\s*:\\s*[^=]+=/g, 'let $1 =');
-                                      // Remove React.FC and other type annotations
-                                      code = code.replace(/:\\s*React\\.FC(<[^>]+>)?/g, '');
-                                      code = code.replace(/:\\s*FC(<[^>]+>)?/g, '');
-                                      // Remove as type assertions
-                                      code = code.replace(/\\s+as\\s+(const|\\w+)/g, '');
-                                      // Remove ErrorBoundary wrapper
-                                      code = code.split('<ErrorBoundary').join('<React.Fragment');
-                                      code = code.split('</ErrorBoundary>').join('</React.Fragment>');
-                                      return code;
-                                    }
-                                    
-                                    // Sort files: components/ folder first, then App.tsx last
-                                    const sortedFiles = componentFiles.sort((a, b) => {
-                                      const aIsApp = a.path.includes('App.tsx');
-                                      const bIsApp = b.path.includes('App.tsx');
-                                      const aIsComponent = a.path.includes('components/');
-                                      const bIsComponent = b.path.includes('components/');
-                                      
-                                      if (aIsApp) return 1;  // App.tsx goes last
-                                      if (bIsApp) return -1;
-                                      if (aIsComponent && !bIsComponent) return -1; // components/ first
-                                      if (!aIsComponent && bIsComponent) return 1;
-                                      return 0;
-                                    });
-                                    
-                                    console.log('Preview: Loading order:', sortedFiles.map(f => f.path));
-                                    
-                                    // Combine all component code
-                                    let allCode = '';
-                                    sortedFiles.forEach((file, index) => {
-                                      let code = removeTypeScript(file.content);
-                                      allCode += code + String.fromCharCode(10) + String.fromCharCode(10);
-                                      console.log('Preview: Added file ' + (index + 1) + '/' + sortedFiles.length + ': ' + file.path);
-                                    });
-
-                                    // Detect undefined JSX component identifiers and stub them to avoid ReferenceErrors
-                                    try {
-                                      const jsxTags = Array.from(new Set((allCode.match(/<([A-Z][A-Za-z0-9_]*)\b/g) || []).map(m => m.replace('<',''))));
-                                      const definedNames = Array.from(new Set((allCode.match(/(function|const)\s+([A-Z][A-Za-z0-9_]*)/g) || []).map(m => m.split(/\s+/)[1])));
-                                      const missing = jsxTags.filter(name => !definedNames.includes(name) && name !== 'App' && name !== 'React' && name !== 'Fragment');
-                                      if (missing.length) {
-                                        missing.forEach(name => {
-                                          allCode = `const ${name} = (props) => React.createElement('div', props, '${name}');\n` + allCode;
-                                        });
-                                        console.log('Preview: Stubbed missing components:', missing);
-                                      }
-                                    } catch (e) { console.warn('Preview: Stub scan failed', e); }
-                                    
-                                    // Find the main App component name
-                                    const mainFile = sortedFiles.find(f => f.path.includes('App.tsx'));
-                                    if (mainFile) {
-                                      const cleanCode = removeTypeScript(mainFile.content);
-                                      const match = cleanCode.match(/function\\s+(\\w+)/) || cleanCode.match(/const\\s+(\\w+)\\s*=/);
-                                      const componentName = match ? match[1] : 'App';
-                                      allCode += '; const AppComponent = ' + componentName + ';';
-                                      console.log('Preview: Main component name:', componentName);
-                                    }
-                                    
-                                    return allCode;
-                                  })()}
-
-                                  const rootElement = document.getElementById('root');
-                                  if (rootElement) {
-                                    const root = ReactDOM.createRoot ? ReactDOM.createRoot(rootElement) : null;
-                                    if (root) {
-                                      root.render(React.createElement(AppComponent));
-                                    } else {
-                                      ReactDOM.render(React.createElement(AppComponent), rootElement);
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error('Preview error:', error);
-                                  document.getElementById('root').innerHTML = '<div style="padding: 2rem; color: #ef4444; border: 1px solid #fecaca; border-radius: 0.5rem; background: #fef2f2;">Error rendering component: ' + error.message + '</div>';
-                                }
-                              </script>
-                            </body>
-                          </html>
-                        `}
-                        className="w-full h-full border-0 rounded bg-white"
-                        title="Component Preview (Fallback)"
-                        sandbox="allow-scripts"
-                      />
-                      )}
-                            </div>
-                  </div>
+                  <AdvancedPreview
+                    files={response.files}
+                    previewUrl={livePreviewUrl || ''}
+                    projectName={currentComponentName}
+                  />
                 ) : (
                   <div className="h-full flex items-center justify-center bg-background">
                     <div className="text-center text-muted-foreground">
@@ -1764,219 +1847,12 @@ export default function PromptPlayground() {
               </div>
             )}
 
-            {/* Process Tab */}
-            {activeTab === 'process' && (
-                    <ScrollArea className="h-full">
+
+            {/* Agents Tab */}
+            {activeTab === 'agents' && (
+              <ScrollArea className="h-full">
                 <div className="p-6 space-y-6">
-                  {/* Overall Progress Header */}
-                  {orchestrationSteps.length > 0 && (
-                    <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg p-6 border border-blue-200/20">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-semibold flex items-center gap-2">
-                          <span className="text-2xl">🎯</span>
-                          Multi-Agent Orchestration
-                          </h3>
-                        <span className="text-sm font-medium text-muted-foreground">
-                          {orchestrationSteps.filter(s => s.status === 'completed').length} / {orchestrationSteps.length} completed
-                              </span>
-                            </div>
-                      <div className="w-full bg-muted/30 rounded-full h-2.5 mb-2">
-                        <div 
-                          className="bg-gradient-to-r from-blue-500 to-purple-500 h-2.5 rounded-full transition-all duration-500"
-                          style={{ width: `${overallProgress}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {isLoading 
-                          ? currentStep || '✨ Our AI agents are working together to build your application...' 
-                          : '✅ All agents have completed their tasks successfully!'}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Agent Steps */}
-                  <div className="space-y-4">
-                    {orchestrationSteps.map((step, index) => {
-                      const agentDetails = {
-                        'Requirements Analyst': {
-                          icon: '📋',
-                          description: 'Breaking down your idea into technical specifications',
-                          color: 'blue',
-                          tips: 'Analyzing requirements, identifying core features, and planning architecture'
-                        },
-                        'UI Designer': {
-                          icon: '🎨',
-                          description: 'Crafting a beautiful and intuitive user interface',
-                          color: 'purple',
-                          tips: 'Designing components, choosing color schemes, and planning layouts'
-                        },
-                        'Code Generator': {
-                          icon: '⚡',
-                          description: 'Writing clean, production-ready code for your app',
-                          color: 'green',
-                          tips: 'Generating React components, configuring dependencies, and setting up the project'
-                        },
-                        'Completion Agent': {
-                          icon: '🎉',
-                          description: 'Finalizing and polishing your application',
-                          color: 'yellow',
-                          tips: 'Adding finishing touches, optimizing performance, and ensuring quality'
-                        }
-                      };
-
-                      const details = agentDetails[step.agent as keyof typeof agentDetails] || {
-                        icon: '🤖',
-                        description: 'Processing your request',
-                        color: 'gray',
-                        tips: 'Working on your application'
-                      };
-
-                      return (
-                        <div 
-                          key={index}
-                          className={`
-                            relative overflow-hidden rounded-lg border transition-all duration-300
-                            ${step.status === 'completed' 
-                              ? 'bg-green-50/10 border-green-200/30 shadow-sm' 
-                              : step.status === 'in_progress'
-                              ? 'bg-blue-50/10 border-blue-200/30 shadow-md ring-2 ring-blue-500/20 animate-pulse'
-                              : step.status === 'failed'
-                              ? 'bg-red-50/10 border-red-200/30'
-                              : 'bg-muted/10 border-border opacity-60'}
-                          `}
-                        >
-                          {/* Gradient overlay for active step */}
-                          {step.status === 'in_progress' && (
-                            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 animate-pulse"></div>
-                          )}
-                          
-                          <div className="relative p-5">
-                            <div className="flex items-start gap-4">
-                              {/* Icon and Status */}
-                              <div className="flex-shrink-0">
-                                <div className={`
-                                  text-3xl mb-2 transition-transform duration-300
-                                  ${step.status === 'in_progress' ? 'animate-bounce' : ''}
-                                `}>
-                                  {details.icon}
-                            </div>
-                                <div className="flex justify-center">
-                                  {step.status === 'completed' && (
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-500 text-white text-xs">
-                                      ✓
-                              </span>
-                                  )}
-                                  {step.status === 'in_progress' && (
-                                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
-                                  )}
-                                  {step.status === 'failed' && (
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white text-xs">
-                                      ✕
-                                    </span>
-                                  )}
-                                  {step.status === 'pending' && (
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs">
-                                      ⋯
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Content */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-2">
-                                  <h4 className="font-semibold text-base">{step.agent}</h4>
-                                  {step.status === 'in_progress' && (
-                                    <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-200/50">
-                                      Working...
-                                    </Badge>
-                                  )}
-                                  {step.status === 'completed' && (
-                                    <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200/50">
-                                      Complete
-                                    </Badge>
-                                  )}
-                                </div>
-                                
-                                <p className="text-sm font-medium text-foreground mb-2">
-                                  {step.task}
-                                </p>
-                                
-                                <p className="text-sm text-muted-foreground mb-3">
-                                  {details.description}
-                                </p>
-
-                                {/* Progress details */}
-                                {step.status === 'in_progress' && (
-                                  <div className="mt-3 p-3 bg-blue-500/5 rounded-md border border-blue-200/20">
-                                    <p className="text-xs text-muted-foreground italic">
-                                      💭 {details.tips}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {/* Completion details */}
-                                {step.status === 'completed' && (
-                                  <div className="mt-3 flex items-center gap-2 text-xs text-green-600">
-                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                                    Successfully completed • Ready for next step
-                                  </div>
-                                )}
-
-                                {/* Dependencies */}
-                                {step.dependencies && step.dependencies.length > 0 && (
-                                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span>Depends on:</span>
-                                    {step.dependencies.map((dep, i) => (
-                                      <Badge key={i} variant="secondary" className="text-xs">
-                                        {dep}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Connection line to next step */}
-                          {index < orchestrationSteps.length - 1 && (
-                            <div className="flex justify-center">
-                              <div className={`w-0.5 h-4 ${step.status === 'completed' ? 'bg-green-500/30' : 'bg-border'}`}></div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Loading state */}
-                  {isLoading && orchestrationSteps.length === 0 && (
-                    <div className="text-center py-12">
-                      <div className="relative inline-block mb-4">
-                        <div className="h-16 w-16 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-2xl">🤖</span>
-                        </div>
-                      </div>
-                      <h3 className="text-lg font-semibold mb-2">Initializing AI Agents...</h3>
-                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                        We're assembling a team of specialized AI agents to handle your request. 
-                        Each agent brings unique expertise to build your application perfectly.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Empty state */}
-                  {!isLoading && orchestrationSteps.length === 0 && (
-                    <div className="text-center py-12">
-                      <div className="text-6xl mb-4">💡</div>
-                      <h3 className="text-lg font-semibold mb-2">Ready to Build</h3>
-                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                        Describe what you want to create in the chat, and watch as our AI agents 
-                        collaborate to bring your idea to life. Each step will be shown here in real-time.
-                      </p>
-                    </div>
-                  )}
+                  <AgentMonitorPanel />
                 </div>
               </ScrollArea>
             )}

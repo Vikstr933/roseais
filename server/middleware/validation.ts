@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import { sentryService } from '../services/SentryService';
+import { rateLimitService } from '../services/RateLimitService';
+import crypto from 'crypto';
 
 /**
  * Validation Middleware
@@ -236,6 +238,128 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   // Referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   
+  // Permissions Policy
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), interest-cohort=()'
+  );
+  
+  // Strict Transport Security (HSTS) for production
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload'
+    );
+  }
+  
   next();
+}
+
+/**
+ * CSRF Token Generation and Validation
+ */
+export function generateCSRFToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+export function validateCSRFToken(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  // Skip CSRF for read-only methods
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  const token = req.headers['x-csrf-token'] as string || req.body._csrf;
+  const sessionToken = (req as any).session?.csrfToken;
+
+  if (!token || !sessionToken || token !== sessionToken) {
+    return res.status(403).json({
+      error: 'Invalid CSRF token',
+      type: 'CSRF_ERROR',
+    });
+  }
+
+  next();
+}
+
+/**
+ * SQL Injection Prevention
+ */
+export function sanitizeSQLInput(input: string): string {
+  // Remove or escape dangerous SQL characters
+  return input
+    .replace(/['";\\]/g, '') // Remove quotes and semicolons
+    .replace(/--/g, '') // Remove SQL comments
+    .replace(/\/\*/g, '') // Remove multi-line comments
+    .replace(/\*\//g, '')
+    .trim();
+}
+
+/**
+ * Path Traversal Prevention
+ */
+export function sanitizePath(filePath: string): string {
+  // Remove directory traversal attempts
+  return filePath
+    .replace(/\.\./g, '')
+    .replace(/^\//, '')
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/');
+}
+
+/**
+ * Command Injection Prevention
+ */
+export function sanitizeCommandInput(input: string): string {
+  // Remove shell metacharacters
+  const dangerous = /[;&|`$(){}[\]<>\\]/g;
+  return input.replace(dangerous, '');
+}
+
+/**
+ * XML/XXE Attack Prevention
+ */
+export function sanitizeXMLInput(input: string): string {
+  // Remove DTD declarations and external entities
+  return input
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<!ENTITY[^>]*>/gi, '')
+    .replace(/<\?xml[^>]*\?>/gi, '');
+}
+
+/**
+ * Detect and prevent common web vulnerabilities
+ */
+export function detectVulnerabilities(input: string): string[] {
+  const vulnerabilities: string[] = [];
+  
+  // XSS patterns
+  if (/<script[^>]*>[\s\S]*?<\/script>/gi.test(input)) {
+    vulnerabilities.push('Potential XSS: Script tags detected');
+  }
+  
+  if (/on\w+\s*=\s*["'][^"']+["']/gi.test(input)) {
+    vulnerabilities.push('Potential XSS: Event handlers detected');
+  }
+  
+  // SQL Injection patterns
+  if (/(\b(union|select|insert|update|delete|drop|create)\b[\s\S]*\b(from|into|where|table)\b)/gi.test(input)) {
+    vulnerabilities.push('Potential SQL Injection: SQL keywords detected');
+  }
+  
+  // Command Injection patterns
+  if (/[;&|`$]/.test(input)) {
+    vulnerabilities.push('Potential Command Injection: Shell metacharacters detected');
+  }
+  
+  // Path Traversal
+  if (/\.\.\/|\.\.\\/.test(input)) {
+    vulnerabilities.push('Potential Path Traversal: Directory traversal detected');
+  }
+  
+  return vulnerabilities;
 }
 

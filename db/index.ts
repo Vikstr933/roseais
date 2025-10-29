@@ -1,7 +1,8 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import * as schema from './schema';
+import * as schema from './schema-pg';
 import * as dotenv from 'dotenv';
+// Trigger reload to test Supabase connection
 
 dotenv.config();
 
@@ -55,7 +56,9 @@ const db = drizzle(pool, { schema });
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
     console.error('❌ Failed to connect to PostgreSQL:', err.message);
-    process.exit(1);
+    console.error('⚠️  Database connection failed, but server will continue running');
+    console.error('   If using Supabase: Your project may be paused. Restore it at https://supabase.com/dashboard');
+    console.error('   The app will work with limited functionality (no user data persistence)');
   } else {
     console.log('✅ PostgreSQL connection successful');
     console.log('🕐 Server time:', res.rows[0].now);

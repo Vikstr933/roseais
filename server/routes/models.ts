@@ -1,15 +1,35 @@
 import { Router } from 'express';
+import { multiModelAI } from '../services/MultiModelAIService';
+import { SimpleLogger } from '../utils/SimpleLogger';
 
 const router = Router();
+const logger = new SimpleLogger('ModelsAPI');
 
 // Define available models - Updated with latest 2024/2025 models
 const models = [
+  {
+    id: 'claude-sonnet-4-5-20250929',
+    name: 'Claude Sonnet 4.5',
+    provider: 'Anthropic',
+    description:
+      'Latest Claude model (Sept 2025) with best-in-class reasoning and coding capabilities',
+    contextWindow: 200000,
+    maxTokens: 8192,
+    releaseDate: '2025-09-29',
+    strengths: [
+      'Superior code generation',
+      'Advanced reasoning',
+      'Long context',
+      'Multimodal',
+      'Best for complex tasks',
+    ],
+  },
   {
     id: 'claude-3-5-sonnet-20241022',
     name: 'Claude 3.5 Sonnet',
     provider: 'Anthropic',
     description:
-      'Latest Claude model with improved reasoning and coding capabilities',
+      'Previous Claude model with improved reasoning and coding capabilities',
     contextWindow: 200000,
     maxTokens: 8192,
     releaseDate: '2024-10-22',
@@ -113,6 +133,114 @@ const models = [
   },
 ];
 
+// Multi-model AI endpoints (must come before /:id route)
+// GET /api/models/available - Get actively available AI models from multi-model service
+router.get('/available', async (req, res) => {
+  try {
+    const models = multiModelAI.getAvailableModels();
+    logger.info('Available models requested', { count: models.length });
+
+    res.json({
+      success: true,
+      models: models.map(model => ({
+        provider: model.provider,
+        model: model.model,
+        maxTokens: model.maxTokens,
+        costPerToken: model.costPerToken,
+        qualityScore: model.qualityScore,
+        enabled: model.enabled
+      })),
+      totalModels: models.length
+    });
+  } catch (error) {
+    logger.error('Failed to get available models', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve available models'
+    });
+  }
+});
+
+// GET /api/models/health - Check health status of all AI providers
+router.get('/health', async (req, res) => {
+  try {
+    logger.info('Health check requested for all providers');
+
+    const health = await multiModelAI.healthCheck();
+    const allHealthy = Object.values(health).every(status => status === true);
+
+    res.json({
+      success: true,
+      health,
+      overallStatus: allHealthy ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Health check failed', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Health check failed'
+    });
+  }
+});
+
+// GET /api/models/usage - Get usage statistics for all models
+router.get('/usage', async (req, res) => {
+  try {
+    const stats = multiModelAI.getUsageStats();
+    logger.info('Usage statistics requested');
+
+    res.json({
+      success: true,
+      usage: stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get usage statistics', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve usage statistics'
+    });
+  }
+});
+
+// POST /api/models/test - Test a specific model with a sample request
+router.post('/test', async (req, res) => {
+  try {
+    const { prompt = 'Hello, this is a test message.', priority = 'quality' } = req.body;
+    logger.info('Model test requested', { priority });
+
+    const response = await multiModelAI.generate({
+      prompt,
+      useCase: 'explanation',
+      priority,
+      maxTokens: 100,
+      temperature: 0.7
+    });
+
+    res.json({
+      success: true,
+      test: {
+        prompt,
+        response: response.content.substring(0, 200) + '...', // Truncate for API response
+        provider: response.provider,
+        model: response.model,
+        responseTime: response.responseTime,
+        tokens: response.usage.totalTokens,
+        cost: response.usage.cost
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Model test failed', error as Error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Model test failed'
+    });
+  }
+});
+
+// Static model endpoints (must come after multi-model endpoints)
 // GET /api/models - Get list of available models
 router.get('/', (req, res) => {
   res.json(models);

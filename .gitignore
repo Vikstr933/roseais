@@ -156,3 +156,6 @@ workspaces/
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Windows reserved names
+nul

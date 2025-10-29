@@ -92,8 +92,8 @@ export default function NewHome() {
 
       {/* Main Content */}
       <div className="relative z-10">
-        {/* Hero Section with Prompt Banner */}
-        <section className="container mx-auto px-6 pt-32 pb-20">
+        {/* Hero Section with Prompt Banner - Optimized for 14" screens */}
+        <section className="container mx-auto px-4 lg:px-6 pt-16 lg:pt-24 xl:pt-32 pb-12 lg:pb-20">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -101,20 +101,20 @@ export default function NewHome() {
             className="max-w-6xl mx-auto"
           >
             {/* Title */}
-            <div className="text-center mb-12">
+            <div className="text-center mb-8 lg:mb-12">
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-6"
+                className="inline-flex items-center gap-2 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-4 lg:mb-6"
               >
-                <Sparkles className="h-4 w-4 text-blue-400" />
-                <span className="text-blue-300 text-sm font-medium">
+                <Sparkles className="h-3 w-3 lg:h-4 lg:w-4 text-blue-400" />
+                <span className="text-blue-300 text-xs lg:text-sm font-medium">
                   Powered by Advanced AI
                 </span>
               </motion.div>
 
-              <h1 className="text-6xl md:text-8xl font-bold text-white mb-6 leading-tight">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white mb-4 lg:mb-6 leading-tight px-4">
                 Build Anything
                 <br />
                 <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
@@ -122,7 +122,7 @@ export default function NewHome() {
                 </span>
               </h1>
 
-              <p className="text-xl md:text-2xl text-blue-200/80 mb-12 max-w-3xl mx-auto">
+              <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-blue-200/80 mb-8 lg:mb-12 max-w-3xl mx-auto px-4">
                 Transform your ideas into reality with AI-powered development.
                 No code? No problem.
               </p>
@@ -139,13 +139,13 @@ export default function NewHome() {
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl blur-xl opacity-30 group-hover:opacity-50 transition duration-500"></div>
 
-              {/* Main Input Container */}
-              <div className="relative bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-blue-500/30 p-8 shadow-2xl">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20">
-                    <Rocket className="h-6 w-6 text-blue-400" />
+              {/* Main Input Container - Compact on small screens */}
+              <div className="relative bg-slate-900/90 backdrop-blur-xl rounded-xl lg:rounded-2xl border border-blue-500/30 p-4 lg:p-6 xl:p-8 shadow-2xl">
+                <div className="flex items-center gap-2 lg:gap-4 mb-3 lg:mb-4">
+                  <div className="p-2 lg:p-3 rounded-lg lg:rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20">
+                    <Rocket className="h-4 w-4 lg:h-6 lg:w-6 text-blue-400" />
                   </div>
-                  <label className="text-2xl font-bold text-white">
+                  <label className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-white">
                     Start building by telling me what you envision
                   </label>
                 </div>
@@ -154,34 +154,35 @@ export default function NewHome() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="e.g., Build a modern todo app with animations and dark mode..."
-                  className="w-full h-32 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 text-lg resize-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 rounded-xl"
+                  className="w-full h-24 lg:h-32 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 text-sm lg:text-base xl:text-lg resize-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 rounded-lg lg:rounded-xl"
                 />
 
-                <div className="flex items-center justify-between mt-6">
-                  <div className="flex items-center gap-2 text-sm text-slate-400">
-                    <Network className="h-4 w-4" />
-                    <span>Powered by multi-agent AI orchestration</span>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 lg:gap-4 mt-4 lg:mt-6">
+                  <div className="flex items-center gap-2 text-xs lg:text-sm text-slate-400">
+                    <Network className="h-3 w-3 lg:h-4 lg:w-4" />
+                    <span className="hidden sm:inline">Powered by multi-agent AI orchestration</span>
+                    <span className="sm:hidden">AI Orchestration</span>
                   </div>
 
                   <Button
                     type="submit"
                     size="lg"
                     disabled={!prompt.trim()}
-                    className="px-8 py-6 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white border-0 shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto px-6 lg:px-8 py-4 lg:py-6 text-base lg:text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white border-0 shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {user ? 'Generate' : 'Get Started'}
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                    <ArrowRight className="ml-2 h-4 w-4 lg:h-5 lg:w-5" />
                   </Button>
                 </div>
               </div>
             </motion.form>
 
-            {/* Quick Stats */}
+            {/* Quick Stats - Compact on small screens */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
-              className="flex flex-wrap justify-center gap-8 mt-12 text-blue-300/70 text-sm"
+              className="flex flex-wrap justify-center gap-4 lg:gap-8 mt-8 lg:mt-12 text-blue-300/70 text-xs lg:text-sm"
             >
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
@@ -199,14 +200,14 @@ export default function NewHome() {
           </motion.div>
         </section>
 
-        {/* Features Grid */}
-        <section className="container mx-auto px-6 pb-20">
+        {/* Features Grid - Better spacing on laptop screens */}
+        <section className="container mx-auto px-4 lg:px-6 pb-12 lg:pb-20">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
             viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 max-w-6xl mx-auto"
           >
             {features.map((feature, index) => (
               <motion.div

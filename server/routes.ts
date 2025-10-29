@@ -23,6 +23,10 @@ import activityRouter from './routes/activity';
 import terminalRouter from './routes/terminal';
 import authRouter from './routes/auth';
 import deploymentsRouter from './routes/deployments';
+import healthRouter from './routes/health';
+import costsRouter from './routes/costs';
+import pluginsRouter from './routes/plugins';
+import userRouter from './routes/user';
 
 // Utility function to generate component content based on file path
 async function generateComponentContent(filePath: string): Promise<string> {
@@ -73,7 +77,7 @@ async function generateComponentContent(filePath: string): Promise<string> {
   `;
 }
 
-// the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
+// the newest Anthropic model is "claude-sonnet-4-5-20250929" which was released September 29, 2025
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -295,6 +299,18 @@ export function registerRoutes(app: Express): Server {
   app.use('/api', terminalRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/deployments', deploymentsRouter);
+  app.use('/api/health', healthRouter);
+  app.use('/api/costs', costsRouter);
+  app.use('/api/user', userRouter);
+
+  // Register plugins router
+  console.log('🔌 Registering plugins router...', pluginsRouter ? 'Router loaded' : 'Router is null/undefined');
+  if (pluginsRouter) {
+    app.use('/api/plugins', pluginsRouter);
+    console.log('✅ Plugins router registered at /api/plugins');
+  } else {
+    console.error('❌ Plugins router is null or undefined, not registered');
+  }
 
   app.post('/api/server/start', async (req, res) => {
     try {
@@ -462,7 +478,7 @@ export default defineConfig({
 
           // Call Anthropic API
           const response = await anthropic.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
+            model: 'claude-sonnet-4-5-20250929',
             max_tokens: chain.maxTokens || 2048,
             messages: [{ role: 'user', content: prompt }],
           });

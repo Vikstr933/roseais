@@ -1,6 +1,7 @@
 import { BaseAgent } from './BaseAgent';
 import { ToolRegistry } from '../utils/ToolRegistry';
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { PromptBuilder } from '../prompts/UltimateAgentPrompts';
 
 export class CompletionAgent extends BaseAgent {
   private state = {
@@ -102,10 +103,13 @@ export class CompletionAgent extends BaseAgent {
   }
 
   async executeTask(task: string): Promise<void> {
-    this.state.currentTask = task;
+    // Apply ultimate completion agent prompt for enhanced intelligence
+    const enhancedTask = PromptBuilder.buildAgentPrompt('COMPLETION_AGENT', task);
+
+    this.state.currentTask = enhancedTask;
     this.state.iterationCount = 0;
 
-    this.logger.info(`Starting completion task: ${task}`);
+    this.logger.info(`Starting completion task with enhanced intelligence: ${task}`);
     
     // For now, just validate that we have a task and mark as complete
     // This prevents the infinite loop while we implement the full completion logic

@@ -23,6 +23,7 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isAdmin: boolean;
   login: (username: string, password: string) => Promise<boolean>;
+  loginWithOAuth: (user: User, token: string) => void;
   register: (
     username: string,
     email: string,
@@ -101,6 +102,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginWithOAuth = (user: User, token: string) => {
+    setUser(user);
+    setSessionToken(token);
+    localStorage.setItem('sessionToken', token);
+  };
+
   const register = async (
     username: string,
     email: string,
@@ -158,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSuperAdmin,
     isAdmin,
     login,
+    loginWithOAuth,
     register,
     logout,
     isLoading,

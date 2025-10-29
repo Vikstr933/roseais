@@ -1,5 +1,6 @@
 import { BaseAgent } from './BaseAgent';
 import { ToolRegistry } from '../utils/ToolRegistry';
+import { PromptBuilder } from '../prompts/UltimateAgentPrompts';
 
 export class UIDesignerAgent extends BaseAgent {
   constructor() {
@@ -13,10 +14,13 @@ export class UIDesignerAgent extends BaseAgent {
   async executeTask(
     task: string
   ): Promise<{ components: string[]; styles: string; structure: string }> {
-    this.logger.info(`Designing UI for: ${task}`);
+    // Apply ultimate UI designer prompt for enhanced intelligence
+    const enhancedTask = PromptBuilder.buildAgentPrompt('UI_DESIGNER', task);
+
+    this.logger.info(`Designing UI with enhanced intelligence for: ${task}`);
 
     // Analyze the requirement for UI components
-    const analysis = await this.analyzeUIRequirements(task);
+    const analysis = await this.analyzeUIRequirements(enhancedTask);
 
     // Generate component structure
     const structure = await this.generateComponentStructure(analysis);

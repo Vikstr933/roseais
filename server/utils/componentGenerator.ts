@@ -24,29 +24,36 @@ export const generateReactComponent = async (
 
     // Parse files from AI response
     const files: { path: string; content: string }[] = [];
+
+    // Enhanced regex to match various markdown formats
+    // Matches: **path** ```lang ... ``` or **path**\n```lang ... ```
     const fileRegex =
-      /\*\*(.*?)\*\*\s*```(?:typescript|tsx|ts|jsx|css|json|html|js)\s*([\s\S]*?)```/g;
+      /\*\*\s*(.*?)\s*\*\*\s*\n?\s*```(?:typescript|tsx|ts|jsx|css|json|html|js|javascript)?\s*\n([\s\S]*?)```/gi;
     let match;
 
     // Sanitize file paths to remove invalid characters and ensure proper directory structure
     const sanitizePath = (path: string) => {
       // Remove invalid characters and trim whitespace
       let sanitized = path.replace(/[<>:"|?*]/g, '-').trim();
-      
+
       // Handle root-level files (index.html, package.json, etc.)
       const rootFiles = ['index.html', 'package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js', 'tailwind.config.js', 'postcss.config.js'];
       const fileName = sanitized.split('/').pop() || '';
-      
+
       if (rootFiles.includes(fileName) && !sanitized.startsWith('src/')) {
         return fileName; // Keep root files at root
       }
-      
+
       // Ensure other files start with src/ if they don't already
       return sanitized.startsWith('src/') ? sanitized : `src/${sanitized}`;
     };
 
     // First pass: collect all files
     const tempFiles: { path: string; content: string }[] = [];
+
+    // Reset regex
+    fileRegex.lastIndex = 0;
+
     while ((match = fileRegex.exec(aiResponse)) !== null) {
       const [, filePath, content] = match;
       if (filePath && content) {
@@ -55,8 +62,18 @@ export const generateReactComponent = async (
           path: sanitizedPath,
           content: content.trim(),
         });
+
+        await logger.info('ComponentGenerator', `Parsed file: ${sanitizedPath}`, {
+          contentLength: content.length
+        });
       }
     }
+
+    // Log parsing results
+    await logger.info('ComponentGenerator', `Parsed ${tempFiles.length} files from AI response`, {
+      responseLength: aiResponse.length,
+      filePaths: tempFiles.map(f => f.path)
+    });
 
     // Second pass: stream files with callback
     const totalFiles = tempFiles.length;
@@ -70,23 +87,218 @@ export const generateReactComponent = async (
       }
     }
 
-    // If no files were found in the AI response, create a default component
+    // If no files or very few files were found, ensure we have a complete project
     if (files.length === 0) {
+      await logger.warning('ComponentGenerator', 'No files found in AI response - creating default structure', {
+        responsePreview: aiResponse.substring(0, 500)
+      });
+
       const componentName = prompt.toLowerCase().includes('todo')
         ? 'TodoList'
         : 'CustomComponent';
-      files.push({
-        path: `src/${componentName}.tsx`,
-        content: `import React from 'react';
 
-export default function ${componentName}() {
+      // Create a minimal working structure
+      files.push(
+        {
+          path: 'index.html',
+          content: `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${componentName}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>`
+        },
+        {
+          path: 'package.json',
+          content: JSON.stringify({
+            name: componentName.toLowerCase(),
+            version: '1.0.0',
+            type: 'module',
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+              preview: 'vite preview'
+            },
+            dependencies: {
+              react: '^18.3.1',
+              'react-dom': '^18.3.1'
+            },
+            devDependencies: {
+              '@types/react': '^18.3.18',
+              '@types/react-dom': '^18.3.5',
+              '@vitejs/plugin-react': '^4.3.4',
+              typescript: '^5.7.2',
+              vite: '^6.0.11'
+            }
+          }, null, 2)
+        },
+        {
+          path: 'tsconfig.json',
+          content: JSON.stringify({
+            compilerOptions: {
+              target: 'ES2020',
+              useDefineForClassFields: true,
+              lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+              module: 'ESNext',
+              skipLibCheck: true,
+              moduleResolution: 'bundler',
+              allowImportingTsExtensions: true,
+              isolatedModules: true,
+              moduleDetection: 'force',
+              noEmit: true,
+              jsx: 'react-jsx',
+              strict: true,
+              noUnusedLocals: true,
+              noUnusedParameters: true,
+              noFallthroughCasesInSwitch: true
+            },
+            include: ['src']
+          }, null, 2)
+        },
+        {
+          path: 'vite.config.ts',
+          content: `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});`
+        },
+        {
+          path: 'src/main.tsx',
+          content: `import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);`
+        },
+        {
+          path: 'src/index.css',
+          content: `body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}`
+        },
+        {
+          path: `src/App.tsx`,
+          content: `import React, { useState } from 'react';
+
+export default function App() {
+  const [count, setCount] = useState(0);
+
   return (
     <div>
       <h1>${componentName}</h1>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>
+        Increment
+      </button>
     </div>
   );
-}`,
-      });
+}`
+        }
+      );
+    } else if (files.length < 5) {
+      // If we have some files but not all required ones, fill in the gaps
+      await logger.warning('ComponentGenerator', `Only ${files.length} files found - may be missing config files`);
+
+      const existingPaths = new Set(files.map(f => f.path));
+
+      // Ensure we have required files
+      if (!existingPaths.has('package.json')) {
+        files.push({
+          path: 'package.json',
+          content: JSON.stringify({
+            name: 'generated-app',
+            version: '1.0.0',
+            type: 'module',
+            scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+            dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' },
+            devDependencies: {
+              '@types/react': '^18.3.18',
+              '@types/react-dom': '^18.3.5',
+              '@vitejs/plugin-react': '^4.3.4',
+              typescript: '^5.7.2',
+              vite: '^6.0.11'
+            }
+          }, null, 2)
+        });
+      }
+
+      if (!existingPaths.has('index.html')) {
+        files.push({
+          path: 'index.html',
+          content: `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React + TS</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>`
+        });
+      }
+
+      if (!existingPaths.has('tsconfig.json')) {
+        files.push({
+          path: 'tsconfig.json',
+          content: JSON.stringify({
+            compilerOptions: {
+              target: 'ES2020',
+              useDefineForClassFields: true,
+              lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+              module: 'ESNext',
+              skipLibCheck: true,
+              moduleResolution: 'bundler',
+              allowImportingTsExtensions: true,
+              isolatedModules: true,
+              moduleDetection: 'force',
+              noEmit: true,
+              jsx: 'react-jsx',
+              strict: true
+            },
+            include: ['src']
+          }, null, 2)
+        });
+      }
+
+      if (!existingPaths.has('vite.config.ts')) {
+        files.push({
+          path: 'vite.config.ts',
+          content: `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});`
+        });
+      }
     }
 
     // Log the generated files

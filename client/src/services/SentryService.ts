@@ -1,5 +1,4 @@
 import * as Sentry from '@sentry/react';
-import { BrowserTracing } from '@sentry/tracing';
 
 /**
  * Sentry Error Tracking Service for Frontend
@@ -28,10 +27,8 @@ export class FrontendSentryService {
         
         // Performance Monitoring
         integrations: [
-          new BrowserTracing({
-            // Trace requests
-            tracePropagationTargets: ['localhost', /^\//],
-          }),
+          Sentry.browserTracingIntegration(),
+          Sentry.replayIntegration(),
         ],
         
         // Sample rate
@@ -41,8 +38,8 @@ export class FrontendSentryService {
         replaysSessionSampleRate: 0.1, // 10% of sessions
         replaysOnErrorSampleRate: 1.0, // 100% of sessions with errors
         
-        // Don't send errors in development
-        enabled: import.meta.env.MODE === 'production',
+        // Enable in both development and production for testing
+        enabled: true, // Change to: import.meta.env.MODE === 'production' for production-only
 
         // Release tracking
         release: import.meta.env.VITE_APP_VERSION || '1.0.0',

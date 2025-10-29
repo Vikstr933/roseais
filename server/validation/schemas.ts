@@ -27,6 +27,7 @@ export const userPromptSchema = z.object({
     ),
   systemPrompt: z.string().optional(),
   model: z.enum([
+    'claude-sonnet-4-5-20250929',
     'claude-3-5-sonnet-20241022',
     'claude-3-opus-20240229',
     'gpt-4',

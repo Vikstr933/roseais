@@ -7,16 +7,21 @@ import { sentryService } from '../services/SentryService';
  * Must be added BEFORE all routes
  */
 export const sentryRequestHandler = () => {
-  // Only enable if Sentry is configured
-  if (!process.env.SENTRY_DSN) {
+  // Only enable if Sentry is configured and Handlers are available
+  if (!process.env.SENTRY_DSN || !Sentry.Handlers) {
     return (req: Request, res: Response, next: NextFunction) => next();
   }
   
-  return Sentry.Handlers.requestHandler({
-    user: ['id', 'username', 'email'],
-    ip: true,
-    transaction: 'methodPath',
-  });
+  try {
+    return Sentry.Handlers.requestHandler({
+      user: ['id', 'username', 'email'],
+      ip: true,
+      transaction: 'methodPath',
+    });
+  } catch (error) {
+    console.warn('⚠️ Sentry request handler unavailable:', error);
+    return (req: Request, res: Response, next: NextFunction) => next();
+  }
 };
 
 /**
@@ -24,12 +29,17 @@ export const sentryRequestHandler = () => {
  * Adds performance monitoring
  */
 export const sentryTracingHandler = () => {
-  // Only enable if Sentry is configured
-  if (!process.env.SENTRY_DSN) {
+  // Only enable if Sentry is configured and Handlers are available
+  if (!process.env.SENTRY_DSN || !Sentry.Handlers) {
     return (req: Request, res: Response, next: NextFunction) => next();
   }
   
-  return Sentry.Handlers.tracingHandler();
+  try {
+    return Sentry.Handlers.tracingHandler();
+  } catch (error) {
+    console.warn('⚠️ Sentry tracing handler unavailable:', error);
+    return (req: Request, res: Response, next: NextFunction) => next();
+  }
 };
 
 /**
@@ -37,17 +47,22 @@ export const sentryTracingHandler = () => {
  * Must be added AFTER all routes but BEFORE error handlers
  */
 export const sentryErrorHandler = () => {
-  // Only enable if Sentry is configured
-  if (!process.env.SENTRY_DSN) {
+  // Only enable if Sentry is configured and Handlers are available
+  if (!process.env.SENTRY_DSN || !Sentry.Handlers) {
     return (err: Error, req: Request, res: Response, next: NextFunction) => next(err);
   }
   
-  return Sentry.Handlers.errorHandler({
-    shouldHandleError(error) {
-      // Capture all errors with status >= 500
-      return true;
-    },
-  });
+  try {
+    return Sentry.Handlers.errorHandler({
+      shouldHandleError(error) {
+        // Capture all errors with status >= 500
+        return true;
+      },
+    });
+  } catch (error) {
+    console.warn('⚠️ Sentry error handler unavailable:', error);
+    return (err: Error, req: Request, res: Response, next: NextFunction) => next(err);
+  }
 };
 
 /**

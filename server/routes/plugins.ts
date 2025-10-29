@@ -1,0 +1,1021 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { SimpleLogger } from '../utils/SimpleLogger';
+import { authenticateUser } from '../middleware/auth';
+
+const router = Router();
+const logger = new SimpleLogger('PluginsAPI');
+
+let pluginRegistry: any;
+let personalAssistantAgent: any;
+let google: any;
+let pluginsInitialized = false;
+
+// Initialize plugins with error handling
+const initializePlugins = async () => {
+  try {
+    if (!pluginRegistry) {
+      const registry = await import('../services/PluginRegistry');
+      pluginRegistry = registry.pluginRegistry;
+    }
+
+    if (!google) {
+      const googleapis = await import('googleapis');
+      google = googleapis.google;
+    }
+
+    if (!pluginsInitialized) {
+      // Register Gmail plugin
+      try {
+        const { default: GmailPlugin } = await import('../plugins/GmailPlugin');
+        const gmailPlugin = new GmailPlugin();
+        pluginRegistry.registerPlugin(gmailPlugin);
+        logger.info('Gmail plugin registered');
+      } catch (error) {
+        logger.error('Failed to register Gmail plugin', error as Error);
+      }
+
+      // Register Calendar plugin
+      try {
+        const { default: GoogleCalendarPlugin } = await import('../plugins/GoogleCalendarPlugin');
+        const calendarPlugin = new GoogleCalendarPlugin();
+        pluginRegistry.registerPlugin(calendarPlugin);
+        logger.info('Google Calendar plugin registered');
+      } catch (error) {
+        logger.error('Failed to register Calendar plugin', error as Error);
+      }
+
+      // Register Notion plugin
+      try {
+        const { default: NotionPlugin } = await import('../plugins/NotionPlugin');
+        const notionPlugin = new NotionPlugin();
+        pluginRegistry.registerPlugin(notionPlugin);
+        logger.info('Notion plugin registered');
+      } catch (error) {
+        logger.error('Failed to register Notion plugin', error as Error);
+      }
+
+      // Register GitHub plugin
+      try {
+        const { default: GitHubPlugin } = await import('../plugins/GitHubPlugin');
+        const githubPlugin = new GitHubPlugin();
+        pluginRegistry.registerPlugin(githubPlugin);
+        logger.info('GitHub plugin registered');
+      } catch (error) {
+        logger.error('Failed to register GitHub plugin', error as Error);
+      }
+
+      pluginsInitialized = true;
+      logger.info('Plugin registration complete');
+    }
+  } catch (error) {
+    logger.error('Failed to initialize plugin system', error as Error);
+  }
+
+  try {
+    if (!personalAssistantAgent) {
+      const assistantModule = await import('../agents/PersonalAssistantAgent');
+      personalAssistantAgent = assistantModule.personalAssistantAgent;
+      logger.info('Personal assistant agent initialized');
+    }
+  } catch (error) {
+    logger.error('Failed to initialize personal assistant agent', error as Error);
+  }
+};
+
+// Initialize on first import
+initializePlugins();
+
+/**
+ * Debug endpoint - check plugin registration
+ */
+router.get('/debug', async (req, res) => {
+  try {
+    await initializePlugins();
+
+    const allPlugins = pluginRegistry ? pluginRegistry.getAllPlugins() : [];
+
+    res.json({
+      success: true,
+      pluginsInitialized,
+      registryExists: !!pluginRegistry,
+      pluginCount: allPlugins.length,
+      plugins: allPlugins
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * Get all available plugins
+ */
+router.get('/', async (req, res) => {
+  try {
+    // Ensure plugins are initialized
+    await initializePlugins();
+
+    if (!pluginRegistry) {
+      return res.status(503).json({
+        success: false,
+        error: 'Plugin system not available'
+      });
+    }
+
+    const plugins = pluginRegistry.getAllPlugins();
+
+    res.json({
+      success: true,
+      plugins: plugins.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        category: p.category,
+        icon: p.icon,
+        requiresAuth: p.requiresAuth,
+        authType: p.authType,
+        capabilities: p.capabilities
+      }))
+    });
+  } catch (error) {
+    logger.error('Failed to get plugins', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve plugins'
+    });
+  }
+});
+
+/**
+ * Get plugin status for current user
+ */
+router.get('/status', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    // Ensure plugins are initialized
+    await initializePlugins();
+
+    if (!pluginRegistry) {
+      return res.status(503).json({
+        success: false,
+        error: 'Plugin system not available'
+      });
+    }
+
+    const status = pluginRegistry.getUserPluginStatus(userId);
+    const statusArray = Array.from(status.entries()).map(([pluginId, data]: [string, any]) => ({
+      pluginId,
+      ...data
+    }));
+
+    res.json({
+      success: true,
+      plugins: statusArray
+    });
+  } catch (error) {
+    logger.error('Failed to get plugin status', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve plugin status'
+    });
+  }
+});
+
+/**
+ * Validate plugin connection (tests credentials and refreshes if needed)
+ */
+router.post('/:pluginId/validate', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { pluginId } = req.params;
+
+    // Ensure plugins are initialized
+    await initializePlugins();
+
+    if (!pluginRegistry) {
+      return res.status(503).json({
+        success: false,
+        error: 'Plugin system not available'
+      });
+    }
+
+    const plugin = pluginRegistry.getPlugin(pluginId);
+    if (!plugin) {
+      return res.status(404).json({
+        success: false,
+        error: 'Plugin not found'
+      });
+    }
+
+    // Validate credentials (will auto-refresh if needed)
+    const isValid = await plugin.validateCredentials(userId);
+
+    res.json({
+      success: true,
+      valid: isValid,
+      message: isValid
+        ? 'Connection is valid and tokens are up to date'
+        : 'Connection failed. Please reconnect your account.'
+    });
+  } catch (error) {
+    logger.error('Failed to validate plugin', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to validate plugin connection'
+    });
+  }
+});
+
+/**
+ * OAuth callback for Gmail
+ */
+router.get('/gmail/auth/start', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/plugins/gmail/callback'
+    );
+
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent', // Force consent screen to always get refresh token
+      scope: [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/gmail.modify'
+      ],
+      state: userId // Pass userId in state for callback
+    });
+
+    res.json({
+      success: true,
+      authUrl
+    });
+  } catch (error) {
+    logger.error('Failed to start Gmail auth', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start authentication'
+    });
+  }
+});
+
+/**
+ * OAuth callback handler for Gmail
+ */
+router.get('/gmail/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    const userId = state as string;
+
+    if (!code || !userId) {
+      return res.status(400).send('Invalid callback parameters');
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/plugins/gmail/callback'
+    );
+
+    // Exchange code for tokens
+    const { tokens } = await oauth2Client.getToken(code as string);
+
+    // Verify we got a refresh token
+    if (!tokens.refresh_token) {
+      logger.error('No refresh token received from Google', { userId });
+      throw new Error('Failed to obtain refresh token. Please try reconnecting.');
+    }
+
+    logger.info('Gmail OAuth tokens received', {
+      userId,
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : 'unknown'
+    });
+
+    // Enable plugin with credentials
+    await pluginRegistry.enablePlugin(userId, 'gmail', {
+      type: 'oauth2',
+      accessToken: tokens.access_token!,
+      refreshToken: tokens.refresh_token,
+      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+      scope: tokens.scope ? [tokens.scope] : []
+    });
+
+    // Send HTML that closes the popup and notifies the parent window
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Gmail Connected</title>
+        </head>
+        <body>
+          <h2>Gmail connected successfully!</h2>
+          <p>You can close this window now.</p>
+          <script>
+            // Notify parent window and close
+            if (window.opener) {
+              window.opener.postMessage({ type: 'gmail-connected', success: true }, '*');
+              setTimeout(() => window.close(), 1000);
+            } else {
+              // If not a popup, redirect to integrations
+              window.location.href = '${frontendUrl}/integrations?success=gmail';
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    logger.error('Gmail OAuth callback failed', error as Error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Connection Failed</title>
+        </head>
+        <body>
+          <h2>Failed to connect Gmail</h2>
+          <p>Please try again.</p>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'gmail-connected', success: false }, '*');
+              setTimeout(() => window.close(), 2000);
+            } else {
+              window.location.href = '${frontendUrl}/integrations?error=gmail';
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  }
+});
+
+/**
+ * OAuth callback for Google Calendar
+ */
+router.get('/google-calendar/auth/start', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI_CALENDAR || 'http://localhost:3001/api/plugins/google-calendar/callback'
+    );
+
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: [
+        'https://www.googleapis.com/auth/calendar.readonly',
+        'https://www.googleapis.com/auth/calendar.events'
+      ],
+      state: userId
+    });
+
+    res.json({
+      success: true,
+      authUrl
+    });
+  } catch (error) {
+    logger.error('Failed to start Calendar auth', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start authentication'
+    });
+  }
+});
+
+router.get('/google-calendar/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    const userId = state as string;
+
+    if (!code || !userId) {
+      return res.status(400).send('Invalid callback parameters');
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI_CALENDAR || 'http://localhost:3001/api/plugins/google-calendar/callback'
+    );
+
+    const { tokens } = await oauth2Client.getToken(code as string);
+
+    if (!tokens.refresh_token) {
+      logger.error('No refresh token received from Google Calendar', { userId });
+      throw new Error('Failed to obtain refresh token. Please try reconnecting.');
+    }
+
+    logger.info('Calendar OAuth tokens received', {
+      userId,
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : 'unknown'
+    });
+
+    await pluginRegistry.enablePlugin(userId, 'google-calendar', {
+      type: 'oauth2',
+      accessToken: tokens.access_token!,
+      refreshToken: tokens.refresh_token,
+      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+      scope: tokens.scope ? [tokens.scope] : []
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Calendar Connected</title>
+        </head>
+        <body>
+          <h2>Google Calendar connected successfully!</h2>
+          <p>You can close this window now.</p>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'calendar-connected', success: true }, '*');
+              setTimeout(() => window.close(), 1000);
+            } else {
+              window.location.href = '${frontendUrl}/integrations?success=calendar';
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    logger.error('Calendar OAuth callback failed', error as Error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Connection Failed</title>
+        </head>
+        <body>
+          <h2>Failed to connect Google Calendar</h2>
+          <p>Please try again.</p>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'calendar-connected', success: false }, '*');
+              setTimeout(() => window.close(), 2000);
+            } else {
+              window.location.href = '${frontendUrl}/integrations?error=calendar';
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  }
+});
+
+/**
+ * Configure Notion with API key
+ */
+router.post('/notion/configure', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { apiKey } = req.body;
+
+    if (!apiKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'API key is required'
+      });
+    }
+
+    // Enable plugin with API key
+    await pluginRegistry.enablePlugin(userId, 'notion', {
+      type: 'api_key',
+      apiKey
+    });
+
+    res.json({
+      success: true,
+      message: 'Notion connected successfully'
+    });
+  } catch (error) {
+    logger.error('Failed to configure Notion', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to connect Notion'
+    });
+  }
+});
+
+/**
+ * OAuth flow for GitHub
+ */
+router.get('/github/auth/start', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3001/api/plugins/github/callback';
+
+    if (!clientId) {
+      return res.status(500).json({
+        success: false,
+        error: 'GitHub OAuth not configured. Please set GITHUB_CLIENT_ID in environment variables.'
+      });
+    }
+
+    // GitHub OAuth URL with required scopes for repository access
+    const scopes = [
+      'repo',          // Full control of private repositories
+      'read:user',     // Read user profile data
+      'user:email'     // Access user email addresses
+    ].join(' ');
+
+    const authUrl = `https://github.com/login/oauth/authorize?` +
+      `client_id=${clientId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${encodeURIComponent(scopes)}&` +
+      `state=${userId}`;
+
+    res.json({
+      success: true,
+      authUrl
+    });
+  } catch (error) {
+    logger.error('Failed to start GitHub auth', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start authentication'
+    });
+  }
+});
+
+/**
+ * OAuth callback handler for GitHub
+ */
+router.get('/github/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    const userId = state as string;
+
+    if (!code || !userId) {
+      return res.status(400).send('Invalid callback parameters');
+    }
+
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      throw new Error('GitHub OAuth credentials not configured');
+    }
+
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        redirect_uri: process.env.GITHUB_REDIRECT_URI || 'http://localhost:3001/api/plugins/github/callback'
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenData.error || !tokenData.access_token) {
+      logger.error('GitHub OAuth token exchange failed', {
+        error: tokenData.error,
+        error_description: tokenData.error_description
+      });
+      throw new Error(tokenData.error_description || 'Failed to obtain access token');
+    }
+
+    logger.info('GitHub OAuth tokens received', {
+      userId,
+      hasAccessToken: !!tokenData.access_token,
+      scope: tokenData.scope
+    });
+
+    // Enable plugin with credentials
+    await pluginRegistry.enablePlugin(userId, 'github', {
+      type: 'oauth2',
+      accessToken: tokenData.access_token,
+      scope: tokenData.scope ? [tokenData.scope] : []
+    });
+
+    // Send HTML that closes the popup and notifies the parent window
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>GitHub Connected</title>
+        </head>
+        <body>
+          <h2>GitHub connected successfully!</h2>
+          <p>You can close this window now.</p>
+          <script>
+            // Notify parent window and close
+            if (window.opener) {
+              window.opener.postMessage({ type: 'github-connected', success: true }, '*');
+              setTimeout(() => window.close(), 1000);
+            } else {
+              // If not a popup, redirect to integrations
+              window.location.href = '${frontendUrl}/integrations?success=github';
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    logger.error('GitHub OAuth callback failed', error as Error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Connection Failed</title>
+        </head>
+        <body>
+          <h2>Failed to connect GitHub</h2>
+          <p>${error instanceof Error ? error.message : 'Please try again.'}</p>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'github-connected', success: false }, '*');
+              setTimeout(() => window.close(), 2000);
+            } else {
+              window.location.href = '${frontendUrl}/integrations?error=github';
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  }
+});
+
+/**
+ * Enable a plugin
+ */
+const enablePluginSchema = z.object({
+  pluginId: z.string(),
+  credentials: z.object({
+    type: z.enum(['oauth2', 'api_key', 'basic_auth']),
+    accessToken: z.string().optional(),
+    refreshToken: z.string().optional(),
+    apiKey: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional()
+  })
+});
+
+router.post('/enable', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { pluginId, credentials } = enablePluginSchema.parse(req.body);
+
+    await pluginRegistry.enablePlugin(userId, pluginId, credentials);
+
+    res.json({
+      success: true,
+      message: `Plugin ${pluginId} enabled successfully`
+    });
+  } catch (error) {
+    logger.error('Failed to enable plugin', error as Error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request data',
+        details: error.errors
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to enable plugin'
+    });
+  }
+});
+
+/**
+ * Disable a plugin
+ */
+router.post('/:pluginId/disable', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { pluginId } = req.params;
+
+    await pluginRegistry.disablePlugin(userId, pluginId);
+
+    res.json({
+      success: true,
+      message: `Plugin ${pluginId} disabled successfully`
+    });
+  } catch (error) {
+    logger.error('Failed to disable plugin', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to disable plugin'
+    });
+  }
+});
+
+/**
+ * Sync a plugin
+ */
+router.post('/:pluginId/sync', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { pluginId } = req.params;
+    const { fullSync, since, until, maxItems } = req.body;
+
+    const options = {
+      fullSync,
+      since: since ? new Date(since) : undefined,
+      until: until ? new Date(until) : undefined,
+      maxItems
+    };
+
+    const result = await pluginRegistry.syncPlugin(userId, pluginId, options);
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    logger.error('Failed to sync plugin', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to sync plugin'
+    });
+  }
+});
+
+/**
+ * Execute plugin action
+ */
+router.post('/:pluginId/action', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { pluginId } = req.params;
+    const { action, params } = req.body;
+
+    if (!action) {
+      return res.status(400).json({
+        success: false,
+        error: 'Action is required'
+      });
+    }
+
+    const result = await pluginRegistry.executeAction(userId, pluginId, action, params || {});
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    logger.error('Failed to execute plugin action', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to execute action'
+    });
+  }
+});
+
+/**
+ * Get available tools from all enabled plugins
+ */
+router.get('/tools', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const tools = await pluginRegistry.getAvailableTools(userId);
+
+    res.json({
+      success: true,
+      tools: tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }))
+    });
+  } catch (error) {
+    logger.error('Failed to get tools', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve tools'
+    });
+  }
+});
+
+/**
+ * Query knowledge from plugins
+ */
+router.post('/knowledge/query', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { prompt, pluginIds, types, since, limit } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is required'
+      });
+    }
+
+    const filters = {
+      pluginIds,
+      types,
+      since: since ? new Date(since) : undefined,
+      limit
+    };
+
+    const knowledge = await pluginRegistry.queryKnowledge(userId, prompt, filters);
+
+    res.json({
+      success: true,
+      knowledge
+    });
+  } catch (error) {
+    logger.error('Failed to query knowledge', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to query knowledge'
+    });
+  }
+});
+
+/**
+ * Personal assistant chat endpoint
+ */
+const assistantMessageSchema = z.object({
+  message: z.string(),
+  sessionId: z.string().optional(),
+  includeContext: z.boolean().optional(),
+  maxContextItems: z.number().optional()
+});
+
+router.post('/assistant/chat', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const data = assistantMessageSchema.parse(req.body);
+
+    // Ensure plugins are initialized
+    await initializePlugins();
+
+    if (!personalAssistantAgent) {
+      return res.status(503).json({
+        success: false,
+        error: 'Personal assistant not available'
+      });
+    }
+
+    const result = await personalAssistantAgent.processRequest(userId, data.message, {
+      sessionId: data.sessionId,
+      includeContext: data.includeContext,
+      maxContextItems: data.maxContextItems
+    });
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    logger.error('Failed to process assistant message', error as Error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request data',
+        details: error.errors
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process message'
+    });
+  }
+});
+
+/**
+ * Get daily summary
+ */
+router.get('/assistant/daily-summary', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    // Ensure plugins are initialized
+    await initializePlugins();
+
+    if (!personalAssistantAgent) {
+      return res.status(503).json({
+        success: false,
+        error: 'Personal assistant not available'
+      });
+    }
+
+    const summary = await personalAssistantAgent.getDailySummary(userId);
+
+    res.json({
+      success: true,
+      summary
+    });
+  } catch (error) {
+    logger.error('Failed to get daily summary', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get daily summary'
+    });
+  }
+});
+
+/**
+ * Clear assistant conversation history
+ */
+router.post('/assistant/clear-history', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { sessionId } = req.body;
+    personalAssistantAgent.clearHistory(sessionId || userId);
+
+    res.json({
+      success: true,
+      message: 'Conversation history cleared'
+    });
+  } catch (error) {
+    logger.error('Failed to clear history', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear history'
+    });
+  }
+});
+
+export default router;

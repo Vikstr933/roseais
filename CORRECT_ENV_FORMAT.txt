@@ -1,0 +1,41 @@
+# =============================================================================
+# COPY THIS INTO YOUR .env FILE (Replace your current .env content)
+# IMPORTANT: Each URL must be on ONE LINE with NO BREAKS!
+# =============================================================================
+
+# =============================================================================
+# DATABASE (REQUIRED)
+# =============================================================================
+DATABASE_URL=postgresql://postgres:D1nm4mm4@db.hngwzhlhlaggzzmgcwys.supabase.co:5432/postgres
+
+# =============================================================================
+# SENTRY ERROR TRACKING
+# =============================================================================
+SENTRY_DSN=https://e19492d0cffb1100e583863e6f34e068@o4510133486682112.ingest.de.sentry.io/4510133487927376
+
+VITE_SENTRY_DSN=https://e19492d0cffb1100e583863e6f34e068@o4510133486682112.ingest.de.sentry.io/4510133487927376
+
+# =============================================================================
+# SUPABASE (Optional - for OAuth, you can skip this for now)
+# =============================================================================
+# VITE_SUPABASE_URL=https://hngwzhlhlaggzzmgcwys.supabase.co
+# VITE_SUPABASE_ANON_KEY=your-anon-key-here
+
+# =============================================================================
+# AI API KEYS (Add your Anthropic key here)
+# =============================================================================
+ANTHROPIC_API_KEY=your-anthropic-key-here
+
+# =============================================================================
+# SECURITY & SESSION (Generate random strings)
+# =============================================================================
+SESSION_SECRET=change-this-to-a-random-32-character-string
+ENCRYPTION_KEY=change-this-to-another-random-32-character-string
+API_KEY_ENCRYPTION_KEY=change-this-to-yet-another-random-32-character-string
+
+# =============================================================================
+# SERVER CONFIG
+# =============================================================================
+PORT=3001
+NODE_ENV=development
+

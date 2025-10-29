@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Folder,
   File,
@@ -6,6 +7,7 @@ import {
   FileCode,
   FileJson,
   FileImage,
+  Sparkles,
 } from 'lucide-react';
 
 export interface FileExplorerProps {
@@ -26,6 +28,34 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set(['src']) // Auto-expand src folder by default
   );
+  const [newFiles, setNewFiles] = useState<Set<string>>(new Set());
+  const [prevFileCount, setPrevFileCount] = useState(files.length);
+
+  // Detect newly added files and mark them as "new" for animation
+  useEffect(() => {
+    if (files.length > prevFileCount) {
+      const newPaths = files.slice(prevFileCount).map(f => f.path);
+      setNewFiles(new Set(newPaths));
+
+      // Auto-expand folders containing new files
+      const foldersToExpand = new Set(expandedFolders);
+      newPaths.forEach(path => {
+        const parts = path.split('/');
+        let currentPath = '';
+        parts.slice(0, -1).forEach(part => {
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          foldersToExpand.add(currentPath);
+        });
+      });
+      setExpandedFolders(foldersToExpand);
+
+      // Remove "new" indicator after animation
+      setTimeout(() => {
+        setNewFiles(new Set());
+      }, 2000);
+    }
+    setPrevFileCount(files.length);
+  }, [files.length, prevFileCount, expandedFolders]);
 
   // Convert flat file list to directory tree structure
   const buildTree = (files: { path: string }[]) => {
@@ -93,18 +123,32 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
       const fileIndex = files.findIndex(f => f.path === node.path);
       const isSelected = selectedFileIndex === fileIndex;
+      const isNew = newFiles.has(node.path);
 
       return (
-        <div
+        <motion.div
           key={fullPath}
-          className={`flex items-center text-sm px-2 py-1 rounded-sm hover:bg-muted cursor-pointer ${
+          initial={isNew ? { opacity: 0, x: -10, backgroundColor: 'rgba(59, 130, 246, 0.1)' } : false}
+          animate={{ opacity: 1, x: 0, backgroundColor: 'rgba(0, 0, 0, 0)' }}
+          transition={{ duration: 0.3 }}
+          className={`flex items-center text-sm px-2 py-1 rounded-sm hover:bg-muted cursor-pointer transition-colors ${
             isSelected ? 'bg-muted text-foreground' : 'text-muted-foreground'
           }`}
           onClick={() => onSelectFile(fileIndex)}
         >
           {getFileIcon(name)}
           {name}
-        </div>
+          {isNew && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0 }}
+              className="ml-auto"
+            >
+              <Sparkles className="h-3 w-3 text-blue-500" />
+            </motion.span>
+          )}
+        </motion.div>
       );
     });
   };

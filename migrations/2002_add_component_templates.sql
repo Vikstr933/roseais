@@ -1,4 +1,55 @@
 -- Add prompt templates for component generation
+DO $$
+BEGIN
+  -- Ensure tags column exists and uses JSONB
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'prompt_templates' AND column_name = 'tags'
+  ) THEN
+    ALTER TABLE prompt_templates
+      ADD COLUMN tags JSONB DEFAULT '[]'::jsonb;
+  ELSE
+    BEGIN
+      ALTER TABLE prompt_templates
+        ALTER COLUMN tags TYPE JSONB USING tags::jsonb;
+      ALTER TABLE prompt_templates
+        ALTER COLUMN tags SET DEFAULT '[]'::jsonb;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'Skipping tags conversion; existing data is not valid JSON';
+    END;
+  END IF;
+
+  -- Ensure best_practices column exists and uses JSONB
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'prompt_templates' AND column_name = 'best_practices'
+  ) THEN
+    ALTER TABLE prompt_templates
+      ADD COLUMN best_practices JSONB DEFAULT '{}'::jsonb;
+  ELSE
+    BEGIN
+      ALTER TABLE prompt_templates
+        ALTER COLUMN best_practices TYPE JSONB USING best_practices::jsonb;
+      ALTER TABLE prompt_templates
+        ALTER COLUMN best_practices SET DEFAULT '{}'::jsonb;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'Skipping best_practices conversion; existing data is not valid JSON';
+    END;
+  END IF;
+
+  -- Ensure version column exists
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'prompt_templates' AND column_name = 'version'
+  ) THEN
+    ALTER TABLE prompt_templates
+      ADD COLUMN version TEXT DEFAULT '1.0';
+  END IF;
+END
+$$;
 INSERT INTO prompt_templates (
   name,
   description,

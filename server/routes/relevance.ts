@@ -116,7 +116,7 @@ Example response format:
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4000,
       temperature: 0.3, // Lower temperature for more consistent scoring
       messages: [
@@ -132,8 +132,14 @@ Example response format:
       throw new Error('Unexpected response type from AI');
     }
 
-    // Parse the JSON response
-    const scores = JSON.parse(content.text);
+    // Parse the JSON response - strip markdown code blocks if present
+    let jsonText = content.text.trim();
+    if (jsonText.startsWith('```')) {
+      // Remove markdown code block markers
+      jsonText = jsonText.replace(/^```(?:json)?\s*\n/, '').replace(/\n```\s*$/, '');
+    }
+    
+    const scores = JSON.parse(jsonText);
 
     // Validate and normalize scores
     const validatedScores: Record<string, number> = {};

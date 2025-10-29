@@ -7,7 +7,7 @@ export default function AuthCallback() {
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { login } = useAuth();
+  const { loginWithOAuth } = useAuth();
 
   useEffect(() => {
     handleOAuthCallback();
@@ -45,9 +45,9 @@ export default function AuthCallback() {
         }
 
         const userData = await response.json();
-        
+
         // Update auth context
-        login(userData.user, userData.sessionToken);
+        loginWithOAuth(userData.user, userData.sessionToken);
 
         // Check for pending prompt from homepage
         const pendingPrompt = localStorage.getItem('pendingPrompt');

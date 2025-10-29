@@ -17,8 +17,10 @@
     "db:push": "drizzle-kit push",
     "migrate": "tsx db/migrate.ts",
     "migrate:reset": "tsx db/drop.ts && npm run migrate",
+    "migrate:plugins": "tsx scripts/run-plugin-migration.ts",
     "generate": "drizzle-kit generate",
-    "setup:components": "tsx scripts/setup-component-generation.ts"
+    "setup:components": "tsx scripts/setup-component-generation.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
@@ -29,6 +31,8 @@
     "@jridgewell/trace-mapping": "^0.3.25",
     "@monaco-editor/react": "^4.6.0",
     "@neondatabase/serverless": "^1.0.2",
+    "@notionhq/client": "^5.3.0",
+    "@octokit/auth-app": "^8.1.1",
     "@octokit/rest": "^22.0.0",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.2",
@@ -86,6 +90,8 @@
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "framer-motion": "^11.13.1",
+    "google-auth-library": "^10.4.2",
+    "googleapis": "^164.1.0",
     "input-otp": "^1.2.4",
     "ioredis": "^5.8.0",
     "lucide-react": "^0.453.0",
@@ -101,9 +107,11 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.1",
     "react-icons": "^5.4.0",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.4",
     "react-syntax-highlighter": "^15.6.6",
     "recharts": "^2.13.0",
+    "stripe": "^19.1.0",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.0",
@@ -131,7 +139,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.2",
     "drizzle-kit": "^0.31.5",
-    "esbuild": "^0.25.10",
+    "esbuild": "^0.25.11",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.33.0",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -140,7 +148,8 @@
     "tailwindcss": "^3.4.14",
     "tsx": "^4.19.1",
     "typescript": "^5.7.2",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "vitest": "^1.6.0"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"

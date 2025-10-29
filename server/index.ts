@@ -1,15 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import EventEmitter from 'events';
 import { Logger } from './utils/Logger';
 import { sentryService } from './services/SentryService';
-import { 
-  sentryRequestHandler, 
-  sentryTracingHandler, 
+import {
+  sentryRequestHandler,
+  sentryTracingHandler,
   sentryErrorHandler,
   errorLogger,
-  errorResponder 
+  errorResponder
 } from './middleware/sentry';
+import securityMiddleware from './middleware/security';
+import { performanceService, apiCache, compressionMiddleware, memoryMonitoring } from './services/PerformanceService';
 import agentsRouter from './routes/agents';
 import promptsRouter from './routes/prompts';
 import workspacesRouter from './routes/workspaces';
@@ -30,7 +33,11 @@ import sessionsRouter from './routes/sessions';
 import authRouter from './routes/auth.js';
 import oauthRouter from './routes/oauth';
 import testRouter from './routes/test';
+import stripeRouter from './routes/stripe';
+import pluginsRouter from './routes/plugins';
+import workspaceSessionsRouter from './routes/workspace';
 import { lockCleanupService } from './utils/lockCleanup';
+import { webSocketService } from './services/WebSocketService';
 
 import * as dotenv from 'dotenv';
 import { sql } from 'drizzle-orm';
@@ -42,6 +49,7 @@ sentryService.initialize();
 const PORT = process.env.PORT || 3001;
 const logger = new Logger(process.cwd());
 const app = express();
+export const agentEventEmitter = new EventEmitter();
 
 // Initialize logger before starting server
 const initializeApp = async () => {
@@ -67,7 +75,23 @@ const initializeApp = async () => {
     app.use(sentryRequestHandler());
     app.use(sentryTracingHandler());
 
-    // Global CORS configuration
+    // Advanced Security Middleware
+    app.use(securityMiddleware.securityHeaders({
+      allowedOrigins: [
+        'http://localhost:5173',
+        'http://localhost:5174'
+      ]
+    }));
+    app.use(securityMiddleware.requestMonitoring());
+    app.use(securityMiddleware.inputValidation());
+    app.use(securityMiddleware.apiRateLimit());
+
+    // Performance Optimization Middleware
+    app.use(compressionMiddleware());
+    app.use(memoryMonitoring());
+    app.use('/api', apiCache(performanceService.getCache(), 300)); // 5 minute cache for API routes
+
+    // Global CORS configuration (now using secure CORS)
     app.use(
       cors({
         origin: [
@@ -88,7 +112,7 @@ const initializeApp = async () => {
       next();
     });
 
-    app.use(express.json({ limit: '50mb' }));
+    app.use(express.json({ limit: '10mb' })); // Reduced for security
 
     // Add enhanced logging middleware
     app.use(async (req, res, next) => {
@@ -134,6 +158,9 @@ const initializeApp = async () => {
         const duration = Date.now() - startTime;
         const responseSize =
           res.get('Content-Length') || (chunk ? chunk.length : 0);
+
+        // Record performance metrics
+        performanceService.recordResponseTime(req.path, duration);
 
         // Log response details
         logger
@@ -204,10 +231,50 @@ const initializeApp = async () => {
     app.use('/api/billing', billingRouter);
     app.use('/api/knowledge', relevanceRouter);
     app.use('/api/terminal', terminalRouter);
+    app.use('/api/stripe', stripeRouter); // Stripe payment routes
+    app.use('/api/plugins', pluginsRouter); // Plugin system routes
+    app.use('/api/workspace-sessions', workspaceSessionsRouter); // Workspace session persistence
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
+
+    app.get('/api/sse/agent-activity', (req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+
+      res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+      const listener = (event: unknown) => {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      };
+
+      agentEventEmitter.on('agent-event', listener);
+
+      req.on('close', () => {
+        agentEventEmitter.off('agent-event', listener);
+        res.end();
+      });
+    });
     app.use('/api/server', serverRouter);
     app.use('/api/models', modelsRouter);
     app.use('/api/sessions', sessionsRouter);
+
+    // Performance metrics endpoint
+    app.get('/api/metrics/performance', (req, res) => {
+      const metrics = performanceService.getMetrics();
+      res.json({
+        performance: metrics,
+        memory: process.memoryUsage(),
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    // Deployment routes
+    const deploymentRouter = await import('./routes/deployment.js');
+    app.use('/api', deploymentRouter.default);
 
     // Preview route
     app.get('/preview/:component', (req, res) => {
@@ -267,9 +334,17 @@ const initializeApp = async () => {
             `Server is ready and listening on port ${PORT}`
           );
 
+          // Initialize WebSocket service
+          webSocketService.initialize(server);
+          console.log('WebSocket service initialized');
+
           // Start the lock cleanup service
           lockCleanupService.start();
           console.log('Lock cleanup service started');
+
+          // Start the storage cleanup service (deletes old projects automatically)
+          const { storageCleanupService } = await import('./services/StorageCleanupService');
+          storageCleanupService.startAutomaticCleanup();
 
           resolve();
         } catch (err) {
@@ -302,3 +377,4 @@ process.on('SIGTERM', () => {
   lockCleanupService.stop();
   process.exit(0);
 });
+

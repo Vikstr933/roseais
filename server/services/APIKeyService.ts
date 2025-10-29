@@ -1,10 +1,10 @@
 import { db } from '../../db';
 import {
   users,
-  userSessions,
-  userAPIKeys,
-  userWorkspaces,
-} from '../../db/schema';
+  sessions,
+  apiKeys,
+  workspaces,
+} from '../../db/schema-pg';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -104,34 +104,25 @@ export class UserService {
   // Session Management
   async createSession(userId: string, ipAddress?: string, userAgent?: string) {
     const sessionId = crypto.randomUUID();
-    const sessionToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(
       Date.now() + 7 * 24 * 60 * 60 * 1000
-    ).toISOString(); // 7 days
+    ); // 7 days
 
     const newSession = {
       id: sessionId,
       userId,
-      sessionToken,
       expiresAt,
-      ipAddress,
-      userAgent,
     };
 
-    await db.insert(userSessions).values(newSession);
-    return { sessionId, sessionToken, expiresAt };
+    await db.insert(sessions as any).values(newSession);
+    return { sessionId, sessionToken: sessionId, expiresAt: expiresAt.toISOString() };
   }
 
   async getSessionByToken(sessionToken: string) {
     const result = await db
       .select()
-      .from(userSessions)
-      .where(
-        and(
-          eq(userSessions.sessionToken, sessionToken),
-          eq(userSessions.isActive, 1)
-        )
-      )
+      .from(sessions as any)
+      .where(eq((sessions as any).id, sessionToken))
       .limit(1);
 
     return result[0] || null;
@@ -147,27 +138,19 @@ export class UserService {
       return null;
     }
 
-    // Update last activity
-    await db
-      .update(userSessions)
-      .set({ lastActivity: new Date().toISOString() })
-      .where(eq(userSessions.sessionToken, sessionToken));
-
     return await this.getUserById(session.userId);
   }
 
   async invalidateSession(sessionToken: string) {
     await db
-      .update(userSessions)
-      .set({ isActive: 0 })
-      .where(eq(userSessions.sessionToken, sessionToken));
+      .delete(sessions as any)
+      .where(eq((sessions as any).id, sessionToken));
   }
 
   async invalidateAllUserSessions(userId: string) {
     await db
-      .update(userSessions)
-      .set({ isActive: 0 })
-      .where(eq(userSessions.userId, userId));
+      .delete(sessions as any)
+      .where(eq((sessions as any).userId, userId));
   }
 
   // API Key Management
@@ -232,16 +215,16 @@ export class UserService {
       website: keyData.website,
     };
 
-    await db.insert(userAPIKeys).values(newAPIKey);
+    await db.insert(apiKeys).values(newAPIKey);
     return newAPIKey;
   }
 
-  async getUserAPIKeys(userId: string) {
+  async getapiKeys(userId: string) {
     const result = await db
       .select()
-      .from(userAPIKeys)
-      .where(and(eq(userAPIKeys.userId, userId), eq(userAPIKeys.isActive, 1)))
-      .orderBy(desc(userAPIKeys.createdAt));
+      .from(apiKeys)
+      .where(and(eq(apiKeys.userId, userId), eq(apiKeys.isActive, 1)))
+      .orderBy(desc(apiKeys.createdAt));
 
     return result.map(key => ({
       ...key,
@@ -252,12 +235,12 @@ export class UserService {
   async getAPIKey(userId: string, serviceName: string) {
     const result = await db
       .select()
-      .from(userAPIKeys)
+      .from(apiKeys)
       .where(
         and(
-          eq(userAPIKeys.userId, userId),
-          eq(userAPIKeys.serviceName, serviceName),
-          eq(userAPIKeys.isActive, 1)
+          eq(apiKeys.userId, userId),
+          eq(apiKeys.serviceName, serviceName),
+          eq(apiKeys.isActive, 1)
         )
       )
       .limit(1);
@@ -268,21 +251,21 @@ export class UserService {
 
     // Update usage stats
     await db
-      .update(userAPIKeys)
+      .update(apiKeys)
       .set({
         lastUsed: new Date().toISOString(),
         usageCount: key.usageCount + 1,
       })
-      .where(eq(userAPIKeys.id, key.id));
+      .where(eq(apiKeys.id, key.id));
 
     return this.decryptKey(key.encryptedKey);
   }
 
   async removeAPIKey(userId: string, keyId: number) {
     await db
-      .update(userAPIKeys)
+      .update(apiKeys)
       .set({ isActive: 0 })
-      .where(and(eq(userAPIKeys.id, keyId), eq(userAPIKeys.userId, userId)));
+      .where(and(eq(apiKeys.id, keyId), eq(apiKeys.userId, userId)));
   }
 
   async getMissingAPIKeys(
@@ -291,8 +274,8 @@ export class UserService {
   ): Promise<string[]> {
     const userKeys = await db
       .select()
-      .from(userAPIKeys)
-      .where(and(eq(userAPIKeys.userId, userId), eq(userAPIKeys.isActive, 1)));
+      .from(apiKeys)
+      .where(and(eq(apiKeys.userId, userId), eq(apiKeys.isActive, 1)));
 
     const userServiceNames = userKeys.map(key => key.serviceName);
     return requiredServices.filter(
@@ -318,21 +301,21 @@ export class UserService {
       metadata: JSON.stringify(workspaceData.metadata || {}),
     };
 
-    await db.insert(userWorkspaces).values(newWorkspace);
+    await db.insert(workspaces).values(newWorkspace);
     return newWorkspace;
   }
 
-  async getUserWorkspaces(userId: string) {
+  async getworkspaces(userId: string) {
     const result = await db
       .select()
-      .from(userWorkspaces)
+      .from(workspaces)
       .where(
         and(
-          eq(userWorkspaces.userId, userId),
-          eq(userWorkspaces.status, 'active')
+          eq(workspaces.userId, userId),
+          eq(workspaces.status, 'active')
         )
       )
-      .orderBy(desc(userWorkspaces.lastModified));
+      .orderBy(desc(workspaces.lastModified));
 
     return result.map(workspace => ({
       ...workspace,
@@ -346,15 +329,15 @@ export class UserService {
     status: 'active' | 'archived' | 'deleted'
   ) {
     await db
-      .update(userWorkspaces)
+      .update(workspaces)
       .set({
         status,
         lastModified: new Date().toISOString(),
       })
       .where(
         and(
-          eq(userWorkspaces.id, workspaceId),
-          eq(userWorkspaces.userId, userId)
+          eq(workspaces.id, workspaceId),
+          eq(workspaces.userId, userId)
         )
       );
   }
@@ -451,7 +434,7 @@ export class APIKeyService {
       const now = new Date().toISOString();
 
       const result = await db
-        .insert(userAPIKeys)
+        .insert(apiKeys)
         .values({
           userId,
           serviceName,
@@ -486,13 +469,13 @@ export class APIKeyService {
     try {
       const result = await db
         .select()
-        .from(userAPIKeys)
+        .from(apiKeys)
         .where(
           and(
-            eq(userAPIKeys.userId, userId),
-            eq(userAPIKeys.serviceName, serviceName),
-            eq(userAPIKeys.keyName, keyName),
-            eq(userAPIKeys.isActive, 1)
+            eq(apiKeys.userId, userId),
+            eq(apiKeys.serviceName, serviceName),
+            eq(apiKeys.keyName, keyName),
+            eq(apiKeys.isActive, 1)
           )
         )
         .limit(1);
@@ -517,27 +500,27 @@ export class APIKeyService {
   /**
    * Get all API keys for user (without values)
    */
-  async getUserAPIKeys(
+  async getapiKeys(
     userId: string
   ): Promise<Omit<APIKey, 'encryptedKey'>[]> {
     try {
       const result = await db
         .select({
-          id: userAPIKeys.id,
-          userId: userAPIKeys.userId,
-          serviceName: userAPIKeys.serviceName,
-          keyName: userAPIKeys.keyName,
-          keyType: userAPIKeys.keyType,
-          description: userAPIKeys.description,
-          website: userAPIKeys.website,
-          isActive: userAPIKeys.isActive,
-          createdAt: userAPIKeys.createdAt,
-          updatedAt: userAPIKeys.updatedAt,
-          lastUsed: userAPIKeys.lastUsed,
-          usageCount: userAPIKeys.usageCount,
+          id: apiKeys.id,
+          userId: apiKeys.userId,
+          serviceName: apiKeys.serviceName,
+          keyName: apiKeys.keyName,
+          keyType: apiKeys.keyType,
+          description: apiKeys.description,
+          website: apiKeys.website,
+          isActive: apiKeys.isActive,
+          createdAt: apiKeys.createdAt,
+          updatedAt: apiKeys.updatedAt,
+          lastUsed: apiKeys.lastUsed,
+          usageCount: apiKeys.usageCount,
         })
-        .from(userAPIKeys)
-        .where(eq(userAPIKeys.userId, userId));
+        .from(apiKeys)
+        .where(eq(apiKeys.userId, userId));
 
       return result;
     } catch (error) {
@@ -558,7 +541,7 @@ export class APIKeyService {
     existingKeys: string[];
   }> {
     try {
-      const userKeys = await this.getUserAPIKeys(userId);
+      const userKeys = await this.getapiKeys(userId);
       const existingKeyNames = userKeys.map(
         key => `${key.serviceName}:${key.keyName}`
       );
@@ -594,13 +577,13 @@ export class APIKeyService {
     try {
       const now = new Date().toISOString();
       await db
-        .update(userAPIKeys)
+        .update(apiKeys)
         .set({
           lastUsed: now,
           usageCount: sql`usage_count + 1`,
           updatedAt: now,
         })
-        .where(eq(userAPIKeys.id, keyId));
+        .where(eq(apiKeys.id, keyId));
     } catch (error) {
       console.error('Error updating usage stats:', error);
     }
@@ -612,8 +595,8 @@ export class APIKeyService {
   async deleteAPIKey(userId: string, keyId: number): Promise<boolean> {
     try {
       const result = await db
-        .delete(userAPIKeys)
-        .where(and(eq(userAPIKeys.id, keyId), eq(userAPIKeys.userId, userId)))
+        .delete(apiKeys)
+        .where(and(eq(apiKeys.id, keyId), eq(apiKeys.userId, userId)))
         .returning();
 
       return result.length > 0;
@@ -629,12 +612,12 @@ export class APIKeyService {
   async deactivateAPIKey(userId: string, keyId: number): Promise<boolean> {
     try {
       const result = await db
-        .update(userAPIKeys)
+        .update(apiKeys)
         .set({
           isActive: 0,
           updatedAt: new Date().toISOString(),
         })
-        .where(and(eq(userAPIKeys.id, keyId), eq(userAPIKeys.userId, userId)))
+        .where(and(eq(apiKeys.id, keyId), eq(apiKeys.userId, userId)))
         .returning();
 
       return result.length > 0;

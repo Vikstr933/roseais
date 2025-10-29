@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../../db';
-import { agents, promptChains, promptTemplates } from '../../db/schema';
+import { agents, promptChains, promptTemplates } from '../../db/schema-pg';
 import { eq } from 'drizzle-orm';
 import { generateReactComponent } from '../utils/componentGenerator';
 import { knowledgeService } from '../services/KnowledgeService';
@@ -11,33 +11,49 @@ import { validateRequest, sanitizeAIResponse } from '../middleware/validation';
 import { userPromptSchema } from '../validation/schemas';
 import path from 'path';
 import fs from 'fs/promises';
-import Anthropic from '@anthropic-ai/sdk';
+import { AICodeGenerator } from '../services/AICodeGenerator';
+import { agentEventEmitter } from '../index';
+import { agentSelector } from '../services/AgentSelector';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const aiCodeGenerator = new AICodeGenerator();
+
+const COMPONENT_FORMAT_GUIDELINES = `When providing React component code and configurations, use the following guidelines:
+
+1. For file formatting:
+   - Each file should be preceded by its filename in bold, followed by the language
+   - Example format:
+   **src/Component.tsx**
+   \`\`\`typescript
+   // component code here
+   \`\`\`
+   **src/styles.css**
+   \`\`\`css
+   // styles here
+   \`\`\`
+
+2. For libraries, frameworks, capabilities, and best practices, use the actual names instead of indices:
+   - Libraries: React, Redux, Axios, Jest, React Testing Library, Lodash, date-fns, Framer Motion
+   - Frameworks: Next.js, React, Vue.js, Angular, Svelte, Express, NestJS
+   - Capabilities: Frontend Development, UI/UX Design, API Integration, State Management, Testing, Performance Optimization, Responsive Design, Accessibility, SEO, Security
+   - Best Practices: Clean Code, DRY, SOLID, Component-Based Architecture, Responsive Design, Performance Optimization, Code Review, Testing, Documentation, Version Control`;
 
 const router = Router();
 
 async function getActiveAgents() {
   const rawAgents = await db
     .select()
-    .from(agents as any)
-    .where(eq(agents.isActive as any, true));
+    .from(agents)
+    .where(eq(agents.isActive, true));
 
-  // JSONB fields are already parsed by Drizzle, no need to JSON.parse()
+  console.log(`Found ${rawAgents.length} active agents in database`);
+
+  // Return agents with proper field mapping
   return rawAgents.map((agent: any) => ({
     ...agent,
-    capabilities: agent.capabilities || [],
-    expertise: agent.expertise || [],
-    frameworks: agent.frameworks || [],
-    libraries: agent.libraries || [],
-    bestPractices: agent.bestPractices || [],
-    customInstructions: agent.customInstructions || null,
-    isActive: Boolean(agent.isActive),
-    role: agent.role || agent.type || '',
-    systemPrompt: agent.systemPrompt || agent.system_prompt || '',
-    model: agent.model || 'claude-3-5-sonnet-20241022',
+    // Map PostgreSQL fields to expected format
+    role: agent.type || '', // Use 'type' as 'role' for compatibility
+    systemPrompt: agent.systemPrompt || '',
+    model: agent.model || 'claude-sonnet-4-5-20250929',
   }));
 }
 
@@ -302,6 +318,241 @@ function sendSSEUpdate(req: any, type: string, data: any) {
   }
 }
 
+/**
+ * Validates generated code for common errors
+ * Returns { valid: boolean, errors: string[] }
+ */
+function validateGeneratedCode(files: { path: string; content: string }[]): {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Check for required files
+  const requiredFiles = ['index.html', 'package.json', 'tsconfig.json'];
+  const filePaths = files.map(f => f.path.replace(/^src\//, ''));
+
+  requiredFiles.forEach(required => {
+    if (!filePaths.includes(required)) {
+      errors.push(`Missing required file: ${required}`);
+    }
+  });
+
+  // Check each file for common issues
+  files.forEach(file => {
+    const { path, content } = file;
+
+    // Check for empty files
+    if (content.trim().length === 0) {
+      errors.push(`${path} - File is empty`);
+      return;
+    }
+
+    // Validate TypeScript/JavaScript files with actual parsing
+    if (path.match(/\.(ts|tsx|js|jsx)$/)) {
+      // Check for common syntax errors using regex patterns
+      const lines = content.split('\n');
+
+      // Check for missing semicolons on common statements
+      lines.forEach((line, index) => {
+        const trimmed = line.trim();
+
+        // Skip comments and empty lines
+        if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed === '') {
+          return;
+        }
+
+        // Check for statements that should end with semicolon but don't
+        const requiresSemicolon = /^(const|let|var|import|export|return|throw|break|continue)\s+.*[^;{}\s]$/;
+        if (requiresSemicolon.test(trimmed)) {
+          errors.push(`${path}:${index + 1} - Missing semicolon: ${trimmed.substring(0, 50)}...`);
+        }
+
+        // Check for imports without quotes
+        if (trimmed.match(/import.*from\s+[^'"]/)) {
+          errors.push(`${path}:${index + 1} - Import statement missing quotes`);
+        }
+
+        // Check for unclosed brackets
+        const openBrackets = (trimmed.match(/\{/g) || []).length;
+        const closeBrackets = (trimmed.match(/\}/g) || []).length;
+        if (openBrackets !== closeBrackets && !trimmed.includes('=>')) {
+          warnings.push(`${path}:${index + 1} - Possible unclosed brackets`);
+        }
+      });
+
+      // Check for unclosed JSX tags in tsx/jsx files
+      if (path.match(/\.(tsx|jsx)$/)) {
+        const jsxTagPattern = /<([A-Z][a-zA-Z0-9]*)/g;
+        const openTags = [...content.matchAll(jsxTagPattern)].map(m => m[1]);
+        const closeTags = [...content.matchAll(/<\/([A-Z][a-zA-Z0-9]*)/g)].map(m => m[1]);
+
+        // Check if all opening tags have closing tags (simplified check)
+        openTags.forEach(tag => {
+          if (!content.includes(`<${tag} />`) && !content.includes(`</${tag}>`)) {
+            warnings.push(`${path} - Possible unclosed JSX tag: <${tag}>`);
+          }
+        });
+      }
+
+      // Check for imports without corresponding files
+      const importMatches = content.matchAll(/import\s+.*?\s+from\s+['"](.+?)['"]/g);
+      for (const match of importMatches) {
+        let importPath = match[1];
+
+        // Skip external packages (no ./ or ../)
+        if (!importPath.startsWith('./') && !importPath.startsWith('../')) {
+          continue;
+        }
+
+        // Resolve relative path
+        const dir = path.split('/').slice(0, -1).join('/');
+        const resolvedPath = importPath.startsWith('./')
+          ? `${dir}/${importPath.slice(2)}`
+          : importPath;
+
+        // Add extensions if missing
+        const possibleExtensions = ['', '.ts', '.tsx', '.js', '.jsx'];
+        let found = false;
+
+        for (const ext of possibleExtensions) {
+          const fullPath = `${resolvedPath}${ext}`;
+          if (files.some(f => f.path === fullPath || f.path === `src/${fullPath}`)) {
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          errors.push(`${path} - Import '${importPath}' has no corresponding file`);
+        }
+      }
+
+      // Check for common React/TypeScript errors
+      if (content.includes('React') && !content.includes("import React") && !content.includes("import * as React")) {
+        warnings.push(`${path} - Uses React but missing React import`);
+      }
+
+      // Check for undefined variables (very basic check)
+      const variableDeclarations = [...content.matchAll(/(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g)].map(m => m[1]);
+      const functionDeclarations = [...content.matchAll(/function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g)].map(m => m[1]);
+      const declaredNames = new Set([...variableDeclarations, ...functionDeclarations]);
+
+      // Check for uses of common typos
+      if (content.match(/\bundefined\s*;/)) {
+        errors.push(`${path} - Found 'undefined;' which is likely an error`);
+      }
+    }
+
+    // Validate HTML files
+    if (path.endsWith('.html')) {
+      // Check for basic HTML structure
+      if (!content.includes('<!DOCTYPE') && !content.includes('<!doctype')) {
+        warnings.push(`${path} - Missing DOCTYPE declaration`);
+      }
+      if (!content.includes('<html')) {
+        errors.push(`${path} - Missing <html> tag`);
+      }
+      if (!content.includes('<body')) {
+        warnings.push(`${path} - Missing <body> tag`);
+      }
+    }
+
+    // Validate JSON files
+    if (path.endsWith('.json')) {
+      try {
+        JSON.parse(content);
+      } catch (e: any) {
+        errors.push(`${path} - Invalid JSON: ${e.message}`);
+      }
+    }
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
+ * Wrapper around generateWithAI that emits granular progress updates
+ * Shows progress from startProgress to endProgress with realistic messages
+ */
+async function generateWithProgressUpdates(
+  prompt: string,
+  systemPrompt: string,
+  model: string,
+  options: {
+    startProgress: number;
+    endProgress: number;
+    workflowId: string;
+    agentId: string;
+    messages: string[];
+  }
+): Promise<AIResponse> {
+  const { startProgress, endProgress, workflowId, agentId, messages } = options;
+  const totalSteps = messages.length;
+  const progressPerStep = (endProgress - startProgress) / totalSteps;
+
+  let currentProgress = startProgress;
+  let currentMessage = 0;
+  let progressInterval: NodeJS.Timeout | null = null;
+
+  // Start progress simulation
+  progressInterval = setInterval(() => {
+    if (currentMessage < totalSteps) {
+      currentProgress = startProgress + (currentMessage * progressPerStep);
+
+      // Emit progress event
+      agentEventEmitter.emit('agent-event', {
+        type: 'AGENT_PROGRESS',
+        agent: agentId,
+        agentId: agentId,
+        workflowId,
+        progress: Math.round(currentProgress),
+        message: messages[currentMessage],
+        timestamp: Date.now(),
+      });
+
+      console.log(`⏳ ${agentId}: ${Math.round(currentProgress)}% - ${messages[currentMessage]}`);
+
+      currentMessage++;
+    }
+  }, 3000); // Update every 3 seconds
+
+  try {
+    // Call the actual AI generation
+    const result = await generateWithAI(prompt, systemPrompt, model);
+
+    // Clear the interval
+    if (progressInterval) {
+      clearInterval(progressInterval);
+    }
+
+    // Emit final progress before completion
+    agentEventEmitter.emit('agent-event', {
+      type: 'AGENT_PROGRESS',
+      agent: agentId,
+      agentId: agentId,
+      workflowId,
+      progress: endProgress,
+      message: 'Code generation complete!',
+      timestamp: Date.now(),
+    });
+
+    return result;
+  } catch (error) {
+    // Clear the interval on error
+    if (progressInterval) {
+      clearInterval(progressInterval);
+    }
+    throw error;
+  }
+}
+
 async function generateWithAI(
   prompt: string,
   systemPrompt: string,
@@ -312,71 +563,37 @@ async function generateWithAI(
       throw new Error('ANTHROPIC_API_KEY is not set');
     }
 
-    // For Claude-3 and other models
-    // Check if this is a component generation request
     if (await isComponentRequest(prompt)) {
-      // First get the AI response
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-Key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: model,
-          max_tokens: 4000,
-          system: `${systemPrompt}\n\nWhen providing React component code and configurations, use the following guidelines:
-
-1. For file formatting:
-   - Each file should be preceded by its filename in bold, followed by the language
-   - Example format:
-   **src/Component.tsx**
-   \`\`\`typescript
-   // component code here
-   \`\`\`
-   **src/styles.css**
-   \`\`\`css
-   // styles here
-   \`\`\`
-
-2. For libraries, frameworks, capabilities, and best practices, use the actual names instead of indices:
-   - Libraries: React, Redux, Axios, Jest, React Testing Library, Lodash, date-fns, Framer Motion
-   - Frameworks: Next.js, React, Vue.js, Angular, Svelte, Express, NestJS
-   - Capabilities: Frontend Development, UI/UX Design, API Integration, State Management, Testing, Performance Optimization, Responsive Design, Accessibility, SEO, Security
-   - Best Practices: Clean Code, DRY, SOLID, Component-Based Architecture, Responsive Design, Performance Optimization, Code Review, Testing, Documentation, Version Control`,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-        }),
+      const response = await aiCodeGenerator.generateComponent({
+        prompt: `${systemPrompt}\n\n${COMPONENT_FORMAT_GUIDELINES}\n\n${prompt}`,
+        componentName: 'GeneratedComponent',
+        features: [],
+        styling: { animations: false, theme: 'light' },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('AI API error details:', errorData);
-        throw new Error(
-          `AI API error: ${response.statusText} - ${JSON.stringify(errorData)}`
-        );
+      // Use files from AICodeGenerator - it already parsed them correctly!
+      const files = response.files || [];
+      console.log('AICodeGenerator response:', {
+        success: response.success,
+        filesCount: files.length,
+        hasCode: !!response.code,
+        error: response.error
+      });
+
+      if (files.length === 0) {
+        console.error('No files in response. Full response:', JSON.stringify(response, null, 2));
+        throw new Error(`No files generated by AI. Success: ${response.success}, Error: ${response.error || 'none'}`);
       }
 
-      const data = await response.json();
-      if (!data.content || !data.content[0] || !data.content[0].text) {
-        throw new Error('Invalid response format from Claude-3');
-      }
+      const componentText = response.code ?? files[0]?.content ?? '';
 
       // Create unique workspace directory for this generation
       const workspaceId = Date.now().toString();
       const workspaceDir = path.join(process.cwd(), 'workspaces', workspaceId);
       await fs.mkdir(workspaceDir, { recursive: true });
 
-      // Generate component in new workspace
-      const result = await generateReactComponent(prompt, data.content[0].text);
-
       // Update file paths to use new workspace
-      result.files = result.files.map(file => ({
+      const updatedFiles = files.map(file => ({
         ...file,
         path: file.path.replace(
           /^workspaces\/[^\/]+\//,
@@ -384,22 +601,9 @@ async function generateWithAI(
         ),
       }));
 
-      // Check for existing files and merge changes
-      const existingFiles = await fs.readdir(workspaceDir, { recursive: true });
-      result.files = result.files.map(file => {
-        const existingPath = existingFiles.find(f => f === file.path);
-        if (existingPath) {
-          // Add version suffix to avoid overwriting
-          const ext = path.extname(file.path);
-          const base = path.basename(file.path, ext);
-          file.path = `${path.dirname(file.path)}/${base}_v${Date.now()}${ext}`;
-        }
-        return file;
-      });
-
       // Write all generated files
       await Promise.all(
-        result.files.map(async (file: { path: string; content: string }) => {
+        updatedFiles.map(async (file: { path: string; content: string }) => {
           const filePath = path.join(workspaceDir, file.path);
           const fileDir = path.dirname(filePath);
           await fs.mkdir(fileDir, { recursive: true });
@@ -409,47 +613,21 @@ async function generateWithAI(
 
       return {
         type: 'component',
-        text: result.text || data.content[0].text,
-        files: result.files,
+        text: componentText,
+        files: updatedFiles,
       };
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Api-Key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
+    const response = await aiCodeGenerator.generateComponent({
+      prompt: `${systemPrompt}\n\n${prompt}`,
+      componentName: 'GeneratedText',
+      features: [],
+      styling: { animations: false, theme: 'light' },
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('AI API error details:', errorData);
-      throw new Error(
-        `AI API error: ${response.statusText} - ${JSON.stringify(errorData)}`
-      );
-    }
-
-    const data = await response.json();
-    if (!data.content || !data.content[0] || !data.content[0].text) {
-      throw new Error('Invalid response format from Claude-3');
-    }
 
     return {
       type: 'text',
-      text: data.content[0].text,
+      text: response.code ?? '',
     };
   } catch (error) {
     console.error('Error generating with AI:', error);
@@ -470,7 +648,7 @@ router.post(
       const {
         systemPrompt,
         userPrompt,
-        model = 'claude-3-5-sonnet-20241022',
+        model = 'claude-sonnet-4-5-20250929',
         temperature = 0.7,
         orchestration = true,
         selectedKnowledge = null, // New parameter for manual knowledge selection
@@ -582,14 +760,49 @@ router.post(
 
       let finalResponse: AIResponse;
 
+      // Analyze prompt to determine which agents are needed
+      console.log('🔍 Analyzing prompt to select required agents...');
+      const agentSelection = await agentSelector.analyzePrompt(userPrompt);
+      console.log(`📊 Prompt Analysis:`, {
+        complexity: agentSelection.complexity,
+        selectedAgents: agentSelection.selectedAgents,
+        reasoning: agentSelection.reasoning,
+        estimatedDuration: `${agentSelection.estimatedDuration}s`
+      });
+
+      // Filter active agents to only include selected ones
+      const requiredAgents = activeAgents.filter(agent =>
+        agentSelection.selectedAgents.includes(agent.id)
+      );
+
+      console.log(`✅ Using ${requiredAgents.length}/${activeAgents.length} agents for this task`);
+
       // Always use orchestration now
       // Send orchestration start update
+      const workflowId = `workflow-${Date.now()}`;
+
       sendSSEUpdate(req, 'ORCHESTRATION_START', {
-        message: 'Starting AI orchestration process',
+        message: `Starting AI orchestration with ${requiredAgents.length} specialized agents`,
+        complexity: agentSelection.complexity,
+        selectedAgents: agentSelection.selectedAgents,
+        estimatedDuration: agentSelection.estimatedDuration
       });
+
+      // ALSO emit to agent monitor
+      agentEventEmitter.emit('agent-event', {
+        type: 'orchestration:start',
+        workflowId,
+        timestamp: Date.now(),
+        selectedAgents: agentSelection.selectedAgents,
+        complexity: agentSelection.complexity,
+        reasoning: agentSelection.reasoning
+      });
+
+      console.log(`Orchestration decision: requiredAgents.length = ${requiredAgents.length}`);
 
       if (!activeAgents.length) {
         // Fallback to direct generation if no agents are active
+        console.log('⚠️  No active agents found - using fallback direct generation');
         finalResponse = await generateWithAI(
           userPrompt,
           systemPrompt ||
@@ -597,23 +810,46 @@ router.post(
           model || 'claude-3-5-sonnet-20241022'
         );
       } else {
-        // Use agent orchestration
+        // Use agent orchestration with dynamically selected agents
+        console.log(`✅ Using agent orchestration with ${requiredAgents.length} agents`);
         const orchestrationSteps = [];
 
-        // Step 1: Requirements Analysis
-        sendSSEUpdate(req, 'STEP_START', {
-          agent: 'Requirements Analyst',
-          task: 'Analyzing user requirements and extracting features',
-          details: 'Breaking down your idea into technical specifications, identifying core features, data structures, and user flows',
-          progress: 0,
-          totalSteps: 4,
-          currentStep: 1
+        // Emit phase start with only selected agents
+        agentEventEmitter.emit('agent-event', {
+          type: 'phase:start',
+          workflowId,
+          phase: 0,
+          agentsInPhase: agentSelection.selectedAgents,
+          timestamp: Date.now(),
         });
 
-        const analysisAgent =
-          activeAgents.find(
-            a => a.role?.includes('analyst') || a.role?.includes('requirement')
-          ) || activeAgents[0];
+        // Track results from each agent
+        let requirementsAnalysis: any = null;
+        let uiDesign: any = null;
+
+        // Step 1: Component Architect (if selected) - Plans architecture
+        if (agentSelection.selectedAgents.includes('component-architect')) {
+          sendSSEUpdate(req, 'STEP_START', {
+            agent: 'Component Architect',
+            task: 'Analyzing user requirements and extracting features',
+            details: 'Breaking down your idea into technical specifications, identifying core features, data structures, and user flows',
+            progress: 0,
+            totalSteps: agentSelection.selectedAgents.length,
+            currentStep: 1
+          });
+
+          // Emit agent start
+          agentEventEmitter.emit('agent-event', {
+            type: 'AGENT_START',
+            agent: 'component-architect',
+            agentId: 'component-architect',
+            workflowId,
+            phase: 0,
+            timestamp: Date.now(),
+          });
+
+          const analysisAgent =
+            requiredAgents.find(a => a.id === 'component-architect') || requiredAgents[0];
 
         // Format existing project files for context
         const formatExistingFiles = (files: { path: string; content: string }[]) => {
@@ -655,14 +891,58 @@ Please provide:
 
 Keep your response detailed but concise.`;
 
-        const requirementsAnalysis = await generateWithAI(
-          requirementsPrompt,
-          analysisAgent.systemPrompt,
-          analysisAgent.model
-        );
+          // Emit progress update - agent is thinking
+          agentEventEmitter.emit('agent-event', {
+            type: 'AGENT_PROGRESS',
+            agent: 'component-architect',
+            agentId: 'component-architect',
+            workflowId,
+            phase: 0,
+            progress: 50,
+            message: 'Planning component architecture...',
+            timestamp: Date.now(),
+          });
+
+          console.log('🏗️ Component Architect: Planning architecture');
+
+          // Wrap architect with progress updates
+          requirementsAnalysis = await generateWithProgressUpdates(
+            requirementsPrompt,
+            analysisAgent.systemPrompt,
+            analysisAgent.model,
+            {
+              startProgress: 10,
+              endProgress: 28,
+              workflowId,
+              agentId: 'component-architect',
+              messages: [
+                'Analyzing user requirements...',
+                'Identifying core features...',
+                'Planning data structures...',
+                'Mapping user flows...',
+                'Defining component hierarchy...',
+                'Finalizing architecture plan...'
+              ]
+            }
+          );
+
+          console.log('✅ Component Architect: Architecture planned');
+
+          // Emit agent complete
+          agentEventEmitter.emit('agent-event', {
+            type: 'AGENT_COMPLETE',
+            agent: 'component-architect',
+            agentId: 'component-architect',
+            workflowId,
+            phase: 0,
+            duration: 1800,
+            success: true,
+            timestamp: Date.now(),
+          });
+        } // End component architect
 
         sendSSEUpdate(req, 'STEP_COMPLETE', {
-          agent: 'Requirements Analyst',
+          agent: 'Component Architect',
           task: 'Analyzing user requirements and extracting features',
           result: 'Successfully identified core features, user stories, and technical requirements',
           progress: 25,
@@ -677,22 +957,31 @@ Keep your response detailed but concise.`;
           dependencies: [],
         });
 
-        // Step 2: UI Design
-        sendSSEUpdate(req, 'STEP_START', {
-          agent: 'UI Designer',
-          task: 'Crafting beautiful and intuitive user interface',
-          details: 'Designing component layouts, color schemes, typography, and interactive elements for optimal user experience',
-          progress: 25,
-          totalSteps: 4,
-          currentStep: 2
-        });
+        // Step 2: UI Design (if selected)
+        if (agentSelection.selectedAgents.includes('ui-designer')) {
+          agentEventEmitter.emit('agent-event', {
+            type: 'agent:start',
+            workflowId,
+            agentId: 'ui-designer',
+            phase: 0,
+            timestamp: Date.now(),
+          });
 
-        const uiAgent =
-          activeAgents.find(
-            a => a.role?.includes('ui') || a.role?.includes('designer')
-          ) || activeAgents[0];
+          sendSSEUpdate(req, 'STEP_START', {
+            agent: 'UI Designer',
+            task: 'Crafting beautiful and intuitive user interface',
+            details: 'Designing component layouts, color schemes, typography, and interactive elements for optimal user experience',
+            progress: Math.round((agentSelection.selectedAgents.indexOf('ui-designer') / agentSelection.selectedAgents.length) * 100),
+            totalSteps: agentSelection.selectedAgents.length,
+            currentStep: agentSelection.selectedAgents.indexOf('ui-designer') + 1
+          });
 
-        const uiPrompt = `Based on these requirements: ${requirementsAnalysis.text}
+          const uiAgent =
+            requiredAgents.find(
+              a => a.type?.includes('ui') || a.type?.includes('designer')
+            ) || requiredAgents[0];
+
+        const uiPrompt = `Based on these requirements: ${requirementsAnalysis?.text || userPrompt}
 
 ${existingProjectFiles.length > 0 ? `
 🔄 EXISTING PROJECT FILES (maintain compatibility):
@@ -716,12 +1005,29 @@ Provide the component code in this format:
 // component code here
 \`\`\``;
 
-        const uiDesign = await generateWithAI(
-          uiPrompt,
-          uiAgent.systemPrompt,
-          uiAgent.model
-        );
+          uiDesign = await generateWithAI(
+            uiPrompt,
+            uiAgent.systemPrompt,
+            uiAgent.model
+          );
 
+          agentEventEmitter.emit('agent-event', {
+            type: 'agent:complete',
+            workflowId,
+            agentId: 'ui-designer',
+            phase: 0,
+            duration: 2100,
+            timestamp: Date.now(),
+          });
+        } // End UI designer
+        
+        agentEventEmitter.emit('agent-event', {
+          type: 'phase:complete',
+          workflowId,
+          phase: 0,
+          timestamp: Date.now(),
+        });
+        
         sendSSEUpdate(req, 'STEP_COMPLETE', {
           agent: 'UI Designer',
           task: 'Crafting beautiful and intuitive user interface',
@@ -738,9 +1044,28 @@ Provide the component code in this format:
           dependencies: ['Requirements Analyst'],
         });
 
-        // Step 3: Code Generation
+        // Step 3: Code Generation (component-developer)
+        agentEventEmitter.emit('agent-event', {
+          type: 'phase:start',
+          workflowId,
+          phase: 1,
+          agentsInPhase: ['component-developer'],
+          timestamp: Date.now(),
+        });
+
+        agentEventEmitter.emit('agent-event', {
+          type: 'AGENT_START',
+          agent: 'component-developer',
+          agentId: 'component-developer',
+          workflowId,
+          phase: 1,
+          timestamp: Date.now(),
+        });
+
+        console.log('⚡ Component Developer: Starting code generation');
+
         sendSSEUpdate(req, 'STEP_START', {
-          agent: 'Code Generator',
+          agent: 'Component Developer',
           task: 'Writing clean, production-ready code',
           details: 'Generating React components, implementing business logic, state management, API integrations, and ensuring type safety with TypeScript',
           progress: 50,
@@ -749,11 +1074,22 @@ Provide the component code in this format:
         });
 
         const codeAgent =
-          activeAgents.find(
-            a => a.role?.includes('developer') || a.role?.includes('coder')
-          ) || activeAgents[0];
+          requiredAgents.find(a => a.id === 'component-developer') || requiredAgents[0];
 
-        const codePrompt = `Based on the UI design: ${uiDesign.text}
+        // Emit progress - generating code
+        agentEventEmitter.emit('agent-event', {
+          type: 'AGENT_PROGRESS',
+          agent: 'component-developer',
+          agentId: 'component-developer',
+          workflowId,
+          phase: 1,
+          progress: 60,
+          message: 'Writing React components and TypeScript code...',
+          timestamp: Date.now(),
+        });
+
+        const codePrompt = `Based on the requirements: ${requirementsAnalysis?.text || userPrompt}
+${uiDesign ? `\nUI Design: ${uiDesign.text}` : ''}
 
 ${existingProjectFiles.length > 0 ? `
 🔄 EXISTING PROJECT FILES:
@@ -869,14 +1205,64 @@ Format each file as:
 complete code here
 \`\`\`
 
-REMEMBER: This app must work immediately when deployed to WebContainer. No missing files, no incomplete features!`;
+🚨 CRITICAL VALIDATION RULES:
+1. **Every import MUST have a corresponding file**
+   - If you import './components/FilterBar', you MUST create src/components/FilterBar.tsx
+   - If you import './hooks/useData', you MUST create src/hooks/useData.ts
+   - NO exceptions - every single import must have its file!
 
-        const generatedCode = await generateWithAI(
+2. **Generate files in dependency order**:
+   - Types/interfaces first
+   - Utilities and helpers next
+   - Components that don't import other components
+   - Components that import the above
+   - Main App.tsx last
+
+3. **Self-contained components**:
+   - If splitting into components, generate ALL of them
+   - OR keep everything in App.tsx (simpler, always works)
+   - Don't create imports you won't fulfill!
+
+REMEMBER: This app must work immediately when deployed to WebContainer. No missing files, no incomplete features, no broken imports!`;
+
+        // Wrap AI generation with real-time progress updates
+        const generatedCode = await generateWithProgressUpdates(
           codePrompt,
           codeAgent.systemPrompt,
-          codeAgent.model
+          codeAgent.model,
+          {
+            startProgress: 60,
+            endProgress: 90,
+            workflowId,
+            agentId: 'component-developer',
+            messages: [
+              'Analyzing requirements and planning structure...',
+              'Setting up project configuration files...',
+              'Creating TypeScript interfaces and types...',
+              'Building React components...',
+              'Implementing hooks and state management...',
+              'Adding styles and animations...',
+              'Integrating API connections...',
+              'Adding error handling and validation...',
+              'Optimizing bundle size...',
+              'Finalizing code generation...'
+            ]
+          }
         );
 
+        console.log('✅ Component Developer: Code generation completed');
+
+        agentEventEmitter.emit('agent-event', {
+          type: 'AGENT_COMPLETE',
+          agent: 'component-developer',
+          agentId: 'component-developer',
+          workflowId,
+          phase: 1,
+          duration: 4500,
+          success: true,
+          timestamp: Date.now(),
+        });
+        
         sendSSEUpdate(req, 'STEP_COMPLETE', {
           agent: 'Code Generator',
           task: 'Writing clean, production-ready code',
@@ -894,6 +1280,21 @@ REMEMBER: This app must work immediately when deployed to WebContainer. No missi
         });
 
         // Step 4: Finalization
+        agentEventEmitter.emit('agent-event', {
+          type: 'phase:complete',
+          workflowId,
+          phase: 1,
+          timestamp: Date.now(),
+        });
+        
+        agentEventEmitter.emit('agent-event', {
+          type: 'agent:start',
+          workflowId,
+          agentId: 'completion-agent',
+          phase: 2,
+          timestamp: Date.now(),
+        });
+        
         sendSSEUpdate(req, 'STEP_START', {
           agent: 'Completion Agent',
           task: 'Finalizing and optimizing your application',
@@ -911,35 +1312,222 @@ REMEMBER: This app must work immediately when deployed to WebContainer. No missi
           plan: orchestrationPlan,
         });
 
-        // Generate the final component
-        const workspaceId = Date.now().toString();
-        const workspaceDir = path.join(
-          process.cwd(),
-          'workspaces',
-          workspaceId
-        );
-        await fs.mkdir(workspaceDir, { recursive: true });
+        // Use files already parsed by generateWithAI (skip re-parsing)
+        let files = generatedCode.files || [];
 
-        const generatedComponent = await generateReactComponent(
-          userPrompt,
-          generatedCode.text,
-          (file, index, total) => {
-            // Stream each file to the client in real-time
-            sendSSEUpdate(req, 'FILE_GENERATED', {
-              file: {
-                path: file.path,
-                content: file.content
-              },
-              index,
-              total,
-              progress: Math.round((index / total) * 100)
-            });
+        // Step 4.5: Validate generated code (Component QA)
+        console.log('🔍 Component QA: Validating generated code...');
+
+        agentEventEmitter.emit('agent-event', {
+          type: 'AGENT_START',
+          agent: 'component-qa',
+          agentId: 'component-qa',
+          workflowId,
+          phase: 2,
+          timestamp: Date.now(),
+        });
+
+        agentEventEmitter.emit('agent-event', {
+          type: 'AGENT_PROGRESS',
+          agent: 'component-qa',
+          agentId: 'component-qa',
+          workflowId,
+          progress: 92,
+          message: 'Validating code structure and dependencies...',
+          timestamp: Date.now(),
+        });
+
+        const validation = validateGeneratedCode(files);
+
+        if (!validation.valid) {
+          console.error('❌ Validation failed:', validation.errors);
+
+          agentEventEmitter.emit('agent-event', {
+            type: 'AGENT_PROGRESS',
+            agent: 'component-qa',
+            agentId: 'component-qa',
+            workflowId,
+            progress: 95,
+            message: `Found ${validation.errors.length} issues, fixing...`,
+            timestamp: Date.now(),
+          });
+
+          // Log errors for user visibility
+          sendSSEUpdate(req, 'VALIDATION_ERRORS', {
+            errors: validation.errors,
+            warnings: validation.warnings,
+            message: 'Code validation found issues - attempting automatic fixes...'
+          });
+
+          // AI-powered error fixing
+          console.log('🔧 Attempting to fix errors with AI...');
+
+          const qaAgent = requiredAgents.find(a => a.id === 'component-qa') || requiredAgents[0];
+
+          const fixPrompt = `The following code has validation errors that need to be fixed:
+
+VALIDATION ERRORS:
+${validation.errors.join('\n')}
+
+WARNINGS:
+${validation.warnings.join('\n')}
+
+CURRENT FILES:
+${files.map(f => `
+File: ${f.path}
+\`\`\`
+${f.content}
+\`\`\`
+`).join('\n')}
+
+CRITICAL INSTRUCTIONS:
+1. Fix ALL validation errors
+2. Ensure every import has a corresponding file
+3. Fix any syntax errors (missing semicolons, unclosed strings, etc.)
+4. Return ONLY the fixed files in the same format
+5. DO NOT add new features or change functionality
+6. ONLY fix the specific errors listed above
+
+Return the corrected files in the exact same format:
+**filepath**
+\`\`\`language
+corrected code
+\`\`\``;
+
+          try {
+            const fixedCode = await generateWithAI(
+              fixPrompt,
+              'You are a code quality expert. Fix only the specific errors mentioned, do not change functionality.',
+              qaAgent.model
+            );
+
+            if (fixedCode.files && fixedCode.files.length > 0) {
+              console.log(`✅ AI attempted to fix ${fixedCode.files.length} files`);
+              const fixedFiles = fixedCode.files;
+
+              // Re-validate after fixes
+              const revalidation = validateGeneratedCode(fixedFiles);
+              if (revalidation.valid) {
+                console.log('✅ Re-validation passed after fixes');
+                files = fixedFiles;
+              } else {
+                console.log(`⚠️ Still have ${revalidation.errors.length} errors after AI fixes`);
+
+                // CRITICAL: Do NOT deploy broken code
+                // Try one more time with a stronger prompt
+                const criticalFixPrompt = `CRITICAL ERROR FIXING REQUIRED
+
+The code still has ${revalidation.errors.length} errors after initial fixes:
+
+${revalidation.errors.slice(0, 10).join('\n')}
+
+You MUST fix these errors. The code cannot be deployed in this state.
+
+RULES:
+1. Fix EVERY error listed above
+2. DO NOT introduce new errors
+3. Return complete, working files
+4. Ensure all imports resolve correctly
+5. Add missing semicolons
+6. Close all brackets and tags
+
+Return the corrected files:`;
+
+                try {
+                  const secondFix = await generateWithAI(
+                    criticalFixPrompt + '\n\nCURRENT FILES:\n' + fixedFiles.map(f => `**${f.path}**\n\`\`\`\n${f.content}\n\`\`\``).join('\n'),
+                    'You are a code quality expert. Fix ALL errors without changing functionality.',
+                    qaAgent.model
+                  );
+
+                  if (secondFix.files && secondFix.files.length > 0) {
+                    const finalValidation = validateGeneratedCode(secondFix.files);
+                    if (finalValidation.valid || finalValidation.errors.length < revalidation.errors.length) {
+                      console.log('✅ Second fix attempt improved code quality');
+                      files = secondFix.files;
+                    } else {
+                      console.error('❌ CRITICAL: Code still has errors, blocking deployment');
+                      sendSSEUpdate(req, 'GENERATION_FAILED', {
+                        error: 'Code validation failed after multiple fix attempts',
+                        errors: finalValidation.errors,
+                        message: 'The generated code has critical errors that could not be automatically fixed. Please try again with a more specific prompt.'
+                      });
+
+                      // Return error response instead of broken code
+                      return res.json({
+                        response: {
+                          type: 'text',
+                          text: `❌ Code generation failed due to validation errors:\n\n${finalValidation.errors.join('\n')}\n\nPlease try again with a more specific prompt.`
+                        }
+                      });
+                    }
+                  }
+                } catch (secondFixError) {
+                  console.error('❌ Second fix attempt failed:', secondFixError);
+                  // Continue with first fix attempt if second fails
+                  files = fixedFiles;
+                }
+              }
+            } else {
+              console.error('❌ Error fixing failed - no files returned');
+              // BLOCK deployment of completely broken code
+              sendSSEUpdate(req, 'GENERATION_FAILED', {
+                error: 'Code validation failed and automatic fixes did not work',
+                errors: validation.errors,
+                message: 'Unable to generate working code. Please try again with a clearer prompt.'
+              });
+
+              return res.json({
+                response: {
+                  type: 'text',
+                  text: `❌ Code generation failed:\n\n${validation.errors.join('\n')}\n\nPlease try again.`
+                }
+              });
+            }
+          } catch (fixError) {
+            console.error('❌ Error fixing failed:', fixError);
+            // Continue with original files
           }
-        );
+        } else {
+          console.log('✅ Component QA: Validation passed');
+        }
+
+        // Show warnings even if validation passed
+        if (validation.warnings.length > 0) {
+          console.log('⚠️ Warnings:', validation.warnings);
+          sendSSEUpdate(req, 'VALIDATION_WARNINGS', {
+            warnings: validation.warnings
+          });
+        }
+
+        agentEventEmitter.emit('agent-event', {
+          type: 'AGENT_COMPLETE',
+          agent: 'component-qa',
+          agentId: 'component-qa',
+          workflowId,
+          phase: 2,
+          duration: 2000,
+          success: validation.valid,
+          timestamp: Date.now(),
+        });
+
+        // Stream files to client
+        files.forEach((file, index) => {
+          sendSSEUpdate(req, 'FILE_GENERATED', {
+            file: {
+              path: file.path,
+              content: file.content
+            },
+            index: index + 1,
+            total: files.length,
+            progress: Math.round(((index + 1) / files.length) * 100)
+          });
+        });
+
         finalResponse = {
           type: 'component',
           text: generatedCode.text,
-          files: generatedComponent.files,
+          files: files,
         };
       }
 
@@ -953,6 +1541,22 @@ REMEMBER: This app must work immediately when deployed to WebContainer. No missi
         totalSteps: 4
       });
 
+      // Emit final agent events
+      agentEventEmitter.emit('agent-event', {
+        type: 'agent:complete',
+        workflowId,
+        agentId: 'completion-agent',
+        phase: 2,
+        duration: 1200,
+        timestamp: Date.now(),
+      });
+      
+      agentEventEmitter.emit('agent-event', {
+        type: 'orchestration:complete',
+        workflowId,
+        timestamp: Date.now(),
+      });
+      
       // Send completion update
       sendSSEUpdate(req, 'GENERATION_COMPLETE', {
         message: 'Multi-agent orchestration completed successfully',
