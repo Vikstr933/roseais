@@ -157,5 +157,9 @@ workspaces/
 # TypeScript build info
 *.tsbuildinfo
 
+# Compiled database files (use TypeScript sources)
+db/*.js
+!db/migrate.js
+
 # Windows reserved names
 nul
