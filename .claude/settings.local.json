@@ -21,7 +21,10 @@
       "Bash(pg_dump:*)",
       "Bash(set:*)",
       "Bash(.import-to-supabase.bat)",
-      "Bash(cmd /c import-to-supabase.bat)"
+      "Bash(cmd /c import-to-supabase.bat)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
