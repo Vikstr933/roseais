@@ -7,7 +7,7 @@ services:
     plan: free
     branch: main
     rootDir: .
-    buildCommand: npm install && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+    buildCommand: npm install && npm run build:backend
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
