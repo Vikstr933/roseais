@@ -62,6 +62,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
 }) => {
   const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [animatedProgress, setAnimatedProgress] = useState(0);
 
   // Fetch agents from database
   useEffect(() => {
@@ -121,7 +122,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
     angle: (360 / agents.length) * index // Distribute evenly based on actual count
   }));
 
-  const getPosition = (angle: number, radius = 280) => { // Increased from 240 to 280 for proper spacing
+  const getPosition = (angle: number, radius = 240) => { // Reduced from 280 to 240 for better container fit
     const radian = (angle - 90) * (Math.PI / 180);
     return {
       x: Math.cos(radian) * radius,
@@ -132,7 +133,30 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
   // Count completed agents for progress animation (only count agents that have status)
   const selectedAgentsCount = agentStatusMap.size;
   const completedCount = Array.from(agentStatusMap.values()).filter(s => s.status === 'completed').length;
-  const progressPercent = selectedAgentsCount > 0 ? (completedCount / selectedAgentsCount) * 100 : 0;
+  const targetProgress = selectedAgentsCount > 0 ? (completedCount / selectedAgentsCount) * 100 : 0;
+
+  // Smooth progress animation - increment gradually instead of jumping
+  useEffect(() => {
+    if (targetProgress === 0) {
+      setAnimatedProgress(0);
+      return;
+    }
+
+    const increment = targetProgress > animatedProgress ? 1 : 0;
+    if (increment === 0) return;
+
+    const interval = setInterval(() => {
+      setAnimatedProgress(prev => {
+        // Increment by 1% at a time for smooth animation
+        if (prev < targetProgress) {
+          return Math.min(prev + 1, targetProgress);
+        }
+        return prev;
+      });
+    }, 30); // Update every 30ms for smooth visual effect
+
+    return () => clearInterval(interval);
+  }, [targetProgress, animatedProgress]);
 
   return (
     <div className="relative h-[700px] flex items-center justify-center overflow-hidden">
@@ -181,7 +205,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
 
             return (
               <React.Fragment key={agent.id}>
-                {/* Connection line */}
+                {/* Connection line - Keep visible once workflow starts */}
                 <line
                   x1="0"
                   y1="0"
@@ -190,7 +214,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
                   stroke={isComplete ? 'url(#completeGradient)' : isActive ? 'url(#activeGradient)' : '#334155'}
                   strokeWidth={isActive ? "3" : "2"}
                   className="transition-all duration-700"
-                  opacity={isComplete ? 1 : isActive ? 0.8 : 0.3}
+                  opacity={isComplete ? 1 : isActive ? 0.8 : (status ? 0.5 : 0.3)}
                 />
 
                 {/* Lightning charge animation when active */}
@@ -271,8 +295,8 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
               strokeWidth="4"
               strokeLinecap="round"
               strokeDasharray={`${2 * Math.PI * 52}`}
-              strokeDashoffset={`${2 * Math.PI * 52 * (1 - progressPercent / 100)}`}
-              className="transition-all duration-1000 ease-out"
+              strokeDashoffset={`${2 * Math.PI * 52 * (1 - animatedProgress / 100)}`}
+              className="transition-all duration-500 ease-out"
             />
             <defs>
               <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -298,7 +322,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
           )}
 
           {/* Completion sparkle effect */}
-          {progressPercent === 100 && !isRunning && (
+          {animatedProgress === 100 && !isRunning && (
             <div className="absolute inset-0 rounded-full bg-green-500 opacity-20 animate-pulse" />
           )}
 
@@ -307,8 +331,8 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
             <div className="text-sm font-semibold text-foreground">Orchestrator</div>
             <div className="text-xs text-muted-foreground text-center">
               {isRunning ? (
-                <span className="text-violet-400">{Math.round(progressPercent)}% Complete</span>
-              ) : progressPercent === 100 ? (
+                <span className="text-violet-400">{Math.round(animatedProgress)}% Complete</span>
+              ) : animatedProgress === 100 ? (
                 <span className="text-green-400">✓ Done</span>
               ) : (
                 <span>Idle</span>
