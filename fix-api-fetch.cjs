@@ -31,6 +31,15 @@ const files = [
   './client/src/pages/Workspaces.tsx',
   './client/src/services/BackgroundTaskService.ts',
   './client/src/utils/ClientLogger.ts',
+  './client/src/components/SubscriptionStatus.tsx',
+  './client/src/components/SharedWorkspaceManager.tsx',
+  './client/src/pages/ProjectDetail.tsx',
+  './client/src/pages/ComponentView.tsx',
+  './client/src/components/TerminalOutput.tsx',
+  './client/src/components/KnowledgeSelectorOld.tsx',
+  './client/src/components/KnowledgeSelector.tsx',
+  './client/src/components/ExportToProjectDialog.tsx',
+  './client/src/components/ActiveUsersIndicator.tsx',
 ];
 
 function getRelativePath(from) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../lib/api';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -78,7 +79,7 @@ export function TerminalOutput({
     if (!componentName) return;
 
     try {
-      await fetch(`/api/terminal/${componentName}`, {
+      await apiFetch(`/api/terminal/${componentName}`, {
         method: 'DELETE',
       });
       setOutput([]);

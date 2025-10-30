@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
@@ -54,7 +55,7 @@ export function ExportToProjectDialog({
       files: any[];
       componentName: string;
     }) => {
-      const response = await fetch(`/api/workspaces/${projectId}/export`, {
+      const response = await apiFetch(`/api/workspaces/${projectId}/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files, componentName }),

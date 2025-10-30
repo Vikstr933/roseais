@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -172,14 +173,14 @@ export const SharedWorkspaceManager: React.FC<SharedWorkspaceManagerProps> = ({
       setIsLoading(true);
 
       // Load members
-      const membersResponse = await fetch(`/api/workspaces/${workspaceId}/members`);
+      const membersResponse = await apiFetch(`/api/workspaces/${workspaceId}/members`);
       if (membersResponse.ok) {
         const membersData = await membersResponse.json();
         setMembers(membersData);
       }
 
       // Load settings
-      const settingsResponse = await fetch(`/api/workspaces/${workspaceId}`);
+      const settingsResponse = await apiFetch(`/api/workspaces/${workspaceId}`);
       if (settingsResponse.ok) {
         const settingsData = await settingsResponse.json();
         setSettings(settingsData);
@@ -211,7 +212,7 @@ export const SharedWorkspaceManager: React.FC<SharedWorkspaceManagerProps> = ({
 
   const handleInviteMember = async (data: z.infer<typeof inviteSchema>) => {
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/invite`, {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}/invite`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -246,7 +247,7 @@ export const SharedWorkspaceManager: React.FC<SharedWorkspaceManagerProps> = ({
 
   const handleUpdateMemberRole = async (memberId: string, newRole: string) => {
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/members/${memberId}`, {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}/members/${memberId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -274,7 +275,7 @@ export const SharedWorkspaceManager: React.FC<SharedWorkspaceManagerProps> = ({
 
   const handleRemoveMember = async (memberId: string) => {
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/members/${memberId}`, {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}/members/${memberId}`, {
         method: 'DELETE',
       });
 
@@ -298,7 +299,7 @@ export const SharedWorkspaceManager: React.FC<SharedWorkspaceManagerProps> = ({
 
   const handleUpdateSettings = async (data: z.infer<typeof workspaceSettingsSchema>) => {
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}`, {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -327,7 +328,7 @@ export const SharedWorkspaceManager: React.FC<SharedWorkspaceManagerProps> = ({
 
   const handleGenerateNewInviteCode = async () => {
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/invite-code`, {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}/invite-code`, {
         method: 'POST',
       });
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import {
   User,
   Zap,
@@ -64,7 +65,7 @@ const ActiveUsersIndicator: React.FC<ActiveUsersIndicatorProps> = ({
 
   const fetchActivityStatus = async () => {
     try {
-      const response = await fetch(`/api/activity/project/${projectId}`);
+      const response = await apiFetch(`/api/activity/project/${projectId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch activity status');
       }

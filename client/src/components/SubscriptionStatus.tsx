@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -34,7 +35,7 @@ export function SubscriptionStatus() {
 
   const fetchSubscription = async () => {
     try {
-      const response = await fetch(`/api/stripe/subscription/${user?.id}`, {
+      const response = await apiFetch(`/api/stripe/subscription/${user?.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         }

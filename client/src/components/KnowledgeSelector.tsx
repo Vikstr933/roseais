@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 import { Lightbulb } from 'lucide-react';
 
 interface KnowledgeSelectorProps {
@@ -70,7 +71,7 @@ export function KnowledgeSelector({
 
     const timeoutId = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/knowledge/calculate-relevance`, {
+        const response = await apiFetch(`/api/knowledge/calculate-relevance`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: searchQuery }),

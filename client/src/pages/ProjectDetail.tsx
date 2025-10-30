@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { useRoute, useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -105,7 +106,7 @@ function ProjectDetailContent() {
     queryKey: [`/api/workspaces/${id}`],
     enabled: !!id,
     queryFn: async () => {
-      const response = await fetch(`/api/workspaces/${id}`, {
+      const response = await apiFetch(`/api/workspaces/${id}`, {
         headers: getAuthHeaders(sessionToken),
       });
       if (!response.ok) throw new Error('Failed to fetch project');
@@ -117,7 +118,7 @@ function ProjectDetailContent() {
     queryKey: [`/api/workspaces/${id}/chat`],
     enabled: !!id,
     queryFn: async () => {
-      const response = await fetch(`/api/workspaces/${id}/chat`, {
+      const response = await apiFetch(`/api/workspaces/${id}/chat`, {
         headers: getAuthHeaders(sessionToken),
       });
       if (!response.ok) throw new Error('Failed to fetch chat messages');
@@ -129,7 +130,7 @@ function ProjectDetailContent() {
     queryKey: [`/api/workspaces/${id}/files`],
     enabled: !!id,
     queryFn: async () => {
-      const response = await fetch(`/api/workspaces/${id}/files`, {
+      const response = await apiFetch(`/api/workspaces/${id}/files`, {
         headers: getAuthHeaders(sessionToken),
       });
       if (!response.ok) throw new Error('Failed to fetch project files');
@@ -146,7 +147,7 @@ function ProjectDetailContent() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
-      const response = await fetch(`/api/workspaces/${id}/chat`, {
+      const response = await apiFetch(`/api/workspaces/${id}/chat`, {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({ message }),

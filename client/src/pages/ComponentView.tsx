@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { useLocation } from 'wouter';
 import { ComponentPreview } from '../components/ComponentPreview/ComponentPreview';
 
@@ -41,7 +42,7 @@ export default function ComponentView() {
         setLoading(true);
         // In a real app, this would fetch from your API endpoint
         // For now, we'll use mock data
-        const response = await fetch(`/api/components/${componentName}`);
+        const response = await apiFetch(`/api/components/${componentName}`);
         if (!response.ok) {
           throw new Error('Failed to fetch component data');
         }
