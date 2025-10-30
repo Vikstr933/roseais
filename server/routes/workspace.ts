@@ -188,8 +188,39 @@ router.post('/', authenticateUser, async (req, res) => {
 
     // Create or get workspace for this session
     if (existing.length > 0 && existing[0].workspaceId) {
-      // Use existing workspace
-      workspaceId = existing[0].workspaceId;
+      // Validate that the existing workspace still exists
+      const workspaceExists = await db
+        .select()
+        .from(workspaces as any)
+        .where(eq((workspaces as any).id, existing[0].workspaceId))
+        .limit(1);
+
+      if (workspaceExists.length > 0) {
+        // Use existing workspace (it still exists)
+        workspaceId = existing[0].workspaceId;
+        logger.info('Reusing existing workspace', { workspaceId, sessionId: session.id });
+      } else {
+        // Workspace was deleted, create a new one
+        logger.warn('Workspace was deleted, creating new one', {
+          oldWorkspaceId: existing[0].workspaceId,
+          sessionId: session.id
+        });
+
+        const newWorkspace = await db
+          .insert(workspaces as any)
+          .values({
+            name: session.name,
+            description: session.description || `Workspace for ${session.name}`,
+            ownerId: userId,
+            projectType: session.type === 'playground' ? 'playground' : 'web_app',
+            projectStatus: 'active',
+            status: 'active',
+            lastActivity: new Date()
+          })
+          .returning();
+
+        workspaceId = newWorkspace[0].id;
+      }
     } else {
       // Check if workspace already exists for this session
       const existingWorkspace = await db
