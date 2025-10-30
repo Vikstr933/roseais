@@ -1,3 +1,5 @@
+import { apiFetch } from '../lib/api';
+
 export enum ClientLogLevel {
   INFO = 'INFO',
   WARNING = 'WARNING',
