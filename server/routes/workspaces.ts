@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../../db';
 import { workspaces, projectMembers } from '../../db/schema';
+import { chatMessages, codeGenerationSessions } from '../../db/schema-pg';
 import { eq, and } from 'drizzle-orm';
 import { projectService } from '../services/ProjectService';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
@@ -279,24 +280,61 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/workspaces/:id - Delete workspace
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateUser, async (req, res) => {
   try {
     const workspaceId = parseInt(req.params.id);
+    const userId = req.user!.id;
 
-    const deletedWorkspace = await db
-      .delete(workspaces)
-      .where(eq(workspaces.id, workspaceId))
-      .returning();
+    // First verify workspace exists and user owns it
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
 
-    if (!deletedWorkspace || deletedWorkspace.length === 0) {
+    if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    console.log('Deleted workspace:', deletedWorkspace[0]);
-    res.json({ message: 'Workspace deleted successfully' });
+    // Check if user is the owner
+    if (workspace.ownerId !== userId) {
+      return res.status(403).json({ error: 'Only the workspace owner can delete it' });
+    }
+
+    // Delete related records first to prevent foreign key violations
+    // Delete chat messages
+    await db
+      .delete(chatMessages as any)
+      .where(eq((chatMessages as any).projectId, workspaceId));
+
+    // Delete code generation sessions
+    await db
+      .delete(codeGenerationSessions as any)
+      .where(eq((codeGenerationSessions as any).workspaceId, workspaceId));
+
+    // Delete project members
+    await db
+      .delete(projectMembers)
+      .where(eq(projectMembers.projectId, workspaceId));
+
+    // Finally delete the workspace
+    const deletedWorkspace = await db
+      .delete(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .returning();
+
+    console.log('Deleted workspace and all related records:', workspaceId);
+    res.json({
+      success: true,
+      message: 'Workspace deleted successfully',
+      workspace: deletedWorkspace[0]
+    });
   } catch (error) {
     console.error('Error deleting workspace:', error);
-    res.status(500).json({ error: 'Failed to delete workspace' });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete workspace'
+    });
   }
 });
 
