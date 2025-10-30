@@ -102,14 +102,34 @@ function WorkspacesContent() {
       if (!response.ok) throw new Error('Failed to delete workspace');
       return response.json();
     },
+    onMutate: async (workspaceId: number) => {
+      // Cancel outgoing refetches to prevent overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ['/api/workspaces'] });
+
+      // Snapshot the previous value
+      const previousWorkspaces = queryClient.getQueryData(['/api/workspaces']);
+
+      // Optimistically remove the workspace from the UI IMMEDIATELY
+      queryClient.setQueryData(['/api/workspaces'], (old: any[] = []) => {
+        return old.filter((workspace: any) => workspace.id !== workspaceId);
+      });
+
+      // Return context with the snapshot
+      return { previousWorkspaces };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/workspaces'] });
       toast({
         title: 'Workspace Deleted',
         description: 'The workspace has been permanently deleted.',
       });
+      // Refetch to confirm deletion from server
+      queryClient.invalidateQueries({ queryKey: ['/api/workspaces'] });
     },
-    onError: error => {
+    onError: (error, workspaceId, context) => {
+      // Roll back to previous state if delete failed
+      if (context?.previousWorkspaces) {
+        queryClient.setQueryData(['/api/workspaces'], context.previousWorkspaces);
+      }
       toast({
         title: 'Error',
         description: error.message,
