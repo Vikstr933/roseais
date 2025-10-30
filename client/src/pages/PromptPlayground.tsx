@@ -206,23 +206,35 @@ export default function PromptPlayground() {
 
   // Restore generated files from workspace session
   useEffect(() => {
-    if (currentSession?.generatedFiles && currentSession.generatedFiles.length > 0 && !response) {
-      // Restore files from workspace session
-      setResponse({
-        type: 'component',
-        text: '',
-        files: currentSession.generatedFiles
+    if (currentSession?.generatedFiles && currentSession.generatedFiles.length > 0) {
+      // Always restore files from workspace session when currentSession changes
+      // This ensures files are visible even after tab switches or refreshes
+      setResponse(prevResponse => {
+        // Only update if files are different to avoid infinite loops
+        const currentFiles = prevResponse?.type === 'component' ? prevResponse.files : [];
+        const sessionFiles = currentSession.generatedFiles;
+
+        // Check if files are actually different
+        const filesChanged = currentFiles?.length !== sessionFiles.length ||
+          !currentFiles?.every((f, i) => f.path === sessionFiles[i]?.path && f.content === sessionFiles[i]?.content);
+
+        if (filesChanged) {
+          console.log(`✅ Restoring ${sessionFiles.length} files from workspace session`);
+          return {
+            type: 'component',
+            text: '',
+            files: sessionFiles
+          };
+        }
+        return prevResponse;
       });
 
-      // Set the first file as selected
-      setSelectedFileIndex(0);
-      if (currentSession.generatedFiles[0]) {
+      // Set the first file as selected if no file is selected
+      if (selectedFileIndex === 0 && currentSession.generatedFiles[0]) {
         setEditorLanguage(getFileLanguage(currentSession.generatedFiles[0].path));
       }
-
-      console.log(`✅ Restored ${currentSession.generatedFiles.length} files from workspace session`);
     }
-  }, [currentSession, response]);
+  }, [currentSession?.generatedFiles]); // Only depend on generatedFiles to avoid re-runs
 
   // Auto-scroll to bottom when chat history changes
   useEffect(() => {

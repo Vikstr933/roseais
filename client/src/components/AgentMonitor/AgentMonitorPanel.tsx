@@ -79,21 +79,25 @@ export function AgentMonitorPanel() {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    // Create a single EventSource instance
-    console.log('🔌 Creating EventSource for agent activity');
-    const eventSource = new EventSource(getApiUrl('/api/sse/agent-activity'));
+    let eventSource: EventSource | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
 
-    eventSource.onopen = () => {
-      console.log('✅ Agent activity stream opened');
-      setConnected(true);
-    };
+    // Create EventSource connection
+    const createConnection = () => {
+      console.log('🔌 Creating EventSource for agent activity');
+      eventSource = new EventSource(getApiUrl('/api/sse/agent-activity'));
 
-    eventSource.onmessage = event => {
-      try {
-        const data: AgentEvent = JSON.parse(event.data);
+      eventSource.onopen = () => {
+        console.log('✅ Agent activity stream opened');
+        setConnected(true);
+      };
 
-        // Ignore heartbeat messages
-        if (event.data === ': heartbeat') return;
+      eventSource.onmessage = event => {
+        try {
+          const data: AgentEvent = JSON.parse(event.data);
+
+          // Ignore heartbeat messages
+          if (event.data === ': heartbeat') return;
 
         setEvents(prev => {
           // Limit to last 100 events to prevent memory bloat
@@ -302,23 +306,33 @@ export function AgentMonitorPanel() {
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error('❌ Agent activity stream error:', error);
-      setConnected(false);
-      eventSource.close();
-
-      // Retry after 5 seconds
-      setTimeout(() => {
-        console.log('🔄 Retrying agent activity stream...');
-        // Trigger re-render to create new connection
+      eventSource.onerror = (error) => {
+        console.error('❌ Agent activity stream error:', error);
         setConnected(false);
-      }, 5000);
+        if (eventSource) {
+          eventSource.close();
+        }
+
+        // Retry after 5 seconds
+        retryTimeout = setTimeout(() => {
+          console.log('🔄 Retrying agent activity stream...');
+          createConnection();
+        }, 5000);
+      };
     };
+
+    // Start the connection
+    createConnection();
 
     // CRITICAL: Cleanup on unmount
     return () => {
       console.log('🧹 Cleaning up EventSource for agent activity');
-      eventSource.close();
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+      if (eventSource) {
+        eventSource.close();
+      }
     };
   }, []); // Empty deps array - only run once
 
