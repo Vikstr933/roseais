@@ -195,6 +195,21 @@ router.post('/:id/export', authenticateUser, async (req, res) => {
       return res.status(400).json({ error: 'Files array is required' });
     }
 
+    // First, verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, projectId))
+      .limit(1);
+
+    if (!workspace) {
+      console.error(`Workspace ${projectId} does not exist`);
+      return res.status(404).json({
+        error: 'Workspace not found',
+        message: 'This workspace may have been deleted. Please refresh the page.'
+      });
+    }
+
     // Check if user has access to project
     const [member] = await db
       .select()
@@ -331,6 +346,21 @@ router.post('/:id/chat', authenticateUser, async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
+    // First, verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, projectId))
+      .limit(1);
+
+    if (!workspace) {
+      console.error(`Workspace ${projectId} does not exist`);
+      return res.status(404).json({
+        error: 'Workspace not found',
+        message: 'This workspace may have been deleted. Please refresh the page.'
+      });
+    }
+
     // Check if user has access to project
     const [member] = await db
       .select()
@@ -370,6 +400,21 @@ router.post('/:id/files', authenticateUser, async (req, res) => {
 
     if (!files || !Array.isArray(files)) {
       return res.status(400).json({ error: 'Files array is required' });
+    }
+
+    // First, verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, projectId))
+      .limit(1);
+
+    if (!workspace) {
+      console.error(`Workspace ${projectId} does not exist`);
+      return res.status(404).json({
+        error: 'Workspace not found',
+        message: 'This workspace may have been deleted. Please refresh the page.'
+      });
     }
 
     // Check if user has access to project

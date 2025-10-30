@@ -37,6 +37,7 @@ import stripeRouter from './routes/stripe';
 import pluginsRouter from './routes/plugins';
 import workspaceSessionsRouter from './routes/workspace';
 import healthRouter from './routes/health';
+import adminRouter from './routes/admin';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -282,6 +283,7 @@ const initializeApp = async () => {
     app.use('/api/server', serverRouter);
     app.use('/api/models', modelsRouter);
     app.use('/api/sessions', sessionsRouter);
+    app.use('/api/admin', adminRouter); // Admin endpoints for database cleanup
 
     // Performance metrics endpoint
     app.get('/api/metrics/performance', (req, res) => {
