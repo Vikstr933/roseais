@@ -88,6 +88,7 @@
     "drizzle-orm": "^0.44.6",
     "drizzle-zod": "^0.6.0",
     "embla-carousel-react": "^8.3.0",
+    "esbuild": "^0.25.11",
     "execa": "^9.5.2",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
@@ -120,8 +121,7 @@
     "vaul": "^1.1.0",
     "wouter": "^3.3.5",
     "ws": "^8.18.3",
-    "zod": "^3.25.76",
-    "esbuild": "^0.25.11"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
@@ -149,6 +149,7 @@
     "postcss": "^8.4.47",
     "prettier": "^3.0.0",
     "tailwindcss": "^3.4.14",
+    "terser": "^5.44.0",
     "tsx": "^4.19.1",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
