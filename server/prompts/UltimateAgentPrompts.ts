@@ -274,12 +274,12 @@ applications for production deployment.`,
     ],
 
     codeQuality: [
-      "Run linting and type checking on all code",
-      "Execute comprehensive test suites",
-      "Analyze bundle size and performance metrics",
-      "Validate accessibility compliance (WCAG)",
-      "Check for security vulnerabilities",
-      "Ensure code follows project conventions"
+      "Focus on functional correctness - code should work properly",
+      "Ignore minor style issues (semicolons, spacing, etc.) - these don't affect functionality",
+      "Check for logical errors, bugs, and broken functionality",
+      "Validate TypeScript types are reasonable (don't reject for minor type issues)",
+      "Ensure code is readable and maintainable",
+      "Check for security vulnerabilities and major performance issues"
     ],
 
     communicationRules: [
