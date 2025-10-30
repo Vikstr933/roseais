@@ -112,8 +112,11 @@ export class AICodeGenerator {
         parsingMethod: parseResult.method,
       });
 
+      // Validate and fix missing imports
+      const validatedFiles = this.validateAndFixImports(parseResult.files);
+
       // Ensure all required configuration files are present
-      const completeFiles = this.ensureRequiredFiles(parseResult.files, dependencies, request.componentName);
+      const completeFiles = this.ensureRequiredFiles(validatedFiles, dependencies, request.componentName);
 
       const result: AIGenerationResponse = {
         success: true,
@@ -796,6 +799,237 @@ body {
     });
 
     return result;
+  }
+
+  /**
+   * Validates all imports in generated files and creates missing files
+   * This fixes the issue where AI generates imports but not the actual files
+   */
+  private validateAndFixImports(files: { path: string; content: string }[]): { path: string; content: string }[] {
+    const result = [...files];
+    const existingPaths = new Set(files.map(f => f.path));
+    const missingFiles = new Map<string, string[]>(); // path -> [files that import it]
+
+    // Extract all imports from all files
+    for (const file of files) {
+      const imports = this.extractLocalImports(file.content);
+
+      for (const importPath of imports) {
+        // Convert relative import to absolute path
+        const absolutePath = this.resolveImportPath(file.path, importPath);
+
+        if (absolutePath && !existingPaths.has(absolutePath)) {
+          if (!missingFiles.has(absolutePath)) {
+            missingFiles.set(absolutePath, []);
+          }
+          missingFiles.get(absolutePath)!.push(file.path);
+        }
+      }
+    }
+
+    // Create stub files for missing imports
+    if (missingFiles.size > 0) {
+      this.logger.warning('AICodeGenerator', `Found ${missingFiles.size} missing imported files, creating stubs`, {
+        missingFiles: Array.from(missingFiles.keys())
+      });
+
+      for (const [missingPath, importers] of missingFiles.entries()) {
+        const stubContent = this.createStubFile(missingPath, importers);
+        result.push({
+          path: missingPath,
+          content: stubContent
+        });
+        existingPaths.add(missingPath);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Extract local import paths from TypeScript/JavaScript code
+   */
+  private extractLocalImports(content: string): string[] {
+    const imports: string[] = [];
+
+    // Match: import ... from './path' or import ... from '../path'
+    const importRegex = /import\s+(?:{[^}]+}|[^'\s]+|\*\s+as\s+[^\s]+)\s+from\s+['"](\.\/.+?|\.\.?\/.+?)['"];?/g;
+
+    let match;
+    while ((match = importRegex.exec(content)) !== null) {
+      imports.push(match[1]);
+    }
+
+    return imports;
+  }
+
+  /**
+   * Resolve relative import path to absolute file path
+   */
+  private resolveImportPath(fromFile: string, importPath: string): string | null {
+    // Get directory of the importing file
+    const fromDir = fromFile.substring(0, fromFile.lastIndexOf('/'));
+
+    // Handle different import patterns
+    let targetPath = importPath;
+
+    // Remove leading './' or '../'
+    const parts = importPath.split('/');
+    let currentDir = fromDir;
+
+    for (const part of parts) {
+      if (part === '..') {
+        // Go up one directory
+        const lastSlash = currentDir.lastIndexOf('/');
+        currentDir = lastSlash > 0 ? currentDir.substring(0, lastSlash) : '';
+      } else if (part === '.') {
+        // Stay in current directory
+        continue;
+      } else {
+        // Add to path
+        currentDir = currentDir ? `${currentDir}/${part}` : part;
+      }
+    }
+
+    // Add file extensions if missing
+    const possibleExtensions = ['.tsx', '.ts', '/index.tsx', '/index.ts'];
+
+    for (const ext of possibleExtensions) {
+      const testPath = currentDir + ext;
+      if (!testPath.includes('..')) {
+        return testPath;
+      }
+    }
+
+    // If no extension and no index, default to .tsx
+    if (!currentDir.match(/\.(tsx?|jsx?)$/)) {
+      return currentDir + '.tsx';
+    }
+
+    return currentDir;
+  }
+
+  /**
+   * Create a stub file for a missing import
+   */
+  private createStubFile(path: string, importedBy: string[]): string {
+    const fileName = path.substring(path.lastIndexOf('/') + 1).replace(/\.(tsx?|jsx?)$/, '');
+    const isComponent = path.includes('/components/') || fileName.charAt(0) === fileName.charAt(0).toUpperCase();
+    const isType = path.includes('/types/') || path.endsWith('types.ts');
+    const isHook = path.includes('/hooks/') || fileName.startsWith('use');
+    const isUtil = path.includes('/utils/') || path.includes('/lib/');
+    const isContext = path.includes('/context/');
+
+    if (isType) {
+      // Create type definition file
+      return `// Type definitions
+// Auto-generated stub - imported by: ${importedBy.join(', ')}
+
+export interface ${fileName.replace(/[-_]/g, '')} {
+  id: string | number;
+  [key: string]: any;
+}
+
+export type ${fileName}Type = ${fileName.replace(/[-_]/g, '')};
+`;
+    }
+
+    if (isContext) {
+      // Create context file
+      return `import React, { createContext, useContext, ReactNode } from 'react';
+
+// Auto-generated stub - imported by: ${importedBy.join(', ')}
+
+interface ${fileName}ContextType {
+  // Add your context properties here
+  value: any;
+}
+
+const ${fileName}Context = createContext<${fileName}ContextType | undefined>(undefined);
+
+export const ${fileName}Provider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const value = {
+    value: null
+  };
+
+  return (
+    <${fileName}Context.Provider value={value}>
+      {children}
+    </${fileName}Context.Provider>
+  );
+};
+
+export const use${fileName} = () => {
+  const context = useContext(${fileName}Context);
+  if (context === undefined) {
+    throw new Error('use${fileName} must be used within a ${fileName}Provider');
+  }
+  return context;
+};
+`;
+    }
+
+    if (isHook) {
+      // Create custom hook file
+      return `import { useState } from 'react';
+
+// Auto-generated stub - imported by: ${importedBy.join(', ')}
+
+export const ${fileName} = () => {
+  const [state, setState] = useState<any>(null);
+
+  return {
+    state,
+    setState
+  };
+};
+`;
+    }
+
+    if (isUtil) {
+      // Create utility file
+      return `// Utility functions
+// Auto-generated stub - imported by: ${importedBy.join(', ')}
+
+export const ${fileName.replace(/[-_]/g, '')} = (input: any): any => {
+  return input;
+};
+
+export default ${fileName.replace(/[-_]/g, '')};
+`;
+    }
+
+    if (isComponent) {
+      // Create React component file
+      return `import React from 'react';
+
+// Auto-generated stub - imported by: ${importedBy.join(', ')}
+
+interface ${fileName}Props {
+  [key: string]: any;
+}
+
+export const ${fileName}: React.FC<${fileName}Props> = (props) => {
+  return (
+    <div className="p-4">
+      <h2 className="text-xl font-semibold">${fileName}</h2>
+      <p className="text-gray-600">This component is under development.</p>
+    </div>
+  );
+};
+
+export default ${fileName};
+`;
+    }
+
+    // Default: Create a simple module
+    return `// Auto-generated module
+// Imported by: ${importedBy.join(', ')}
+
+export const placeholder = true;
+
+export default {};
+`;
   }
 
   async generateHooks(componentName: string, features: string[]): Promise<string> {
