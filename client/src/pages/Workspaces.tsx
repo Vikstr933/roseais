@@ -93,6 +93,31 @@ function WorkspacesContent() {
     },
   });
 
+  const deleteWorkspaceMutation = useMutation({
+    mutationFn: async (workspaceId: number) => {
+      const response = await apiFetch(`/api/workspaces/${workspaceId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(sessionToken),
+      });
+      if (!response.ok) throw new Error('Failed to delete workspace');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/workspaces'] });
+      toast({
+        title: 'Workspace Deleted',
+        description: 'The workspace has been permanently deleted.',
+      });
+    },
+    onError: error => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const filteredProjects = projects.filter(
     project =>
       project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -170,7 +195,10 @@ function WorkspacesContent() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.1 }}
             >
-              <ProjectCard project={project} />
+              <ProjectCard
+                project={project}
+                onDelete={() => deleteWorkspaceMutation.mutate(project.id)}
+              />
             </motion.div>
           ))}
         </div>

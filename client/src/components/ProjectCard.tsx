@@ -20,7 +20,20 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
+import { Trash2 } from 'lucide-react';
 
 interface ProjectCardProps {
   project: {
@@ -51,12 +64,15 @@ interface ProjectCardProps {
     agentConfig?: any;
     testCases?: any[];
   };
+  onDelete?: () => void;
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({ project, onDelete }: ProjectCardProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isHovered, setIsHovered] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   const getProjectTypeIcon = (type: string) => {
     switch (type) {
@@ -113,6 +129,20 @@ export function ProjectCard({ project }: ProjectCardProps) {
     return activity.description;
   };
 
+  const handleDelete = () => {
+    if (deleteConfirmation === 'DELETE') {
+      onDelete?.();
+      setShowDeleteDialog(false);
+      setDeleteConfirmation('');
+    } else {
+      toast({
+        title: 'Invalid Confirmation',
+        description: 'Please type DELETE to confirm',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <motion.div
       whileHover={{ scale: 1.02 }}
@@ -146,6 +176,14 @@ export function ProjectCard({ project }: ProjectCardProps) {
                     Copy Invite Code
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Workspace
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -245,6 +283,42 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the workspace
+              <strong className="block mt-2 text-foreground">{project.name}</strong>
+              and remove all of its data including files, chat history, and settings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="my-4">
+            <label className="text-sm font-medium">
+              Type <strong>DELETE</strong> to confirm:
+            </label>
+            <Input
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              placeholder="DELETE"
+              className="mt-2"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteConfirmation('')}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteConfirmation !== 'DELETE'}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Workspace
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }
