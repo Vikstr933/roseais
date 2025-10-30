@@ -1,30 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(netstat:*)",
-      "Bash(findstr:*)",
-      "Bash(dir:*)",
-      "Bash(npm run build:*)",
-      "Bash(npm run:*)",
-      "Bash(timeout:*)",
-      "Bash(cat:*)",
-      "Bash(curl:*)",
-      "Bash(node:*)",
-      "Bash(nslookup:*)",
-      "Bash(taskkill:*)",
-      "Bash(powershell:*)",
-      "Bash(npx tsx:*)",
-      "Bash(npm install:*)",
-      "Bash(psql:*)",
-      "Bash(del:*)",
-      "Bash(ping:*)",
-      "Bash(pg_dump:*)",
-      "Bash(set:*)",
-      "Bash(.import-to-supabase.bat)",
-      "Bash(cmd /c import-to-supabase.bat)",
+      "Bash(vercel:*)",
+      "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(git add:*)"
+      "Bash(curl:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []

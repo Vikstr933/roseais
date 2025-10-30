@@ -163,3 +163,4 @@ db/*.js
 
 # Windows reserved names
 nul
+.vercel

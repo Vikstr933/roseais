@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { apiFetch } from '../lib/api';
 
 export default function AuthCallback() {
   const [, setLocation] = useLocation();
@@ -26,11 +27,8 @@ export default function AuthCallback() {
         const user = data.session.user;
         
         // Register/login the user in our system
-        const response = await fetch('/api/auth/oauth', {
+        const response = await apiFetch('/api/auth/oauth', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify({
             provider: user.app_metadata.provider,
             providerId: user.id,
