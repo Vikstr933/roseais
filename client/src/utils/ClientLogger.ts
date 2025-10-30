@@ -75,7 +75,7 @@ class ClientLogger {
     this.logQueue = [];
 
     try {
-      await fetch('/api/logs/client', {
+      await apiFetch('/api/logs/client', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

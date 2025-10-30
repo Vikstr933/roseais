@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { useToast } from './use-toast';
 
 export type ServerStatus = 'running' | 'stopped' | 'error';
@@ -10,7 +11,7 @@ export function useServerStatus() {
 
   const checkStatus = async () => {
     try {
-      const response = await fetch('/api/server/status');
+      const response = await apiFetch('/api/server/status');
       if (!response.ok) {
         // If API doesn't exist, assume stopped
         setStatus('stopped');
@@ -29,7 +30,7 @@ export function useServerStatus() {
   const startServer = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/server/start', { method: 'POST' });
+      const response = await apiFetch('/api/server/start', { method: 'POST' });
       if (!response.ok) throw new Error('Failed to start server');
       const data = await response.json();
       setStatus(data.status);
@@ -50,7 +51,7 @@ export function useServerStatus() {
   const stopServer = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/server/stop', { method: 'POST' });
+      const response = await apiFetch('/api/server/stop', { method: 'POST' });
       if (!response.ok) throw new Error('Failed to stop server');
       const data = await response.json();
       setStatus(data.status);

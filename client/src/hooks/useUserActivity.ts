@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
+import { apiFetch } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
 interface TrackActivityParams {
@@ -18,7 +19,7 @@ export const useUserActivity = () => {
       if (!user) return;
 
       try {
-        const response = await fetch('/api/activity/track', {
+        const response = await apiFetch('/api/activity/track', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -41,7 +42,7 @@ export const useUserActivity = () => {
       if (!user) return;
 
       try {
-        const response = await fetch('/api/activity/update', {
+        const response = await apiFetch('/api/activity/update', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -64,7 +65,7 @@ export const useUserActivity = () => {
       if (!user) return;
 
       try {
-        const response = await fetch('/api/activity/remove', {
+        const response = await apiFetch('/api/activity/remove', {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',

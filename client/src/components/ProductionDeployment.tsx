@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Input } from './ui/input';
@@ -54,7 +55,7 @@ export function ProductionDeployment({ files, projectName, onDeployment }: Produ
     setDeploymentResult(null);
 
     try {
-      const response = await fetch('/api/deploy', {
+      const response = await apiFetch('/api/deploy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

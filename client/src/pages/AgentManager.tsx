@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '../lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Plus, Edit2, Power, PowerOff, Wand2 } from 'lucide-react';
@@ -108,7 +109,7 @@ function AgentManagerContent() {
       });
 
       console.log('Fetching agents...');
-      const response = await fetch('/api/agents');
+      const response = await apiFetch('/api/agents');
       const duration = Date.now() - startTime;
 
       if (!response.ok) {
@@ -178,7 +179,7 @@ function AgentManagerContent() {
 
   const generateMutation = useMutation({
     mutationFn: async (prompt: string) => {
-      const res = await fetch('/api/agents/generate', {
+      const res = await apiFetch('/api/agents/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -202,7 +203,7 @@ function AgentManagerContent() {
 
   const createMutation = useMutation({
     mutationFn: async (newAgent: Omit<Agent, 'id'>) => {
-      const res = await fetch('/api/agents', {
+      const res = await apiFetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newAgent),
@@ -230,7 +231,7 @@ function AgentManagerContent() {
 
   const updateMutation = useMutation({
     mutationFn: async (agent: Agent) => {
-      const res = await fetch(`/api/agents/${agent.id}`, {
+      const res = await apiFetch(`/api/agents/${agent.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -293,7 +294,7 @@ function AgentManagerContent() {
         !agent.isActive
       );
 
-      const res = await fetch(`/api/agents/${agent.id}`, {
+      const res = await apiFetch(`/api/agents/${agent.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

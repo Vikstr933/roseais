@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lightbulb, Zap, Brain, ChevronRight } from 'lucide-react';
 import { Badge } from './ui/badge';
@@ -300,7 +301,7 @@ export function ChatAutocomplete({
         const relevanceScores = await knowledgeResponse.json();
 
         // Get all knowledge items to match with scores
-        const allKnowledgeResponse = await fetch('/api/knowledge/all');
+        const allKnowledgeResponse = await apiFetch('/api/knowledge/all');
         if (allKnowledgeResponse.ok) {
           const allKnowledge = await allKnowledgeResponse.json();
 

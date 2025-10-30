@@ -6,7 +6,10 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(curl:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git log:*)",
+      "Bash(node fix-api-fetch.js:*)",
+      "Bash(node fix-api-fetch.cjs:*)"
     ],
     "deny": [],
     "ask": []

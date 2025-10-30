@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,7 +52,7 @@ export function BillingSettings() {
 
   const fetchSubscription = async () => {
     try {
-      const response = await fetch(`/api/stripe/subscription/${user?.id}`, {
+      const response = await apiFetch(`/api/stripe/subscription/${user?.id}`, {
         headers: getAuthHeaders(sessionToken)
       });
 
@@ -91,7 +92,7 @@ export function BillingSettings() {
 
     setPortalLoading(true);
     try {
-      const response = await fetch('/api/stripe/create-portal-session', {
+      const response = await apiFetch('/api/stripe/create-portal-session', {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({

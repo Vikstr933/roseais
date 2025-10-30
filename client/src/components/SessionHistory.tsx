@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { format } from 'date-fns';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -60,7 +61,7 @@ export default function SessionHistory() {
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/sessions');
+      const response = await apiFetch('/api/sessions');
       if (!response.ok) {
         throw new Error('Failed to fetch sessions');
       }
@@ -75,7 +76,7 @@ export default function SessionHistory() {
 
   const deleteSession = async (sessionId: string) => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
+      const response = await apiFetch(`/api/sessions/${sessionId}`, {
         method: 'DELETE',
       });
       if (!response.ok) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../../lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Card } from '../ui/card';
 import { ScrollArea } from '../ui/scroll-area';
@@ -26,7 +27,7 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
   const handleStartServer = useCallback(async () => {
     try {
       // Save edited files
-      const response = await fetch('/api/components/save', {
+      const response = await apiFetch('/api/components/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -43,7 +44,7 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
       if (!response.ok) throw new Error('Failed to save files');
 
       // Start development server
-      const serverResponse = await fetch('/api/components/start-server', {
+      const serverResponse = await apiFetch('/api/components/start-server', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -72,7 +73,7 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
 
   const handleStopServer = useCallback(async () => {
     try {
-      const response = await fetch('/api/components/stop-server', {
+      const response = await apiFetch('/api/components/stop-server', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,7 +124,7 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
 
   const handleDownload = useCallback(async () => {
     try {
-      const response = await fetch('/api/components/download', {
+      const response = await apiFetch('/api/components/download', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

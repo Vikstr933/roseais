@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,7 +82,7 @@ export function APIKeyManager({
   const loadAPIKeys = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/api-keys/user/${userId}`);
+      const response = await apiFetch(`/api/api-keys/user/${userId}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -113,7 +114,7 @@ export function APIKeyManager({
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/api-keys/store', {
+      const response = await apiFetch('/api/api-keys/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -165,7 +166,7 @@ export function APIKeyManager({
     }
 
     try {
-      const response = await fetch(`/api/api-keys/${userId}/${keyId}`, {
+      const response = await apiFetch(`/api/api-keys/${userId}/${keyId}`, {
         method: 'DELETE',
       });
 
@@ -192,7 +193,7 @@ export function APIKeyManager({
 
   const checkAPIKeyRequirements = async (prompt: string) => {
     try {
-      const response = await fetch('/api/api-keys/check-requirements', {
+      const response = await apiFetch('/api/api-keys/check-requirements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

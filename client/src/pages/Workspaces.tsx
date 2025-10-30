@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { apiFetch } from '../lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SearchBar } from '@/components/SearchBar';
 import { ProjectCard } from '@/components/ProjectCard';
@@ -30,7 +31,7 @@ function WorkspacesContent() {
   const { data: projects = [], isLoading } = useQuery<any[]>({
     queryKey: ['/api/workspaces'],
     queryFn: async () => {
-      const response = await fetch('/api/workspaces', {
+      const response = await apiFetch('/api/workspaces', {
         headers: getAuthHeaders(sessionToken),
       });
       if (!response.ok) throw new Error('Failed to fetch projects');
@@ -40,7 +41,7 @@ function WorkspacesContent() {
 
   const createProjectMutation = useMutation({
     mutationFn: async (projectData: any) => {
-      const response = await fetch('/api/workspaces', {
+      const response = await apiFetch('/api/workspaces', {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify(projectData),
@@ -67,7 +68,7 @@ function WorkspacesContent() {
 
   const joinProjectMutation = useMutation({
     mutationFn: async (inviteCode: string) => {
-      const response = await fetch('/api/workspaces/join', {
+      const response = await apiFetch('/api/workspaces/join', {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({ inviteCode }),

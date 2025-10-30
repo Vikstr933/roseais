@@ -67,7 +67,7 @@ class BackgroundTaskServiceClass {
 
     try {
       // Start code generation via orchestration
-      const response = await fetch('/api/prompts', {
+      const response = await apiFetch('/api/prompts', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,

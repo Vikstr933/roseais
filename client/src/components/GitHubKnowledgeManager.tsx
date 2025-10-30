@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,7 +58,7 @@ export function GitHubKnowledgeManager({
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/github-knowledge/add', {
+      const response = await apiFetch('/api/github-knowledge/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

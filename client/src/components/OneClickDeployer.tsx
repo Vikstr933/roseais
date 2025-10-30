@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../lib/api';
 
 interface OneClickDeployerProps {
   componentName: string;
@@ -28,7 +29,7 @@ export const OneClickDeployer: React.FC<OneClickDeployerProps> = ({
       setError('');
       setDeploymentUrl('');
 
-      const response = await fetch('/api/deployments/public', {
+      const response = await apiFetch('/api/deployments/public', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

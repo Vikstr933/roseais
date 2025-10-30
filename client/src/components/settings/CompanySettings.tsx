@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -47,7 +48,7 @@ export function CompanySettings() {
     if (!user) return;
 
     try {
-      const response = await fetch(`/api/user/company/${user.id}`, {
+      const response = await apiFetch(`/api/user/company/${user.id}`, {
         headers: getAuthHeaders(sessionToken)
       });
 
@@ -65,7 +66,7 @@ export function CompanySettings() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/user/company', {
+      const response = await apiFetch('/api/user/company', {
         method: 'PUT',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify(company)

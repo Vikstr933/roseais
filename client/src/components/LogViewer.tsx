@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
@@ -50,7 +51,7 @@ export function LogViewer() {
   useEffect(() => {
     // Connect to SSE endpoint for real-time logs
     // Load initial logs
-    fetch('/api/logs/recent')
+    apiFetch('/api/logs/recent')
       .then(res => res.json())
       .then(initialLogs => setLogs(initialLogs))
       .catch(console.error);

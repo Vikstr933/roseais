@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Checkbox } from './ui/checkbox';
 import { Badge } from './ui/badge';
@@ -57,7 +58,7 @@ export function ChatKnowledgeSelector({
   const loadAllKnowledge = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/knowledge/all');
+      const response = await apiFetch('/api/knowledge/all');
       if (response.ok) {
         const data = await response.json();
         setAllKnowledge(data);
@@ -77,7 +78,7 @@ export function ChatKnowledgeSelector({
     }
 
     try {
-      const response = await fetch('/api/knowledge/calculate-relevance', {
+      const response = await apiFetch('/api/knowledge/calculate-relevance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),

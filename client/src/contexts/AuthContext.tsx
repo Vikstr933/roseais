@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       setSessionToken(token);
       // Verify token with server
-      fetch('/api/auth/me', {
+      apiFetch('/api/auth/me', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string
   ): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string
   ): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/register', {
+      const response = await apiFetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       if (sessionToken) {
-        await fetch('/api/auth/logout', {
+        await apiFetch('/api/auth/logout', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${sessionToken}`,

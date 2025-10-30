@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -78,7 +79,7 @@ export default function AssistantWidget({
   useEffect(() => {
     const loadAgentConfig = async () => {
       try {
-        const response = await fetch('/api/agents/personal-assistant', {
+        const response = await apiFetch('/api/agents/personal-assistant', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
           }
@@ -527,7 +528,7 @@ export default function AssistantWidget({
         enhancedMessage = `${inputText}\n\n[Context: ${contextParts.join('. ')}]`;
       }
 
-      const response = await fetch('/api/plugins/assistant/chat', {
+      const response = await apiFetch('/api/plugins/assistant/chat', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,

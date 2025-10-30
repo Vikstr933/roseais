@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -40,7 +41,7 @@ export function AccountSettings() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/user/profile', {
+      const response = await apiFetch('/api/user/profile', {
         method: 'PUT',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({

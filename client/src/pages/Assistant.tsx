@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,7 +50,7 @@ export default function Assistant() {
   const loadDailySummary = async () => {
     try {
       setLoadingSummary(true);
-      const response = await fetch('/api/plugins/assistant/daily-summary', {
+      const response = await apiFetch('/api/plugins/assistant/daily-summary', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         }
@@ -80,7 +81,7 @@ export default function Assistant() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/plugins/assistant/chat', {
+      const response = await apiFetch('/api/plugins/assistant/chat', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
@@ -129,7 +130,7 @@ export default function Assistant() {
 
   const handleClearHistory = async () => {
     try {
-      await fetch('/api/plugins/assistant/clear-history', {
+      await apiFetch('/api/plugins/assistant/clear-history', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,

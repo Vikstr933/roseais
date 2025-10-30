@@ -1,5 +1,6 @@
 ﻿import { motion } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
+import { apiFetch } from '../lib/api';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -299,7 +300,7 @@ export default function PromptPlayground() {
       const projectId = params.projectId;
       
       // Load project details
-      fetch(`/api/workspaces/${projectId}`, {
+      apiFetch(`/api/workspaces/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
           'Content-Type': 'application/json',
@@ -320,7 +321,7 @@ export default function PromptPlayground() {
         });
       
       // Load chat history
-      fetch(`/api/workspaces/${projectId}/chat?limit=100`, {
+      apiFetch(`/api/workspaces/${projectId}/chat?limit=100`, {
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
           'Content-Type': 'application/json',
@@ -357,7 +358,7 @@ export default function PromptPlayground() {
         });
       
       // Load project files
-      fetch(`/api/workspaces/${projectId}/files`, {
+      apiFetch(`/api/workspaces/${projectId}/files`, {
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
           'Content-Type': 'application/json',
@@ -820,7 +821,7 @@ export default function PromptPlayground() {
         });
 
         // Call existing server-side deployment
-      const response = await fetch('/api/components/generate', {
+      const response = await apiFetch('/api/components/generate', {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({
@@ -896,7 +897,7 @@ export default function PromptPlayground() {
 
       // âœ¨ Calculate relevance score for the prompt
       try {
-        const relevanceRes = await fetch('/api/knowledge/calculate-relevance', {
+        const relevanceRes = await apiFetch('/api/knowledge/calculate-relevance', {
           method: 'POST',
           headers: getAuthHeaders(sessionToken),
           body: JSON.stringify({ query: data.userPrompt })
@@ -969,7 +970,7 @@ export default function PromptPlayground() {
       setCurrentStep('');
       setOverallProgress(0);
 
-      const res = await fetch("/api/prompts/generate", {
+      const res = await apiFetch("/api/prompts/generate", {
         method: "POST",
         headers: {
           ...getAuthHeaders(sessionToken),
@@ -1262,7 +1263,7 @@ export default function PromptPlayground() {
           const userMessage = form.getValues('userPrompt');
           
           // Save user message
-          fetch(`/api/workspaces/${currentProject.id}/chat`, {
+          apiFetch(`/api/workspaces/${currentProject.id}/chat`, {
             method: 'POST',
             headers: getAuthHeaders(sessionToken),
             body: JSON.stringify({
@@ -1273,7 +1274,7 @@ export default function PromptPlayground() {
           }).catch(err => console.error('Failed to save user message:', err));
           
           // Save AI response
-          fetch(`/api/workspaces/${currentProject.id}/chat`, {
+          apiFetch(`/api/workspaces/${currentProject.id}/chat`, {
             method: 'POST',
             headers: getAuthHeaders(sessionToken),
             body: JSON.stringify({
@@ -1288,7 +1289,7 @@ export default function PromptPlayground() {
           
           // Save generated files to project after all are displayed
           setTimeout(() => {
-            fetch(`/api/workspaces/${currentProject.id}/files`, {
+            apiFetch(`/api/workspaces/${currentProject.id}/files`, {
               method: 'POST',
               headers: getAuthHeaders(sessionToken),
               body: JSON.stringify({

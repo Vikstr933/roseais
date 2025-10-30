@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -47,7 +48,7 @@ export function PreferencesSettings() {
     if (!user) return;
 
     try {
-      const response = await fetch(`/api/user/preferences/${user.id}`, {
+      const response = await apiFetch(`/api/user/preferences/${user.id}`, {
         headers: getAuthHeaders(sessionToken)
       });
 
@@ -65,7 +66,7 @@ export function PreferencesSettings() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/user/preferences', {
+      const response = await apiFetch('/api/user/preferences', {
         method: 'PUT',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify(preferences)

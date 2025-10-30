@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../../lib/api';
 import { Brain, Search, Code, FileText, CheckCircle, Loader2, Palette, Box, User, Cpu } from 'lucide-react';
 
 interface AgentStatus {
@@ -66,7 +67,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
   useEffect(() => {
     const fetchAgents = async () => {
       try {
-        const response = await fetch('/api/agents', {
+        const response = await apiFetch('/api/agents', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
           }

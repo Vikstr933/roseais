@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { apiFetch } from '../lib/api';
 
 /**
  * WorkspaceContext - Global state management for the entire application
@@ -161,7 +162,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (!sessionToken) return;
 
     try {
-      const response = await fetch('/api/workspace-sessions', {
+      const response = await apiFetch('/api/workspace-sessions', {
         headers: {
           'Authorization': `Bearer ${sessionToken}`
         }
@@ -183,11 +184,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     setIsSaving(true);
     try {
-      const response = await fetch('/api/workspace-sessions', {
+      const response = await apiFetch('/api/workspace-sessions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${sessionToken}`
         },
         body: JSON.stringify({
           session: {
@@ -237,7 +237,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (!sessionToken) return;
 
     try {
-      const response = await fetch(`/api/workspace-sessions/${sessionId}`, {
+      const response = await apiFetch(`/api/workspace-sessions/${sessionId}`, {
         headers: {
           'Authorization': `Bearer ${sessionToken}`
         }
@@ -272,7 +272,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     // Delete from server
     if (sessionToken) {
       try {
-        await fetch(`/api/workspace-sessions/${sessionId}`, {
+        await apiFetch(`/api/workspace-sessions/${sessionId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${sessionToken}`

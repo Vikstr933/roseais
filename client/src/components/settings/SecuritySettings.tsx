@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { apiFetch } from '../../lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -68,7 +69,7 @@ export function SecuritySettings() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/user/change-password', {
+      const response = await apiFetch('/api/user/change-password', {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({

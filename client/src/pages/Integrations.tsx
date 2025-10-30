@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -117,7 +118,7 @@ export default function Integrations() {
 
   const loadPlugins = async () => {
     try {
-      const response = await fetch('/api/plugins');
+      const response = await apiFetch('/api/plugins');
       const data = await response.json();
       if (data.success) {
         setAvailablePlugins(data.plugins);
@@ -131,7 +132,7 @@ export default function Integrations() {
   const loadUserStatus = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/plugins/status', {
+      const response = await apiFetch('/api/plugins/status', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
         }
@@ -158,7 +159,7 @@ export default function Integrations() {
       // For OAuth plugins, initiate OAuth flow
       if (pluginId === 'gmail') {
         console.log('Fetching Gmail auth URL...');
-        const response = await fetch('/api/plugins/gmail/auth/start', {
+        const response = await apiFetch('/api/plugins/gmail/auth/start', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
           }
@@ -180,7 +181,7 @@ export default function Integrations() {
         }
       } else if (pluginId === 'google-calendar') {
         console.log('Fetching Calendar auth URL...');
-        const response = await fetch('/api/plugins/google-calendar/auth/start', {
+        const response = await apiFetch('/api/plugins/google-calendar/auth/start', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
           }
@@ -202,7 +203,7 @@ export default function Integrations() {
         }
       } else if (pluginId === 'github') {
         console.log('Fetching GitHub auth URL...');
-        const response = await fetch('/api/plugins/github/auth/start', {
+        const response = await apiFetch('/api/plugins/github/auth/start', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
           }
@@ -226,7 +227,7 @@ export default function Integrations() {
         // Notion uses API key, not OAuth - show a prompt
         const apiKey = prompt('Enter your Notion API Key (from https://www.notion.so/my-integrations):');
         if (apiKey) {
-          const response = await fetch('/api/plugins/notion/configure', {
+          const response = await apiFetch('/api/plugins/notion/configure', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
@@ -271,7 +272,7 @@ export default function Integrations() {
       setError(null);
       setSuccess(null);
 
-      const response = await fetch(`/api/plugins/${pluginId}/disable`, {
+      const response = await apiFetch(`/api/plugins/${pluginId}/disable`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
@@ -297,7 +298,7 @@ export default function Integrations() {
       setError(null);
       setSyncing(prev => new Set(prev).add(pluginId));
 
-      const response = await fetch(`/api/plugins/${pluginId}/sync`, {
+      const response = await apiFetch(`/api/plugins/${pluginId}/sync`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,

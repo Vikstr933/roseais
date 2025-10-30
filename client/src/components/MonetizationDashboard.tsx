@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -83,9 +84,9 @@ export function MonetizationDashboard({
     setIsLoading(true);
     try {
       const [usageResponse, plansResponse, configResponse] = await Promise.all([
-        fetch('/api/monetization/usage'),
-        fetch('/api/monetization/plans'),
-        fetch('/api/monetization/rate-limits'),
+        apiFetch('/api/monetization/usage'),
+        apiFetch('/api/monetization/plans'),
+        apiFetch('/api/monetization/rate-limits'),
       ]);
 
       if (usageResponse.ok) {
@@ -116,7 +117,7 @@ export function MonetizationDashboard({
   const handleUpgrade = async (tier: string) => {
     setIsUpgrading(true);
     try {
-      const response = await fetch('/api/monetization/upgrade', {
+      const response = await apiFetch('/api/monetization/upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tier }),
@@ -145,7 +146,7 @@ export function MonetizationDashboard({
 
   const handleDowngrade = async () => {
     try {
-      const response = await fetch('/api/monetization/downgrade', {
+      const response = await apiFetch('/api/monetization/downgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });

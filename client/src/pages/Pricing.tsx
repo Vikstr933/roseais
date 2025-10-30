@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { motion } from 'framer-motion';
 import { Check, Zap, Crown, Sparkles, ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -92,7 +93,7 @@ export default function Pricing() {
     setLoading(plan.name);
 
     try {
-      const response = await fetch('/api/stripe/create-checkout-session', {
+      const response = await apiFetch('/api/stripe/create-checkout-session', {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({
