@@ -83,6 +83,11 @@ const initializeApp = async () => {
       'http://localhost:5173',
       'http://localhost:5174',
       new RegExp('http://localhost:5[0-9]{3}'),
+      // Add Vercel deployment patterns
+      'https://newai-sigma.vercel.app',
+      'https://newai.vercel.app',
+      new RegExp('https://newai-.*\\.vercel\\.app'),  // Match all Vercel preview URLs
+      new RegExp('https://.*-viktors-projects-.*\\.vercel\\.app'), // Match user-specific Vercel URLs
     ];
 
     // Add production origins if set
@@ -112,7 +117,27 @@ const initializeApp = async () => {
     // Global CORS configuration (now using secure CORS)
     app.use(
       cors({
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+          // Allow requests with no origin (e.g., mobile apps, Postman)
+          if (!origin) return callback(null, true);
+
+          // Check if origin is in allowed list (string or regex match)
+          const isAllowed = allowedOrigins.some(allowed => {
+            if (typeof allowed === 'string') {
+              return allowed === origin;
+            } else if (allowed instanceof RegExp) {
+              return allowed.test(origin);
+            }
+            return false;
+          });
+
+          if (isAllowed) {
+            callback(null, true);
+          } else {
+            console.warn(`CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+          }
+        },
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         credentials: true,
         allowedHeaders: ['Content-Type', 'Authorization'],
