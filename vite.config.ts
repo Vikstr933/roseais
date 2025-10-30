@@ -95,17 +95,7 @@ export default defineConfig({
 
     // Additional performance settings
     target: 'esnext',
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true, // Remove console.log in production
-        drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.trace']
-      },
-      format: {
-        comments: false
-      }
-    },
+    minify: 'esbuild', // Use esbuild (faster and already installed)
 
     // Chunk size warnings
     chunkSizeWarningLimit: 1000, // 1MB
