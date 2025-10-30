@@ -39,6 +39,7 @@ import workspaceSessionsRouter from './routes/workspace';
 import healthRouter from './routes/health';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
+import { chatCleanupService } from './services/ChatCleanupService';
 
 import * as dotenv from 'dotenv';
 import { sql } from 'drizzle-orm';
@@ -363,6 +364,10 @@ const initializeApp = async () => {
           lockCleanupService.start();
           console.log('Lock cleanup service started');
 
+          // Start the chat cleanup service (auto-delete messages after 24 hours)
+          chatCleanupService.start();
+          console.log('Chat cleanup service started (24-hour retention)');
+
           // Start the storage cleanup service (deletes old projects automatically)
           const { storageCleanupService } = await import('./services/StorageCleanupService');
           storageCleanupService.startAutomaticCleanup();
@@ -390,12 +395,14 @@ initializeApp();
 process.on('SIGINT', () => {
   console.log('Received SIGINT, shutting down gracefully...');
   lockCleanupService.stop();
+  chatCleanupService.stop();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
   lockCleanupService.stop();
+  chatCleanupService.stop();
   process.exit(0);
 });
 
