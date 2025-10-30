@@ -40,11 +40,14 @@ router.get('/', authenticateUser, async (req, res) => {
     // Load chat history for each session
     const sessionsWithHistory = await Promise.all(
       sessions.map(async (session) => {
-        const history = await db
-          .select()
-          .from(chatMessages as any)
-          .where(eq((chatMessages as any).projectId, session.id))
-          .orderBy((chatMessages as any).createdAt);
+        // Use workspaceId (integer) instead of session.id (string) for chat messages
+        const history = session.workspaceId
+          ? await db
+              .select()
+              .from(chatMessages as any)
+              .where(eq((chatMessages as any).projectId, session.workspaceId))
+              .orderBy((chatMessages as any).createdAt)
+          : [];
 
         return {
           id: session.id,
@@ -112,12 +115,14 @@ router.get('/:sessionId', authenticateUser, async (req, res) => {
 
     const session = sessions[0];
 
-    // Load chat history
-    const history = await db
-      .select()
-      .from(chatMessages as any)
-      .where(eq((chatMessages as any).projectId, session.id))
-      .orderBy((chatMessages as any).createdAt);
+    // Load chat history using workspaceId (integer) instead of session.id (string)
+    const history = session.workspaceId
+      ? await db
+          .select()
+          .from(chatMessages as any)
+          .where(eq((chatMessages as any).projectId, session.workspaceId))
+          .orderBy((chatMessages as any).createdAt)
+      : [];
 
     res.json({
       success: true,
