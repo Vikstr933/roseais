@@ -5,7 +5,6 @@ import {
   projectChatMessages,
   projectActivities,
   projectFiles,
-  chatMessages,
   users,
   type Workspace,
   type ProjectMember,
@@ -457,9 +456,9 @@ export class ProjectService {
       // Get recent chat messages as activity
       const messages = await db
         .select()
-        .from(chatMessages as any)
-        .where(eq((chatMessages as any).projectId, projectId))
-        .orderBy(desc((chatMessages as any).createdAt))
+        .from(projectChatMessages as any)
+        .where(eq((projectChatMessages as any).projectId, projectId))
+        .orderBy(desc((projectChatMessages as any).createdAt))
         .limit(limit);
 
       return messages.map((msg: any) => ({
