@@ -5,6 +5,7 @@ import React, {
   useEffect,
   ReactNode,
 } from 'react';
+import { apiFetch } from '../lib/api';
 
 interface User {
   id: string;
