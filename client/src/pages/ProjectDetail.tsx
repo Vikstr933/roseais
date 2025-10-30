@@ -21,6 +21,9 @@ import {
   Settings,
   Play,
   Code2,
+  Share2,
+  QrCode,
+  Link,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
@@ -100,6 +103,7 @@ function ProjectDetailContent() {
   const { sessionToken, user } = useAuth();
   const queryClient = useQueryClient();
   const [newMessage, setNewMessage] = useState('');
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
   const { data: project, isLoading } = useQuery({
@@ -194,6 +198,50 @@ function ProjectDetailContent() {
   const openInPlayground = () => {
     // Navigate to playground with project context
     setLocation(`/playground/${id}`);
+  };
+
+  const openProjectSettings = () => {
+    // Navigate to project settings (you can implement a settings page later)
+    toast({
+      title: 'Project Settings',
+      description: 'Settings page coming soon! You can update workspace details here.',
+    });
+  };
+
+  const shareProject = () => {
+    setShowShareDialog(true);
+  };
+
+  const copyShareLink = () => {
+    if (project?.inviteCode) {
+      const shareUrl = `${window.location.origin}/workspaces/join?code=${project.inviteCode}`;
+      navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: 'Share Link Copied',
+        description: 'Anyone with this link can request to join the project',
+      });
+    }
+  };
+
+  const downloadQRCode = () => {
+    if (project?.inviteCode) {
+      const shareUrl = `${window.location.origin}/workspaces/join?code=${project.inviteCode}`;
+      // Generate QR code using a simple service
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}`;
+
+      // Download the QR code
+      const link = document.createElement('a');
+      link.href = qrCodeUrl;
+      link.download = `${project.name}-qr-code.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: 'QR Code Downloaded',
+        description: 'Team members can scan this to join your project',
+      });
+    }
   };
 
   if (isLoading) {
@@ -406,19 +454,98 @@ function ProjectDetailContent() {
                   <Play className="h-4 w-4 mr-2" />
                   Generate in Playground
                 </Button>
-                <Button variant="outline">
+                <Button variant="outline" onClick={openProjectSettings}>
                   <Settings className="h-4 w-4 mr-2" />
                   Project Settings
                 </Button>
                 {project.inviteCode && (
-                  <Button variant="outline" onClick={copyInviteCode}>
-                    <Copy className="h-4 w-4 mr-2" />
-                    Share Invite Code
+                  <Button variant="outline" onClick={shareProject}>
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Share Project
                   </Button>
                 )}
               </div>
             </CardContent>
           </Card>
+
+          {/* Share Dialog */}
+          {showShareDialog && project?.inviteCode && (
+            <Card className="border-primary">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Share2 className="h-5 w-5" />
+                    Share Project
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowShareDialog(false)}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Invite Code Section */}
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground block mb-2">
+                    Invite Code
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={project.inviteCode}
+                      readOnly
+                      className="font-mono"
+                    />
+                    <Button variant="outline" onClick={copyInviteCode}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Share Link Section */}
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground block mb-2">
+                    Share Link
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={`${window.location.origin}/workspaces/join?code=${project.inviteCode}`}
+                      readOnly
+                      className="font-mono text-sm"
+                    />
+                    <Button variant="outline" onClick={copyShareLink}>
+                      <Link className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* QR Code Section */}
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground block mb-2">
+                    QR Code
+                  </label>
+                  <div className="flex flex-col items-center gap-4 p-4 bg-muted rounded-lg">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                        `${window.location.origin}/workspaces/join?code=${project.inviteCode}`
+                      )}`}
+                      alt="Project QR Code"
+                      className="w-48 h-48 border-4 border-background rounded-lg"
+                    />
+                    <Button onClick={downloadQRCode} size="sm">
+                      <QrCode className="h-4 w-4 mr-2" />
+                      Download QR Code
+                    </Button>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Team members can scan this to join your project
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Files Tab */}

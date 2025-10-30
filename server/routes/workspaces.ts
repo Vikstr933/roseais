@@ -59,8 +59,8 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/workspaces/:id - Get specific workspace
-router.get('/:id', async (req, res) => {
+// GET /api/workspaces/:id - Get specific workspace with full details
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const workspaceId = parseInt(req.params.id);
     const workspace = await db
@@ -75,6 +75,16 @@ router.get('/:id', async (req, res) => {
 
     const workspaceData = workspace[0];
 
+    // Get project members
+    const members = await projectService.getProjectMembers(workspaceId);
+
+    // Get file count
+    const files = await projectService.getProjectFiles(workspaceId);
+    const fileCount = files.length;
+
+    // Get recent activity
+    const recentActivity = await projectService.getProjectActivity(workspaceId, 10);
+
     // Transform the data to match the expected format
     const transformedWorkspace = {
       id: workspaceData.id,
@@ -82,6 +92,10 @@ router.get('/:id', async (req, res) => {
       description: workspaceData.description,
       createdAt: workspaceData.createdAt,
       updatedAt: workspaceData.updatedAt,
+      projectType: workspaceData.projectType,
+      projectStatus: workspaceData.projectStatus,
+      inviteCode: workspaceData.inviteCode,
+      ownerId: workspaceData.ownerId,
       agentConfig:
         typeof workspaceData.agentConfig === 'string'
           ? JSON.parse(workspaceData.agentConfig)
@@ -96,6 +110,15 @@ router.get('/:id', async (req, res) => {
           ? JSON.parse(workspaceData.collaborators)
           : workspaceData.collaborators,
       status: workspaceData.status,
+      settings: workspaceData.settings
+        ? typeof workspaceData.settings === 'string'
+          ? JSON.parse(workspaceData.settings)
+          : workspaceData.settings
+        : {},
+      // Additional fields expected by frontend
+      members,
+      fileCount,
+      recentActivity,
     };
 
     res.json(transformedWorkspace);
