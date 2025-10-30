@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '@/lib/api';
 import { Brain, Search, Code, Database, FileText, MessageSquare, TrendingUp, CheckCircle, Loader2, Minimize2, Maximize2, X } from 'lucide-react';
 
 interface AgentStatus {
@@ -38,7 +39,7 @@ export const GlobalAgentMonitor: React.FC = () => {
 
   useEffect(() => {
     // Connect to SSE for agent activity
-    const es = new EventSource('/api/sse/agent-activity');
+    const es = new EventSource(getApiUrl('/api/sse/agent-activity'));
 
     es.addEventListener('message', (event) => {
       try {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getApiUrl } from '../lib/api';
 import { apiFetch } from '../lib/api';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
@@ -40,7 +41,7 @@ export function TerminalOutput({
     setIsConnected(false);
 
     // Create EventSource for Server-Sent Events
-    const eventSource = new EventSource(
+    const eventSource = new EventSource(getApiUrl(
       `/api/terminal/${componentName}/stream`
     );
     eventSourceRef.current = eventSource;

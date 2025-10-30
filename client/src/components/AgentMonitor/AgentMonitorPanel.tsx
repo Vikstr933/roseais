@@ -10,6 +10,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { CircularAgentVisualization } from './CircularAgentVisualization';
+import { getApiUrl } from '@/lib/api';
 
 type AgentEventType =
   | 'connected'
@@ -80,7 +81,7 @@ export function AgentMonitorPanel() {
   useEffect(() => {
     // Create a single EventSource instance
     console.log('🔌 Creating EventSource for agent activity');
-    const eventSource = new EventSource('/api/sse/agent-activity');
+    const eventSource = new EventSource(getApiUrl('/api/sse/agent-activity'));
 
     eventSource.onopen = () => {
       console.log('✅ Agent activity stream opened');

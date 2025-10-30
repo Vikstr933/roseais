@@ -1,20 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(vercel:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(curl:*)",
-      "Bash(git config:*)",
-      "Bash(git log:*)",
-      "Bash(node fix-api-fetch.js:*)",
-      "Bash(node fix-api-fetch.cjs:*)",
-      "Bash(while read file)",
-      "Bash(do if ! grep -q \"import.*apiFetch\" \"$file\")",
-      "Bash(then echo \"$file\")",
-      "Bash(fi)",
-      "Bash(done)"
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

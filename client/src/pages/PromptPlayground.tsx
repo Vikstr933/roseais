@@ -1,6 +1,6 @@
 ﻿import { motion } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
-import { apiFetch } from '../lib/api';
+import { apiFetch, getApiUrl } from '../lib/api';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -412,7 +412,7 @@ export default function PromptPlayground() {
     // Connect to backend SSE terminal stream when we have a component name
     if (!currentComponentName) return;
 
-    const streamUrl = `/api/terminal/${encodeURIComponent(currentComponentName)}/stream`;
+    const streamUrl = getApiUrl(`/api/terminal/${encodeURIComponent(currentComponentName)}/stream`);
     let es: EventSource | null = new EventSource(streamUrl);
     let retryTimer: number | null = null;
 
@@ -533,9 +533,9 @@ export default function PromptPlayground() {
 
   // Set up SSE connections
   useEffect(() => {
-    const eventsSource = new EventSource('/api/events');
-    const logsSource = new EventSource('/api/logs');
-    const agentActivitySource = new EventSource('/api/sse/agent-activity');
+    const eventsSource = new EventSource(getApiUrl('/api/events'));
+    const logsSource = new EventSource(getApiUrl('/api/logs'));
+    const agentActivitySource = new EventSource(getApiUrl('/api/sse/agent-activity'));
 
     // ðŸ¤– Agent Activity Stream - Real-time updates
     agentActivitySource.onmessage = (event) => {

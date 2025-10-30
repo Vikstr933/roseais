@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getApiUrl } from '@/lib/api';
 import { apiFetch } from '../lib/api';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
@@ -57,7 +58,7 @@ export function LogViewer() {
       .catch(console.error);
 
     // Connect to SSE endpoint for real-time logs
-    const eventSource = new EventSource('/api/logs', { withCredentials: true });
+    const eventSource = new EventSource(getApiUrl('/api/logs'), { withCredentials: true });
 
     eventSource.onmessage = event => {
       const logEntry: LogEntry = JSON.parse(event.data);

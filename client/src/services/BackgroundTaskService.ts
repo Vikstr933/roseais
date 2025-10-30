@@ -118,7 +118,7 @@ class BackgroundTaskServiceClass {
 
     console.log('📡 Subscribing to agent events:', sseUrl);
 
-    this.eventSource = new EventSource(sseUrl);
+    this.eventSource = new EventSource(getApiUrl(sseUrl));
     this.isConnected = true;
 
     this.eventSource.onopen = () => {
