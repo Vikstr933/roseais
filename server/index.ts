@@ -114,6 +114,30 @@ const initializeApp = async () => {
     app.use(memoryMonitoring());
     app.use('/api', apiCache(performanceService.getCache(), 300)); // 5 minute cache for API routes
 
+    // Handle preflight OPTIONS requests explicitly
+    app.options('*', (req, res, next) => {
+      const origin = req.headers.origin;
+      const isAllowed = !origin || allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin;
+        } else if (allowed instanceof RegExp) {
+          return allowed.test(origin);
+        }
+        return false;
+      });
+
+      if (isAllowed) {
+        res.setHeader('Access-Control-Allow-Origin', origin || '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Max-Age', '86400');
+        res.status(204).send();
+      } else {
+        res.status(403).send();
+      }
+    });
+
     // Global CORS configuration (now using secure CORS)
     app.use(
       cors({
@@ -141,6 +165,8 @@ const initializeApp = async () => {
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         credentials: true,
         allowedHeaders: ['Content-Type', 'Authorization'],
+        preflightContinue: false,
+        optionsSuccessStatus: 204
       })
     );
 

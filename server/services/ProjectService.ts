@@ -5,6 +5,7 @@ import {
   projectChatMessages,
   projectActivities,
   projectFiles,
+  chatMessages,
   users,
   type Workspace,
   type ProjectMember,
@@ -414,6 +415,62 @@ export class ProjectService {
         return 'documentation';
       default:
         return 'other';
+    }
+  }
+
+  /**
+   * Get project members
+   */
+  async getProjectMembers(projectId: number): Promise<any[]> {
+    try {
+      // Check if project_members table exists and use it
+      const result = await db
+        .select({
+          id: (projectMembers as any).id,
+          userId: (projectMembers as any).userId,
+          role: (projectMembers as any).role,
+          joinedAt: (projectMembers as any).joinedAt,
+          user: {
+            id: (users as any).id,
+            email: (users as any).email,
+            name: (users as any).name,
+            avatar_url: (users as any).avatar_url,
+          }
+        })
+        .from(projectMembers as any)
+        .leftJoin(users as any, eq((projectMembers as any).userId, (users as any).id))
+        .where(eq((projectMembers as any).projectId, projectId));
+
+      return result;
+    } catch (error) {
+      // If project_members table doesn't exist, return empty array
+      console.warn('getProjectMembers: project_members table may not exist', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get project activity
+   */
+  async getProjectActivity(projectId: number, limit: number = 10): Promise<any[]> {
+    try {
+      // Get recent chat messages as activity
+      const messages = await db
+        .select()
+        .from(chatMessages as any)
+        .where(eq((chatMessages as any).projectId, projectId))
+        .orderBy(desc((chatMessages as any).createdAt))
+        .limit(limit);
+
+      return messages.map((msg: any) => ({
+        type: 'message',
+        description: msg.message?.substring(0, 100) + '...',
+        timestamp: msg.createdAt,
+        userId: msg.userId
+      }));
+    } catch (error) {
+      console.warn('getProjectActivity error:', error);
+      return [];
     }
   }
 }
