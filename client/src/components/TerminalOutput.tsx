@@ -43,7 +43,7 @@ export function TerminalOutput({
     // Create EventSource for Server-Sent Events
     const eventSource = new EventSource(getApiUrl(
       `/api/terminal/${componentName}/stream`
-    );
+    ));
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
