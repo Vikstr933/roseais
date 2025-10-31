@@ -308,46 +308,93 @@ export class MultiModelAIService {
     return score;
   }
 
-  private async executeGeneration(model: ModelConfig, request: AIRequest): Promise<Omit<AIResponse, 'responseTime' | 'qualityMetrics'>> {
+  private async executeGeneration(model: ModelConfig, request: AIRequest, retryCount = 0): Promise<Omit<AIResponse, 'responseTime' | 'qualityMetrics'>> {
     const maxTokens = request.maxTokens || model.maxTokens;
     const temperature = request.temperature || model.temperature;
+    const maxRetries = 3;
 
     console.log('🎯 executeGeneration: Starting', {
       provider: model.provider,
       model: model.model,
       maxTokens,
-      temperature
+      temperature,
+      attempt: retryCount + 1
     });
 
     try {
+      let result;
       switch (model.provider) {
         case 'anthropic':
           console.log('🤖 executeGeneration: Calling Anthropic API');
-          const anthropicResult = await this.generateWithAnthropic(model, request, maxTokens, temperature);
+          result = await this.generateWithAnthropic(model, request, maxTokens, temperature);
           console.log('✅ executeGeneration: Anthropic API completed');
-          return anthropicResult;
+          return result;
 
         case 'openai':
           console.log('🤖 executeGeneration: Calling OpenAI API');
-          const openaiResult = await this.generateWithOpenAI(model, request, maxTokens, temperature);
+          result = await this.generateWithOpenAI(model, request, maxTokens, temperature);
           console.log('✅ executeGeneration: OpenAI API completed');
-          return openaiResult;
+          return result;
 
         case 'gemini':
           console.log('🤖 executeGeneration: Calling Gemini API');
-          const geminiResult = await this.generateWithGemini(model, request, maxTokens, temperature);
+          result = await this.generateWithGemini(model, request, maxTokens, temperature);
           console.log('✅ executeGeneration: Gemini API completed');
-          return geminiResult;
+          return result;
 
         default:
           throw new Error(`Unsupported provider: ${model.provider}`);
       }
     } catch (error) {
       console.error('❌ executeGeneration: Error occurred:', error);
+
+      // Check if error is retryable (transient errors like rate limits, overloaded)
+      const isRetryable = this.isRetryableError(error);
+      const shouldRetry = isRetryable && retryCount < maxRetries;
+
+      if (shouldRetry) {
+        const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+        console.log(`⏰ Retrying in ${delay}ms (attempt ${retryCount + 2}/${maxRetries + 1})...`);
+        logger.warn(`Retrying generation after ${delay}ms due to transient error`, { error, retryCount });
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.executeGeneration(model, request, retryCount + 1);
+      }
+
       // Record failure for this model
       this.recordFailure(model);
       throw error;
     }
+  }
+
+  /**
+   * Check if an error is retryable (transient vs permanent)
+   */
+  private isRetryableError(error: any): boolean {
+    const errorString = error?.toString() || '';
+    const errorMessage = error?.message || '';
+
+    // Anthropic specific errors
+    if (errorString.includes('Overloaded') || errorMessage.includes('Overloaded')) {
+      return true;
+    }
+    if (errorString.includes('rate_limit') || errorMessage.includes('rate_limit')) {
+      return true;
+    }
+    if (error?.status === 429 || error?.status === 503 || error?.status === 500) {
+      // Rate limit, service unavailable, or internal server error
+      return true;
+    }
+
+    // OpenAI specific errors
+    if (errorString.includes('Rate limit') || errorMessage.includes('Rate limit')) {
+      return true;
+    }
+    if (errorString.includes('timeout') || errorMessage.includes('timeout')) {
+      return true;
+    }
+
+    return false;
   }
 
   private async generateWithAnthropic(

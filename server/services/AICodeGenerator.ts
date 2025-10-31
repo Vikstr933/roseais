@@ -361,9 +361,9 @@ You MUST generate ALL necessary files in this structure:
 
 # Critical Output Requirements
 
-## ⚠️ ABSOLUTELY CRITICAL: JSON FORMAT ONLY ⚠️
+## ⚠️⚠️⚠️ CRITICAL: YOU WILL BE PENALIZED IF YOU DON'T FOLLOW THIS FORMAT ⚠️⚠️⚠️
 
-You MUST return ONLY a raw JSON array. Nothing else. No exceptions.
+YOUR RESPONSE MUST BE PURE JSON - NO EXCEPTIONS. NO MARKDOWN.
 
 ❌ DO NOT include:
 - Markdown code blocks (no \`\`\`json or \`\`\`)
