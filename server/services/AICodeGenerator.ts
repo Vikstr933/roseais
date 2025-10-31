@@ -93,14 +93,16 @@ export class AICodeGenerator {
       }
 
       // Debug: Log response preview for troubleshooting
-      this.logger.debug('AICodeGenerator', 'AI Response Preview', {
-        firstChars: response.content.substring(0, 200),
-        lastChars: response.content.substring(Math.max(0, response.content.length - 200)),
-        totalLength: response.content.length,
-        startsWithBracket: response.content.trim().startsWith('['),
-        endsWithBracket: response.content.trim().endsWith(']'),
-        containsMarkdown: response.content.includes('```')
-      });
+      console.error('=== AI RESPONSE DEBUG START ===');
+      console.error(`Total length: ${response.content.length} chars`);
+      console.error(`Starts with [: ${response.content.trim().startsWith('[')}`);
+      console.error(`Ends with ]: ${response.content.trim().endsWith(']')}`);
+      console.error(`Contains markdown: ${response.content.includes('```')}`);
+      console.error('--- FIRST 1000 CHARS ---');
+      console.error(response.content.substring(0, 1000));
+      console.error('--- LAST 1000 CHARS ---');
+      console.error(response.content.substring(Math.max(0, response.content.length - 1000)));
+      console.error('=== AI RESPONSE DEBUG END ===');
 
       // Parse the multi-file JSON response
       const parseResult = this.parseMultiFileResponse(response.content);
@@ -344,6 +346,16 @@ You MUST generate ALL necessary files in this structure:
 - Use proper generic types where applicable
 - Implement strict null checks and proper error types
 - Export types for reusability across components
+
+## Syntax Requirements (CRITICAL)
+- EVERY statement must end with a semicolon (;)
+- ALL return statements must be complete: \`return (<div>...</div>);\`
+- ALL import statements must have corresponding files in your response
+- If you import \`'../types'\`, you MUST include \`src/types/index.ts\` in your JSON
+- If you import \`'../utils/gameLogic'\`, you MUST include \`src/utils/gameLogic.ts\` in your JSON
+- NO incomplete code blocks - every function, component, and expression must be complete
+- ALL JSX elements must be properly closed
+- ALL curly braces, brackets, and parentheses must be balanced
 
 ## UI/UX Standards
 - Create responsive layouts that work on all devices
