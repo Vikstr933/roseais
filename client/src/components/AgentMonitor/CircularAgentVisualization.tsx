@@ -108,34 +108,12 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
     fetchAgents();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="relative h-[700px] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 animate-spin text-violet-500" />
-      </div>
-    );
-  }
-
-  // Use fetched agents, distributed evenly in a circle
-  const activeAgentConfigs = agents.map((agent, index) => ({
-    ...agent,
-    angle: (360 / agents.length) * index // Distribute evenly based on actual count
-  }));
-
-  const getPosition = (angle: number, radius = 240) => { // Reduced from 280 to 240 for better container fit
-    const radian = (angle - 90) * (Math.PI / 180);
-    return {
-      x: Math.cos(radian) * radius,
-      y: Math.sin(radian) * radius
-    };
-  };
-
   // Count completed agents for progress animation (only count agents that have status)
   const selectedAgentsCount = agentStatusMap.size;
   const completedCount = Array.from(agentStatusMap.values()).filter(s => s.status === 'completed').length;
   const targetProgress = selectedAgentsCount > 0 ? (completedCount / selectedAgentsCount) * 100 : 0;
 
-  // Smooth progress animation - increment gradually instead of jumping
+  // Smooth progress animation - MUST be before early return to avoid conditional hooks
   useEffect(() => {
     if (targetProgress === 0) {
       setAnimatedProgress(0);
@@ -158,6 +136,29 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
 
     return () => clearInterval(interval);
   }, [targetProgress]); // Remove animatedProgress from dependencies to prevent infinite loop
+
+  // Early return for loading state - MUST be after all hooks
+  if (loading) {
+    return (
+      <div className="relative h-[700px] flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+
+  // Use fetched agents, distributed evenly in a circle
+  const activeAgentConfigs = agents.map((agent, index) => ({
+    ...agent,
+    angle: (360 / agents.length) * index // Distribute evenly based on actual count
+  }));
+
+  const getPosition = (angle: number, radius = 240) => { // Reduced from 280 to 240 for better container fit
+    const radian = (angle - 90) * (Math.PI / 180);
+    return {
+      x: Math.cos(radian) * radius,
+      y: Math.sin(radian) * radius
+    };
+  };
 
   return (
     <div className="relative h-[700px] flex items-center justify-center overflow-hidden">
