@@ -510,7 +510,7 @@ export default defineConfig({
             .update(chainExecutions)
             .set({
               status: 'failed',
-              completedAt: new Date().toISOString(),
+              completedAt: new Date(),
               error: JSON.stringify({
                 message: stepError.message,
                 step: step.name,
@@ -532,7 +532,7 @@ export default defineConfig({
         .update(chainExecutions)
         .set({
           status: 'completed',
-          completedAt: new Date().toISOString(),
+          completedAt: new Date(),
           output: JSON.stringify(currentInput),
           stepResults: JSON.stringify(stepResults),
         })

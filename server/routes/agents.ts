@@ -420,7 +420,7 @@ router.post('/agents', async (req, res) => {
       bestPractices: typeof bestPractices === 'object' ? bestPractices : {},
       isActive: 1,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     };
 
     // Validate required fields
@@ -499,7 +499,7 @@ router.put('/agents/:id', async (req, res) => {
     } = req.body;
 
     const updateData: Partial<typeof agents.$inferInsert> = {
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     };
 
     // Transform and include fields that are present in the request

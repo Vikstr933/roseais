@@ -140,7 +140,7 @@ export class GenerationLockService {
         .update(generationLocks)
         .set({
           status,
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(eq(generationLocks.id, lockId))
         .returning();
@@ -171,7 +171,7 @@ export class GenerationLockService {
         .update(generationLocks)
         .set({
           status,
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(
           and(
@@ -232,7 +232,7 @@ export class GenerationLockService {
         .update(generationLocks)
         .set({
           expiresAt: finalExpiry.toISOString(),
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(eq(generationLocks.id, lockId));
 

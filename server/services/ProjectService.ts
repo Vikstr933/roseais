@@ -307,7 +307,7 @@ export class ProjectService {
       .set({
         fileContent: content,
         lastModifiedBy: userId,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
         version: db
           .select()
           .from(projectFiles)

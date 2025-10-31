@@ -253,7 +253,7 @@ export class UserService {
     await db
       .update(apiKeys)
       .set({
-        lastUsed: new Date().toISOString(),
+        lastUsed: new Date(),
         usageCount: key.usageCount + 1,
       })
       .where(eq(apiKeys.id, key.id));
@@ -332,7 +332,7 @@ export class UserService {
       .update(workspaces)
       .set({
         status,
-        lastModified: new Date().toISOString(),
+        lastModified: new Date(),
       })
       .where(
         and(
@@ -615,7 +615,7 @@ export class APIKeyService {
         .update(apiKeys)
         .set({
           isActive: 0,
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         })
         .where(and(eq(apiKeys.id, keyId), eq(apiKeys.userId, userId)))
         .returning();

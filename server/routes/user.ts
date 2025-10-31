@@ -23,7 +23,7 @@ router.put('/profile', authenticateUser, async (req, res) => {
         username: username || undefined,
         displayName: displayName || undefined,
         avatarUrl: avatarUrl || undefined,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
       .returning();
@@ -94,7 +94,7 @@ router.post('/change-password', authenticateUser, async (req, res) => {
       .update(users)
       .set({
         password: hashedPassword,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
 
@@ -177,7 +177,7 @@ router.put('/company', authenticateUser, async (req, res) => {
         country: country || undefined,
         phone: phone || undefined,
         website: website || undefined,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
       .returning();
@@ -250,7 +250,7 @@ router.put('/preferences', authenticateUser, async (req, res) => {
       .update(users)
       .set({
         preferences: preferences as any,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
       .returning();

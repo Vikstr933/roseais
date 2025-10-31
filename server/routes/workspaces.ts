@@ -251,7 +251,7 @@ router.put('/:id', async (req, res) => {
       req.body;
 
     const updateData: any = {
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     };
 
     if (name) updateData.name = name;
