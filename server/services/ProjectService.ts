@@ -176,7 +176,7 @@ export class ProjectService {
       if (!existingMember.isActive) {
         await db
           .update(projectMembers)
-          .set({ isActive: 1, joinedAt: new Date().toISOString() })
+          .set({ isActive: 1, joinedAt: new Date() })  // Fixed: Date object not string
           .where(eq(projectMembers.id, existingMember.id));
       }
       return project;
@@ -368,7 +368,7 @@ export class ProjectService {
     // Update project last activity
     await db
       .update(workspaces)
-      .set({ lastActivity: new Date().toISOString() })
+      .set({ lastActivity: new Date() })  // Fixed: Date object not string
       .where(eq(workspaces.id, projectId));
   }
 

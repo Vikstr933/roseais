@@ -97,7 +97,7 @@ export class UserService {
   async updateUserLastActive(userId: string) {
     await db
       .update(users)
-      .set({ lastActive: new Date().toISOString() })
+      .set({ lastActive: new Date() })  // Fixed: Drizzle expects Date object, not string
       .where(eq(users.id, userId));
   }
 
