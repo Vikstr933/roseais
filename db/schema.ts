@@ -190,14 +190,13 @@ export type ChainExecution = typeof chainExecutions.$inferSelect;
 
 export const codeGenerationSessions = sqliteTable('code_generation_sessions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  userId: integer('user_id'),
+  userId: text('user_id'), // Changed from integer to text for UUID support
   workspaceId: integer('workspace_id').references(() => workspaces.id),
   inputPrompt: text('input_prompt').notNull(),
   generatedCode: text('generated_code').notNull(),
   status: text('status').default('pending'),
   metadata: text('metadata').default('{}'), // JSON stored as text
   createdAt: text('created_at'),
-  completedAt: text('completed_at'),
   title: text('title').notNull(),
   description: text('description'),
   updatedAt: text('updated_at').notNull(),
