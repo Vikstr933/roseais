@@ -3,7 +3,8 @@
     "allow": [
       "Bash(node:*)",
       "Bash(npm run dev:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
