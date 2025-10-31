@@ -38,6 +38,7 @@ import pluginsRouter from './routes/plugins';
 import workspaceSessionsRouter from './routes/workspace';
 import healthRouter from './routes/health';
 import adminRouter from './routes/admin';
+import activityRouter from './routes/activity';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -308,6 +309,7 @@ const initializeApp = async () => {
     app.use('/api/stripe', stripeRouter); // Stripe payment routes
     app.use('/api/plugins', pluginsRouter); // Plugin system routes
     app.use('/api/workspace-sessions', workspaceSessionsRouter); // Workspace session persistence
+    app.use('/api/activity', activityRouter); // User activity tracking routes
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
 
     app.get('/api/sse/agent-activity', (req, res) => {

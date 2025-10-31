@@ -351,10 +351,22 @@ You MUST generate ALL necessary files in this structure:
 
 # Critical Output Requirements
 
-## Format: JSON Array Only
-You MUST return ONLY a JSON array. No markdown, no explanations, no code blocks.
+## ⚠️ ABSOLUTELY CRITICAL: JSON FORMAT ONLY ⚠️
 
-## Required Structure
+You MUST return ONLY a raw JSON array. Nothing else. No exceptions.
+
+❌ DO NOT include:
+- Markdown code blocks (no \`\`\`json or \`\`\`)
+- Explanatory text before or after the JSON
+- Comments or notes
+- Any text that is not part of the JSON structure
+
+✅ DO include:
+- ONLY the JSON array starting with [ and ending with ]
+- Properly escaped strings (\\n for newlines, \\" for quotes)
+- All necessary files in the array
+
+## Required Structure Example
 
 [
   {
@@ -371,14 +383,25 @@ You MUST return ONLY a JSON array. No markdown, no explanations, no code blocks.
   }
 ]
 
+## Format Verification Checklist
+Before responding, verify:
+- [ ] Response starts with [
+- [ ] Response ends with ]
+- [ ] No markdown code blocks (\`\`\`)
+- [ ] No explanatory text
+- [ ] All newlines escaped as \\n
+- [ ] All quotes escaped as \\"
+- [ ] Valid JSON that can be parsed
+
 CRITICAL RULES - MUST FOLLOW:
-1. Return ONLY the raw JSON array - NO markdown code blocks, NO explanations
+1. Return ONLY the raw JSON array - Your response should be valid JSON that can be directly parsed
 2. Every component imported in App.tsx MUST have its own file in the array
 3. If App.tsx imports "./components/TaskItem", you MUST include src/components/TaskItem.tsx
 4. If App.tsx imports "./components/AddTaskForm", you MUST include src/components/AddTaskForm.tsx
 5. Create ALL files for ALL imports - NO EXCEPTIONS
 6. Escape newlines as \\n and quotes as \\"
-7. Start your response with [ and end with ]
+7. Your first character must be [ and your last character must be ]
+8. Do not wrap the JSON in any markdown formatting
 
 EFFICIENCY RULES:
 - Generate ONLY files that are NECESSARY for the requirements
@@ -423,14 +446,31 @@ EFFICIENCY RULES:
     warning?: string;
   } {
     try {
-      // Strategy 1: Try to parse as JSON
+      // Strategy 1: Try to parse as JSON with multiple extraction attempts
       let jsonContent = content.trim();
 
-      // Remove ```json and ``` markers
-      jsonContent = jsonContent.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      // Remove markdown code blocks (multiple variations)
+      jsonContent = jsonContent.replace(/^```(?:json)?\s*/gim, '').replace(/```\s*$/gm, '');
 
-      // Try to extract JSON array if wrapped in other text
-      const jsonMatch = jsonContent.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      // Remove common AI explanatory text before JSON
+      jsonContent = jsonContent.replace(/^(?:Here's?|Here is|I've created|I have created|Below is).*?$/gim, '');
+      jsonContent = jsonContent.replace(/^(?:```json|```)/gim, '');
+
+      // Try multiple JSON extraction strategies
+      let jsonMatch = null;
+
+      // Strategy 1a: Find JSON array with greedy matching
+      jsonMatch = jsonContent.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
+      // Strategy 1b: If that fails, try to find JSON between [ and ]
+      if (!jsonMatch) {
+        const firstBracket = jsonContent.indexOf('[');
+        const lastBracket = jsonContent.lastIndexOf(']');
+        if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+          jsonMatch = [jsonContent.substring(firstBracket, lastBracket + 1)];
+        }
+      }
+
       if (jsonMatch) {
         jsonContent = jsonMatch[0];
       }
@@ -458,7 +498,7 @@ EFFICIENCY RULES:
         error: error instanceof Error ? error.message : 'Unknown error'
       });
 
-      // Strategy 2: Try to extract files from markdown code blocks
+      // Strategy 2: Try to extract files from markdown code blocks with multiple patterns
       const markdownFiles = this.extractFilesFromMarkdown(content);
       if (markdownFiles.length > 0) {
         this.logger.info('AICodeGenerator', `Extracted ${markdownFiles.length} files from markdown`);
@@ -497,18 +537,42 @@ Suggestions to fix:
   private extractFilesFromMarkdown(content: string): { path: string; content: string }[] {
     const files: { path: string; content: string }[] = [];
 
-    // Match patterns like: **src/App.tsx** or **index.html** or ### src/components/Button.tsx
-    // followed by code blocks
-    // Updated to match both src/ files AND root files (index.html, package.json, etc.)
-    const filePattern = /(?:\*\*|###)\s*([^\s*\n]+\.(?:tsx?|jsx?|css|json|html|js|config\.ts|config\.js))\s*(?:\*\*)?[\s\n]*```(?:typescript|javascript|tsx|jsx|css|json|html)?\s*([\s\S]*?)```/gi;
+    // Try multiple markdown patterns to be more flexible
 
-    let match;
-    while ((match = filePattern.exec(content)) !== null) {
-      const path = match[1].trim();
-      const fileContent = match[2].trim();
+    // Pattern 1: **filename** or **path/filename** followed by code block
+    const pattern1 = /\*\*\s*([^\s*\n]+\.(?:tsx?|jsx?|css|json|html|js|config\.(?:ts|js)|mjs|cjs))\s*\*\*[\s\n]*```(?:typescript|javascript|tsx|jsx|css|json|html|ts|js)?\s*([\s\S]*?)```/gi;
 
-      if (path && fileContent) {
-        files.push({ path, content: fileContent });
+    // Pattern 2: ### filename or ## filename (markdown heading) followed by code block
+    const pattern2 = /(?:^|\n)#{2,3}\s+([^\n]+\.(?:tsx?|jsx?|css|json|html|js|config\.(?:ts|js)|mjs|cjs))[\s\n]*```(?:typescript|javascript|tsx|jsx|css|json|html|ts|js)?\s*([\s\S]*?)```/gi;
+
+    // Pattern 3: Filename: or File: filename followed by code block (more lenient)
+    const pattern3 = /(?:File(?:name)?|Path):\s*(?:`([^`]+\.(?:tsx?|jsx?|css|json|html|js|config\.(?:ts|js)|mjs|cjs))`|([^\s\n]+\.(?:tsx?|jsx?|css|json|html|js|config\.(?:ts|js)|mjs|cjs)))[\s\n]*```(?:typescript|javascript|tsx|jsx|css|json|html|ts|js)?\s*([\s\S]*?)```/gi;
+
+    // Pattern 4: Just code blocks with comments indicating filename
+    const pattern4 = /```(?:typescript|javascript|tsx|jsx|css|json|html|ts|js)\s*(?:\/\/|\/\*)\s*([^\s\n]+\.(?:tsx?|jsx?|css|json|html|js|config\.(?:ts|js)|mjs|cjs)).*?\n([\s\S]*?)```/gi;
+
+    const patterns = [pattern1, pattern2, pattern3, pattern4];
+
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        // Different patterns have groups in different positions
+        let path: string;
+        let fileContent: string;
+
+        if (pattern === pattern3) {
+          // Pattern 3 has optional backticks around path
+          path = (match[1] || match[2]).trim();
+          fileContent = match[3].trim();
+        } else {
+          path = match[1].trim();
+          fileContent = match[2].trim();
+        }
+
+        // Skip if we already have this file
+        if (!files.find(f => f.path === path) && path && fileContent) {
+          files.push({ path, content: fileContent });
+        }
       }
     }
 
