@@ -15,6 +15,8 @@
  */
 
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { agentExecutor, AgentExecutionContext } from './AgentExecutor';
+import { ComponentFeatures, GeneratedFile } from '../utils/types';
 
 const logger = new SimpleLogger('SmartOrchestrator');
 
@@ -26,6 +28,9 @@ interface SmartOrchestrationConfig {
     maxDuration?: number;
   };
   userId?: string;
+  sessionId?: string;
+  componentName?: string;
+  features?: ComponentFeatures;
 }
 
 interface Agent {
@@ -50,6 +55,7 @@ interface CachedResult {
 interface OrchestrationResult {
   success: boolean;
   output: any;
+  files?: GeneratedFile[];
   metadata: {
     agentsUsed: string[];
     totalCost: number;
@@ -57,6 +63,12 @@ interface OrchestrationResult {
     fromCache: boolean;
     complexity: string;
     parallelWaves: number;
+    estimatedSavings?: {
+      costSavings: number;
+      costSavingsPercent: number;
+      timeSavings: number;
+      timeSavingsPercent: number;
+    };
   };
 }
 
@@ -118,7 +130,28 @@ export class SmartOrchestrator {
     const result = await this.execute(executionPlan, config);
 
     const duration = Date.now() - startTime;
-    const totalCost = this.calculateCost(agentsWithContext, complexity);
+
+    // Calculate real costs from agent execution results
+    const metrics = agentExecutor.calculateMetrics(result.allResults);
+    const totalCost = metrics.totalCost;
+
+    // Calculate estimated savings vs legacy orchestration (all 7 agents)
+    const legacyCost = this.calculateLegacyCost(complexity);
+    const legacyDuration = this.calculateLegacyDuration(complexity);
+    const estimatedSavings = {
+      costSavings: legacyCost - totalCost,
+      costSavingsPercent: Math.round(((legacyCost - totalCost) / legacyCost) * 100),
+      timeSavings: legacyDuration - duration,
+      timeSavingsPercent: Math.round(((legacyDuration - duration) / legacyDuration) * 100)
+    };
+
+    logger.info('Smart orchestration complete', {
+      complexity,
+      agentsUsed: agents.length,
+      totalCost: `$${totalCost.toFixed(4)}`,
+      duration: `${duration}ms`,
+      savings: `${estimatedSavings.costSavingsPercent}% cheaper, ${estimatedSavings.timeSavingsPercent}% faster`
+    });
 
     // 8. Cache result for future use
     this.cache.set(cacheKey, {
@@ -140,19 +173,22 @@ export class SmartOrchestrator {
       totalCost,
       duration,
       fromCache: false,
-      parallelWaves: executionPlan.waves.length
+      parallelWaves: executionPlan.waves.length,
+      estimatedSavings
     });
 
     return {
-      success: true,
+      success: result.success,
       output: result.output,
+      files: result.files,
       metadata: {
         agentsUsed: agents.map(a => a.type),
         totalCost,
         duration,
         fromCache: false,
         complexity,
-        parallelWaves: executionPlan.waves.length
+        parallelWaves: executionPlan.waves.length,
+        estimatedSavings
       }
     };
   }
@@ -339,105 +375,99 @@ export class SmartOrchestrator {
    * Execute agents in parallel waves
    * This is where we get 40-50% speed improvement!
    */
-  private async execute(plan: ExecutionGraph, config: SmartOrchestrationConfig): Promise<any> {
-    let previousResult: any = { prompt: config.prompt };
+  private async execute(plan: ExecutionGraph, config: SmartOrchestrationConfig): Promise<{
+    success: boolean;
+    output: any;
+    files: GeneratedFile[];
+    allResults: any[];
+  }> {
+    // Create SharedMemory for agent communication
+    const sessionId = config.sessionId || `smart-${Date.now()}`;
+    const workflowId = `smart-${sessionId}`;
+    const sharedMemory = agentExecutor.createSharedMemory(sessionId);
+
+    // Store features in shared memory
+    const features: ComponentFeatures = config.features || {
+      name: config.componentName || 'GeneratedComponent',
+      features: [],
+      styling: { animations: false, theme: 'light' }
+    };
+    sharedMemory.set('features', features);
+    sharedMemory.set('prompt', config.prompt);
+
+    const allResults: any[] = [];
 
     // Execute wave by wave
     for (let i = 0; i < plan.waves.length; i++) {
       const wave = plan.waves[i];
       logger.info(`Executing wave ${i + 1}/${plan.waves.length} with ${wave.length} agents in parallel`);
 
+      // Prepare execution contexts for all agents in this wave
+      const agentExecutions = wave.map(agent => ({
+        type: agent.type,
+        context: {
+          prompt: config.prompt,
+          features,
+          sessionId,
+          workflowId,
+          phase: i + 1,
+          model: agent.model || 'claude-sonnet-4-20250514',
+          context: agent.context || [],
+          sharedMemory,
+        } as AgentExecutionContext
+      }));
+
       // Run all agents in this wave in PARALLEL!
-      const results = await Promise.all(
-        wave.map(agent => this.executeAgent(agent, previousResult, config))
-      );
+      const waveResults = await agentExecutor.executeAgentsInParallel(agentExecutions);
+      allResults.push(...waveResults);
 
-      // Merge results for next wave
-      previousResult = this.mergeResults(previousResult, results);
+      logger.debug(`Wave ${i + 1} complete`, {
+        agentsExecuted: waveResults.length,
+        totalCost: waveResults.reduce((sum, r) => sum + r.cost, 0)
+      });
     }
 
+    // Merge all results
+    const finalResult = agentExecutor.mergeAgentResults(allResults);
+
     return {
-      success: true,
-      output: previousResult
+      success: finalResult.success,
+      output: finalResult,
+      files: finalResult.files || [],
+      allResults
     };
   }
 
-  /**
-   * Execute a single agent
-   * TODO: Connect this to your actual agent execution logic
-   */
-  private async executeAgent(
-    agent: Agent,
-    previousResult: any,
-    config: SmartOrchestrationConfig
-  ): Promise<any> {
-    logger.info(`Executing ${agent.type} with ${agent.model}`);
-    logger.debug('Agent config', {
-      type: agent.type,
-      model: agent.model,
-      contextCount: agent.context?.length || 0
-    });
-
-    // Simulate agent execution (replace with actual agent code)
-    // TODO: Call your actual agent execution here
-    // const result = await YourAgentService.execute({
-    //   type: agent.type,
-    //   model: agent.model,
-    //   context: agent.context,
-    //   input: previousResult,
-    //   userId: config.userId
-    // });
-
-    // Placeholder - replace with actual implementation
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    return {
-      agentType: agent.type,
-      success: true,
-      output: `Output from ${agent.type}`,
-      model: agent.model,
-      contextUsed: agent.context?.length || 0
-    };
-  }
 
   /**
-   * Merge results from parallel agents
+   * Calculate legacy orchestration cost (all 7 agents with Sonnet)
    */
-  private mergeResults(previous: any, results: any[]): any {
-    return {
-      ...previous,
-      agentResults: [
-        ...(previous.agentResults || []),
-        ...results
-      ]
-    };
-  }
-
-  /**
-   * Calculate estimated cost based on agents and complexity
-   */
-  private calculateCost(agents: Agent[], complexity: string): number {
-    const costs = {
-      'claude-haiku-4-20250514': 0.001,  // Per 1M tokens
-      'claude-sonnet-4-20250514': 0.015  // Per 1M tokens
-    };
-
+  private calculateLegacyCost(complexity: string): number {
+    const sonnetCostPer1M = 3.00;  // $3 per 1M tokens
     const tokensPerAgent = {
-      simple: 1000,
-      medium: 3000,
-      complex: 5000
+      simple: 10000,    // Legacy is less efficient
+      medium: 25000,
+      complex: 40000
     };
 
-    let totalCost = 0;
-    const tokens = tokensPerAgent[complexity as keyof typeof tokensPerAgent] || 3000;
+    const tokens = tokensPerAgent[complexity as keyof typeof tokensPerAgent] || 25000;
+    // Legacy always uses 7 agents with Sonnet
+    return (tokens * 7 / 1_000_000) * sonnetCostPer1M;
+  }
 
-    for (const agent of agents) {
-      const model = agent.model || 'claude-sonnet-4-20250514';
-      const costPer1M = costs[model as keyof typeof costs] || costs['claude-sonnet-4-20250514'];
-      totalCost += (tokens / 1_000_000) * costPer1M;
-    }
+  /**
+   * Calculate legacy orchestration duration (sequential execution)
+   */
+  private calculateLegacyDuration(complexity: string): number {
+    const durationPerAgent = {
+      simple: 6500,    // 6.5s per agent
+      medium: 8000,    // 8s per agent
+      complex: 10000   // 10s per agent
+    };
 
-    return totalCost;
+    const duration = durationPerAgent[complexity as keyof typeof durationPerAgent] || 8000;
+    // Legacy runs 7 agents sequentially
+    return duration * 7;
   }
 
   /**
