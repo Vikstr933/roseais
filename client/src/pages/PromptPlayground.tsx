@@ -160,6 +160,7 @@ export default function PromptPlayground() {
     currentSession,
     createSession,
     addChatMessage,
+    clearChat,
     updateGeneratedFiles,
     isSaving,
     lastSaved
@@ -1873,7 +1874,12 @@ export default function PromptPlayground() {
             {/* Sessions Tab */}
             {activeTab === 'sessions' && (
               <div className="h-full overflow-hidden">
-                <SessionHistory />
+                <SessionHistory
+                  onSessionDeleted={(sessionId) => {
+                    // Clear chat history when a session is deleted
+                    clearChat();
+                  }}
+                />
               </div>
             )}
 

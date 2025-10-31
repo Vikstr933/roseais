@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../../db';
-import { codeGenerationSessions } from '../../db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { codeGenerationSessions, chatMessages } from '../../db/schema';
+import { desc, eq, and } from 'drizzle-orm';
 
 const router = Router();
 
@@ -75,16 +75,41 @@ router.post('/', async (req, res) => {
 // Delete session by ID
 router.delete('/:id', async (req, res) => {
   try {
+    // First, get the session to know its workspaceId
+    const [session] = await db
+      .select()
+      .from(codeGenerationSessions)
+      .where(eq(codeGenerationSessions.id, req.params.id))
+      .limit(1);
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Optionally delete chat messages for this workspace
+    // This helps keep the database clean when sessions are deleted
+    if (session.workspaceId) {
+      try {
+        await db
+          .delete(chatMessages as any)
+          .where(eq((chatMessages as any).projectId, session.workspaceId));
+        console.log(`Deleted chat messages for workspace ${session.workspaceId}`);
+      } catch (chatError) {
+        console.error('Error deleting chat messages:', chatError);
+        // Continue even if chat deletion fails
+      }
+    }
+
+    // Delete the session
     const result = await db
       .delete(codeGenerationSessions)
       .where(eq(codeGenerationSessions.id, req.params.id))
       .returning();
 
-    if (!result.length) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    res.json({ message: 'Session deleted successfully' });
+    res.json({
+      message: 'Session deleted successfully',
+      deletedChatMessages: session.workspaceId ? true : false
+    });
   } catch (error) {
     console.error('Error deleting session:', error);
     res.status(500).json({ error: 'Failed to delete session' });

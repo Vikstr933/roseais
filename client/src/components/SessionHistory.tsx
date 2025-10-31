@@ -37,9 +37,13 @@ interface Session {
   status: string;
 }
 
+interface SessionHistoryProps {
+  onSessionDeleted?: (sessionId: string) => void;
+}
+
 const ITEMS_PER_PAGE = 10;
 
-export default function SessionHistory() {
+export default function SessionHistory({ onSessionDeleted }: SessionHistoryProps = {}) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +89,10 @@ export default function SessionHistory() {
       setSessions(sessions.filter(session => session.id !== sessionId));
       if (selectedSession?.id === sessionId) {
         setSelectedSession(null);
+      }
+      // Notify parent component to clear chat history
+      if (onSessionDeleted) {
+        onSessionDeleted(sessionId);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete session');
