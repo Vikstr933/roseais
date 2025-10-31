@@ -142,21 +142,22 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
       return;
     }
 
-    const increment = targetProgress > animatedProgress ? 1 : 0;
-    if (increment === 0) return;
-
     const interval = setInterval(() => {
       setAnimatedProgress(prev => {
         // Increment by 1% at a time for smooth animation
         if (prev < targetProgress) {
           return Math.min(prev + 1, targetProgress);
         }
+        // Clear interval when target is reached
+        if (prev >= targetProgress) {
+          clearInterval(interval);
+        }
         return prev;
       });
     }, 30); // Update every 30ms for smooth visual effect
 
     return () => clearInterval(interval);
-  }, [targetProgress, animatedProgress]);
+  }, [targetProgress]); // Remove animatedProgress from dependencies to prevent infinite loop
 
   return (
     <div className="relative h-[700px] flex items-center justify-center overflow-hidden">
