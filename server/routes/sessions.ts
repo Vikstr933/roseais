@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../../db';
-import { codeGenerationSessions, chatMessages } from '../../db/schema';
+import { codeGenerationSessions } from '../../db/schema';
+import { chatMessages } from '../../db/schema-pg';
 import { desc, eq, and } from 'drizzle-orm';
 
 const router = Router();
