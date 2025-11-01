@@ -111,6 +111,10 @@ export class AICodeGenerator {
         throw new Error('AI generated no files');
       }
 
+      // Automatically fix common syntax issues
+      parseResult.files = this.autoFixCommonSyntaxIssues(parseResult.files);
+      console.log('🔧 Applied automatic syntax fixes to generated code');
+
       // Extract all dependencies from all files
       const dependencies = this.extractDependenciesFromFiles(parseResult.files);
 
@@ -713,6 +717,60 @@ Suggestions to fix:
     });
 
     return files;
+  }
+
+  /**
+   * Automatically fix common syntax issues that AI consistently makes
+   */
+  private autoFixCommonSyntaxIssues(files: { path: string; content: string }[]): { path: string; content: string }[] {
+    return files.map(file => {
+      // Only fix TypeScript/JavaScript files
+      if (!file.path.match(/\.(tsx?|jsx?)$/)) {
+        return file;
+      }
+
+      let content = file.content;
+      let fixesApplied = 0;
+
+      // Fix 1: Add missing semicolons after return statements
+      // Match: return (...); that is missing the semicolon
+      const returnPattern = /(return\s*\([^)]*\)|return\s*<[^>]*>(?:[^<]|<[^/])*<\/[^>]*>|return\s+[^;\n]+)\s*$/gm;
+      content = content.replace(returnPattern, (match) => {
+        if (!match.trim().endsWith(';')) {
+          fixesApplied++;
+          return match.trim() + ';';
+        }
+        return match;
+      });
+
+      // Fix 2: Add missing semicolons after export statements
+      // Match: export const/function/interface/type that is missing semicolon
+      const exportPattern = /(export\s+(?:const|let|var|function|interface|type|enum)\s+[^;]+)\s*$/gm;
+      content = content.replace(exportPattern, (match) => {
+        if (!match.trim().endsWith(';') && !match.trim().endsWith('}')) {
+          fixesApplied++;
+          return match.trim() + ';';
+        }
+        return match;
+      });
+
+      // Fix 3: Add missing semicolons after arrow function declarations
+      // Match: const foo = (...) => ... that is missing semicolon
+      const arrowFuncPattern = /((?:const|let|var)\s+\w+\s*=\s*\([^)]*\)\s*=>\s*[^;{]+)\s*$/gm;
+      content = content.replace(arrowFuncPattern, (match) => {
+        if (!match.trim().endsWith(';') && !match.trim().endsWith('{')) {
+          fixesApplied++;
+          return match.trim() + ';';
+        }
+        return match;
+      });
+
+      if (fixesApplied > 0) {
+        console.log(`🔧 Fixed ${fixesApplied} syntax issues in ${file.path}`);
+      }
+
+      return { ...file, content };
+    });
   }
 
   private stripLocalImports(code: string): string {
