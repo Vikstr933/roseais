@@ -27,7 +27,7 @@ import {
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { ChatMessage } from "../components/ChatMessage";
@@ -1484,10 +1484,23 @@ export default function PromptPlayground() {
           <div className="w-[25%] min-w-[280px] max-w-[400px] lg:w-[28%] xl:w-[30%] border-r border-border flex flex-col bg-card relative">
           {/* Chat Header */}
           <div className="p-4 border-b border-border flex-shrink-0 bg-card relative z-10">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Brain className="h-5 w-5" />
-              AI Assistant
-                  </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                AI Assistant
+              </h2>
+              {chatHistory.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearChat}
+                  className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  title="Clear chat history"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground mt-1">
               Describe what you want to build
             </p>
