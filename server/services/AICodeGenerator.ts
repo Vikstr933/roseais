@@ -430,7 +430,35 @@ EFFICIENCY RULES:
 - DON'T create extra components, hooks, or utilities "just in case"
 - DON'T add features not explicitly requested
 - Keep the file structure simple and focused on the core requirement
-- If the app can work with fewer files, use fewer files`;
+- If the app can work with fewer files, use fewer files
+
+## FINAL SYNTAX CHECKLIST (CHECK EVERY FILE BEFORE RESPONDING):
+⚠️ CRITICAL - Your code is being automatically validated. If any of these fail, the entire generation fails:
+
+1. SEMICOLONS: Every statement MUST end with a semicolon
+   ✅ CORRECT: return (<div>Hello</div>);
+   ❌ WRONG: return (<div>Hello</div>)
+   ✅ CORRECT: export const foo = (): string => "bar";
+   ❌ WRONG: export const foo = (): string => "bar"
+
+2. IMPORTS MUST HAVE FILES: If you write import X from '../types', you MUST include src/types/index.ts
+   Example: If your file has: import { Position } from '../types';
+   Then your JSON MUST include: { "path": "src/types/index.ts", "content": "export interface Position {...}" }
+
+3. COMPLETE STATEMENTS: No incomplete or truncated code
+   ✅ Every function must have a body
+   ✅ Every JSX element must be closed
+   ✅ Every brace/bracket/paren must be balanced
+
+4. NO MARKDOWN: First character of your response MUST be [, last character MUST be ]
+   ❌ Do NOT start with: \`\`\`json
+   ✅ Start with: [
+
+Before you respond, mentally go through EVERY file and check:
+- Does every return statement end with semicolon?
+- Does every export statement end with semicolon?
+- Does every import have a corresponding file in my JSON array?
+- Is every JSX element properly closed?`;
   }
 
   private buildUserPromptMultiFile(request: AIGenerationRequest): string {
@@ -471,12 +499,21 @@ EFFICIENCY RULES:
       // Strategy 1: Try to parse as JSON with multiple extraction attempts
       let jsonContent = content.trim();
 
-      // Remove markdown code blocks (multiple variations)
-      jsonContent = jsonContent.replace(/^```(?:json)?\s*/gim, '').replace(/```\s*$/gm, '');
+      // Remove markdown code blocks - be aggressive
+      // Handle cases like: ```json\n[...]\n```
+      if (jsonContent.includes('```')) {
+        // Extract content between first and last ```
+        const codeBlockMatch = jsonContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+        if (codeBlockMatch && codeBlockMatch[1]) {
+          jsonContent = codeBlockMatch[1].trim();
+        } else {
+          // Fallback: just remove all ``` markers
+          jsonContent = jsonContent.replace(/```(?:json)?/g, '').trim();
+        }
+      }
 
       // Remove common AI explanatory text before JSON
-      jsonContent = jsonContent.replace(/^(?:Here's?|Here is|I've created|I have created|Below is).*?$/gim, '');
-      jsonContent = jsonContent.replace(/^(?:```json|```)/gim, '');
+      jsonContent = jsonContent.replace(/^(?:Here's?|Here is|I've created|I have created|Below is).*?\n/gim, '');
 
       // Try multiple JSON extraction strategies
       let jsonMatch = null;
