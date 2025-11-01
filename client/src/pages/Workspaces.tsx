@@ -122,8 +122,8 @@ function WorkspacesContent() {
         title: 'Workspace Deleted',
         description: 'The workspace has been permanently deleted.',
       });
-      // Refetch to confirm deletion from server
-      queryClient.invalidateQueries({ queryKey: ['/api/workspaces'] });
+      // No need to refetch - optimistic update already removed it from UI
+      // Refetching too quickly can cause the deleted workspace to briefly reappear
     },
     onError: (error, workspaceId, context) => {
       // Roll back to previous state if delete failed
