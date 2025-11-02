@@ -622,10 +622,12 @@ async function generateWithAI(
 
     if (await isComponentRequest(prompt)) {
       const response = await aiCodeGenerator.generateComponent({
-        prompt: `${systemPrompt}\n\n${COMPONENT_FORMAT_GUIDELINES}\n\n${prompt}`,
+        prompt,  // Use orchestrator's prompt directly (it already includes all context)
         componentName: 'GeneratedComponent',
         features: [],
         styling: { animations: false, theme: 'light' },
+        orchestrated: true,  // Signal: skip internal prompt building to avoid double-prompting
+        systemPrompt,  // Pass orchestrator's system prompt
       });
 
       // Use files from AICodeGenerator - it already parsed them correctly!
@@ -676,10 +678,12 @@ async function generateWithAI(
     }
 
     const response = await aiCodeGenerator.generateComponent({
-      prompt: `${systemPrompt}\n\n${prompt}`,
+      prompt,  // Use orchestrator's prompt directly
       componentName: 'GeneratedText',
       features: [],
       styling: { animations: false, theme: 'light' },
+      orchestrated: true,  // Signal: skip internal prompt building
+      systemPrompt,  // Pass orchestrator's system prompt
     });
 
     return {
@@ -1543,7 +1547,28 @@ Return the corrected files:`;
             }
           } catch (fixError) {
             console.error('❌ Error fixing failed:', fixError);
-            // Continue with original files
+
+            // CRITICAL: Do NOT continue with broken code if fix attempt throws error
+            sendSSEUpdate(req, 'GENERATION_FAILED', {
+              error: 'Code validation failed and automatic fix attempt threw an error',
+              errors: validation.errors,
+              fixError: fixError instanceof Error ? fixError.message : String(fixError),
+              message: 'Unable to generate working code. The AI encountered an error while trying to fix validation issues.'
+            });
+
+            setAgentsActive(false);
+
+            return res.status(500).json({
+              error: 'Code generation and validation failed',
+              details: {
+                validationErrors: validation.errors,
+                fixAttemptError: fixError instanceof Error ? fixError.message : String(fixError)
+              },
+              response: {
+                type: 'text',
+                text: `❌ Code generation failed:\n\nValidation errors:\n${validation.errors.join('\n')}\n\nAutomatic fix attempt also failed.\n\nPlease try again with a clearer, more specific prompt.`
+              }
+            });
           }
         } else {
           console.log('✅ Component QA: Validation passed');

@@ -14,6 +14,8 @@ export interface AIGenerationRequest {
   context?: string;
   modelPreference?: 'speed' | 'quality' | 'cost';
   provider?: 'anthropic' | 'openai' | 'gemini' | 'auto';
+  orchestrated?: boolean; // If true, skip internal prompt building (orchestrator already built prompts)
+  systemPrompt?: string; // Optional pre-built system prompt from orchestrator
 }
 
 export interface AIGenerationResponse {
@@ -54,7 +56,8 @@ export class AICodeGenerator {
       console.log('📝 AICodeGenerator: Request:', {
         componentName: request.componentName,
         features: request.features,
-        promptLength: request.prompt.length
+        promptLength: request.prompt.length,
+        orchestrated: request.orchestrated || false
       });
 
       this.logger.info('AICodeGenerator', 'Generating component with multi-model AI', {
@@ -62,15 +65,32 @@ export class AICodeGenerator {
         features: request.features,
         provider: request.provider || 'auto',
         preference: request.modelPreference || 'quality',
+        orchestrated: request.orchestrated || false
       });
 
-      console.log('🏗️ AICodeGenerator: Building prompts');
-      const systemPrompt = this.buildSystemPromptMultiFile(request);
-      const userPrompt = this.buildUserPromptMultiFile(request);
-      console.log('📊 AICodeGenerator: Prompt sizes:', {
-        system: systemPrompt.length,
-        user: userPrompt.length
-      });
+      let systemPrompt: string;
+      let userPrompt: string;
+
+      if (request.orchestrated) {
+        // PASS-THROUGH MODE: Orchestrator already built comprehensive prompts
+        // Use them directly to avoid double-prompting confusion
+        console.log('🎯 AICodeGenerator: ORCHESTRATED MODE - Using pre-built prompts');
+        systemPrompt = request.systemPrompt || '';
+        userPrompt = request.prompt; // Use orchestrator's prompt exactly as-is
+        console.log('📊 AICodeGenerator: Orchestrated prompt sizes:', {
+          system: systemPrompt.length,
+          user: userPrompt.length
+        });
+      } else {
+        // LEGACY MODE: Build prompts internally (for direct calls not from orchestrator)
+        console.log('🏗️ AICodeGenerator: LEGACY MODE - Building prompts internally');
+        systemPrompt = this.buildSystemPromptMultiFile(request);
+        userPrompt = this.buildUserPromptMultiFile(request);
+        console.log('📊 AICodeGenerator: Built prompt sizes:', {
+          system: systemPrompt.length,
+          user: userPrompt.length
+        });
+      }
 
       // Use multi-model AI service
       const aiRequest: AIRequest = {
@@ -111,13 +131,34 @@ export class AICodeGenerator {
         throw new Error('AI generated no files');
       }
 
-      // CRITICAL: Validate that files don't contain JSON structures
+      // STEP 1: Fix syntax issues FIRST (before validation)
+      // This ensures patterns like "return (;" get fixed before validation throws errors
+      console.log('🔧 Applying automatic syntax fixes to generated code...');
+      parseResult.files = this.autoFixCommonSyntaxIssues(parseResult.files);
+      console.log('✅ Syntax fixes applied');
+
+      // STEP 2: THEN validate that files don't contain JSON structures
       console.log('🔍 Validating file contents...');
       parseResult.files = parseResult.files.map(file => {
-        // Check if content looks like JSON (starts with [ or { after trimming)
         const trimmed = file.content.trim();
-        if ((trimmed.startsWith('[') || trimmed.startsWith('{')) &&
-            (trimmed.includes('"path"') || trimmed.includes('"content"'))) {
+
+        // IMPROVED: More precise JSON-inside-JSON detection
+        // Only flag if it looks like the ENTIRE file is our multi-file JSON structure
+        // Not just TypeScript code that happens to have "path" or "content" fields
+
+        // Pattern 1: File is a JSON array like: [{"path": "...", "content": "..."}]
+        const looksLikeFileArray = trimmed.startsWith('[') &&
+          /^\s*\[\s*\{\s*"path"\s*:\s*"[^"]+"\s*,\s*"content"\s*:/.test(trimmed) &&
+          trimmed.endsWith(']');
+
+        // Pattern 2: File is a single JSON object like: {"path": "...", "content": "..."}
+        const looksLikeSingleFileObject = /^\s*\{\s*"path"\s*:\s*"[^"]+"\s*,\s*"content"\s*:\s*"/.test(trimmed) &&
+          !trimmed.includes('export') && // TypeScript exports are NOT JSON
+          !trimmed.includes('interface') && // TypeScript interfaces are NOT JSON
+          !trimmed.includes('type') && // TypeScript types are NOT JSON
+          !trimmed.includes('import'); // TypeScript imports are NOT JSON
+
+        if (looksLikeFileArray || looksLikeSingleFileObject) {
           console.error(`❌ CRITICAL ERROR: ${file.path} contains JSON structure instead of code!`);
           console.error(`First 500 chars: ${trimmed.substring(0, 500)}`);
 
@@ -144,10 +185,7 @@ export class AICodeGenerator {
         }
         return file;
       });
-
-      // Automatically fix common syntax issues
-      parseResult.files = this.autoFixCommonSyntaxIssues(parseResult.files);
-      console.log('🔧 Applied automatic syntax fixes to generated code');
+      console.log('✅ File validation passed');
 
       // Extract all dependencies from all files
       const dependencies = this.extractDependenciesFromFiles(parseResult.files);

@@ -1215,15 +1215,49 @@ export default function PromptPlayground() {
       console.log('ðŸŽ¯ Generation response received:', data);
       console.log('ðŸ“ Files in response:', data.response?.files);
       
-      if (data.response.type === 'component' && data.response.files) {
+      // âœ… VALIDATION: Ensure response structure is valid
+      if (!data || !data.response) {
+        console.error('âŒ Invalid response structure:', data);
+        toast({
+          title: "Generation Error",
+          description: "Received invalid response from server. Please try again.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        addChatMessage({
+          role: 'assistant',
+          content: 'Error: Invalid response received from server. This is likely a system issue. Please try again.',
+          timestamp: Date.now()
+        });
+        return;
+      }
+
+      if (data.response.type === 'component') {
+        // âœ… VALIDATION: Check if files array exists and is non-empty
+        if (!data.response.files || data.response.files.length === 0) {
+          console.error('âŒ No files in component response');
+          toast({
+            title: "Generation Error",
+            description: "No files were generated. The AI response was malformed.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          addChatMessage({
+            role: 'assistant',
+            content: 'Error: No files were generated. This usually means:\n\n1. The AI response was malformed (JSON-inside-JSON bug)\n2. The prompt was unclear or too complex\n3. A validation error occurred\n\nTry:\n- Using a more specific, concrete prompt\n- Breaking complex requests into smaller steps\n- Checking the console for detailed error messages',
+            timestamp: Date.now()
+          });
+          return;
+        }
+
         // âœ¨ Display files one by one with animation - BOLT.NEW STYLE!
         const displayFiles = data.response.files.map(file => ({
           ...file,
           path: file.path.replace(/^workspaces\/[^/]+\//, '').replace(/^\/workspaces\/[^/]+\//, '')
         }));
-        
-        console.log('ðŸ“‚ Files to display:', displayFiles.length);
-        
+
+        console.log('ðŸ"‚ Files to display:', displayFiles.length);
+
         // Extract a better component name from the user's prompt
         const promptText = form.getValues('userPrompt');
         let componentName = 'App';
