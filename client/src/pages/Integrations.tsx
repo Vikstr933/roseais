@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus } from 'lucide-react';
 
 interface Plugin {
   id: string;
@@ -371,19 +371,28 @@ export default function Integrations() {
             Connect your productivity tools to enhance your AI assistant with contextual awareness
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            loadPlugins();
-            loadUserStatus();
-            setSuccess('Status refreshed');
-            setTimeout(() => setSuccess(null), 2000);
-          }}
-          disabled={loading}
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => window.location.href = '/plugin-generator'}
+            className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Generate Custom Plugin
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              loadPlugins();
+              loadUserStatus();
+              setSuccess('Status refreshed');
+              setTimeout(() => setSuccess(null), 2000);
+            }}
+            disabled={loading}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -409,6 +418,47 @@ export default function Integrations() {
 
         <TabsContent value="all" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Custom Plugin Generator Card */}
+            <Card className="border-2 border-dashed border-purple-300 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 hover:border-purple-400 transition-all cursor-pointer" onClick={() => window.location.href = '/plugin-generator'}>
+              <CardHeader>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                      Generate Custom Plugin
+                    </CardTitle>
+                    <Badge variant="outline" className="mt-1 border-purple-300">AI-Powered</Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="mb-4">
+                  Create custom integrations with Discord, Slack, Trello, and more using natural language.
+                  Just describe what you want and let AI build it for you!
+                </CardDescription>
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-purple-500" />
+                    Secure code generation
+                  </div>
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-purple-500" />
+                    Multi-layer security analysis
+                  </div>
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-purple-500" />
+                    Sandboxed execution
+                  </div>
+                </div>
+                <Button className="w-full mt-4 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600" onClick={(e) => { e.stopPropagation(); window.location.href = '/plugin-generator'; }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your Plugin
+                </Button>
+              </CardContent>
+            </Card>
+
             {availablePlugins.map((plugin) => {
               const status = getPluginStatus(plugin.id);
               const enabled = isPluginEnabled(plugin.id);
