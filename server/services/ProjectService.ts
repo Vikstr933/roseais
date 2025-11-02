@@ -12,7 +12,7 @@ import {
   type ProjectActivity,
   type ProjectFile,
 } from '../../db/schema';
-import { eq, and, desc, or } from 'drizzle-orm';
+import { eq, and, desc, or, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface CreateProjectData {
@@ -260,16 +260,29 @@ export class ProjectService {
     files: Array<{ path: string; content: string }>,
     componentName: string
   ): Promise<void> {
-    // Save files to project
+    // Save files to project using UPSERT logic
+    // This prevents duplicates and updates existing files
     for (const file of files) {
-      await db.insert(projectFiles).values({
-        projectId,
-        filePath: file.path,
-        fileContent: file.content,
-        fileType: this.getFileType(file.path),
-        createdBy: userId,
-        lastModifiedBy: userId,
-      });
+      await db
+        .insert(projectFiles)
+        .values({
+          projectId,
+          filePath: file.path,
+          fileContent: file.content,
+          fileType: this.getFileType(file.path),
+          createdBy: userId,
+          lastModifiedBy: userId,
+          version: 1,
+        })
+        .onConflictDoUpdate({
+          target: [projectFiles.projectId, projectFiles.filePath],
+          set: {
+            fileContent: file.content,
+            lastModifiedBy: userId,
+            version: sql`${projectFiles.version} + 1`,
+            updatedAt: new Date(),
+          },
+        });
     }
 
     // Log export activity

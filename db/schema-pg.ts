@@ -1,4 +1,4 @@
-import { pgTable, text, integer, real, timestamp, boolean, serial, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, timestamp, boolean, serial, jsonb, unique } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { createInsertSchema, createSelectSchema } from 'drizzle-zod';
 
@@ -111,10 +111,17 @@ export const projectFiles = pgTable('project_files', {
   projectId: integer('project_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   filePath: text('file_path').notNull(),
   fileContent: text('file_content').notNull(),
+  fileType: text('file_type'),
+  createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+  lastModifiedBy: text('last_modified_by').references(() => users.id, { onDelete: 'set null' }),
+  version: integer('version').default(1),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   isActive: boolean('is_active').default(true),
-});
+}, (table) => ({
+  // Unique constraint to prevent duplicate files in same project
+  uniqueProjectFile: unique().on(table.projectId, table.filePath),
+}));
 
 export const chatMessages = pgTable('chat_messages', {
   id: serial('id').primaryKey(),

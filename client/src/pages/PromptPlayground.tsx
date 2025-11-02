@@ -1337,9 +1337,9 @@ export default function PromptPlayground() {
               }
             })
           }).catch(err => console.error('Failed to save AI message:', err));
-          
-          // Save generated files to project after all are displayed
-          setTimeout(() => {
+
+          // Save generated files to project immediately (no arbitrary delay)
+          if (currentProject?.id) {
             apiFetch(`/api/workspaces/${currentProject.id}/files`, {
               method: 'POST',
               headers: getAuthHeaders(sessionToken),
@@ -1348,9 +1348,35 @@ export default function PromptPlayground() {
                 componentName: componentName
               })
             })
-              .then(() => console.log('âœ… Files saved to project'))
-              .catch(err => console.error('Failed to save files to project:', err));
-          }, 600); // Small delay after files are displayed
+              .then(async (response) => {
+                if (response.ok) {
+                  console.log('âœ… Files saved to project');
+                  addChatMessage({
+                    role: 'assistant',
+                    content: `ðŸ'¾ Saved ${displayFiles.length} files to workspace`,
+                    timestamp: Date.now()
+                  });
+                } else {
+                  const error = await response.text();
+                  console.error('Failed to save files:', error);
+                  addChatMessage({
+                    role: 'assistant',
+                    content: `âš ï¸ Warning: Could not save files to workspace. Files are still available in this session. Error: ${error}`,
+                    timestamp: Date.now()
+                  });
+                }
+              })
+              .catch(err => {
+                console.error('Failed to save files to project:', err);
+                addChatMessage({
+                  role: 'assistant',
+                  content: `â š ï¸ Warning: Could not save files to workspace. Files are still available in this session. Please try regenerating.`,
+                  timestamp: Date.now()
+                });
+              });
+          } else {
+            console.warn('â š ï¸ No project ID - files will only be saved to session');
+          }
         }
       } else {
         // Merge text responses into chat without resetting state
