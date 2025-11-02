@@ -22,7 +22,7 @@ export function getApiUrl(path: string): string {
 }
 
 /**
- * Enhanced fetch wrapper that automatically uses the correct API URL
+ * Enhanced fetch wrapper that automatically uses the correct API URL and includes authentication
  * @param path - API endpoint path
  * @param options - Fetch options
  * @returns Fetch promise
@@ -30,12 +30,16 @@ export function getApiUrl(path: string): string {
 export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   const url = getApiUrl(path);
 
-  // Default headers
+  // Get auth token from localStorage
+  const token = localStorage.getItem('sessionToken');
+
+  // Default headers with automatic authentication
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  // Merge headers
+  // Merge headers (user-provided headers can override defaults)
   const headers = {
     ...defaultHeaders,
     ...options?.headers,
