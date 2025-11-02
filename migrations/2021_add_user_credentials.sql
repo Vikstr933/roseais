@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 CREATE INDEX idx_os_state ON oauth_states(state_token);
 CREATE INDEX idx_os_user ON oauth_states(user_id);
 
--- Cleanup expired states (run periodically)
-CREATE INDEX idx_os_expires ON oauth_states(expires_at) WHERE expires_at < CURRENT_TIMESTAMP;
+-- Index for expired states cleanup (queries will use WHERE expires_at < NOW())
+CREATE INDEX idx_os_expires ON oauth_states(expires_at);
 
 -- Add updated_at trigger for user_credentials
 CREATE TRIGGER update_user_credentials_updated_at BEFORE UPDATE ON user_credentials
