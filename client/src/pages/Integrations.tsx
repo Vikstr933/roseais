@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus, AlertTriangle, Code, Shield } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus, AlertTriangle, Code, Shield, Key, ExternalLink } from 'lucide-react';
 
 interface Plugin {
   id: string;
@@ -84,6 +84,10 @@ export default function Integrations() {
   const [serviceName, setServiceName] = useState('');
   const [complexity, setComplexity] = useState<'simple' | 'medium' | 'complex'>('simple');
   const [result, setResult] = useState<PluginGenerationResult | null>(null);
+
+  // Credential Dialog State
+  const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
+  const [credentialServiceName, setCredentialServiceName] = useState('');
 
   // Fetch plugin generation stats
   const { data: stats } = useQuery<GenerationStats>({
@@ -1047,6 +1051,34 @@ export default function Integrations() {
                     </div>
                   )}
 
+                  {/* Credential Requirement Alert */}
+                  {result.metadata.requiresAuth && (
+                    <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+                      <Key className="h-4 w-4 text-blue-600" />
+                      <AlertDescription className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                            Credentials Required
+                          </p>
+                          <p className="text-sm text-blue-700 dark:text-blue-300">
+                            This plugin needs {serviceName || 'service'} credentials (API keys, OAuth tokens, etc.) to function properly.
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => {
+                            setCredentialServiceName(serviceName || '');
+                            setCredentialDialogOpen(true);
+                          }}
+                          className="ml-4 bg-blue-600 hover:bg-blue-700"
+                          size="sm"
+                        >
+                          <Key className="w-4 h-4 mr-2" />
+                          Add Credentials
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   <div className="pt-4 border-t space-y-2">
                     <Button
                       onClick={() => {
@@ -1077,6 +1109,104 @@ export default function Integrations() {
                 </AlertDescription>
               </Alert>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Credential Management Dialog */}
+      <Dialog open={credentialDialogOpen} onOpenChange={setCredentialDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-6 h-6 text-blue-600" />
+              Add {credentialServiceName || 'Service'} Credentials
+            </DialogTitle>
+            <DialogDescription>
+              Securely store your API keys and OAuth tokens. All credentials are encrypted with AES-256-GCM.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <Alert>
+              <Shield className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Security:</strong> Your credentials are encrypted before storage and never exposed to the frontend.
+                They're only decrypted server-side when your plugin executes.
+              </AlertDescription>
+            </Alert>
+
+            <div className="bg-muted p-6 rounded-lg space-y-4">
+              <h3 className="font-semibold text-lg">How to Get Your Credentials:</h3>
+
+              {credentialServiceName.toLowerCase() === 'discord' && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    1. Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center">
+                      Discord Developer Portal <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                  </p>
+                  <p className="text-sm text-muted-foreground">2. Create a new application or select an existing one</p>
+                  <p className="text-sm text-muted-foreground">3. Copy the <strong>Client ID</strong> and <strong>Client Secret</strong></p>
+                  <p className="text-sm text-muted-foreground">4. Optionally, go to the Bot section to get your <strong>Bot Token</strong></p>
+                </div>
+              )}
+
+              {credentialServiceName.toLowerCase() === 'slack' && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    1. Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center">
+                      Slack API Apps <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                  </p>
+                  <p className="text-sm text-muted-foreground">2. Create a new app or select an existing one</p>
+                  <p className="text-sm text-muted-foreground">3. Navigate to OAuth & Permissions</p>
+                  <p className="text-sm text-muted-foreground">4. Copy the <strong>Client ID</strong> and <strong>Client Secret</strong></p>
+                </div>
+              )}
+
+              {credentialServiceName.toLowerCase() === 'trello' && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    1. Go to <a href="https://trello.com/app-key" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center">
+                      Trello API Key Page <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                  </p>
+                  <p className="text-sm text-muted-foreground">2. Copy your <strong>API Key</strong></p>
+                  <p className="text-sm text-muted-foreground">3. Generate and copy an <strong>API Token</strong></p>
+                </div>
+              )}
+
+              {!['discord', 'slack', 'trello'].includes(credentialServiceName.toLowerCase()) && (
+                <p className="text-sm text-muted-foreground">
+                  Check your service's developer documentation for instructions on obtaining API credentials.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                onClick={() => {
+                  // For now, close the dialog and inform user about credential vault
+                  setCredentialDialogOpen(false);
+                  setSuccess('Credential vault is available! You can manage credentials from Settings > Credentials (coming soon)');
+                }}
+                className="flex-1"
+              >
+                I'll Add Them Later
+              </Button>
+              <Button
+                onClick={() => {
+                  setCredentialDialogOpen(false);
+                  // TODO: Navigate to credential vault page when route is added
+                  alert('Credential vault page will be added to Settings menu soon. For now, you can use the /api/credentials/store endpoint directly.');
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Manage Credentials
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
