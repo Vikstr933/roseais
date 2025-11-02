@@ -27,7 +27,7 @@ import {
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2 } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { ChatMessage } from "../components/ChatMessage";
@@ -187,7 +187,7 @@ export default function PromptPlayground() {
   const [relevanceData, setRelevanceData] = useState<any[]>([]);
   const [currentComponentName, setCurrentComponentName] = useState<string>('');
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
-  const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string } | null>(null);
+  const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' } | null>(null);
   const [agentsActive, setAgentsActive] = useState(false); // Track if agents are currently working
 
   // Refs
@@ -343,10 +343,11 @@ export default function PromptPlayground() {
           setCurrentProject({
             id: project.id,
             name: project.name,
-            description: project.description
+            description: project.description,
+            workspaceType: project.workspaceType || 'personal'
           });
-          
-          console.log('âœ… Loaded project:', project.name);
+
+          console.log('âœ… Loaded project:', project.name, `(${project.workspaceType || 'personal'})`);
         })
         .catch(err => {
           console.error('Failed to load project:', err);
@@ -1427,9 +1428,23 @@ export default function PromptPlayground() {
       <div className="h-12 border-b flex items-center justify-between px-4 bg-muted/30 flex-shrink-0 relative z-10">
         <div className="flex items-center space-x-4">
           {currentProject && (
-            <div className="flex items-center px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
-              <Laptop className="h-3.5 w-3.5 mr-2 text-primary" />
-              <span className="text-xs font-semibold text-primary">{currentProject.name}</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
+                <Laptop className="h-3.5 w-3.5 mr-2 text-primary" />
+                <span className="text-xs font-semibold text-primary">{currentProject.name}</span>
+              </div>
+              {/* Workspace Type Badge */}
+              {currentProject.workspaceType === 'team' ? (
+                <div className="flex items-center px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full border border-blue-200 dark:border-blue-800">
+                  <Users className="h-3 w-3 mr-1 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Team</span>
+                </div>
+              ) : (
+                <div className="flex items-center px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-full border border-green-200 dark:border-green-800">
+                  <User className="h-3 w-3 mr-1 text-green-600 dark:text-green-400" />
+                  <span className="text-xs font-medium text-green-600 dark:text-green-400">Personal</span>
+                </div>
+              )}
             </div>
           )}
           
@@ -1768,6 +1783,30 @@ export default function PromptPlayground() {
           <div className="h-full min-h-0 flex flex-col">
             <div className="px-2 py-1.5 border-b flex items-center justify-between">
               <h2 className="text-xs font-semibold">EXPLORER</h2>
+              {/* Clear All Files Button */}
+              {response && typeof response === 'object' && response.files && response.files.length > 0 && (
+                <button
+                  onClick={() => {
+                    // Clear files from UI state
+                    setResponse(null);
+                    // Clear files from workspace session
+                    updateGeneratedFiles([]);
+                    // Clear selected file
+                    setSelectedFileIndex(0);
+                    // Notify user
+                    addChatMessage({
+                      role: 'assistant',
+                      content: 'All files cleared from workspace',
+                      timestamp: Date.now()
+                    });
+                  }}
+                  className="text-xs px-2 py-0.5 rounded hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-1"
+                  title="Clear all files"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Clear
+                </button>
+              )}
                             </div>
             <ScrollArea className="flex-1 min-h-0">
               <div className="p-2">
@@ -1794,28 +1833,37 @@ export default function PromptPlayground() {
                     onCreateFile={(path: string, content: string) => {
                       const newFile = { path, content };
                       if (response && typeof response === 'object' && response.files) {
+                        const updatedFiles = [...(response as AIResponse).files!, newFile];
                         setResponse(prev => ({
                           ...prev as AIResponse,
-                          files: [...(prev as AIResponse).files!, newFile]
+                          files: updatedFiles
                         }));
+                        // Sync with workspace session
+                        updateGeneratedFiles(updatedFiles);
                       }
                     }}
                     onDeleteFile={(path: string) => {
                       if (response && typeof response === 'object' && response.files) {
+                        const updatedFiles = (response as AIResponse).files!.filter(f => f.path !== path);
                         setResponse(prev => ({
                           ...prev as AIResponse,
-                          files: (prev as AIResponse).files!.filter(f => f.path !== path)
+                          files: updatedFiles
                         }));
+                        // Sync with workspace session
+                        updateGeneratedFiles(updatedFiles);
                       }
                     }}
                     onRenameFile={(oldPath: string, newPath: string) => {
                       if (response && typeof response === 'object' && response.files) {
+                        const updatedFiles = (response as AIResponse).files!.map(f =>
+                          f.path === oldPath ? { ...f, path: newPath } : f
+                        );
                         setResponse(prev => ({
                           ...prev as AIResponse,
-                          files: (prev as AIResponse).files!.map(f =>
-                            f.path === oldPath ? { ...f, path: newPath } : f
-                          )
+                          files: updatedFiles
                         }));
+                        // Sync with workspace session
+                        updateGeneratedFiles(updatedFiles);
                       }
                     }}
                     onDuplicateFile={(path: string) => {
@@ -1826,10 +1874,13 @@ export default function PromptPlayground() {
                             ...originalFile,
                             path: path.replace(/(\.[^.]+)$/, '_copy$1')
                           };
+                          const updatedFiles = [...(response as AIResponse).files!, duplicatedFile];
                           setResponse(prev => ({
                             ...prev as AIResponse,
-                            files: [...(prev as AIResponse).files!, duplicatedFile]
+                            files: updatedFiles
                           }));
+                          // Sync with workspace session
+                          updateGeneratedFiles(updatedFiles);
                         }
                       }
                     }}

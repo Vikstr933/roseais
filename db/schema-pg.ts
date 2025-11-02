@@ -68,6 +68,7 @@ export const workspaces = pgTable('workspaces', {
   collaborators: jsonb('collaborators').default([]),
   status: text('status').notNull().default('active'),
   ownerId: text('owner_id').references(() => users.id),
+  workspaceType: text('workspace_type').notNull().default('personal'), // 'personal' or 'team'
   projectType: text('project_type').notNull().default('web_app'),
   projectStatus: text('project_status').default('active'),
   inviteCode: text('invite_code').unique(),
