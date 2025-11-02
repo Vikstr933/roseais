@@ -351,15 +351,32 @@ You MUST generate ALL necessary files in this structure:
 - Implement strict null checks and proper error types
 - Export types for reusability across components
 
-## Syntax Requirements (CRITICAL)
+## Syntax Requirements (CRITICAL - CODE MUST COMPILE)
+⚠️ YOUR CODE WILL BE VALIDATED - IT MUST BE SYNTACTICALLY CORRECT ⚠️
+
+### Semicolons
 - EVERY statement must end with a semicolon (;)
-- ALL return statements must be complete: \`return (<div>...</div>);\`
+- NEVER put semicolons after opening parentheses: ❌ \`return (;\` ✅ \`return (\`
+- NEVER put semicolons before closing parentheses: ❌ \`;)\` ✅ \`)\`
+- NO double semicolons: ❌ \`;;\` ✅ \`;\`
+
+### Return Statements
+- ALL return statements must be complete and valid
+- ✅ CORRECT: \`return (<div>Hello</div>);\`
+- ✅ CORRECT: \`return null;\`
+- ❌ WRONG: \`return (;\` (stray semicolon)
+- ❌ WRONG: \`return (<div>\` (incomplete)
+
+### Imports and Files
 - ALL import statements must have corresponding files in your response
 - If you import \`'../types'\`, you MUST include \`src/types/index.ts\` in your JSON
 - If you import \`'../utils/gameLogic'\`, you MUST include \`src/utils/gameLogic.ts\` in your JSON
+
+### Code Completeness
 - NO incomplete code blocks - every function, component, and expression must be complete
 - ALL JSX elements must be properly closed
-- ALL curly braces, brackets, and parentheses must be balanced
+- ALL curly braces \`{}\`, brackets \`[]\`, and parentheses \`()\` must be balanced
+- NO placeholder comments like "// rest of implementation" - write the full code
 
 ## UI/UX Standards
 - Create responsive layouts that work on all devices
@@ -731,6 +748,28 @@ Suggestions to fix:
 
       let content = file.content;
       let fixesApplied = 0;
+
+      // Fix 0: Remove stray semicolons after opening parentheses/braces
+      // Fixes: return (;  -> return (
+      //        function(;  -> function(
+      //        if (;     -> if (
+      content = content.replace(/([(\[{])\s*;+\s*/g, (match, opener) => {
+        fixesApplied++;
+        return opener + ' ';
+      });
+
+      // Fix 0b: Remove stray semicolons before closing parentheses
+      // Fixes: );  -> )
+      content = content.replace(/\s*;+\s*([)\]}])/g, (match, closer) => {
+        fixesApplied++;
+        return closer;
+      });
+
+      // Fix 0c: Fix double semicolons
+      content = content.replace(/;;+/g, () => {
+        fixesApplied++;
+        return ';';
+      });
 
       // Fix 1: Add missing semicolons after return statements
       // Match: return (...); that is missing the semicolon
