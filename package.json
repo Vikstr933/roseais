@@ -21,6 +21,7 @@
     "migrate:plugins": "tsx scripts/run-plugin-migration.ts",
     "generate": "drizzle-kit generate",
     "setup:components": "tsx scripts/setup-component-generation.ts",
+    "setup:stripe": "tsx scripts/setup-stripe-products.ts",
     "test": "vitest run"
   },
   "dependencies": {
