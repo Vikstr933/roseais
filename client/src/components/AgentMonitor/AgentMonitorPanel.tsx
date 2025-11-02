@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { CircularAgentVisualization } from './CircularAgentVisualization';
 import { getApiUrl } from '@/lib/api';
+import { useAnimatedNumber } from '@/hooks/useAnimatedNumber';
 
 type AgentEventType =
   | 'connected'
@@ -402,6 +403,9 @@ function SummaryCard(props: {
 }) {
   const { connected, completeCount, failedCount, totalAgents, progress } = props;
 
+  // Animate progress value smoothly
+  const animatedProgress = useAnimatedNumber(progress, 600);
+
   return (
     <Card>
       <CardHeader>
@@ -420,16 +424,16 @@ function SummaryCard(props: {
         <div>
           <div className="flex items-center justify-between text-sm">
             <span>Overall progress</span>
-            <span className="text-muted-foreground">{progress}%</span>
+            <span className="text-muted-foreground">{animatedProgress}%</span>
           </div>
-          <Progress value={progress} className="h-2" />
+          <Progress value={animatedProgress} className="h-2" />
         </div>
 
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Metric value={totalAgents} label="Agents In Run" icon={Clock3} />
           <Metric value={completeCount} label="Completed" icon={CheckCircle2} />
           <Metric value={failedCount} label="Failed" icon={XCircle} />
-          <Metric value={progress + '%'} label="Progress" icon={Loader2} />
+          <Metric value={animatedProgress + '%'} label="Progress" icon={Loader2} />
         </div>
       </CardContent>
     </Card>
