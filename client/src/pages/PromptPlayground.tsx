@@ -158,7 +158,9 @@ export default function PromptPlayground() {
   const { user, sessionToken, isSuperAdmin } = useAuth();
   const {
     currentSession,
+    sessions,
     createSession,
+    switchSession,
     addChatMessage,
     clearChat,
     updateGeneratedFiles,
@@ -197,13 +199,30 @@ export default function PromptPlayground() {
   const [useWebContainer, setUseWebContainer] = useState(true); // Toggle for fallback
   const { toast } = useToast();
 
-  // Initialize workspace session
+  // Initialize or switch workspace session based on projectId
   useEffect(() => {
-    if (user && !currentSession) {
-      // Create a new playground session
-      createSession('playground', 'Playground Session');
+    if (!user) return;
+
+    const projectId = params?.projectId || 'default';
+
+    // Find existing session for this project
+    const existingSession = sessions.find(
+      s => s.type === 'playground' && s.metadata?.projectId === projectId
+    );
+
+    if (existingSession) {
+      // Switch to existing session for this project
+      if (currentSession?.id !== existingSession.id) {
+        console.log(`🔄 Switching to existing session for project: ${projectId}`);
+        switchSession(existingSession.id);
+      }
+    } else {
+      // Create new session for this project with projectId in metadata
+      const projectName = currentProject?.name || (projectId === 'default' ? 'Playground' : `Project ${projectId}`);
+      console.log(`✨ Creating new session for project: ${projectId}`);
+      createSession('playground', projectName, { projectId });
     }
-  }, [user, currentSession, createSession]);
+  }, [user, params?.projectId, currentProject?.name, sessions, currentSession, createSession, switchSession]);
 
   // Restore generated files from workspace session
   useEffect(() => {

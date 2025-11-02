@@ -45,7 +45,7 @@ interface WorkspaceContextType {
   sessions: WorkspaceSession[];
 
   // Session management
-  createSession: (type: 'playground' | 'assistant', name?: string) => WorkspaceSession;
+  createSession: (type: 'playground' | 'assistant', name?: string, metadata?: Record<string, any>) => WorkspaceSession;
   loadSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   switchSession: (sessionId: string) => void;
@@ -207,7 +207,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const createSession = useCallback((type: 'playground' | 'assistant', name?: string): WorkspaceSession => {
+  const createSession = useCallback((type: 'playground' | 'assistant', name?: string, metadata?: Record<string, any>): WorkspaceSession => {
     const newSession: WorkspaceSession = {
       id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: name || `${type === 'playground' ? 'Playground' : 'Assistant'} Session`,
@@ -216,7 +216,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       updatedAt: Date.now(),
       chatHistory: [],
       generatedFiles: [],
-      metadata: {}
+      metadata: metadata || {}
     };
 
     setSessions(prev => [...prev, newSession]);
