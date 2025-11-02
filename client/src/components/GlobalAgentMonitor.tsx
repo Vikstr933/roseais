@@ -29,6 +29,16 @@ const agentConfigs: AgentConfig[] = [
   { id: 'completion', icon: CheckCircle, angle: 300, name: 'QA', task: 'Verifying completion', color: 'from-teal-500 to-cyan-500' }
 ];
 
+const STORAGE_KEY = 'agent-workflow-state';
+
+interface WorkflowState {
+  isVisible: boolean;
+  workflowId: string | null;
+  currentPhase: number;
+  agentStatuses: Array<[string, AgentStatus]>;
+  timestamp: number;
+}
+
 export const GlobalAgentMonitor: React.FC = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -36,6 +46,42 @@ export const GlobalAgentMonitor: React.FC = () => {
   const [currentPhase, setCurrentPhase] = useState(0);
   const [agentStatusMap, setAgentStatusMap] = useState<Map<string, AgentStatus>>(new Map());
   const [eventSource, setEventSource] = useState<EventSource | null>(null);
+
+  // Restore state from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const state: WorkflowState = JSON.parse(saved);
+        // Only restore if workflow is recent (within last hour)
+        if (Date.now() - state.timestamp < 3600000) {
+          setIsVisible(state.isVisible);
+          setWorkflowId(state.workflowId);
+          setCurrentPhase(state.currentPhase);
+          setAgentStatusMap(new Map(state.agentStatuses));
+        } else {
+          // Clear old state
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to restore workflow state:', error);
+    }
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    if (isVisible && workflowId) {
+      const state: WorkflowState = {
+        isVisible,
+        workflowId,
+        currentPhase,
+        agentStatuses: Array.from(agentStatusMap.entries()),
+        timestamp: Date.now()
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+  }, [isVisible, workflowId, currentPhase, agentStatusMap]);
 
   useEffect(() => {
     // Connect to SSE for agent activity
@@ -131,12 +177,9 @@ export const GlobalAgentMonitor: React.FC = () => {
 
           case 'orchestration:complete':
           case 'orchestration:error':
-            // Keep visible for 3 seconds after completion
-            setTimeout(() => {
-              setIsVisible(false);
-              setWorkflowId(null);
-              setAgentStatusMap(new Map());
-            }, 3000);
+            // Keep workflow visible so users can review it
+            // They can manually close it with the X button
+            // Don't auto-hide - this allows users to leave and return
             break;
         }
       } catch (error) {
@@ -167,52 +210,58 @@ export const GlobalAgentMonitor: React.FC = () => {
 
   return (
     <div className={`
-      fixed z-50 transition-all duration-300
+      fixed z-[45] transition-all duration-300
       ${isMinimized
-        ? 'bottom-4 right-4 w-20 h-20'
-        : 'bottom-4 right-4 w-[500px] h-[550px]'
+        ? 'bottom-20 right-4 w-16 h-16 md:w-20 md:h-20'
+        : 'bottom-20 right-4 w-[90vw] max-w-[420px] h-[480px] md:max-w-[500px] md:h-[550px]'
       }
     `}>
       <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden h-full flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Brain className="w-5 h-5 text-white animate-pulse" />
-            <span className="text-white font-semibold text-sm">
+        <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-2 py-1.5 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Brain className="w-4 h-4 text-white animate-pulse" />
+            <span className="text-white font-semibold text-xs">
               {isMinimized ? '' : 'Agent Workflow'}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {!isMinimized && (
               <button
                 onClick={() => setIsMinimized(true)}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/80 hover:text-white transition-colors p-1"
               >
-                <Minimize2 className="w-4 h-4" />
+                <Minimize2 className="w-3.5 h-3.5" />
               </button>
             )}
             {isMinimized && (
               <button
                 onClick={() => setIsMinimized(false)}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/80 hover:text-white transition-colors p-1"
               >
-                <Maximize2 className="w-4 h-4" />
+                <Maximize2 className="w-3.5 h-3.5" />
               </button>
             )}
             <button
-              onClick={() => setIsVisible(false)}
-              className="text-white/80 hover:text-white transition-colors"
+              onClick={() => {
+                setIsVisible(false);
+                setWorkflowId(null);
+                setAgentStatusMap(new Map());
+                localStorage.removeItem(STORAGE_KEY);
+              }}
+              className="text-white/80 hover:text-white transition-colors p-1"
+              title="Close workflow monitor"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* Content */}
         {!isMinimized && (
-          <div className="flex-1 p-6 overflow-auto">
+          <div className="flex-1 p-3 overflow-auto">
             {/* Visualization */}
-            <div className="relative h-[400px] flex items-center justify-center">
+            <div className="relative h-[320px] flex items-center justify-center">
 
               {/* Connection Lines */}
               <svg className="absolute inset-0 w-full h-full">
@@ -271,7 +320,7 @@ export const GlobalAgentMonitor: React.FC = () => {
                   >
                     {/* Agent Circle */}
                     <div className={`
-                      relative w-14 h-14 rounded-full flex items-center justify-center
+                      relative w-11 h-11 rounded-full flex items-center justify-center
                       transition-all duration-500
                       ${isComplete
                         ? `bg-gradient-to-br ${agent.color} scale-100`
@@ -285,11 +334,11 @@ export const GlobalAgentMonitor: React.FC = () => {
                       }
                     `}>
                       {isActive ? (
-                        <Loader2 className="w-7 h-7 text-white animate-spin" />
+                        <Loader2 className="w-5 h-5 text-white animate-spin" />
                       ) : isComplete ? (
-                        <CheckCircle className="w-7 h-7 text-white" />
+                        <CheckCircle className="w-5 h-5 text-white" />
                       ) : (
-                        <Icon className={`w-7 h-7 transition-colors duration-500 ${
+                        <Icon className={`w-5 h-5 transition-colors duration-500 ${
                           isComplete || isActive ? 'text-white' : 'text-slate-500'
                         }`} />
                       )}
@@ -302,11 +351,11 @@ export const GlobalAgentMonitor: React.FC = () => {
 
                     {/* Agent Name (always show, but dim if inactive) */}
                     <div className={`
-                      mt-2 text-center transition-all duration-500 w-28
+                      mt-1.5 text-center transition-all duration-500 w-20
                       ${isActive || isComplete ? 'opacity-100' : 'opacity-40'}
                     `}>
                       <div className={`
-                        text-xs font-medium
+                        text-[10px] font-medium
                         ${isComplete ? 'text-green-400' : isActive ? 'text-white' : isFailed ? 'text-red-400' : 'text-slate-400'}
                       `}>
                         {agent.name}

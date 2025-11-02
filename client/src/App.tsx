@@ -19,6 +19,7 @@ import { WorkspaceProvider, useWorkspace } from './contexts/WorkspaceContext';
 import AssistantWidget from './components/AssistantWidget';
 import BackgroundTasksPanel from './components/BackgroundTasksPanel';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { OmniAssistant, InsightsPanel } from './components/OmniAssistant';
 
 function AppContent() {
   const [location] = useLocation();
@@ -119,10 +120,11 @@ function AppContent() {
         </Route>
       </Switch>
 
-      {/* Global AI Assistant Widget - Only show when logged in */}
+      {/* Global AI Assistant - Only show when logged in */}
       {user && (
         <>
-          <AssistantWidget
+          {/* Legacy AssistantWidget - Can be disabled via settings in future */}
+          {/* <AssistantWidget
             contextData={{
               currentPage: getCurrentPage(),
               workspaceId: currentSession?.id,
@@ -133,7 +135,12 @@ function AppContent() {
                 files: currentSession.generatedFiles
               } : undefined
             }}
-          />
+          /> */}
+
+          {/* New OmniAssistant - Digital Office Platform */}
+          <OmniAssistant />
+          <InsightsPanel />
+
           <BackgroundTasksPanel />
         </>
       )}

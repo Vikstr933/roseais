@@ -5,7 +5,18 @@
       "Bash(npm run dev:*)",
       "Bash(npx tsc:*)",
       "Bash(echo:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(vercel --prod:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run migrate:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(npx kill-port 3001)",
+      "Bash(npx tsx:*)"
     ],
     "deny": [],
     "ask": []

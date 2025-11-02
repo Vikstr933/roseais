@@ -765,6 +765,48 @@ Suggestions to fix:
         return match;
       });
 
+      // Fix 4: Add missing semicolons after multi-line function calls/expressions
+      // This catches cases like: const x = useCallback(\n  ...\n) <- missing semicolon
+      const lines = content.split('\n');
+      const fixedLines = lines.map((line, index) => {
+        const trimmed = line.trim();
+
+        // Skip if already has semicolon, or ends with { or , or is a comment
+        if (trimmed.endsWith(';') || trimmed.endsWith('{') || trimmed.endsWith(',') ||
+            trimmed.startsWith('//') || trimmed.startsWith('/*') || !trimmed) {
+          return line;
+        }
+
+        // Check for closing ) that might need semicolon
+        if (trimmed === ')' || trimmed.endsWith(')')) {
+          // Look back to find if this completes a const/let/var declaration
+          let checkIndex = index - 1;
+          let foundDeclaration = false;
+
+          while (checkIndex >= 0 && index - checkIndex < 20) {
+            const checkLine = lines[checkIndex].trim();
+            if (checkLine.match(/^(const|let|var|export const|export let|export var)\s+\w+\s*=/)) {
+              foundDeclaration = true;
+              break;
+            }
+            // Stop if we hit another statement
+            if (checkLine.includes(';') || checkLine.match(/^(function|class|interface|type|import)/)) {
+              break;
+            }
+            checkIndex--;
+          }
+
+          if (foundDeclaration && !trimmed.endsWith(';')) {
+            fixesApplied++;
+            return line + ';';
+          }
+        }
+
+        return line;
+      });
+
+      content = fixedLines.join('\n');
+
       if (fixesApplied > 0) {
         console.log(`🔧 Fixed ${fixesApplied} syntax issues in ${file.path}`);
       }

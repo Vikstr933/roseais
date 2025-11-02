@@ -8,7 +8,14 @@ import {
   Loader2,
   TriangleAlert,
   XCircle,
+  ChevronDown,
+  ChevronUp,
+  FileCode,
+  Activity,
+  Zap,
+  AlertCircle,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { CircularAgentVisualization } from './CircularAgentVisualization';
 import { getApiUrl } from '@/lib/api';
 
@@ -552,42 +559,211 @@ function AgentCard({ agent }: { agent: AgentStatus }) {
   );
 }
 
+// Event grouping interface
+interface EventGroup {
+  type: string;
+  events: AgentEvent[];
+  count: number;
+  firstTimestamp: number;
+  lastTimestamp: number;
+  agentId?: string;
+  icon: any;
+  color: string;
+}
+
 function EventLog({ events }: { events: AgentEvent[] }) {
+  const [verbosity, setVerbosity] = useState<'minimal' | 'normal' | 'verbose'>('normal');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
   if (!events.length) return null;
 
-  const lastEvents = events.slice(-40).reverse();
+  // Group consecutive similar events
+  const groupEvents = (events: AgentEvent[]): EventGroup[] => {
+    const groups: EventGroup[] = [];
+    let currentGroup: EventGroup | null = null;
+
+    events.slice(-50).reverse().forEach((event) => {
+      const groupKey = `${event.type}-${event.agentId || 'global'}`;
+
+      if (
+        currentGroup &&
+        currentGroup.type === event.type &&
+        currentGroup.agentId === event.agentId
+      ) {
+        // Add to existing group
+        currentGroup.events.push(event);
+        currentGroup.count++;
+        currentGroup.lastTimestamp = event.timestamp || Date.now();
+      } else {
+        // Start new group
+        if (currentGroup) groups.push(currentGroup);
+        currentGroup = {
+          type: event.type,
+          events: [event],
+          count: 1,
+          firstTimestamp: event.timestamp || Date.now(),
+          lastTimestamp: event.timestamp || Date.now(),
+          agentId: event.agentId,
+          ...getEventStyle(event.type),
+        };
+      }
+    });
+
+    if (currentGroup) groups.push(currentGroup);
+    return groups;
+  };
+
+  const getEventStyle = (type: string) => {
+    if (type.includes('error') || type.includes('failed')) {
+      return { icon: AlertCircle, color: 'text-red-500' };
+    } else if (type.includes('complete')) {
+      return { icon: CheckCircle2, color: 'text-green-500' };
+    } else if (type.includes('start')) {
+      return { icon: Zap, color: 'text-blue-500' };
+    } else if (type.includes('FILE')) {
+      return { icon: FileCode, color: 'text-purple-500' };
+    } else if (type.includes('progress')) {
+      return { icon: Activity, color: 'text-yellow-500' };
+    }
+    return { icon: Clock3, color: 'text-muted-foreground' };
+  };
+
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
+
+  const filteredGroups = groupEvents(events).filter((group) => {
+    if (verbosity === 'minimal') {
+      // Only show errors, complete, and orchestration events
+      return group.type.includes('error') ||
+             group.type.includes('complete') ||
+             group.type.includes('orchestration');
+    } else if (verbosity === 'normal') {
+      // Hide progress and connected events
+      return !group.type.includes('progress') &&
+             group.type !== 'connected';
+    }
+    return true; // verbose - show all
+  });
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Event Log</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Event Log</CardTitle>
+          <div className="flex gap-1">
+            {(['minimal', 'normal', 'verbose'] as const).map((level) => (
+              <Button
+                key={level}
+                variant={verbosity === level ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setVerbosity(level)}
+                className="h-7 px-2 text-xs"
+              >
+                {level}
+              </Button>
+            ))}
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="max-h-80 overflow-y-auto">
-        <ul className="space-y-2 text-sm">
-          {lastEvents.map((event, idx) => (
-            <li
-              key={`${event.timestamp}-${event.type}-${idx}`}
-              className="flex items-center justify-between gap-4 rounded border bg-muted/40 px-3 py-2"
-            >
-              <div className="space-y-1">
-                <div className="font-mono text-xs text-muted-foreground">
-                  {new Date(event.timestamp ?? Date.now()).toLocaleTimeString()}
+      <CardContent className="max-h-64 overflow-y-auto">
+        <ul className="space-y-1.5 text-sm">
+          {filteredGroups.map((group, idx) => {
+            const groupKey = `${group.type}-${group.agentId}-${idx}`;
+            const isExpanded = expandedGroups.has(groupKey);
+            const Icon = group.icon;
+            const timeRange =
+              group.count > 1
+                ? `${new Date(group.firstTimestamp).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  })} - ${new Date(group.lastTimestamp).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  })}`
+                : new Date(group.firstTimestamp).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  });
+
+            return (
+              <li key={groupKey}>
+                <div
+                  className={`flex items-center justify-between gap-2 rounded border bg-muted/40 px-2 py-1.5 ${
+                    group.count > 1 ? 'cursor-pointer hover:bg-muted/60' : ''
+                  }`}
+                  onClick={() => group.count > 1 && toggleGroup(groupKey)}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${group.color}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-xs capitalize truncate">
+                          {group.type.replace(/[:_]/g, ' ')}
+                        </span>
+                        {group.agentId && (
+                          <Badge variant="outline" className="h-4 px-1 text-[10px]">
+                            {group.agentId}
+                          </Badge>
+                        )}
+                        {group.count > 1 && (
+                          <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                            {group.count}×
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                        {timeRange}
+                      </div>
+                    </div>
+                  </div>
+                  {group.count > 1 && (
+                    <div className="flex-shrink-0">
+                      {isExpanded ? (
+                        <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="capitalize">
-                  {event.type.replace(/[:_]/g, ' ')}{' '}
-                  {event.agentId ? (
-                    <span className="font-semibold text-muted-foreground">({event.agentId})</span>
-                  ) : null}
-                </div>
-                {event.error ? (
-                  <p className="text-xs text-destructive">{event.error}</p>
-                ) : null}
-              </div>
-              {event.duration ? (
-                <span className="text-xs text-muted-foreground">{event.duration}ms</span>
-              ) : null}
-            </li>
-          ))}
+
+                {/* Expanded events */}
+                {isExpanded && group.count > 1 && (
+                  <ul className="ml-6 mt-1 space-y-1 border-l-2 border-muted pl-2">
+                    {group.events.map((event, eventIdx) => (
+                      <li key={eventIdx} className="text-xs text-muted-foreground">
+                        <span className="font-mono text-[10px]">
+                          {new Date(event.timestamp || Date.now()).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          })}
+                        </span>
+                        {event.duration && (
+                          <span className="ml-2 text-[10px]">({event.duration}ms)</span>
+                        )}
+                        {event.error && (
+                          <p className="text-destructive text-[10px] mt-0.5">{event.error}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </CardContent>
     </Card>

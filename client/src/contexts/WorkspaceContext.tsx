@@ -292,17 +292,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addChatMessage = useCallback((message: ChatMessage) => {
-    if (!currentSession) return;
+    // Use functional setState to ensure we always work with the latest state
+    // This prevents race conditions when multiple messages are added quickly
+    setCurrentSession(prev => {
+      if (!prev) return prev;
 
-    const updated = {
-      ...currentSession,
-      chatHistory: [...currentSession.chatHistory, message],
-      updatedAt: Date.now()
-    };
+      const updated = {
+        ...prev,
+        chatHistory: [...prev.chatHistory, message],
+        updatedAt: Date.now()
+      };
 
-    setCurrentSession(updated);
-    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-  }, [currentSession]);
+      // Also update sessions array with the new chat history
+      setSessions(sessions => sessions.map(s => s.id === updated.id ? updated : s));
+
+      return updated;
+    });
+  }, []);
 
   const clearChat = useCallback(() => {
     if (!currentSession) return;

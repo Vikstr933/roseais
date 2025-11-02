@@ -1510,7 +1510,6 @@ export default function PromptPlayground() {
           <div
             ref={chatMessagesRef}
             className="flex-1 overflow-y-auto p-3 min-h-0 relative"
-            style={{ maxHeight: 'calc(100vh - 220px)' }}
           >
             <div className="space-y-4">
               {chatHistory.length === 0 && (

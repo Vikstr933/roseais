@@ -260,6 +260,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   pluginConfigs: many(pluginConfigs),
   pluginKnowledge: many(pluginKnowledge),
   pluginActions: many(pluginActions),
+  conversations: many(conversations),
+  userPreferences: many(userPreferences),
+  aiInsights: many(aiInsights),
 }));
 
 export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
@@ -330,6 +333,12 @@ export type PluginAction = typeof pluginActions.$inferSelect;
 export type NewPluginAction = typeof pluginActions.$inferInsert;
 export type PluginSyncLog = typeof pluginSyncLogs.$inferSelect;
 export type NewPluginSyncLog = typeof pluginSyncLogs.$inferInsert;
+export type Conversation = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;
+export type UserPreference = typeof userPreferences.$inferSelect;
+export type NewUserPreference = typeof userPreferences.$inferInsert;
+export type AIInsight = typeof aiInsights.$inferSelect;
+export type NewAIInsight = typeof aiInsights.$inferInsert;
 
 // Legacy exports for backward compatibility
 export const promptChains = pgTable('prompt_chains', {
@@ -347,3 +356,55 @@ export const promptTemplates = pgTable('prompt_templates', {
   variables: jsonb('variables').default([]),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// OmniAssistant Tables - Fas 1: Digital Office Platform
+
+// Persistent conversation memory for context-aware AI assistance
+export const conversations = pgTable('conversations', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  contextType: text('context_type').notNull(), // 'general', 'coding', 'marketing', 'crm', 'analytics', etc.
+  summary: text('summary').notNull(), // AI-generated summary of conversation
+  keyPoints: jsonb('key_points').default([]), // Important takeaways
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  lastReferenced: timestamp('last_referenced').defaultNow(),
+});
+
+// AI-learned user preferences and patterns
+export const userPreferences = pgTable('user_preferences', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  preferenceType: text('preference_type').notNull(), // 'coding_style', 'communication_tone', 'work_hours', etc.
+  value: jsonb('value').notNull(), // Flexible JSON storage for any preference type
+  confidenceScore: real('confidence_score').default(0.5), // 0-1, how confident AI is about this preference
+  learnedAt: timestamp('learned_at').defaultNow().notNull(),
+  lastUpdated: timestamp('last_updated').defaultNow(),
+});
+
+// Proactive AI-generated insights and suggestions
+export const aiInsights = pgTable('ai_insights', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  insightType: text('insight_type').notNull(), // 'opportunity', 'warning', 'suggestion', 'trend', etc.
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  data: jsonb('data').default({}), // Supporting data (metrics, charts, links)
+  priority: integer('priority').default(1).notNull(), // 1-5, where 5 is highest
+  dismissed: boolean('dismissed').default(false),
+  actionTaken: boolean('action_taken').default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at'), // Optional expiration for time-sensitive insights
+});
+
+// OmniAssistant Relations
+export const conversationsRelations = relations(conversations, ({ one }) => ({
+  user: one(users, { fields: [conversations.userId], references: [users.id] }),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(users, { fields: [userPreferences.userId], references: [users.id] }),
+}));
+
+export const aiInsightsRelations = relations(aiInsights, ({ one }) => ({
+  user: one(users, { fields: [aiInsights.userId], references: [users.id] }),
+}));

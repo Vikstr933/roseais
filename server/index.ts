@@ -39,6 +39,7 @@ import workspaceSessionsRouter from './routes/workspace';
 import healthRouter from './routes/health';
 import adminRouter from './routes/admin';
 import activityRouter from './routes/activity';
+import omniassistantRouter from './routes/omniassistant';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -308,6 +309,7 @@ const initializeApp = async () => {
     app.use('/api/terminal', terminalRouter);
     app.use('/api/stripe', stripeRouter); // Stripe payment routes
     app.use('/api/plugins', pluginsRouter); // Plugin system routes
+    app.use('/api/omniassistant', omniassistantRouter); // OmniAssistant - Digital Office Platform
     app.use('/api/workspace-sessions', workspaceSessionsRouter); // Workspace session persistence
     app.use('/api/activity', activityRouter); // User activity tracking routes
     app.use('/api', sseRouter); // This will handle /api/sse/* routes

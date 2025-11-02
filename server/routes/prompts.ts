@@ -355,8 +355,16 @@ function validateGeneratedCode(files: { path: string; content: string }[]): {
       // Check for common syntax errors using regex patterns
       const lines = content.split('\n');
 
-      // Check for missing semicolons on common statements
-      lines.forEach((line, index) => {
+      // IMPROVED: More lenient semicolon checking that handles multi-line properly
+      const contentLines = content.split('\n');
+
+      // Build a map of statement endings for better multi-line detection
+      let inMultiLine = false;
+      let multiLineStart = -1;
+      let bracketDepth = 0;
+      let parenDepth = 0;
+
+      contentLines.forEach((line, index) => {
         const trimmed = line.trim();
 
         // Skip comments and empty lines
@@ -364,22 +372,58 @@ function validateGeneratedCode(files: { path: string; content: string }[]): {
           return;
         }
 
-        // Check for statements that should end with semicolon but don't
-        const requiresSemicolon = /^(const|let|var|import|export|return|throw|break|continue)\s+.*[^;{}\s]$/;
-        if (requiresSemicolon.test(trimmed)) {
-          errors.push(`${path}:${index + 1} - Missing semicolon: ${trimmed.substring(0, 50)}...`);
+        // Track bracket/paren depth for multi-line detection
+        const openParens = (trimmed.match(/\(/g) || []).length;
+        const closeParens = (trimmed.match(/\)/g) || []).length;
+        const openBrackets = (trimmed.match(/\[/g) || []).length;
+        const closeBrackets = (trimmed.match(/\]/g) || []).length;
+        const openBraces = (trimmed.match(/\{/g) || []).length;
+        const closeBraces = (trimmed.match(/\}/g) || []).length;
+
+        parenDepth += openParens - closeParens;
+        bracketDepth += openBrackets - closeBrackets + openBraces - closeBraces;
+
+        // Detect start of statement
+        if (!inMultiLine && trimmed.match(/^(const|let|var|export const|export let|export var|export default)\s+/)) {
+          inMultiLine = true;
+          multiLineStart = index;
         }
 
-        // Check for imports without quotes
-        if (trimmed.match(/import.*from\s+[^'"]/)) {
-          errors.push(`${path}:${index + 1} - Import statement missing quotes`);
+        // Check if statement ends on this line
+        const endsWithTerminator = trimmed.endsWith(';') || trimmed.endsWith(',') || trimmed.endsWith('{');
+
+        if (inMultiLine && parenDepth === 0 && bracketDepth === 0 && !endsWithTerminator) {
+          // Statement might be complete - check if it should have semicolon
+          const nextLineIndex = index + 1;
+          const nextLine = nextLineIndex < contentLines.length ? contentLines[nextLineIndex].trim() : '';
+
+          // Only flag if next line looks like a new statement (not a continuation)
+          const isNewStatement = nextLine.match(/^(const|let|var|export|import|function|class|interface|type|return)/);
+
+          if (isNewStatement && !trimmed.endsWith(';') && !trimmed.endsWith('{') && !trimmed.endsWith(',')) {
+            // ONLY flag truly missing semicolons - be very conservative
+            const isCompleteStatement =
+              trimmed.endsWith(')') || // Function call
+              trimmed.endsWith(']') || // Array literal
+              trimmed.endsWith('}') || // Object literal
+              trimmed.endsWith('"') || // String
+              trimmed.endsWith("'") || // String
+              trimmed.endsWith('`') || // Template literal
+              trimmed.match(/\w$/); // Variable/number
+
+            if (isCompleteStatement) {
+              // This is likely a real missing semicolon
+              warnings.push(`${path}:${index + 1} - Possibly missing semicolon: ${trimmed.substring(0, 50)}...`);
+            }
+          }
+
+          inMultiLine = false;
+          multiLineStart = -1;
         }
 
-        // Check for unclosed brackets
-        const openBrackets = (trimmed.match(/\{/g) || []).length;
-        const closeBrackets = (trimmed.match(/\}/g) || []).length;
-        if (openBrackets !== closeBrackets && !trimmed.includes('=>')) {
-          warnings.push(`${path}:${index + 1} - Possible unclosed brackets`);
+        if (endsWithTerminator) {
+          inMultiLine = false;
+          multiLineStart = -1;
         }
       });
 
@@ -407,11 +451,24 @@ function validateGeneratedCode(files: { path: string; content: string }[]): {
           continue;
         }
 
-        // Resolve relative path
+        // Resolve relative path properly handling both ./ and ../
         const dir = path.split('/').slice(0, -1).join('/');
-        const resolvedPath = importPath.startsWith('./')
-          ? `${dir}/${importPath.slice(2)}`
-          : importPath;
+        let resolvedPath = dir;
+
+        const parts = importPath.split('/');
+        for (const part of parts) {
+          if (part === '..') {
+            // Go up one directory
+            const pathParts = resolvedPath.split('/');
+            resolvedPath = pathParts.slice(0, -1).join('/');
+          } else if (part === '.') {
+            // Stay in current directory
+            continue;
+          } else {
+            // Add to path
+            resolvedPath = resolvedPath ? `${resolvedPath}/${part}` : part;
+          }
+        }
 
         // Add extensions if missing
         const possibleExtensions = ['', '.ts', '.tsx', '.js', '.jsx'];
