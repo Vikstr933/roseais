@@ -181,6 +181,10 @@ function validateComponentFile(
 ): string[] {
   const errors: string[] = [];
 
+  // SYNTAX VALIDATION - Check for critical syntax errors first
+  const syntaxErrors = validateSyntax(content);
+  errors.push(...syntaxErrors);
+
   // Basic structural validation
   if (!content.includes('export default')) {
     errors.push('Component missing default export');
@@ -214,6 +218,46 @@ function validateComponentFile(
       errors.push(`Missing import for ${feature} feature: ${importPattern}`);
     }
   });
+
+  return errors;
+}
+
+/**
+ * Validate code syntax for common errors that would cause compilation failure
+ */
+function validateSyntax(content: string): string[] {
+  const errors: string[] = [];
+
+  // Check 1: return (; pattern (critical)
+  if (/return\s*\(\s*;/.test(content)) {
+    errors.push('SYNTAX ERROR: Found "return (;" - incomplete return statement');
+  }
+
+  // Check 2: Stray semicolons after opening delimiters
+  if (/[(\[{][ \t]+;/.test(content)) {
+    errors.push('SYNTAX ERROR: Found stray semicolons after opening delimiters');
+  }
+
+  // Check 3: Multiple consecutive semicolons
+  if (/;;+/.test(content)) {
+    errors.push('SYNTAX ERROR: Found multiple consecutive semicolons');
+  }
+
+  // Check 4: Severe bracket/brace imbalance
+  const openBraces = (content.match(/\{/g) || []).length;
+  const closeBraces = (content.match(/\}/g) || []).length;
+  const braceDiff = Math.abs(openBraces - closeBraces);
+  if (braceDiff > 3) {
+    errors.push(`SYNTAX ERROR: Severe brace mismatch - ${openBraces} open, ${closeBraces} close (diff: ${braceDiff})`);
+  }
+
+  // Check 5: Parentheses mismatch
+  const openParens = (content.match(/\(/g) || []).length;
+  const closeParens = (content.match(/\)/g) || []).length;
+  const parenDiff = Math.abs(openParens - closeParens);
+  if (parenDiff > 5) {
+    errors.push(`SYNTAX ERROR: Severe parentheses mismatch - ${openParens} open, ${closeParens} close (diff: ${parenDiff})`);
+  }
 
   return errors;
 }

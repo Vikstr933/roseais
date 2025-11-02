@@ -828,6 +828,13 @@ Suggestions to fix:
 
         // Skip if we already have this file or if path/content is invalid
         if (!files.find(f => f.path === path) && path && fileContent && fileContent.length > 10) {
+          // Validate extracted content for obvious truncation issues
+          const validationWarnings = this.validateExtractedCode(fileContent, path);
+          if (validationWarnings.length > 0) {
+            console.warn(`⚠️  Markdown extraction warnings for ${path}:`);
+            validationWarnings.forEach(w => console.warn(`   - ${w}`));
+          }
+
           files.push({ path, content: fileContent });
         }
       }
@@ -857,29 +864,30 @@ Suggestions to fix:
 
       // Fix 0: CRITICAL - Remove "return (;" pattern immediately
       // This is the most common and critical error
-      const returnSemicolonPattern = /return\s*\(\s*;/g;
-      if (returnSemicolonPattern.test(content)) {
-        console.log(`  ⚠️  FOUND CRITICAL ERROR: "return (;" in ${file.path}`);
-        content = content.replace(/return\s*\(\s*;/g, 'return (');
+      content = content.replace(/return\s*\(\s*;/g, (match) => {
+        console.log(`  ⚠️  FOUND CRITICAL ERROR: "${match.replace(/\n/g, '\\n')}" in ${file.path}`);
         fixesApplied++;
         console.log(`  ✅ FIXED: "return (;" -> "return ("`);
-      }
+        return 'return (';
+      });
 
       // Fix 0b: Remove stray semicolons after ANY opening parentheses/braces
       // Fixes: (;  -> (
       //        [;  -> [
       //        {;  -> {
-      content = content.replace(/([(\[{])\s*;+/g, (match, opener) => {
+      // IMPORTANT: Only match spaces/tabs, NOT newlines to preserve code structure
+      content = content.replace(/([(\[{])[ \t]*;+/g, (match, opener) => {
         fixesApplied++;
-        console.log(`  ✅ Fixed opening delimiter: "${match}" -> "${opener}"`);
+        console.log(`  ✅ Fixed opening delimiter: "${match.replace(/\n/g, '\\n')}" -> "${opener}"`);
         return opener;
       });
 
-      // Fix 0c: Remove stray semicolons before closing parentheses
+      // Fix 0c: Remove stray semicolons before closing parentheses (SAME LINE ONLY)
       // Fixes: );  -> )
-      content = content.replace(/;+\s*([)\]}])/g, (match, closer) => {
+      // IMPORTANT: Only match spaces/tabs, NOT newlines to avoid removing valid semicolons
+      content = content.replace(/;+[ \t]*([)\]}])/g, (match, closer) => {
         fixesApplied++;
-        console.log(`  ✅ Fixed closing delimiter: "${match}" -> "${closer}"`);
+        console.log(`  ✅ Fixed closing delimiter: "${match.replace(/\n/g, '\\n')}" -> "${closer}"`);
         return closer;
       });
 
@@ -968,8 +976,95 @@ Suggestions to fix:
         console.log(`🔧 Fixed ${fixesApplied} syntax issues in ${file.path}`);
       }
 
+      // POST-FIX VERIFICATION: Check for critical syntax errors that should have been fixed
+      const criticalErrors = this.verifySyntaxFixes(content, file.path);
+      if (criticalErrors.length > 0) {
+        console.error(`❌ CRITICAL: Syntax fixer failed to fix errors in ${file.path}:`);
+        criticalErrors.forEach(error => console.error(`   - ${error}`));
+        // Log the problematic content for debugging
+        console.error(`Problematic content preview:\n${content.substring(0, 500)}...`);
+      }
+
       return { ...file, content };
     });
+  }
+
+  /**
+   * Validate extracted code for obvious truncation or corruption issues
+   * Returns array of warning messages
+   */
+  private validateExtractedCode(content: string, filePath: string): string[] {
+    const warnings: string[] = [];
+
+    // Skip validation for non-code files
+    if (!filePath.match(/\.(tsx?|jsx?)$/)) {
+      return warnings;
+    }
+
+    // Check 1: Severe bracket/brace imbalance (indicates truncation)
+    const openBraces = (content.match(/\{/g) || []).length;
+    const closeBraces = (content.match(/\}/g) || []).length;
+    const braceDiff = Math.abs(openBraces - closeBraces);
+    if (braceDiff > 3) {
+      warnings.push(`Severe brace mismatch: ${openBraces} open, ${closeBraces} close (diff: ${braceDiff})`);
+    }
+
+    // Check 2: File ends with opening delimiter (likely truncated)
+    const lastChars = content.trim().slice(-10);
+    if (/[({[][\s]*$/.test(lastChars)) {
+      warnings.push(`File ends with opening delimiter - likely truncated`);
+    }
+
+    // Check 3: File has "return (" without matching close
+    const returnMatches = content.match(/return\s*\(/g);
+    if (returnMatches && returnMatches.length > 0) {
+      const returnCount = returnMatches.length;
+      // Count how many return statements have closing parens on same or next line
+      const completeReturns = content.match(/return\s*\([^)]*\)|return\s*\(\s*\n/g);
+      const completeCount = completeReturns ? completeReturns.length : 0;
+      if (returnCount > completeCount + 2) {
+        warnings.push(`Found ${returnCount} "return (" but only ${completeCount} appear complete`);
+      }
+    }
+
+    return warnings;
+  }
+
+  /**
+   * Verify that critical syntax errors have been fixed
+   * Returns array of remaining error messages
+   */
+  private verifySyntaxFixes(content: string, filePath: string): string[] {
+    const errors: string[] = [];
+
+    // Check 1: return (; pattern
+    if (/return\s*\(\s*;/.test(content)) {
+      errors.push('Found "return (;" pattern - incomplete return statement');
+    }
+
+    // Check 2: Stray semicolons after opening delimiters on same line
+    if (/[(\[{][ \t]+;/.test(content)) {
+      errors.push('Found stray semicolons after opening delimiters');
+    }
+
+    // Check 3: Multiple semicolons
+    if (/;;+/.test(content)) {
+      errors.push('Found multiple consecutive semicolons');
+    }
+
+    // Check 4: Common incomplete statements
+    if (/return\s*\(\s*$/.test(content)) {
+      errors.push('Found incomplete return statement at end of line');
+    }
+
+    // Check 5: Unclosed JSX/parentheses (basic check)
+    const openParens = (content.match(/\(/g) || []).length;
+    const closeParens = (content.match(/\)/g) || []).length;
+    if (Math.abs(openParens - closeParens) > 5) { // Allow some tolerance for string literals
+      errors.push(`Parentheses mismatch: ${openParens} open, ${closeParens} close`);
+    }
+
+    return errors;
   }
 
   private stripLocalImports(code: string): string {
