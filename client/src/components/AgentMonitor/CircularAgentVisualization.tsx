@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/api';
-import { Brain, Search, Code, FileText, CheckCircle, Loader2, Palette, Box, User, Cpu } from 'lucide-react';
+import { Brain, Search, Code, FileText, CheckCircle, Loader2, Palette, Box, User, Cpu, Zap, Sparkles } from 'lucide-react';
 
 interface AgentStatus {
   id: string;
@@ -20,33 +20,31 @@ interface AgentConfig {
   color: string;
 }
 
-// Map agent IDs to icons and colors
+// Map agent IDs to icons and colors (updated to match current 8-agent system)
 const getAgentIcon = (agentId: string) => {
   const iconMap: Record<string, any> = {
     'personal-assistant': User,
+    'requirements-agent': Search,
     'component-architect': Box,
-    'component-developer': Code,
-    'component-qa': CheckCircle,
-    'requirements-analyst': Search,
-    'ui-designer': FileText,
-    'style-generator': Palette,
+    'ui-designer': Palette,
+    'style-generator': Sparkles,
     'code-generator': Code,
-    'completion': CheckCircle
+    'completion-agent': CheckCircle,
+    'orchestration': Zap
   };
   return iconMap[agentId] || Cpu;
 };
 
 const getAgentColor = (agentId: string): string => {
   const colorMap: Record<string, string> = {
-    'personal-assistant': 'from-blue-500 to-cyan-500',
-    'component-architect': 'from-green-500 to-emerald-500',
-    'component-developer': 'from-violet-500 to-purple-500',
-    'component-qa': 'from-teal-500 to-cyan-500',
-    'requirements-analyst': 'from-blue-500 to-cyan-500',
-    'ui-designer': 'from-purple-500 to-pink-500',
-    'style-generator': 'from-orange-500 to-red-500',
-    'code-generator': 'from-violet-500 to-purple-500',
-    'completion': 'from-teal-500 to-cyan-500'
+    'personal-assistant': 'from-indigo-500 to-indigo-600',
+    'requirements-agent': 'from-blue-500 to-blue-600',
+    'component-architect': 'from-purple-500 to-purple-600',
+    'ui-designer': 'from-pink-500 to-pink-600',
+    'style-generator': 'from-cyan-500 to-cyan-600',
+    'code-generator': 'from-green-500 to-green-600',
+    'completion-agent': 'from-emerald-500 to-emerald-600',
+    'orchestration': 'from-amber-500 to-amber-600'
   };
   return colorMap[agentId] || 'from-gray-500 to-gray-600';
 };
@@ -333,7 +331,11 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
             <div className="text-sm font-semibold text-foreground">Orchestrator</div>
             <div className="text-xs text-muted-foreground text-center">
               {isRunning ? (
-                <span className="text-violet-400">{Math.round(animatedProgress)}% Complete</span>
+                animatedProgress === 100 ? (
+                  <span className="text-blue-400 animate-pulse">📝 Generating files...</span>
+                ) : (
+                  <span className="text-violet-400">{Math.round(animatedProgress)}% Complete</span>
+                )
               ) : animatedProgress === 100 ? (
                 <span className="text-green-400">✓ Done</span>
               ) : (

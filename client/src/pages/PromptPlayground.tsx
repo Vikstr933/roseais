@@ -652,10 +652,10 @@ export default function PromptPlayground() {
           break;
           
         case 'orchestration:complete':
-          setAgentsActive(false);
+          // Keep agents active! File generation happens after orchestration
           addChatMessage({
             role: 'assistant',
-            content: `Almost done! Just putting the finishing touches on everything... ðŸŽ¨`,
+            content: `Agents done! Now generating your files... ðŸ"`,
             timestamp: Date.now()
           });
           break;
@@ -712,6 +712,7 @@ export default function PromptPlayground() {
 
         case 'GENERATION_COMPLETE':
           setIsLoading(false);
+          setAgentsActive(false); // Stop agent animation when fully complete
           addChatMessage({
             role: 'assistant',
             content: `All done! ðŸŽ‰ Your app is ready - check out the Editor and Preview tabs!`,
@@ -721,6 +722,7 @@ export default function PromptPlayground() {
 
         case 'GENERATION_ERROR':
           setIsLoading(false);
+          setAgentsActive(false); // Stop agent animation on error
           setError({
             message: data.data.error,
             suggestion: data.data.suggestion

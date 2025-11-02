@@ -184,6 +184,16 @@ CRITICAL REQUIREMENTS:
 - Use Tailwind CSS for styling (with inline classes, use modern gradients and shadows)
 - Make the component fully functional and interactive with realistic data
 - Include proper error handling and loading states
+
+🚨 CRITICAL SYNTAX RULES - VERIFY BEFORE RESPONDING 🚨
+ABSOLUTELY NO SYNTAX ERRORS ALLOWED:
+❌ NEVER write "return (;" - this is a CRITICAL ERROR
+❌ NEVER put semicolons immediately after opening parentheses: (;
+❌ NEVER put semicolons immediately after opening braces: {;
+❌ NEVER put semicolons immediately after opening brackets: [;
+✅ ALWAYS verify your code has valid JavaScript/TypeScript syntax
+✅ ALWAYS check that parentheses, braces, and brackets are properly closed
+✅ DOUBLE-CHECK every return statement for correct syntax
 - Use semantic HTML elements
 - Make it responsive and accessible (works on mobile, tablet, desktop)
 - Add smooth transitions and professional UI/UX
@@ -306,6 +316,16 @@ Generate a COMPLETE, MULTI-FILE React TypeScript application based STRICTLY on t
 - **Framework**: React 18+ with TypeScript
 - **Styling**: Tailwind CSS with custom design system
 - **State**: Modern React patterns (hooks, context when needed)
+
+## 🚨 CRITICAL SYNTAX RULES - VERIFY ALL CODE 🚨
+**ABSOLUTELY NO SYNTAX ERRORS ALLOWED:**
+❌ NEVER write "return (;" - this is a CRITICAL ERROR
+❌ NEVER put semicolons immediately after opening parentheses: (;
+❌ NEVER put semicolons immediately after opening braces: {;
+❌ NEVER put semicolons immediately after opening brackets: [;
+✅ ALWAYS verify ALL code has valid JavaScript/TypeScript syntax
+✅ ALWAYS check that ALL parentheses, braces, and brackets are properly closed
+✅ DOUBLE-CHECK every return statement for correct syntax before responding
 - **Quality**: Production-ready with error handling
 - **Accessibility**: WCAG 2.1 AA compliant
 - **Performance**: Optimized for fast loading and smooth interactions
@@ -749,23 +769,37 @@ Suggestions to fix:
       let content = file.content;
       let fixesApplied = 0;
 
-      // Fix 0: Remove stray semicolons after opening parentheses/braces
-      // Fixes: return (;  -> return (
-      //        function(;  -> function(
-      //        if (;     -> if (
-      content = content.replace(/([(\[{])\s*;+\s*/g, (match, opener) => {
+      console.log(`🔧 [SYNTAX FIX] Checking ${file.path}...`);
+
+      // Fix 0: CRITICAL - Remove "return (;" pattern immediately
+      // This is the most common and critical error
+      const returnSemicolonPattern = /return\s*\(\s*;/g;
+      if (returnSemicolonPattern.test(content)) {
+        console.log(`  ⚠️  FOUND CRITICAL ERROR: "return (;" in ${file.path}`);
+        content = content.replace(/return\s*\(\s*;/g, 'return (');
         fixesApplied++;
-        return opener + ' ';
+        console.log(`  ✅ FIXED: "return (;" -> "return ("`);
+      }
+
+      // Fix 0b: Remove stray semicolons after ANY opening parentheses/braces
+      // Fixes: (;  -> (
+      //        [;  -> [
+      //        {;  -> {
+      content = content.replace(/([(\[{])\s*;+/g, (match, opener) => {
+        fixesApplied++;
+        console.log(`  ✅ Fixed opening delimiter: "${match}" -> "${opener}"`);
+        return opener;
       });
 
-      // Fix 0b: Remove stray semicolons before closing parentheses
+      // Fix 0c: Remove stray semicolons before closing parentheses
       // Fixes: );  -> )
-      content = content.replace(/\s*;+\s*([)\]}])/g, (match, closer) => {
+      content = content.replace(/;+\s*([)\]}])/g, (match, closer) => {
         fixesApplied++;
+        console.log(`  ✅ Fixed closing delimiter: "${match}" -> "${closer}"`);
         return closer;
       });
 
-      // Fix 0c: Fix double semicolons
+      // Fix 0d: Fix double semicolons
       content = content.replace(/;;+/g, () => {
         fixesApplied++;
         return ';';
