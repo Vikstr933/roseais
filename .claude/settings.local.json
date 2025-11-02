@@ -17,7 +17,9 @@
       "Bash(taskkill:*)",
       "Bash(npx kill-port 3001)",
       "Bash(npx tsx:*)",
-      "Bash(npm run build:backend:*)"
+      "Bash(npm run build:backend:*)",
+      "Bash(npm run dev:backend:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": []

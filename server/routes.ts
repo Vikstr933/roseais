@@ -27,6 +27,8 @@ import healthRouter from './routes/health';
 import costsRouter from './routes/costs';
 import pluginsRouter from './routes/plugins';
 import userRouter from './routes/user';
+import userPluginsRouter from './routes/user-plugins';
+import credentialsRouter from './routes/credentials';
 
 // Utility function to generate component content based on file path
 async function generateComponentContent(filePath: string): Promise<string> {
@@ -310,6 +312,24 @@ export function registerRoutes(app: Express): Server {
     console.log('✅ Plugins router registered at /api/plugins');
   } else {
     console.error('❌ Plugins router is null or undefined, not registered');
+  }
+
+  // Register user-generated plugins router
+  console.log('🔌 Registering user-plugins router...', userPluginsRouter ? 'Router loaded' : 'Router is null/undefined');
+  if (userPluginsRouter) {
+    app.use('/api/user-plugins', userPluginsRouter);
+    console.log('✅ User-plugins router registered at /api/user-plugins');
+  } else {
+    console.error('❌ User-plugins router is null or undefined, not registered');
+  }
+
+  // Register credentials router
+  console.log('🔑 Registering credentials router...', credentialsRouter ? 'Router loaded' : 'Router is null/undefined');
+  if (credentialsRouter) {
+    app.use('/api/credentials', credentialsRouter);
+    console.log('✅ Credentials router registered at /api/credentials');
+  } else {
+    console.error('❌ Credentials router is null or undefined, not registered');
   }
 
   app.post('/api/server/start', async (req, res) => {

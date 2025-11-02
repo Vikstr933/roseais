@@ -416,3 +416,318 @@ export const userPreferencesRelations = relations(userPreferences, ({ one }) => 
 export const aiInsightsRelations = relations(aiInsights, ({ one }) => ({
   user: one(users, { fields: [aiInsights.userId], references: [users.id] }),
 }));
+
+// User-Generated Plugins System
+export const userGeneratedPlugins = pgTable('user_generated_plugins', {
+  id: serial('id').primaryKey(),
+  pluginId: text('plugin_id').unique().notNull(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  serviceName: text('service_name').notNull(),
+
+  // Code and metadata
+  generatedCode: text('generated_code').notNull(),
+  pluginTemplate: text('plugin_template').notNull(),
+  capabilities: jsonb('capabilities').default([]).notNull(),
+
+  // Security
+  securityScore: integer('security_score').default(0).notNull(),
+  securityIssues: jsonb('security_issues'),
+  sandboxConfig: jsonb('sandbox_config').default({}).notNull(),
+
+  // Status and review
+  status: text('status').default('pending_review').notNull(), // 'pending_review', 'approved', 'rejected', 'disabled', 'active'
+  reviewNotes: text('review_notes'),
+  reviewedBy: text('reviewed_by'),
+  reviewedAt: timestamp('reviewed_at'),
+
+  // Limits and configuration
+  rateLimits: jsonb('rate_limits').default({ requestsPerMinute: 10, requestsPerHour: 100 }).notNull(),
+  resourceLimits: jsonb('resource_limits').default({ maxMemoryMB: 128, maxCpuSeconds: 5, maxNetworkCalls: 10 }).notNull(),
+
+  // OAuth configuration
+  requiresAuth: boolean('requires_auth').default(false).notNull(),
+  authType: text('auth_type'),
+  authConfig: jsonb('auth_config'),
+
+  // Usage tracking
+  installCount: integer('install_count').default(0),
+  executionCount: integer('execution_count').default(0),
+  errorCount: integer('error_count').default(0),
+  lastExecutedAt: timestamp('last_executed_at'),
+
+  // Version control
+  version: text('version').default('1.0.0').notNull(),
+  changelog: text('changelog'),
+
+  // Public marketplace
+  isPublic: boolean('is_public').default(false),
+  marketplaceApproved: boolean('marketplace_approved').default(false),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueUserPluginName: unique().on(table.userId, table.name),
+}));
+
+export const pluginExecutionLogs = pgTable('plugin_execution_logs', {
+  id: serial('id').primaryKey(),
+  pluginId: text('plugin_id').notNull().references(() => userGeneratedPlugins.pluginId, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  action: text('action').notNull(),
+  parameters: jsonb('parameters'),
+  result: jsonb('result'),
+  status: text('status').notNull(),
+  errorMessage: text('error_message'),
+
+  // Performance metrics
+  executionTimeMs: integer('execution_time_ms'),
+  memoryUsedMb: real('memory_used_mb'),
+  networkCalls: integer('network_calls'),
+
+  // Security
+  blocked: boolean('blocked').default(false),
+  blockReason: text('block_reason'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const pluginGenerationRequests = pgTable('plugin_generation_requests', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  prompt: text('prompt').notNull(),
+  serviceName: text('service_name'),
+  requestedCapabilities: jsonb('requested_capabilities'),
+
+  // AI Generation metrics
+  tokensUsed: integer('tokens_used'),
+  generationTimeMs: integer('generation_time_ms'),
+  modelUsed: text('model_used'),
+
+  // Result
+  status: text('status').notNull(), // 'success', 'rejected', 'failed', 'blocked'
+  rejectionReason: text('rejection_reason'),
+
+  pluginId: text('plugin_id'),
+
+  // Tier checking
+  userTier: text('user_tier'),
+  quotaUsed: integer('quota_used'),
+  quotaLimit: integer('quota_limit'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const pluginReviews = pgTable('plugin_reviews', {
+  id: serial('id').primaryKey(),
+  pluginId: text('plugin_id').notNull().references(() => userGeneratedPlugins.pluginId, { onDelete: 'cascade' }),
+  reviewerId: text('reviewer_id').notNull().references(() => users.id, { onDelete: 'set null' }),
+
+  // Review decision
+  decision: text('decision').notNull(), // 'approved', 'rejected', 'requires_changes'
+
+  // Review notes
+  securityNotes: text('security_notes'),
+  functionalityNotes: text('functionality_notes'),
+  recommendations: text('recommendations'),
+
+  // Security findings
+  securityIssuesFound: jsonb('security_issues_found'),
+  autoFixesApplied: jsonb('auto_fixes_applied'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const pluginInstallations = pgTable('plugin_installations', {
+  id: serial('id').primaryKey(),
+  pluginId: text('plugin_id').notNull().references(() => userGeneratedPlugins.pluginId, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+  // Installation status
+  status: text('status').default('active').notNull(), // 'active', 'disabled', 'uninstalled'
+
+  // Configuration override
+  customConfig: jsonb('custom_config'),
+
+  // Credentials (encrypted)
+  credentials: jsonb('credentials'),
+
+  // Usage
+  lastUsedAt: timestamp('last_used_at'),
+  useCount: integer('use_count').default(0),
+
+  installedAt: timestamp('installed_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  uniquePluginInstallation: unique().on(table.pluginId, table.userId),
+}));
+
+export const pluginSecurityIncidents = pgTable('plugin_security_incidents', {
+  id: serial('id').primaryKey(),
+  pluginId: text('plugin_id').notNull().references(() => userGeneratedPlugins.pluginId, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+  // Incident details
+  incidentType: text('incident_type').notNull(), // 'malicious_code', 'rate_limit_exceeded', 'unauthorized_access', 'resource_abuse', etc.
+  severity: text('severity').notNull(), // 'low', 'medium', 'high', 'critical'
+  description: text('description').notNull(),
+  details: jsonb('details'),
+
+  // Actions taken
+  actionTaken: text('action_taken'), // 'plugin_disabled', 'user_warned', 'user_banned', 'under_investigation'
+  resolved: boolean('resolved').default(false),
+  resolvedAt: timestamp('resolved_at'),
+  resolvedBy: text('resolved_by'),
+  resolutionNotes: text('resolution_notes'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const pluginMarketplaceRatings = pgTable('plugin_marketplace_ratings', {
+  id: serial('id').primaryKey(),
+  pluginId: text('plugin_id').notNull().references(() => userGeneratedPlugins.pluginId, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+  rating: integer('rating').notNull(), // 1-5
+  review: text('review'),
+
+  // Helpful votes
+  helpfulCount: integer('helpful_count').default(0),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  uniquePluginUserRating: unique().on(table.pluginId, table.userId),
+}));
+
+// User-Generated Plugins Relations
+export const userGeneratedPluginsRelations = relations(userGeneratedPlugins, ({ one, many }) => ({
+  user: one(users, { fields: [userGeneratedPlugins.userId], references: [users.id] }),
+  executionLogs: many(pluginExecutionLogs),
+  reviews: many(pluginReviews),
+  installations: many(pluginInstallations),
+  securityIncidents: many(pluginSecurityIncidents),
+  ratings: many(pluginMarketplaceRatings),
+}));
+
+export const pluginExecutionLogsRelations = relations(pluginExecutionLogs, ({ one }) => ({
+  plugin: one(userGeneratedPlugins, { fields: [pluginExecutionLogs.pluginId], references: [userGeneratedPlugins.pluginId] }),
+  user: one(users, { fields: [pluginExecutionLogs.userId], references: [users.id] }),
+}));
+
+export const pluginGenerationRequestsRelations = relations(pluginGenerationRequests, ({ one }) => ({
+  user: one(users, { fields: [pluginGenerationRequests.userId], references: [users.id] }),
+}));
+
+export const pluginReviewsRelations = relations(pluginReviews, ({ one }) => ({
+  plugin: one(userGeneratedPlugins, { fields: [pluginReviews.pluginId], references: [userGeneratedPlugins.pluginId] }),
+  reviewer: one(users, { fields: [pluginReviews.reviewerId], references: [users.id] }),
+}));
+
+export const pluginInstallationsRelations = relations(pluginInstallations, ({ one }) => ({
+  plugin: one(userGeneratedPlugins, { fields: [pluginInstallations.pluginId], references: [userGeneratedPlugins.pluginId] }),
+  user: one(users, { fields: [pluginInstallations.userId], references: [users.id] }),
+}));
+
+export const pluginSecurityIncidentsRelations = relations(pluginSecurityIncidents, ({ one }) => ({
+  plugin: one(userGeneratedPlugins, { fields: [pluginSecurityIncidents.pluginId], references: [userGeneratedPlugins.pluginId] }),
+  user: one(users, { fields: [pluginSecurityIncidents.userId], references: [users.id] }),
+}));
+
+export const pluginMarketplaceRatingsRelations = relations(pluginMarketplaceRatings, ({ one }) => ({
+  plugin: one(userGeneratedPlugins, { fields: [pluginMarketplaceRatings.pluginId], references: [userGeneratedPlugins.pluginId] }),
+  user: one(users, { fields: [pluginMarketplaceRatings.userId], references: [users.id] }),
+}));
+
+// TypeScript types for user-generated plugins
+export type UserGeneratedPlugin = typeof userGeneratedPlugins.$inferSelect;
+export type InsertUserGeneratedPlugin = typeof userGeneratedPlugins.$inferInsert;
+
+export type PluginExecutionLog = typeof pluginExecutionLogs.$inferSelect;
+export type InsertPluginExecutionLog = typeof pluginExecutionLogs.$inferInsert;
+
+export type PluginGenerationRequest = typeof pluginGenerationRequests.$inferSelect;
+export type InsertPluginGenerationRequest = typeof pluginGenerationRequests.$inferInsert;
+
+export type PluginReview = typeof pluginReviews.$inferSelect;
+export type InsertPluginReview = typeof pluginReviews.$inferInsert;
+
+export type PluginInstallation = typeof pluginInstallations.$inferSelect;
+export type InsertPluginInstallation = typeof pluginInstallations.$inferInsert;
+
+export type PluginSecurityIncident = typeof pluginSecurityIncidents.$inferSelect;
+export type InsertPluginSecurityIncident = typeof pluginSecurityIncidents.$inferInsert;
+
+export type PluginMarketplaceRating = typeof pluginMarketplaceRatings.$inferSelect;
+export type InsertPluginMarketplaceRating = typeof pluginMarketplaceRatings.$inferInsert;
+
+// User Credentials System
+export const userCredentials = pgTable('user_credentials', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  serviceName: text('service_name').notNull(),
+  credentialType: text('credential_type').notNull(), // 'api_key', 'oauth2', 'personal_access_token', 'custom'
+
+  // Encrypted credential data
+  encryptedData: text('encrypted_data').notNull(),
+
+  // Metadata
+  displayName: text('display_name').notNull(),
+  description: text('description'),
+
+  // OAuth specific fields
+  oauthAccessToken: text('oauth_access_token'),
+  oauthRefreshToken: text('oauth_refresh_token'),
+  oauthExpiresAt: timestamp('oauth_expires_at'),
+  oauthScopes: text('oauth_scopes').array(),
+
+  // Status
+  isActive: boolean('is_active').default(true),
+  lastValidatedAt: timestamp('last_validated_at'),
+  validationStatus: text('validation_status'), // 'valid', 'invalid', 'expired', 'pending'
+  validationError: text('validation_error'),
+
+  // Usage tracking
+  lastUsedAt: timestamp('last_used_at'),
+  useCount: integer('use_count').default(0),
+
+  // Security
+  createdFromIp: text('created_from_ip'),
+  lastModifiedIp: text('last_modified_ip'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueUserServiceCredential: unique().on(table.userId, table.serviceName, table.displayName),
+}));
+
+export const oauthStates = pgTable('oauth_states', {
+  id: serial('id').primaryKey(),
+  stateToken: text('state_token').unique().notNull(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  serviceName: text('service_name').notNull(),
+  redirectUri: text('redirect_uri'),
+
+  // Security
+  createdFromIp: text('created_from_ip'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+});
+
+// User Credentials Relations
+export const userCredentialsRelations = relations(userCredentials, ({ one }) => ({
+  user: one(users, { fields: [userCredentials.userId], references: [users.id] }),
+}));
+
+export const oauthStatesRelations = relations(oauthStates, ({ one }) => ({
+  user: one(users, { fields: [oauthStates.userId], references: [users.id] }),
+}));
+
+// TypeScript types for user credentials
+export type UserCredential = typeof userCredentials.$inferSelect;
+export type InsertUserCredential = typeof userCredentials.$inferInsert;
+
+export type OAuthState = typeof oauthStates.$inferSelect;
+export type InsertOAuthState = typeof oauthStates.$inferInsert;
