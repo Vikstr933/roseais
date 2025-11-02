@@ -111,6 +111,40 @@ export class AICodeGenerator {
         throw new Error('AI generated no files');
       }
 
+      // CRITICAL: Validate that files don't contain JSON structures
+      console.log('🔍 Validating file contents...');
+      parseResult.files = parseResult.files.map(file => {
+        // Check if content looks like JSON (starts with [ or { after trimming)
+        const trimmed = file.content.trim();
+        if ((trimmed.startsWith('[') || trimmed.startsWith('{')) &&
+            (trimmed.includes('"path"') || trimmed.includes('"content"'))) {
+          console.error(`❌ CRITICAL ERROR: ${file.path} contains JSON structure instead of code!`);
+          console.error(`First 500 chars: ${trimmed.substring(0, 500)}`);
+
+          // Try to extract the actual code if it's nested JSON
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed) && parsed[0]?.path && parsed[0]?.content) {
+              // This is the entire JSON array embedded in a file - extract the matching file
+              const match = parsed.find((f: any) => f.path === file.path);
+              if (match?.content) {
+                console.log(`✅ Recovered actual content for ${file.path} from nested JSON`);
+                return { ...file, content: match.content };
+              }
+            } else if (parsed.content && typeof parsed.content === 'string') {
+              // Single file JSON object
+              console.log(`✅ Recovered actual content for ${file.path} from JSON wrapper`);
+              return { ...file, content: parsed.content };
+            }
+          } catch (e) {
+            console.error(`Failed to recover content from malformed JSON in ${file.path}`);
+          }
+
+          throw new Error(`CRITICAL: ${file.path} contains JSON metadata instead of actual code. The AI generated malformed output.`);
+        }
+        return file;
+      });
+
       // Automatically fix common syntax issues
       parseResult.files = this.autoFixCommonSyntaxIssues(parseResult.files);
       console.log('🔧 Applied automatic syntax fixes to generated code');
@@ -423,13 +457,23 @@ YOUR RESPONSE MUST BE PURE JSON - NO EXCEPTIONS. NO MARKDOWN.
 - Explanatory text before or after the JSON
 - Comments or notes
 - Any text that is not part of the JSON structure
+- **CRITICAL**: DO NOT put the JSON structure itself inside a "content" field!
 
 ✅ DO include:
 - ONLY the JSON array starting with [ and ending with ]
 - Properly escaped strings (\\n for newlines, \\" for quotes)
 - All necessary files in the array
+- **CRITICAL**: Each file's "content" must be ACTUAL SOURCE CODE, not more JSON!
 
-## Required Structure Example
+## ❌ WRONG - DO NOT DO THIS:
+[
+  {
+    "path": "src/App.tsx",
+    "content": "[{\\"path\\":\\"src/components/Grid.tsx\\",\\"content\\":\\"...\\"}]"  ← WRONG! This is JSON inside JSON!
+  }
+]
+
+## ✅ CORRECT - Required Structure Example
 
 [
   {
@@ -445,6 +489,8 @@ YOUR RESPONSE MUST BE PURE JSON - NO EXCEPTIONS. NO MARKDOWN.
     "content": "export interface Recipe {\\n  id: number;\\n  title: string;\\n}"
   }
 ]
+
+NOTICE: The "content" field contains ACTUAL TYPESCRIPT/REACT CODE, not JSON metadata!
 
 ## Format Verification Checklist
 Before responding, verify:

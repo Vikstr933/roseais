@@ -16,7 +16,8 @@
       "Bash(findstr:*)",
       "Bash(taskkill:*)",
       "Bash(npx kill-port 3001)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(npm run build:backend:*)"
     ],
     "deny": [],
     "ask": []
