@@ -228,9 +228,12 @@ function validateComponentFile(
 function validateSyntax(content: string): string[] {
   const errors: string[] = [];
 
-  // Check 1: return (; pattern (critical)
+  // Check 1: return (; or return {; patterns (critical)
   if (/return\s*\(\s*;/.test(content)) {
     errors.push('SYNTAX ERROR: Found "return (;" - incomplete return statement');
+  }
+  if (/return\s*\{\s*;/.test(content)) {
+    errors.push('SYNTAX ERROR: Found "return {;" - incomplete return statement');
   }
 
   // Check 2: Stray semicolons after opening delimiters

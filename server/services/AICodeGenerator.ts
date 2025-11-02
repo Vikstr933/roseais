@@ -862,13 +862,20 @@ Suggestions to fix:
 
       console.log(`🔧 [SYNTAX FIX] Checking ${file.path}...`);
 
-      // Fix 0: CRITICAL - Remove "return (;" pattern immediately
-      // This is the most common and critical error
+      // Fix 0: CRITICAL - Remove "return (;" and "return {;" patterns immediately
+      // These are the most common and critical errors
       content = content.replace(/return\s*\(\s*;/g, (match) => {
         console.log(`  ⚠️  FOUND CRITICAL ERROR: "${match.replace(/\n/g, '\\n')}" in ${file.path}`);
         fixesApplied++;
         console.log(`  ✅ FIXED: "return (;" -> "return ("`);
         return 'return (';
+      });
+
+      content = content.replace(/return\s*\{\s*;/g, (match) => {
+        console.log(`  ⚠️  FOUND CRITICAL ERROR: "${match.replace(/\n/g, '\\n')}" in ${file.path}`);
+        fixesApplied++;
+        console.log(`  ✅ FIXED: "return {;" -> "return {"`);
+        return 'return {';
       });
 
       // Fix 0b: Remove stray semicolons after ANY opening parentheses/braces
@@ -1037,9 +1044,12 @@ Suggestions to fix:
   private verifySyntaxFixes(content: string, filePath: string): string[] {
     const errors: string[] = [];
 
-    // Check 1: return (; pattern
+    // Check 1: return (; or return {; patterns
     if (/return\s*\(\s*;/.test(content)) {
       errors.push('Found "return (;" pattern - incomplete return statement');
+    }
+    if (/return\s*\{\s*;/.test(content)) {
+      errors.push('Found "return {;" pattern - incomplete return statement');
     }
 
     // Check 2: Stray semicolons after opening delimiters on same line
