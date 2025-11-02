@@ -928,8 +928,23 @@ Suggestions to fix:
     const result = [...files];
     const existingPaths = new Set(files.map(f => f.path));
 
-    // Ensure package.json
-    if (!existingPaths.has('package.json')) {
+    // Required devDependencies that MUST be present for the app to build
+    const requiredDevDeps = {
+      '@types/react': '^18.3.18',
+      '@types/react-dom': '^18.3.5',
+      '@vitejs/plugin-react': '^4.3.4',
+      'autoprefixer': '^10.4.20',
+      'postcss': '^8.4.47',
+      'tailwindcss': '^3.4.14',
+      'typescript': '^5.7.2',
+      'vite': '^6.0.11'
+    };
+
+    // Ensure package.json with proper dependencies
+    const existingPackageJsonIndex = result.findIndex(f => f.path === 'package.json');
+
+    if (existingPackageJsonIndex === -1) {
+      // No package.json exists - create one
       const depObj: Record<string, string> = {
         'react': '^18.3.1',
         'react-dom': '^18.3.1',
@@ -961,18 +976,84 @@ Suggestions to fix:
             preview: 'vite preview'
           },
           dependencies: depObj,
-          devDependencies: {
-            '@types/react': '^18.3.18',
-            '@types/react-dom': '^18.3.5',
-            '@vitejs/plugin-react': '^4.3.4',
-            'autoprefixer': '^10.4.20',
-            'postcss': '^8.4.47',
-            'tailwindcss': '^3.4.14',
-            'typescript': '^5.7.2',
-            'vite': '^6.0.11'
-          }
+          devDependencies: requiredDevDeps
         }, null, 2)
       });
+    } else {
+      // package.json exists - merge required devDependencies
+      try {
+        const existingPackageJson = JSON.parse(result[existingPackageJsonIndex].content);
+
+        // Ensure devDependencies object exists
+        if (!existingPackageJson.devDependencies) {
+          existingPackageJson.devDependencies = {};
+        }
+
+        // Merge required devDependencies (our versions take precedence to ensure compatibility)
+        Object.assign(existingPackageJson.devDependencies, requiredDevDeps);
+
+        // Ensure dependencies object exists with at least react and react-dom
+        if (!existingPackageJson.dependencies) {
+          existingPackageJson.dependencies = {};
+        }
+        if (!existingPackageJson.dependencies.react) {
+          existingPackageJson.dependencies.react = '^18.3.1';
+        }
+        if (!existingPackageJson.dependencies['react-dom']) {
+          existingPackageJson.dependencies['react-dom'] = '^18.3.1';
+        }
+
+        // Ensure scripts exist
+        if (!existingPackageJson.scripts) {
+          existingPackageJson.scripts = {
+            dev: 'vite',
+            build: 'vite build',
+            preview: 'vite preview'
+          };
+        }
+
+        // Ensure type module is set
+        existingPackageJson.type = 'module';
+
+        // Update the package.json in the result
+        result[existingPackageJsonIndex].content = JSON.stringify(existingPackageJson, null, 2);
+
+        this.logger.info('AICodeGenerator', 'Merged required devDependencies into AI-generated package.json', {
+          addedDeps: Object.keys(requiredDevDeps)
+        });
+      } catch (error) {
+        this.logger.error('AICodeGenerator', 'Failed to parse existing package.json, replacing it', { error });
+        // If parsing fails, replace with our own
+        const depObj: Record<string, string> = {
+          'react': '^18.3.1',
+          'react-dom': '^18.3.1',
+        };
+        dependencies.forEach(dep => {
+          if (dep === 'framer-motion') depObj[dep] = '^11.13.1';
+          else if (dep === 'lucide-react') depObj[dep] = '^0.453.0';
+          else if (dep === 'clsx') depObj[dep] = '^2.1.1';
+          else if (dep === 'tailwind-merge') depObj[dep] = '^2.5.4';
+          else if (dep === 'date-fns') depObj[dep] = '^3.6.0';
+          else if (dep === 'recharts') depObj[dep] = '^2.13.0';
+          else if (dep === 'react-hook-form') depObj[dep] = '^7.53.1';
+          else if (dep === 'zod') depObj[dep] = '^3.25.76';
+          else if (dep === 'react-router-dom') depObj[dep] = '^6.26.0';
+          else if (!depObj[dep]) depObj[dep] = 'latest';
+        });
+
+        result[existingPackageJsonIndex].content = JSON.stringify({
+          name: componentName.toLowerCase().replace(/\s+/g, '-'),
+          version: '0.1.0',
+          type: 'module',
+          scripts: {
+            dev: 'vite',
+            build: 'vite build',
+            preview: 'vite preview'
+          },
+          dependencies: depObj,
+          devDependencies: requiredDevDeps
+        }, null, 2);
+      }
     }
 
     // Ensure index.html
