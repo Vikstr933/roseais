@@ -68,7 +68,7 @@ export const workspaces = pgTable('workspaces', {
   collaborators: jsonb('collaborators').default([]),
   status: text('status').notNull().default('active'),
   ownerId: text('owner_id').references(() => users.id),
-  // workspaceType: text('workspace_type').default('personal'), // TEMPORARILY COMMENTED - uncomment after running migration 2021
+  workspaceType: text('workspace_type').default('personal'),
   projectType: text('project_type').notNull().default('web_app'),
   projectStatus: text('project_status').default('active'),
   inviteCode: text('invite_code').unique(),
