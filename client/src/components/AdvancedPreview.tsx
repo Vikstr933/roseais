@@ -110,8 +110,28 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
   // Debug: Log when preview URL changes
   useEffect(() => {
     console.log('🔍 AdvancedPreview URL updated:', previewUrl);
-    if (previewUrl) {
+
+    // Only set loading state if document is visible and not hidden
+    // This prevents race conditions when iframe loads while tab is hidden
+    if (previewUrl && !document.hidden) {
       setIsLoading(true);
+    } else if (previewUrl && document.hidden) {
+      console.log('⚠️ Preview URL set while tab is hidden - deferring load');
+
+      // Wait for tab to become visible before loading
+      const visibilityHandler = () => {
+        if (!document.hidden) {
+          console.log('✅ Tab is now visible - loading preview');
+          setIsLoading(true);
+          document.removeEventListener('visibilitychange', visibilityHandler);
+        }
+      };
+      document.addEventListener('visibilitychange', visibilityHandler);
+
+      // Cleanup on unmount
+      return () => {
+        document.removeEventListener('visibilitychange', visibilityHandler);
+      };
     }
   }, [previewUrl]);
 

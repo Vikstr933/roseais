@@ -462,14 +462,18 @@ export default function PromptPlayground() {
           const localUrlMatch = line.match(/(?:Local:\s+|started at\s+)(https?:\/\/[^\s]+)/i);
           if (localUrlMatch && localUrlMatch[1]) {
             const url = localUrlMatch[1];
-            setLivePreviewUrl(url);
-            // Auto-switch to preview when dev server is ready
+            // Auto-switch to preview when dev server is ready (switch tab FIRST)
             setActiveTab('preview');
-            addChatMessage({
-              role: 'assistant',
-              content: `ðŸ”Œ Dev server ready at ${url}. Switching to Previewâ€¦`,
-              timestamp: Date.now()
-            });
+
+            // Wait for tab switch to render before setting preview URL
+            setTimeout(() => {
+              setLivePreviewUrl(url);
+              addChatMessage({
+                role: 'assistant',
+                content: `ðŸ"Œ Dev server ready at ${url}. Switching to Previewâ€¦`,
+                timestamp: Date.now()
+              });
+            }, 100);
           }
         }
       } catch {
@@ -496,9 +500,11 @@ export default function PromptPlayground() {
                   const localUrlMatch = line.match(/(?:Local:\s+|started at\s+)(https?:\/\/[^\s]+)/i);
                   if (localUrlMatch && localUrlMatch[1]) {
                     const url = localUrlMatch[1];
-                    setLivePreviewUrl(url);
                     setActiveTab('preview');
-                    addChatMessage({ role: 'assistant', content: `ðŸ”Œ Dev server ready at ${url}. Switching to Previewâ€¦`, timestamp: Date.now() });
+                    setTimeout(() => {
+                      setLivePreviewUrl(url);
+                      addChatMessage({ role: 'assistant', content: `ðŸ"Œ Dev server ready at ${url}. Switching to Previewâ€¦`, timestamp: Date.now() });
+                    }, 100);
                   }
                 }
               } catch {}
@@ -833,14 +839,22 @@ export default function PromptPlayground() {
         });
 
         console.log('âœ… WebContainer dev server URL:', devServerUrl);
-        setLivePreviewUrl(devServerUrl);
+
+        // Switch to preview tab FIRST, then set URL after tab is visible
+        // This prevents race condition where iframe tries to load while hidden
         setActiveTab('preview');
 
-        addChatMessage({
-          role: 'assistant',
-          content: `ðŸŽ‰ Preview is ready at: ${devServerUrl}`,
-          timestamp: Date.now()
-        });
+        // Wait for tab switch to render before setting preview URL
+        // This ensures iframe is visible when it starts loading
+        setTimeout(() => {
+          setLivePreviewUrl(devServerUrl);
+
+          addChatMessage({
+            role: 'assistant',
+            content: `ðŸŽ‰ Preview is ready at: ${devServerUrl}`,
+            timestamp: Date.now()
+          });
+        }, 100);
 
       } else {
         // Fallback to server-side deployment
@@ -866,14 +880,19 @@ export default function PromptPlayground() {
         if (response.ok) {
       const result = await response.json();
           if (result.deploymentUrl) {
-            setLivePreviewUrl(result.deploymentUrl);
+            // Switch to preview tab FIRST, then set URL
             setActiveTab('preview');
 
-            addChatMessage({
+            // Wait for tab switch to render before setting preview URL
+            setTimeout(() => {
+              setLivePreviewUrl(result.deploymentUrl);
+
+              addChatMessage({
         role: 'assistant',
-              content: `âœ… Server deployment complete! Preview available at: ${result.deploymentUrl}`,
-              timestamp: Date.now()
-            });
+                content: `âœ… Server deployment complete! Preview available at: ${result.deploymentUrl}`,
+                timestamp: Date.now()
+              });
+            }, 100);
           }
         }
       }
