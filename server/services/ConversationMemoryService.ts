@@ -270,20 +270,29 @@ Key points (JSON array):`,
    * Get active (non-dismissed, non-expired) insights
    */
   async getActiveInsights(userId: string, limit: number = 10): Promise<AIInsight[]> {
-    const now = new Date();
+    try {
+      const now = new Date();
 
-    return await db
-      .select()
-      .from(aiInsights)
-      .where(
-        and(
-          eq(aiInsights.userId, userId),
-          eq(aiInsights.dismissed, false),
-          or(isNull(aiInsights.expiresAt), gte(aiInsights.expiresAt, now))
+      return await db
+        .select()
+        .from(aiInsights)
+        .where(
+          and(
+            eq(aiInsights.userId, userId),
+            eq(aiInsights.dismissed, false),
+            or(isNull(aiInsights.expiresAt), gte(aiInsights.expiresAt, now))
+          )
         )
-      )
-      .orderBy(desc(aiInsights.priority), desc(aiInsights.createdAt))
-      .limit(limit);
+        .orderBy(desc(aiInsights.priority), desc(aiInsights.createdAt))
+        .limit(limit);
+    } catch (error: any) {
+      // Gracefully handle missing table - return empty array
+      if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+        console.warn('⚠️ ai_insights table does not exist yet. Run migrations to enable insights feature.');
+        return [];
+      }
+      throw error;
+    }
   }
 
   /**

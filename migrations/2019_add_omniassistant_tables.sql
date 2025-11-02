@@ -67,7 +67,8 @@ CREATE INDEX idx_ai_insights_priority ON ai_insights(priority DESC);
 CREATE INDEX idx_ai_insights_dismissed ON ai_insights(dismissed);
 CREATE INDEX idx_ai_insights_created_at ON ai_insights(created_at DESC);
 CREATE INDEX idx_ai_insights_expires_at ON ai_insights(expires_at);
-CREATE INDEX idx_ai_insights_active ON ai_insights(user_id, dismissed, expires_at) WHERE dismissed = false AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP);
+-- Partial index for active insights (removed CURRENT_TIMESTAMP check as it's non-immutable)
+CREATE INDEX idx_ai_insights_active ON ai_insights(user_id, dismissed, expires_at) WHERE dismissed = false;
 
 -- Comments explaining the schema design
 COMMENT ON TABLE conversations IS 'Persistent conversation memory for context-aware AI assistance across sessions';
