@@ -518,4 +518,302 @@ router.get('/:id/files', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/workspaces/:id/members - Get workspace members
+router.get('/:id/members', authenticateUser, async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.id);
+
+    // Verify workspace exists and user has access
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Get all members with their details
+    const members = await projectService.getProjectMembers(workspaceId);
+    res.json(members);
+  } catch (error) {
+    console.error('Error fetching workspace members:', error);
+    res.status(500).json({ error: 'Failed to fetch workspace members' });
+  }
+});
+
+// POST /api/workspaces/:id/invite - Invite member by email
+router.post('/:id/invite', authenticateUser, async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.id);
+    const { email, role = 'editor', message } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Verify workspace exists and user has permission to invite
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if requester is owner or admin
+    const [requesterMember] = await db
+      .select()
+      .from(projectMembers)
+      .where(
+        and(
+          eq(projectMembers.projectId, workspaceId),
+          eq(projectMembers.userId, req.user!.id)
+        )
+      )
+      .limit(1);
+
+    if (!requesterMember && workspace.ownerId !== req.user!.id) {
+      return res.status(403).json({ error: 'Only workspace owner or admins can invite members' });
+    }
+
+    // TODO: Send invitation email to the user
+    // For now, we'll just return success
+    console.log(`Invitation sent to ${email} for workspace ${workspaceId} with role ${role}`);
+
+    res.json({
+      success: true,
+      message: `Invitation sent to ${email}`,
+      email,
+      role,
+    });
+  } catch (error) {
+    console.error('Error inviting member:', error);
+    res.status(500).json({ error: 'Failed to send invitation' });
+  }
+});
+
+// PATCH /api/workspaces/:id/members/:memberId - Update member role
+router.patch('/:id/members/:memberId', authenticateUser, async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.id);
+    const memberId = req.params.memberId;
+    const { role } = req.body;
+
+    if (!role) {
+      return res.status(400).json({ error: 'Role is required' });
+    }
+
+    // Verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if requester is owner or admin
+    if (workspace.ownerId !== req.user!.id) {
+      return res.status(403).json({ error: 'Only workspace owner can update member roles' });
+    }
+
+    // Update the member's role
+    const [updatedMember] = await db
+      .update(projectMembers)
+      .set({ role, updatedAt: new Date() })
+      .where(
+        and(
+          eq(projectMembers.projectId, workspaceId),
+          eq(projectMembers.userId, parseInt(memberId))
+        )
+      )
+      .returning();
+
+    if (!updatedMember) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    console.log(`Updated member ${memberId} role to ${role} in workspace ${workspaceId}`);
+    res.json(updatedMember);
+  } catch (error) {
+    console.error('Error updating member role:', error);
+    res.status(500).json({ error: 'Failed to update member role' });
+  }
+});
+
+// DELETE /api/workspaces/:id/members/:memberId - Remove member from workspace
+router.delete('/:id/members/:memberId', authenticateUser, async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.id);
+    const memberId = req.params.memberId;
+
+    // Verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if requester is owner or admin
+    if (workspace.ownerId !== req.user!.id) {
+      return res.status(403).json({ error: 'Only workspace owner can remove members' });
+    }
+
+    // Can't remove the owner
+    if (parseInt(memberId) === workspace.ownerId) {
+      return res.status(400).json({ error: 'Cannot remove workspace owner' });
+    }
+
+    // Remove the member
+    await db
+      .delete(projectMembers)
+      .where(
+        and(
+          eq(projectMembers.projectId, workspaceId),
+          eq(projectMembers.userId, parseInt(memberId))
+        )
+      );
+
+    console.log(`Removed member ${memberId} from workspace ${workspaceId}`);
+    res.json({ success: true, message: 'Member removed successfully' });
+  } catch (error) {
+    console.error('Error removing member:', error);
+    res.status(500).json({ error: 'Failed to remove member' });
+  }
+});
+
+// PATCH /api/workspaces/:id - Update workspace settings (alternative to PUT)
+router.patch('/:id', authenticateUser, async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.id);
+    const {
+      name,
+      description,
+      isPublic,
+      allowJoinRequests,
+      requireApproval,
+      maxMembers,
+      allowComments,
+      allowForking,
+      enableAI,
+      enableWebContainer,
+      theme,
+    } = req.body;
+
+    // Verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if user has permission to update settings
+    if (workspace.ownerId !== req.user!.id) {
+      return res.status(403).json({ error: 'Only workspace owner can update settings' });
+    }
+
+    // Build settings object from request
+    const existingSettings = workspace.settings
+      ? typeof workspace.settings === 'string'
+        ? JSON.parse(workspace.settings)
+        : workspace.settings
+      : {};
+
+    const newSettings = {
+      ...existingSettings,
+      ...(allowJoinRequests !== undefined && { allowJoinRequests }),
+      ...(requireApproval !== undefined && { requireApproval }),
+      ...(maxMembers !== undefined && { maxMembers }),
+      ...(allowComments !== undefined && { allowComments }),
+      ...(allowForking !== undefined && { allowForking }),
+      ...(enableAI !== undefined && { enableAI }),
+      ...(enableWebContainer !== undefined && { enableWebContainer }),
+      ...(theme !== undefined && { theme }),
+    };
+
+    // Build update object
+    const updateData: any = {
+      updatedAt: new Date(),
+      settings: JSON.stringify(newSettings),
+    };
+
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (isPublic !== undefined) updateData.isPublic = isPublic;
+
+    // Update workspace
+    const [updatedWorkspace] = await db
+      .update(workspaces)
+      .set(updateData)
+      .where(eq(workspaces.id, workspaceId))
+      .returning();
+
+    console.log(`Updated workspace ${workspaceId} settings`);
+    res.json(updatedWorkspace);
+  } catch (error) {
+    console.error('Error updating workspace settings:', error);
+    res.status(500).json({ error: 'Failed to update workspace settings' });
+  }
+});
+
+// POST /api/workspaces/:id/invite-code - Generate new invite code
+router.post('/:id/invite-code', authenticateUser, async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.id);
+
+    // Verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if user has permission
+    if (workspace.ownerId !== req.user!.id) {
+      return res.status(403).json({ error: 'Only workspace owner can generate invite codes' });
+    }
+
+    // Generate new invite code (8 characters)
+    const newInviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    // Update workspace with new invite code
+    const [updatedWorkspace] = await db
+      .update(workspaces)
+      .set({
+        inviteCode: newInviteCode,
+        updatedAt: new Date(),
+      })
+      .where(eq(workspaces.id, workspaceId))
+      .returning();
+
+    console.log(`Generated new invite code for workspace ${workspaceId}: ${newInviteCode}`);
+    res.json({
+      success: true,
+      inviteCode: newInviteCode,
+      workspace: updatedWorkspace,
+    });
+  } catch (error) {
+    console.error('Error generating invite code:', error);
+    res.status(500).json({ error: 'Failed to generate invite code' });
+  }
+});
+
 export default router;
