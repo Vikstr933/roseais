@@ -52,77 +52,11 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
 
-    // Performance optimizations
+    // Simplified build configuration to fix module loading issues
     rollupOptions: {
       output: {
-        // Advanced code splitting with dynamic chunking
-        manualChunks(id) {
-          // Core React dependencies (keep together for shared context)
-          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
-            return 'react-core';
-          }
-
-          // Monaco Editor (heavy - separate chunk for lazy loading)
-          if (id.includes('node_modules/monaco-editor') || id.includes('@monaco-editor')) {
-            return 'monaco-editor';
-          }
-
-          // Radix UI components (UI library)
-          if (id.includes('@radix-ui')) {
-            return 'radix-ui';
-          }
-
-          // Query/state management
-          if (id.includes('@tanstack/react-query')) {
-            return 'react-query';
-          }
-
-          // Form libraries
-          if (id.includes('react-hook-form') || id.includes('@hookform')) {
-            return 'forms';
-          }
-
-          // Charts (heavy visualization library)
-          if (id.includes('recharts') || id.includes('d3-')) {
-            return 'charts';
-          }
-
-          // Animation libraries
-          if (id.includes('framer-motion')) {
-            return 'animations';
-          }
-
-          // Routing
-          if (id.includes('wouter')) {
-            return 'routing';
-          }
-
-          // WebContainer (if used)
-          if (id.includes('@webcontainer')) {
-            return 'webcontainer';
-          }
-
-          // Icon libraries
-          if (id.includes('lucide-react') || id.includes('react-icons')) {
-            return 'icons';
-          }
-
-          // Date/time utilities
-          if (id.includes('date-fns') || id.includes('dayjs') || id.includes('moment')) {
-            return 'date-utils';
-          }
-
-          // All other node_modules go into vendor chunk
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
-        },
-
-        // Optimize chunk file names
-        chunkFileNames: (chunkInfo) => {
-          const facadeModuleId = chunkInfo.facadeModuleId ? chunkInfo.facadeModuleId.split('/').pop() : 'chunk';
-          return `js/[name]-[hash].js`;
-        },
+        // Let Vite handle chunking automatically
+        chunkFileNames: 'js/[name]-[hash].js',
         entryFileNames: 'js/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name!.split('.');
@@ -138,16 +72,20 @@ export default defineConfig({
       }
     },
 
-    // Additional performance settings
-    target: 'esnext',
-    minify: 'esbuild', // Use esbuild (faster and already installed)
+    // Use terser for better compatibility
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: false,
+        drop_debugger: true
+      }
+    },
 
-    // Chunk size warnings
-    chunkSizeWarningLimit: 1000, // 1MB
-    assetsInlineLimit: 4096, // 4KB
+    // Increase chunk size limit
+    chunkSizeWarningLimit: 2000,
 
-    // Source maps for production debugging (optional)
-    sourcemap: false, // Set to true if you need source maps in production
+    // Source maps disabled for production
+    sourcemap: false,
 
     // CSS code splitting
     cssCodeSplit: true
