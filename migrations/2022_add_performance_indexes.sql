@@ -85,17 +85,17 @@ ON user_generated_plugins(created_at DESC);
 -- PLUGIN EXECUTION LOGS INDEXES
 -- ============================================================================
 
--- Critical index for plugin execution history (recent executions)
-CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_executed
-ON plugin_execution_logs(plugin_id, executed_at DESC);
+-- Critical index for plugin execution history (recent executions) - uses created_at, not executed_at
+CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_created
+ON plugin_execution_logs(plugin_id, created_at DESC);
 
 -- Index for user's execution history
-CREATE INDEX IF NOT EXISTS idx_plugin_logs_user_executed
-ON plugin_execution_logs(user_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_plugin_logs_user_created
+ON plugin_execution_logs(user_id, created_at DESC);
 
--- Index for success/failure analysis
-CREATE INDEX IF NOT EXISTS idx_plugin_logs_success
-ON plugin_execution_logs(success);
+-- Index for status filtering (status column, not success boolean)
+CREATE INDEX IF NOT EXISTS idx_plugin_logs_status
+ON plugin_execution_logs(status);
 
 -- ============================================================================
 -- SESSIONS INDEXES
