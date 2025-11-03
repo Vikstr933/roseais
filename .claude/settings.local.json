@@ -20,7 +20,12 @@
       "Bash(npm run build:backend:*)",
       "Bash(npm run dev:backend:*)",
       "Bash(npm run:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "Bash(vercel inspect:*)",
+      "Bash(vercel ls:*)",
+      "Bash(vercel project:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

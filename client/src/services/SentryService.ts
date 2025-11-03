@@ -1,5 +1,4 @@
 import * as Sentry from '@sentry/react';
-import React from 'react';
 
 /**
  * Sentry Error Tracking Service for Frontend
@@ -125,15 +124,4 @@ export class FrontendSentryService {
 
 // Export singleton
 export const frontendSentryService = new FrontendSentryService();
-
-// Also export ErrorBoundary component with fallback
-// Create a simple pass-through component if Sentry ErrorBoundary is not available
-class FallbackErrorBoundary extends React.Component<any> {
-  render() {
-    return this.props.children;
-  }
-}
-
-// Use Sentry's ErrorBoundary if available, otherwise use our fallback
-export const ErrorBoundary = Sentry.ErrorBoundary || FallbackErrorBoundary;
 
