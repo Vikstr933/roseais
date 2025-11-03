@@ -59,6 +59,7 @@ function AppContent() {
           {/* Public routes */}
           <Route path="/" component={NewHome} />
           <Route path="/auth/callback" component={AuthCallback} />
+          <Route path="/callback" component={AuthCallback} />
           <Route path="/pricing" component={Pricing} />
 
         {/* Protected routes */}
