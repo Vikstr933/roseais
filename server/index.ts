@@ -167,20 +167,19 @@ const initializeApp = async () => {
       }
     });
 
-    // Health check endpoints bypass CORS (no Origin required)
-    // This allows monitoring services like Render to check health without Origin header
+    // Health check endpoints skip CORS entirely (monitoring services don't send Origin)
+    // This MUST come before global CORS middleware
     app.use('/api/health', (req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
       if (req.method === 'OPTIONS') {
         return res.status(204).send();
       }
       next();
     });
 
-    // Global CORS configuration (now using secure CORS)
+    // Global CORS configuration (strict security for all non-health endpoints)
     app.use(
       cors({
         origin: (origin, callback) => {
