@@ -5,6 +5,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WorkspaceProvider, useWorkspace } from './contexts/WorkspaceContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
+// App version - force cache bust
+const APP_VERSION = '2025.11.03.1';
+
 // Lazy load pages for code splitting - reduces initial bundle size
 const NewHome = lazy(() => import('./pages/NewHome'));
 const Workspaces = lazy(() => import('./pages/Workspaces'));
