@@ -52,6 +52,7 @@ export interface IntentAnalysis {
 export class PluginGeneratorAgent extends BaseAgent {
   private anthropic: Anthropic;
   private securityAnalyzer: PluginSecurityAnalyzer;
+  private model: string;
 
   private static readonly BLOCKED_INTENTS = [
     'crypto_mining',
@@ -92,12 +93,9 @@ export class PluginGeneratorAgent extends BaseAgent {
   ];
 
   constructor() {
-    super(
-      'plugin-generator-agent',
-      'Plugin Generator',
-      'code-generator',
-      'claude-3-5-sonnet-20241022'
-    );
+    super('plugin-generator-agent');
+
+    this.model = 'claude-3-5-sonnet-20241022';
 
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
