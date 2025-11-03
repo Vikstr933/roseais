@@ -128,9 +128,9 @@ ON project_files(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agents_is_active
 ON agents(is_active);
 
--- Index for agent type filtering
+-- Index for agent type filtering (column is 'type', not 'agent_type')
 CREATE INDEX IF NOT EXISTS idx_agents_type
-ON agents(agent_type);
+ON agents(type);
 
 -- ============================================================================
 -- VERIFICATION
