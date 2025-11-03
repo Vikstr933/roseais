@@ -2,30 +2,10 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
-  "redirects": [
+  "rewrites": [
     {
-      "source": "/((?!js|css|assets|images).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/index.html",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/(js|css|assets)/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
     }
   ]
 }
