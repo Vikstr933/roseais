@@ -1,5 +1,8 @@
-import { VM } from 'vm2';
+import { Worker } from 'worker_threads';
 import { SimpleLogger } from '../utils/SimpleLogger';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 
 const logger = new SimpleLogger('PluginSandbox');
 
@@ -27,8 +30,10 @@ export interface ExecutionResult {
 /**
  * PluginSandbox
  *
- * Provides isolated execution environment for user-generated plugins using VM2.
+ * Provides isolated execution environment for user-generated plugins using Worker threads.
  * Implements resource limits, domain whitelist, and security monitoring.
+ *
+ * SECURITY: Replaces vulnerable vm2 with Node.js Worker threads for true process isolation.
  */
 export class PluginSandbox {
   private static readonly DEFAULT_CONFIG: SandboxConfig = {
@@ -50,8 +55,16 @@ export class PluginSandbox {
     ],
   };
 
+  private workerPath: string;
+
+  constructor() {
+    // Create worker script path
+    this.workerPath = path.join(__dirname, 'sandbox-worker.js');
+    this.ensureWorkerScript();
+  }
+
   /**
-   * Execute plugin code in isolated sandbox
+   * Execute plugin code in isolated Worker thread
    */
   async execute(
     code: string,
@@ -65,142 +78,37 @@ export class PluginSandbox {
     logger.info('Starting sandbox execution', { functionName });
 
     try {
-      // Track network calls
-      let networkCallCount = 0;
-      const blockedDomains: string[] = [];
-
-      // Create sandbox with limited access
-      const vm = new VM({
-        timeout: sandboxConfig.timeout,
-        sandbox: {
-          console: {
-            log: (...args: any[]) => logger.debug('Plugin log', { args }),
-            error: (...args: any[]) => logger.error('Plugin error', { args }),
-            warn: (...args: any[]) => logger.warn('Plugin warning', { args }),
-          },
-
-          // Provide safe fetch wrapper
-          fetch: this.createSafeFetch(
-            sandboxConfig.allowedDomains,
-            (domain) => {
-              networkCallCount++;
-              if (networkCallCount > sandboxConfig.maxNetworkCalls) {
-                throw new Error('Network call limit exceeded');
-              }
-              if (!this.isDomainAllowed(domain, sandboxConfig.allowedDomains)) {
-                blockedDomains.push(domain);
-                throw new Error(`Domain not allowed: ${domain}`);
-              }
-            }
-          ),
-
-          // Provide setTimeout/setInterval with limits
-          setTimeout: (fn: Function, delay: number) => {
-            if (delay > sandboxConfig.timeout) {
-              throw new Error('Timeout exceeds maximum allowed');
-            }
-            return setTimeout(fn, delay);
-          },
-
-          setInterval: (fn: Function, delay: number) => {
-            if (delay < 1000) {
-              throw new Error('Interval too frequent (minimum 1000ms)');
-            }
-            return setInterval(fn, delay);
-          },
-        },
-
-        // Disable require for dangerous modules
-        require: {
-          external: {
-            modules: [
-              'axios',
-              'node-fetch',
-              'discord.js',
-              '@discordjs/rest',
-              '@discordjs/builders',
-              '@slack/web-api',
-              'trello',
-              '@notionhq/client',
-              'zod',
-              'date-fns',
-              'uuid',
-            ],
-          },
-          builtin: [], // No built-in Node.js modules
-          context: 'sandbox',
-        },
-      });
-
-      // Execute the code
-      const startMemory = process.memoryUsage().heapUsed / 1024 / 1024;
-
-      // Run code with CPU time limit
-      const result = await this.executeWithCpuLimit(
-        () => vm.run(code),
-        sandboxConfig.maxCpuSeconds * 1000
-      );
-
-      const endMemory = process.memoryUsage().heapUsed / 1024 / 1024;
-      const memoryUsed = endMemory - startMemory;
-
-      // Check memory limit
-      if (memoryUsed > sandboxConfig.maxMemoryMB) {
-        logger.warn('Memory limit exceeded', {
-          used: memoryUsed,
-          limit: sandboxConfig.maxMemoryMB,
-        });
+      // Validate code before execution
+      const validation = await this.validateCode(code);
+      if (!validation.valid) {
         return {
           success: false,
-          error: 'Memory limit exceeded',
+          error: `Code validation failed: ${validation.errors.join(', ')}`,
           metrics: {
             executionTimeMs: Date.now() - startTime,
-            memoryUsedMB: memoryUsed,
-            networkCalls: networkCallCount,
+            memoryUsedMB: 0,
+            networkCalls: 0,
           },
           blocked: true,
-          blockReason: 'memory_limit_exceeded',
+          blockReason: 'code_validation_failed',
         };
       }
 
-      // Check for blocked domains
-      if (blockedDomains.length > 0) {
-        logger.warn('Blocked domain access attempt', { domains: blockedDomains });
-        return {
-          success: false,
-          error: `Attempted to access blocked domains: ${blockedDomains.join(', ')}`,
-          metrics: {
-            executionTimeMs: Date.now() - startTime,
-            memoryUsedMB: memoryUsed,
-            networkCalls: networkCallCount,
-          },
-          blocked: true,
-          blockReason: 'unauthorized_domain',
-        };
-      }
+      // Execute in Worker thread
+      const result = await this.executeInWorker(code, functionName, args, sandboxConfig);
 
       logger.info('Sandbox execution completed successfully', {
         functionName,
-        executionTime: Date.now() - startTime,
-        memoryUsed,
-        networkCalls: networkCallCount,
+        executionTime: result.metrics.executionTimeMs,
+        memoryUsed: result.metrics.memoryUsedMB,
+        networkCalls: result.metrics.networkCalls,
       });
 
-      return {
-        success: true,
-        result,
-        metrics: {
-          executionTimeMs: Date.now() - startTime,
-          memoryUsedMB: memoryUsed,
-          networkCalls: networkCallCount,
-        },
-      };
+      return result;
     } catch (error) {
       logger.error('Sandbox execution failed', error);
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-      // Check if timeout
       const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('Timeout');
 
       return {
@@ -218,64 +126,289 @@ export class PluginSandbox {
   }
 
   /**
-   * Create a safe fetch wrapper that validates domains
+   * Execute code in Worker thread with resource limits
    */
-  private createSafeFetch(
-    allowedDomains: string[],
-    onNetworkCall: (domain: string) => void
-  ): typeof fetch {
-    return async (url: RequestInfo | URL, init?: RequestInit) => {
-      const urlString = url.toString();
-      const domain = this.extractDomain(urlString);
+  private async executeInWorker(
+    code: string,
+    functionName: string,
+    args: any[],
+    config: SandboxConfig
+  ): Promise<ExecutionResult> {
+    const startTime = Date.now();
 
-      // Notify about network call
-      onNetworkCall(domain);
+    return new Promise((resolve, reject) => {
+      // Create Worker with resource limits
+      const worker = new Worker(this.workerPath, {
+        workerData: {
+          code,
+          functionName,
+          args,
+          config,
+        },
+        resourceLimits: {
+          maxOldGenerationSizeMb: config.maxMemoryMB,
+          maxYoungGenerationSizeMb: Math.floor(config.maxMemoryMB / 4),
+        },
+      });
 
-      // Validate domain
-      if (!this.isDomainAllowed(domain, allowedDomains)) {
-        throw new Error(`Domain not allowed: ${domain}`);
-      }
+      let networkCallCount = 0;
+      let completed = false;
 
-      // Use native fetch (or axios)
-      const response = await fetch(url, init);
-      return response;
-    };
+      // Set execution timeout
+      const timeout = setTimeout(() => {
+        if (!completed) {
+          completed = true;
+          worker.terminate();
+          reject(new Error(`Execution timeout after ${config.timeout}ms`));
+        }
+      }, config.timeout);
+
+      // Handle messages from worker
+      worker.on('message', (message) => {
+        if (message.type === 'network_call') {
+          networkCallCount++;
+          if (networkCallCount > config.maxNetworkCalls) {
+            completed = true;
+            worker.terminate();
+            clearTimeout(timeout);
+            resolve({
+              success: false,
+              error: 'Network call limit exceeded',
+              metrics: {
+                executionTimeMs: Date.now() - startTime,
+                memoryUsedMB: 0,
+                networkCalls: networkCallCount,
+              },
+              blocked: true,
+              blockReason: 'network_limit_exceeded',
+            });
+          }
+        } else if (message.type === 'result') {
+          if (!completed) {
+            completed = true;
+            clearTimeout(timeout);
+            worker.terminate();
+            resolve({
+              success: true,
+              result: message.result,
+              metrics: {
+                executionTimeMs: Date.now() - startTime,
+                memoryUsedMB: message.memoryUsed || 0,
+                networkCalls: networkCallCount,
+              },
+            });
+          }
+        } else if (message.type === 'error') {
+          if (!completed) {
+            completed = true;
+            clearTimeout(timeout);
+            worker.terminate();
+
+            const blocked = message.blocked || false;
+            const blockReason = message.blockReason;
+
+            resolve({
+              success: false,
+              error: message.error,
+              metrics: {
+                executionTimeMs: Date.now() - startTime,
+                memoryUsedMB: 0,
+                networkCalls: networkCallCount,
+              },
+              blocked,
+              blockReason,
+            });
+          }
+        }
+      });
+
+      // Handle worker errors
+      worker.on('error', (error) => {
+        if (!completed) {
+          completed = true;
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
+
+      // Handle worker exit
+      worker.on('exit', (code) => {
+        if (!completed) {
+          completed = true;
+          clearTimeout(timeout);
+          if (code !== 0) {
+            reject(new Error(`Worker exited with code ${code}`));
+          }
+        }
+      });
+    });
   }
 
   /**
-   * Execute function with CPU time limit
+   * Ensure worker script exists
    */
-  private async executeWithCpuLimit<T>(
-    fn: () => Promise<T> | T,
-    maxCpuMs: number
-  ): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const startCpu = process.cpuUsage();
-      let checkInterval: NodeJS.Timeout;
+  private ensureWorkerScript(): void {
+    const workerScript = `
+const { parentPort, workerData } = require('worker_threads');
+const vm = require('vm');
 
-      const check = () => {
-        const currentCpu = process.cpuUsage(startCpu);
-        const cpuMs = (currentCpu.user + currentCpu.system) / 1000;
+const { code, functionName, args, config } = workerData;
 
-        if (cpuMs > maxCpuMs) {
-          clearInterval(checkInterval);
-          reject(new Error(`CPU time limit exceeded: ${cpuMs}ms > ${maxCpuMs}ms`));
-        }
-      };
+// Track network calls
+let networkCallCount = 0;
 
-      // Check CPU usage every 100ms
-      checkInterval = setInterval(check, 100);
+// Create safe context
+const context = {
+  console: {
+    log: (...args) => console.log('[Plugin]', ...args),
+    error: (...args) => console.error('[Plugin]', ...args),
+    warn: (...args) => console.warn('[Plugin]', ...args),
+  },
 
-      Promise.resolve(fn())
-        .then((result) => {
-          clearInterval(checkInterval);
-          resolve(result);
-        })
-        .catch((error) => {
-          clearInterval(checkInterval);
-          reject(error);
+  // Proxy fetch to track network calls
+  fetch: new Proxy(fetch, {
+    apply(target, thisArg, argumentsList) {
+      networkCallCount++;
+      parentPort.postMessage({ type: 'network_call' });
+
+      const url = argumentsList[0]?.toString() || '';
+      const domain = extractDomain(url);
+
+      if (!isDomainAllowed(domain, config.allowedDomains)) {
+        parentPort.postMessage({
+          type: 'error',
+          error: \`Domain not allowed: \${domain}\`,
+          blocked: true,
+          blockReason: 'unauthorized_domain'
         });
+        process.exit(1);
+      }
+
+      return Reflect.apply(target, thisArg, argumentsList);
+    }
+  }),
+
+  setTimeout: (fn, delay) => {
+    if (delay > config.timeout) {
+      throw new Error('Timeout exceeds maximum allowed');
+    }
+    return setTimeout(fn, delay);
+  },
+
+  setInterval: (fn, delay) => {
+    if (delay < 1000) {
+      throw new Error('Interval too frequent (minimum 1000ms)');
+    }
+    return setInterval(fn, delay);
+  },
+};
+
+vm.createContext(context);
+
+function extractDomain(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname;
+  } catch {
+    return url;
+  }
+}
+
+function isDomainAllowed(domain, allowedDomains) {
+  return allowedDomains.some(
+    (allowed) => domain === allowed || domain.endsWith('.' + allowed)
+  );
+}
+
+try {
+  const startMemory = process.memoryUsage().heapUsed / 1024 / 1024;
+
+  // Execute code in VM context
+  vm.runInContext(code, context, {
+    timeout: config.timeout,
+    displayErrors: true,
+  });
+
+  const endMemory = process.memoryUsage().heapUsed / 1024 / 1024;
+  const memoryUsed = endMemory - startMemory;
+
+  // Check memory limit
+  if (memoryUsed > config.maxMemoryMB) {
+    parentPort.postMessage({
+      type: 'error',
+      error: 'Memory limit exceeded',
+      blocked: true,
+      blockReason: 'memory_limit_exceeded'
     });
+    process.exit(1);
+  }
+
+  // Get function result
+  const fn = context[functionName];
+  if (typeof fn !== 'function') {
+    throw new Error(\`Function "\${functionName}" not found in code\`);
+  }
+
+  const result = fn(...args);
+
+  parentPort.postMessage({
+    type: 'result',
+    result,
+    memoryUsed
+  });
+
+  process.exit(0);
+} catch (error) {
+  parentPort.postMessage({
+    type: 'error',
+    error: error.message,
+    blocked: false
+  });
+  process.exit(1);
+}
+`;
+
+    try {
+      // Create worker script if it doesn't exist
+      if (!fs.existsSync(this.workerPath)) {
+        fs.writeFileSync(this.workerPath, workerScript, 'utf8');
+        logger.info('Created sandbox worker script', { path: this.workerPath });
+      }
+    } catch (error) {
+      logger.error('Failed to create worker script', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validate plugin code before execution
+   */
+  async validateCode(code: string): Promise<{ valid: boolean; errors: string[] }> {
+    const errors: string[] = [];
+
+    // Check for dangerous patterns
+    const dangerousPatterns = [
+      { pattern: /eval\s*\(/gi, message: 'eval() is not allowed' },
+      { pattern: /Function\s*\(/gi, message: 'Function constructor is not allowed' },
+      { pattern: /child_process/gi, message: 'child_process module is not allowed' },
+      { pattern: /require\s*\(\s*['"]fs['"]\s*\)/gi, message: 'fs module is not allowed' },
+      { pattern: /process\.exit/gi, message: 'process.exit is not allowed' },
+      { pattern: /process\.kill/gi, message: 'process.kill is not allowed' },
+      { pattern: /process\.binding/gi, message: 'process.binding is not allowed' },
+      { pattern: /__dirname/gi, message: '__dirname is not allowed' },
+      { pattern: /__filename/gi, message: '__filename is not allowed' },
+    ];
+
+    for (const { pattern, message } of dangerousPatterns) {
+      if (pattern.test(code)) {
+        errors.push(message);
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
   }
 
   /**
@@ -297,31 +430,5 @@ export class PluginSandbox {
     return allowedDomains.some(
       (allowed) => domain === allowed || domain.endsWith('.' + allowed)
     );
-  }
-
-  /**
-   * Validate plugin code before execution
-   */
-  async validateCode(code: string): Promise<{ valid: boolean; errors: string[] }> {
-    const errors: string[] = [];
-
-    // Check for dangerous patterns
-    const dangerousPatterns = [
-      { pattern: /eval\s*\(/gi, message: 'eval() is not allowed' },
-      { pattern: /Function\s*\(/gi, message: 'Function constructor is not allowed' },
-      { pattern: /child_process/gi, message: 'child_process module is not allowed' },
-      { pattern: /require\s*\(\s*['"]fs['"]\s*\)/gi, message: 'fs module is not allowed' },
-    ];
-
-    for (const { pattern, message } of dangerousPatterns) {
-      if (pattern.test(code)) {
-        errors.push(message);
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    };
   }
 }

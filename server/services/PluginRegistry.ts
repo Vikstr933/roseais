@@ -9,6 +9,7 @@ import {
   KnowledgeItem
 } from '../plugins/BaseProductivityPlugin';
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { CredentialVault } from './CredentialVault';
 import { db } from '../../db';
 import { pluginConfigs, pluginKnowledge } from '../../db/schema-pg';
 import { eq, and } from 'drizzle-orm';
@@ -28,10 +29,12 @@ const logger = new SimpleLogger('PluginRegistry');
 export class PluginRegistry extends EventEmitter {
   private plugins = new Map<string, BaseProductivityPlugin>();
   private userPlugins = new Map<string, Set<string>>(); // userId -> Set<pluginId>
+  private credentialVault: CredentialVault;
 
   constructor() {
     super();
     this.setMaxListeners(100);
+    this.credentialVault = new CredentialVault();
   }
 
   /**
@@ -557,22 +560,28 @@ export class PluginRegistry extends EventEmitter {
 
   /**
    * Encrypt credentials before storing in database
-   * TODO: Implement proper encryption using crypto module
+   * Uses AES-256-GCM encryption via CredentialVault
    */
-  private encryptCredentials(credentials: PluginCredentials): any {
-    // For now, just return as-is
-    // In production, use AES-256-CBC encryption
-    return credentials;
+  private encryptCredentials(credentials: PluginCredentials): string {
+    try {
+      return this.credentialVault.encrypt(credentials as Record<string, any>);
+    } catch (error) {
+      logger.error('Failed to encrypt credentials', error);
+      throw new Error('Credential encryption failed');
+    }
   }
 
   /**
    * Decrypt credentials from database
-   * TODO: Implement proper decryption
+   * Uses AES-256-GCM decryption via CredentialVault
    */
-  private decryptCredentials(encryptedCredentials: any): PluginCredentials {
-    // For now, just return as-is
-    // In production, decrypt using AES-256-CBC
-    return encryptedCredentials as PluginCredentials;
+  private decryptCredentials(encryptedCredentials: string): PluginCredentials {
+    try {
+      return this.credentialVault.decrypt(encryptedCredentials) as PluginCredentials;
+    } catch (error) {
+      logger.error('Failed to decrypt credentials', error);
+      throw new Error('Credential decryption failed');
+    }
   }
 
   /**

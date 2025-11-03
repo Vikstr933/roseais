@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import EventEmitter from 'events';
 import { Logger } from './utils/Logger';
@@ -82,6 +83,30 @@ const initializeApp = async () => {
     app.use(sentryRequestHandler());
     app.use(sentryTracingHandler());
 
+    // Helmet security headers
+    app.use(helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Required for Monaco Editor
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "https:"],
+          connectSrc: ["'self'", "https:", "wss:", "ws:"],
+          fontSrc: ["'self'", "data:"],
+          objectSrc: ["'none'"],
+          mediaSrc: ["'self'"],
+          frameSrc: ["'none'"],
+        },
+      },
+      crossOriginEmbedderPolicy: false, // Disable for WebContainer compatibility
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+      hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      },
+    }));
+
     // Build allowed origins from environment variables
     const allowedOrigins = [
       'http://localhost:5173',
@@ -146,8 +171,16 @@ const initializeApp = async () => {
     app.use(
       cors({
         origin: (origin, callback) => {
-          // Allow requests with no origin (e.g., mobile apps, Postman)
-          if (!origin) return callback(null, true);
+          // In production, reject requests with no origin for security
+          // In development, allow for testing (Postman, curl, etc.)
+          if (!origin) {
+            const isDevelopment = process.env.NODE_ENV !== 'production';
+            if (isDevelopment) {
+              return callback(null, true);
+            } else {
+              return callback(new Error('Origin header required'), false);
+            }
+          }
 
           // Check if origin is in allowed list (string or regex match)
           const isAllowed = allowedOrigins.some(allowed => {

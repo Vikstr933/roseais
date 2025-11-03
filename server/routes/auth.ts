@@ -1,15 +1,41 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { userService } from '../services/APIKeyService';
 import type { User } from '../../db/schema';
 
 const router = Router();
+
+// Rate limiters for auth endpoints
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 attempts per hour
+  message: 'Too many registration attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per 15 minutes
+  message: 'Too many login attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 attempts per hour
+  message: 'Too many password reset attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Authentication Routes
 /**
  * POST /api/auth/register
  * Register a new user
  */
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   try {
     const logger = req.app.locals.logger;
     const { username, email, displayName, password } = req.body;
@@ -91,7 +117,7 @@ router.post('/register', async (req, res) => {
  * POST /api/auth/login
  * Login user
  */
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
