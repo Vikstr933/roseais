@@ -57,9 +57,9 @@ ON chat_messages(role);
 CREATE INDEX IF NOT EXISTS idx_code_sessions_user_created
 ON code_generation_sessions(user_id, created_at DESC);
 
--- Index for project-based session lookup
-CREATE INDEX IF NOT EXISTS idx_code_sessions_project_created
-ON code_generation_sessions(project_id, created_at DESC);
+-- Index for workspace-based session lookup (code_generation_sessions uses workspace_id, not project_id)
+CREATE INDEX IF NOT EXISTS idx_code_sessions_workspace_created
+ON code_generation_sessions(workspace_id, created_at DESC);
 
 -- Index for status filtering (active, completed, failed)
 CREATE INDEX IF NOT EXISTS idx_code_sessions_status
