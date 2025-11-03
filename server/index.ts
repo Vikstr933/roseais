@@ -167,20 +167,14 @@ const initializeApp = async () => {
       }
     });
 
-    // Health check endpoints skip CORS entirely (monitoring services don't send Origin)
-    // This MUST come before global CORS middleware
-    app.use('/api/health', (req, res, next) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      if (req.method === 'OPTIONS') {
-        return res.status(204).send();
+    // Conditional CORS - skip for health checks, apply strict CORS for all other routes
+    app.use((req, res, next) => {
+      // Skip CORS entirely for health check endpoints (monitoring services don't send Origin)
+      if (req.path.startsWith('/api/health')) {
+        return next();
       }
-      next();
-    });
 
-    // Global CORS configuration (strict security for all non-health endpoints)
-    app.use(
+      // Apply strict CORS for all other routes
       cors({
         origin: (origin, callback) => {
           // In production, reject requests with no origin for security
@@ -216,8 +210,8 @@ const initializeApp = async () => {
         allowedHeaders: ['Content-Type', 'Authorization'],
         preflightContinue: false,
         optionsSuccessStatus: 204
-      })
-    );
+      })(req, res, next);
+    });
 
     // Special CORS handling for SSE endpoints
     app.use('/api/sse', (req, res, next) => {
