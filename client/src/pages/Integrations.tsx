@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../lib/api';
+import { apiFetch, getApiUrl } from '../lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -93,7 +93,7 @@ export default function Integrations() {
   const { data: stats } = useQuery<GenerationStats>({
     queryKey: ['plugin-stats'],
     queryFn: async () => {
-      const res = await fetch('/api/user-plugins/stats/overview', {
+      const res = await fetch(getApiUrl('/api/user-plugins/stats/overview'), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
         },
@@ -107,7 +107,7 @@ export default function Integrations() {
   // Generate plugin mutation
   const generateMutation = useMutation({
     mutationFn: async (data: { prompt: string; serviceName?: string; estimatedComplexity?: string }) => {
-      const res = await fetch('/api/user-plugins/generate', {
+      const res = await fetch(getApiUrl('/api/user-plugins/generate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
