@@ -1,16 +1,11 @@
 {
-  "version": 2,
   "buildCommand": "vite build",
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
-  "framework": null,
-  "routes": [
+  "redirects": [
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/((?!js|css|assets|images).*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
