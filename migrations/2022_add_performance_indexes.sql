@@ -106,9 +106,7 @@ ON plugin_execution_logs(status);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_expires
 ON sessions(user_id, expires_at);
 
--- Index for session token lookups (if not already primary key)
-CREATE INDEX IF NOT EXISTS idx_sessions_session_token
-ON sessions(session_token);
+-- Note: sessions.id is already the primary key (session token), so no additional index needed
 
 -- ============================================================================
 -- PROJECT FILES INDEXES
