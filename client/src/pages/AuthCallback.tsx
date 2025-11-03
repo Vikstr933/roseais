@@ -16,17 +16,22 @@ export default function AuthCallback() {
 
   async function handleOAuthCallback() {
     try {
+      console.log('Starting OAuth callback...');
+
       // Get the session from the URL hash
       const { data, error } = await supabase.auth.getSession();
 
       if (error) {
+        console.error('Supabase session error:', error);
         throw error;
       }
 
       if (data.session) {
         const user = data.session.user;
-        
+        console.log('Got Supabase session for user:', user.email);
+
         // Register/login the user in our system
+        console.log('Calling backend OAuth endpoint...');
         const response = await apiFetch('/api/auth/oauth', {
           method: 'POST',
           body: JSON.stringify({
@@ -39,10 +44,13 @@ export default function AuthCallback() {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to register OAuth user');
+          const errorText = await response.text();
+          console.error('Backend OAuth error:', response.status, errorText);
+          throw new Error(`Failed to register OAuth user: ${response.status} ${errorText}`);
         }
 
         const userData = await response.json();
+        console.log('Backend OAuth success:', userData);
 
         // Update auth context
         loginWithOAuth(userData.user, userData.sessionToken);
