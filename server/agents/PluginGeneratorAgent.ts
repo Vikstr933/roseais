@@ -95,7 +95,7 @@ export class PluginGeneratorAgent extends BaseAgent {
   constructor() {
     super('plugin-generator-agent');
 
-    this.model = 'claude-3-5-sonnet-20241022';
+    this.model = 'claude-sonnet-4-5-20250929';
 
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
