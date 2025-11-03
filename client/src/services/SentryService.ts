@@ -125,6 +125,6 @@ export class FrontendSentryService {
 // Export singleton
 export const frontendSentryService = new FrontendSentryService();
 
-// Also export ErrorBoundary component
-export const ErrorBoundary = Sentry.ErrorBoundary;
+// Also export ErrorBoundary component with fallback
+export const ErrorBoundary = Sentry.ErrorBoundary || (({ children }: { children: React.ReactNode }) => <>{children}</>);
 
