@@ -126,5 +126,6 @@ export class FrontendSentryService {
 export const frontendSentryService = new FrontendSentryService();
 
 // Also export ErrorBoundary component with fallback
-export const ErrorBoundary = Sentry.ErrorBoundary || (({ children }: { children: React.ReactNode }) => <>{children}</>);
+// If Sentry.ErrorBoundary is undefined, use a pass-through component
+export const ErrorBoundary = Sentry.ErrorBoundary || (({ children }: { children: any }) => children);
 
