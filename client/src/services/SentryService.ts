@@ -127,10 +127,13 @@ export class FrontendSentryService {
 export const frontendSentryService = new FrontendSentryService();
 
 // Also export ErrorBoundary component with fallback
-// If Sentry.ErrorBoundary is undefined, use a pass-through component
-// This needs to be a proper React component that can accept props
-export const ErrorBoundary = Sentry.ErrorBoundary || (({ children, fallback }: any) => {
-  // Simple fallback that just renders children without error boundary functionality
-  return React.createElement(React.Fragment, null, children);
-});
+// Create a simple pass-through component if Sentry ErrorBoundary is not available
+class FallbackErrorBoundary extends React.Component<any> {
+  render() {
+    return this.props.children;
+  }
+}
+
+// Use Sentry's ErrorBoundary if available, otherwise use our fallback
+export const ErrorBoundary = Sentry.ErrorBoundary || FallbackErrorBoundary;
 
