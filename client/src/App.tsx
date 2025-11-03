@@ -1,25 +1,38 @@
 import { Switch, Route, useLocation } from 'wouter';
-import NewHome from './pages/NewHome';
-import Workspaces from './pages/Workspaces';
-import ProjectDetail from './pages/ProjectDetail';
-import PromptPlayground from './pages/PromptPlayground';
-import AgentManager from './pages/AgentManager';
-import ComponentView from './pages/ComponentView';
-import SystemLogs from './pages/SystemLogs';
-import Sessions from './pages/Sessions';
-import Companies from './pages/Companies';
-import Frameworks from './pages/Frameworks';
-import AuthCallback from './pages/AuthCallback';
-import Pricing from './pages/Pricing';
-import Integrations from './pages/Integrations';
-import Settings from './pages/Settings';
+import { lazy, Suspense } from 'react';
 import { Navigation } from './components/Navigation';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WorkspaceProvider, useWorkspace } from './contexts/WorkspaceContext';
-import AssistantWidget from './components/AssistantWidget';
-import BackgroundTasksPanel from './components/BackgroundTasksPanel';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { OmniAssistant, InsightsPanel } from './components/OmniAssistant';
+
+// Lazy load pages for code splitting - reduces initial bundle size
+const NewHome = lazy(() => import('./pages/NewHome'));
+const Workspaces = lazy(() => import('./pages/Workspaces'));
+const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const PromptPlayground = lazy(() => import('./pages/PromptPlayground'));
+const AgentManager = lazy(() => import('./pages/AgentManager'));
+const ComponentView = lazy(() => import('./pages/ComponentView'));
+const SystemLogs = lazy(() => import('./pages/SystemLogs'));
+const Sessions = lazy(() => import('./pages/Sessions'));
+const Companies = lazy(() => import('./pages/Companies'));
+const Frameworks = lazy(() => import('./pages/Frameworks'));
+const AuthCallback = lazy(() => import('./pages/AuthCallback'));
+const Pricing = lazy(() => import('./pages/Pricing'));
+const Integrations = lazy(() => import('./pages/Integrations'));
+const Settings = lazy(() => import('./pages/Settings'));
+
+// Lazy load heavy components
+const AssistantWidget = lazy(() => import('./components/AssistantWidget'));
+const BackgroundTasksPanel = lazy(() => import('./components/BackgroundTasksPanel'));
+const OmniAssistant = lazy(() => import('./components/OmniAssistant').then(module => ({ default: module.OmniAssistant })));
+const InsightsPanel = lazy(() => import('./components/OmniAssistant').then(module => ({ default: module.InsightsPanel })));
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+  </div>
+);
 
 function AppContent() {
   const [location] = useLocation();
@@ -38,11 +51,12 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navigation />
-      <Switch>
-        {/* Public routes */}
-        <Route path="/" component={NewHome} />
-        <Route path="/auth/callback" component={AuthCallback} />
-        <Route path="/pricing" component={Pricing} />
+      <Suspense fallback={<LoadingFallback />}>
+        <Switch>
+          {/* Public routes */}
+          <Route path="/" component={NewHome} />
+          <Route path="/auth/callback" component={AuthCallback} />
+          <Route path="/pricing" component={Pricing} />
 
         {/* Protected routes */}
         <Route path="/workspaces">
@@ -118,11 +132,12 @@ function AppContent() {
             <Settings />
           </ProtectedRoute>
         </Route>
-      </Switch>
+        </Switch>
+      </Suspense>
 
       {/* Global AI Assistant - Only show when logged in */}
       {user && (
-        <>
+        <Suspense fallback={null}>
           {/* Legacy AssistantWidget - Can be disabled via settings in future */}
           {/* <AssistantWidget
             contextData={{
@@ -142,7 +157,7 @@ function AppContent() {
           <InsightsPanel />
 
           <BackgroundTasksPanel />
-        </>
+        </Suspense>
       )}
     </div>
   );

@@ -31,17 +31,32 @@ if (!DATABASE_URL.startsWith('postgresql://') && !DATABASE_URL.startsWith('postg
 console.log('🐘 Using PostgreSQL database (Supabase)');
 console.log('📍 Database host:', DATABASE_URL.split('@')[1]?.split(':')[0] || 'unknown');
 
-// Create PostgreSQL connection pool
+// Create PostgreSQL connection pool with optimized settings
 const pool = new Pool({
   connectionString: DATABASE_URL,
   // Supabase/Neon requires SSL
   ssl: DATABASE_URL.includes('supabase.co') || DATABASE_URL.includes('neon.tech')
     ? { rejectUnauthorized: false }
     : false,
-  // Connection pool settings
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+
+  // Connection pool settings - optimized for performance
+  min: 2,                        // Minimum number of clients (always maintained)
+  max: 10,                       // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000,      // Close idle clients after 30s
+  connectionTimeoutMillis: 10000, // Timeout for new connections (10s)
+
+  // Advanced pooling configuration
+  allowExitOnIdle: false,         // Keep the pool alive even when all clients are idle
+  maxUses: 7500,                  // Retire connections after 7500 uses (prevents memory leaks)
+
+  // Statement timeout to prevent long-running queries
+  statement_timeout: 30000,       // 30 seconds max per query
+
+  // Query timeout for idle connections
+  query_timeout: 30000,           // 30 seconds max per query execution
+
+  // Application name for monitoring
+  application_name: 'ai-code-generation-platform',
 });
 
 // Handle pool errors

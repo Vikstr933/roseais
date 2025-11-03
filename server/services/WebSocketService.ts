@@ -30,6 +30,9 @@ export class WebSocketService {
   private connections = new Map<WebSocket, ConnectedUser>();
   private projectUsers = new Map<number, Set<string>>(); // projectId -> userIds
   private userActivity = new Map<string, ConnectedUser>(); // userId -> activity
+  private heartbeatInterval?: NodeJS.Timeout; // Store interval reference for cleanup
+  private projectAccessCache = new Map<string, { hasAccess: boolean; timestamp: number }>(); // Cache for access checks
+  private readonly CACHE_TTL = 60000; // 1 minute cache for project access
 
   constructor() {
     this.setupHeartbeat();
@@ -230,6 +233,14 @@ export class WebSocketService {
   }
 
   private async verifyProjectAccess(userId: string, projectId: number): Promise<boolean> {
+    const cacheKey = `${userId}:${projectId}`;
+
+    // Check cache first
+    const cached = this.projectAccessCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      return cached.hasAccess;
+    }
+
     try {
       // Check if user owns the workspace or is a collaborator
       const workspace = await db.query.workspaces.findFirst({
@@ -242,7 +253,15 @@ export class WebSocketService {
         )
       });
 
-      return !!workspace;
+      const hasAccess = !!workspace;
+
+      // Cache the result
+      this.projectAccessCache.set(cacheKey, {
+        hasAccess,
+        timestamp: Date.now()
+      });
+
+      return hasAccess;
     } catch (error) {
       logger.error('Error verifying project access', error as Error, { userId, projectId });
       return false;
@@ -416,6 +435,16 @@ export class WebSocketService {
         projectId: connection.projectId
       });
     }
+
+    // Clean up WebSocket to prevent memory leaks
+    try {
+      ws.removeAllListeners(); // Remove all event listeners
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.terminate(); // Force close the connection
+      }
+    } catch (error) {
+      logger.error('Error cleaning up WebSocket', error as Error);
+    }
   }
 
   private removeUserFromProject(connection: ConnectedUser) {
@@ -498,7 +527,12 @@ export class WebSocketService {
   }
 
   private setupHeartbeat() {
-    setInterval(() => {
+    // Clear existing interval if any (prevent multiple intervals)
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+
+    this.heartbeatInterval = setInterval(() => {
       this.connections.forEach((connection, ws) => {
         if (ws.readyState === WebSocket.OPEN) {
           // Check if user has been inactive for too long (5 minutes)
@@ -513,6 +547,9 @@ export class WebSocketService {
           this.handleDisconnection(ws);
         }
       });
+
+      // Clean up expired cache entries every heartbeat
+      this.cleanupAccessCache();
     }, 30000); // Every 30 seconds
   }
 
@@ -564,6 +601,97 @@ export class WebSocketService {
 
   public getProjectUserCount(projectId: number): number {
     return this.projectUsers.get(projectId)?.size || 0;
+  }
+
+  /**
+   * Clean up expired access cache entries
+   * Called periodically by heartbeat
+   */
+  private cleanupAccessCache() {
+    const now = Date.now();
+    const keysToDelete: string[] = [];
+
+    this.projectAccessCache.forEach((value, key) => {
+      if (now - value.timestamp > this.CACHE_TTL) {
+        keysToDelete.push(key);
+      }
+    });
+
+    keysToDelete.forEach(key => this.projectAccessCache.delete(key));
+
+    if (keysToDelete.length > 0) {
+      logger.info('Cleaned up expired access cache entries', { count: keysToDelete.length });
+    }
+  }
+
+  /**
+   * Invalidate access cache for a specific user or project
+   * Call this when permissions change
+   */
+  public invalidateAccessCache(userId?: string, projectId?: number) {
+    if (userId && projectId) {
+      // Invalidate specific user-project combination
+      this.projectAccessCache.delete(`${userId}:${projectId}`);
+    } else if (userId) {
+      // Invalidate all entries for a user
+      const keysToDelete = Array.from(this.projectAccessCache.keys())
+        .filter(key => key.startsWith(`${userId}:`));
+      keysToDelete.forEach(key => this.projectAccessCache.delete(key));
+    } else if (projectId) {
+      // Invalidate all entries for a project
+      const keysToDelete = Array.from(this.projectAccessCache.keys())
+        .filter(key => key.endsWith(`:${projectId}`));
+      keysToDelete.forEach(key => this.projectAccessCache.delete(key));
+    } else {
+      // Invalidate entire cache
+      this.projectAccessCache.clear();
+    }
+
+    logger.info('Invalidated access cache', { userId, projectId });
+  }
+
+  /**
+   * Graceful shutdown - clean up all resources
+   * Call this when shutting down the server
+   */
+  public shutdown() {
+    logger.info('Shutting down WebSocket service...');
+
+    // Clear heartbeat interval
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = undefined;
+    }
+
+    // Close all WebSocket connections
+    this.connections.forEach((connection, ws) => {
+      try {
+        this.sendMessage(ws, {
+          type: 'user_activity',
+          data: { action: 'server_shutdown' },
+          timestamp: new Date().toISOString()
+        });
+        ws.close(1001, 'Server shutting down');
+        ws.removeAllListeners();
+      } catch (error) {
+        logger.error('Error closing WebSocket during shutdown', error as Error);
+      }
+    });
+
+    // Clear all maps
+    this.connections.clear();
+    this.projectUsers.clear();
+    this.userActivity.clear();
+    this.projectAccessCache.clear();
+
+    // Close WebSocket server
+    if (this.wss) {
+      this.wss.close(() => {
+        logger.info('WebSocket server closed');
+      });
+    }
+
+    logger.info('WebSocket service shutdown complete');
   }
 }
 

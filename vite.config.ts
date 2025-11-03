@@ -55,22 +55,67 @@ export default defineConfig({
     // Performance optimizations
     rollupOptions: {
       output: {
-        // Advanced code splitting
-        manualChunks: {
-          // Vendor chunks
-          'react-vendor': ['react', 'react-dom'],
-          'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-tabs'],
-          'monaco-vendor': ['@monaco-editor/react'],
-          'query-vendor': ['@tanstack/react-query'],
-          'form-vendor': ['react-hook-form', '@hookform/resolvers'],
-          'chart-vendor': ['recharts'],
-          'motion-vendor': ['framer-motion'],
+        // Advanced code splitting with dynamic chunking
+        manualChunks(id) {
+          // Core React dependencies (keep together for shared context)
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'react-core';
+          }
 
-          // Feature-based chunks
-          'components': ['client/src/components/ComponentLibrary.tsx', 'client/src/components/EnhancedFileExplorer.tsx'],
-          'agents': ['client/src/components/AgentMonitor/AgentMonitorPanel.tsx'],
-          'preview': ['client/src/components/AdvancedPreview.tsx', 'client/src/components/ComponentPreview/ComponentPreview.tsx'],
-          'deployment': ['client/src/components/ProductionDeployment.tsx', 'client/src/components/ProjectSharing.tsx']
+          // Monaco Editor (heavy - separate chunk for lazy loading)
+          if (id.includes('node_modules/monaco-editor') || id.includes('@monaco-editor')) {
+            return 'monaco-editor';
+          }
+
+          // Radix UI components (UI library)
+          if (id.includes('@radix-ui')) {
+            return 'radix-ui';
+          }
+
+          // Query/state management
+          if (id.includes('@tanstack/react-query')) {
+            return 'react-query';
+          }
+
+          // Form libraries
+          if (id.includes('react-hook-form') || id.includes('@hookform')) {
+            return 'forms';
+          }
+
+          // Charts (heavy visualization library)
+          if (id.includes('recharts') || id.includes('d3-')) {
+            return 'charts';
+          }
+
+          // Animation libraries
+          if (id.includes('framer-motion')) {
+            return 'animations';
+          }
+
+          // Routing
+          if (id.includes('wouter')) {
+            return 'routing';
+          }
+
+          // WebContainer (if used)
+          if (id.includes('@webcontainer')) {
+            return 'webcontainer';
+          }
+
+          // Icon libraries
+          if (id.includes('lucide-react') || id.includes('react-icons')) {
+            return 'icons';
+          }
+
+          // Date/time utilities
+          if (id.includes('date-fns') || id.includes('dayjs') || id.includes('moment')) {
+            return 'date-utils';
+          }
+
+          // All other node_modules go into vendor chunk
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
         },
 
         // Optimize chunk file names
