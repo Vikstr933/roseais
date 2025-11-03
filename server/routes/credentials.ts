@@ -4,12 +4,12 @@ import { db } from '../../db';
 import { userCredentials, oauthStates } from '../../db/schema-pg';
 import { eq, and, desc } from 'drizzle-orm';
 import { getCredentialVault } from '../services/CredentialVault';
-import { SimpleLogger } from '../utils/logger';
+import { SimpleLogger } from '../utils/SimpleLogger';
 import { authenticateUser } from '../middleware/auth';
 import crypto from 'crypto';
 
 const router = express.Router();
-const logger = SimpleLogger.getInstance().child({ service: 'CredentialsAPI' });
+const logger = new SimpleLogger('CredentialsAPI');
 const vault = getCredentialVault();
 
 // Validation schemas

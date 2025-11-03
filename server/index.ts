@@ -40,6 +40,8 @@ import healthRouter from './routes/health';
 import adminRouter from './routes/admin';
 import activityRouter from './routes/activity';
 import omniassistantRouter from './routes/omniassistant';
+import userPluginsRouter from './routes/user-plugins';
+import credentialsRouter from './routes/credentials';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -309,6 +311,8 @@ const initializeApp = async () => {
     app.use('/api/terminal', terminalRouter);
     app.use('/api/stripe', stripeRouter); // Stripe payment routes
     app.use('/api/plugins', pluginsRouter); // Plugin system routes
+    app.use('/api/user-plugins', userPluginsRouter); // User-generated plugins
+    app.use('/api/credentials', credentialsRouter); // Credential vault
     app.use('/api/omniassistant', omniassistantRouter); // OmniAssistant - Digital Office Platform
     app.use('/api/workspace-sessions', workspaceSessionsRouter); // Workspace session persistence
     app.use('/api/activity', activityRouter); // User activity tracking routes

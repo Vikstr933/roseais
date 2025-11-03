@@ -1,7 +1,7 @@
 import crypto from 'crypto';
-import { SimpleLogger } from '../utils/logger';
+import { SimpleLogger } from '../utils/SimpleLogger';
 
-const logger = SimpleLogger.getInstance().child({ service: 'CredentialVault' });
+const logger = new SimpleLogger('CredentialVault');
 
 /**
  * CredentialVault

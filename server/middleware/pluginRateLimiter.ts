@@ -2,9 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { db } from '../../db';
 import { pluginExecutionLogs, users } from '../../db/schema-pg';
 import { eq, and, sql } from 'drizzle-orm';
-import { SimpleLogger } from '../utils/logger';
+import { SimpleLogger } from '../utils/SimpleLogger';
 
-const logger = SimpleLogger.getInstance().child({ service: 'PluginRateLimiter' });
+const logger = new SimpleLogger('PluginRateLimiter');
 
 // In-memory rate limit tracking (use Redis in production)
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();

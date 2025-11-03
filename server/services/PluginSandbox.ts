@@ -1,7 +1,7 @@
 import { VM } from 'vm2';
-import { SimpleLogger } from '../utils/logger';
+import { SimpleLogger } from '../utils/SimpleLogger';
 
-const logger = SimpleLogger.getInstance().child({ service: 'PluginSandbox' });
+const logger = new SimpleLogger('PluginSandbox');
 
 export interface SandboxConfig {
   maxMemoryMB: number;

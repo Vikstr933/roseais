@@ -11,11 +11,11 @@ import {
 } from '../../db/schema-pg';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { PluginGeneratorAgent } from '../agents/PluginGeneratorAgent';
-import { SimpleLogger } from '../utils/logger';
+import { SimpleLogger } from '../utils/SimpleLogger';
 import { authenticateUser } from '../middleware/auth';
 
 const router = express.Router();
-const logger = SimpleLogger.getInstance().child({ service: 'UserPluginsAPI' });
+const logger = new SimpleLogger('UserPluginsAPI');
 
 // Initialize the plugin generator agent
 const pluginGeneratorAgent = new PluginGeneratorAgent();

@@ -1,9 +1,9 @@
 import * as parser from '@babel/parser';
 import traverse from '@babel/traverse';
 import { Node } from '@babel/types';
-import { SimpleLogger } from '../utils/logger';
+import { SimpleLogger } from '../utils/SimpleLogger';
 
-const logger = SimpleLogger.getInstance().child({ service: 'PluginSecurityAnalyzer' });
+const logger = new SimpleLogger('PluginSecurityAnalyzer');
 
 export interface SecurityIssue {
   severity: 'low' | 'medium' | 'high' | 'critical';

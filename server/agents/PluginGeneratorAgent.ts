@@ -1,10 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { BaseAgent, AgentCapability } from './BaseAgent';
+import { BaseAgent } from './BaseAgent';
 import { PluginSecurityAnalyzer, SecurityAnalysisResult } from '../services/PluginSecurityAnalyzer';
-import { SimpleLogger } from '../utils/logger';
+import { SimpleLogger } from '../utils/SimpleLogger';
 import { nanoid } from 'nanoid';
 
-const logger = SimpleLogger.getInstance().child({ service: 'PluginGeneratorAgent' });
+const logger = new SimpleLogger('PluginGeneratorAgent');
 
 export interface PluginGenerationRequest {
   userId: string;
@@ -104,12 +104,6 @@ export class PluginGeneratorAgent extends BaseAgent {
     });
 
     this.securityAnalyzer = new PluginSecurityAnalyzer();
-
-    this.capabilities = [
-      AgentCapability.CODE_GENERATION,
-      AgentCapability.SECURITY_ANALYSIS,
-      AgentCapability.VALIDATION,
-    ];
   }
 
   /**
