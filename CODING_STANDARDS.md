@@ -188,6 +188,21 @@ useEffect(() => {
 - ✅ `isSystem: INTEGER` (0 or 1), not BOOLEAN
 - ✅ Always test migrations on both databases if dual-support
 
+**PostgreSQL Array Type Casting:**
+- ✅ Match array type cast to column type exactly
+- ✅ If column is `text[]`, use `::text[]` not `::varchar[]`
+- ❌ `ARRAY[value]::varchar[]` on `text[]` column causes: `operator does not exist: text[] @> character varying[]`
+- ✅ `ARRAY[value]::text[]` on `text[]` column works correctly
+
+**Example:**
+```typescript
+// ❌ WRONG - type mismatch
+sql`... applies_to @> ARRAY[${val}]::varchar[]`  // Column is text[]
+
+// ✅ CORRECT - types match
+sql`... applies_to @> ARRAY[${val}]::text[]`     // Column is text[]
+```
+
 **User Isolation:**
 - ✅ Every resource should have `userId` field
 - ✅ Every system resource should have `isSystem` field
