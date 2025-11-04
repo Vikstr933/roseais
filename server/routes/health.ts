@@ -29,6 +29,8 @@ interface HealthStatus {
   };
   version: string;
   environment: string;
+  gitCommit?: string;
+  deployedAt?: string;
 }
 
 interface ServiceStatus {
@@ -66,6 +68,8 @@ router.get('/', async (req, res) => {
     },
     version: process.env.npm_package_version || '1.0.0',
     environment: process.env.NODE_ENV || 'development',
+    gitCommit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || 'unknown',
+    deployedAt: process.env.RENDER_DEPLOYED_AT || 'unknown',
   };
 
   // Check database
