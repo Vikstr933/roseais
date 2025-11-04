@@ -12,9 +12,9 @@
 ALTER TABLE agents
 ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
 
--- Step 2: Add is_system column (boolean in PostgreSQL, not integer)
+-- Step 2: Add is_system column (integer like SQLite, not boolean)
 ALTER TABLE agents
-ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE;
+ADD COLUMN IF NOT EXISTS is_system INTEGER DEFAULT 0;
 
 -- Step 3: Migrate existing data from created_by to user_id
 -- Copy ownership information
@@ -26,7 +26,7 @@ AND user_id IS NULL;
 -- Step 4: Mark existing agents without owner as system agents
 -- This ensures backward compatibility - existing agents remain visible to all
 UPDATE agents
-SET is_system = TRUE
+SET is_system = 1
 WHERE user_id IS NULL;
 
 -- Step 5: Create indexes for performance
@@ -45,8 +45,8 @@ GROUP BY is_system;
 -- Expected output:
 -- is_system | count | unique_owners
 -- ----------|-------|---------------
--- true      | N     | 0 (system agents have no owner)
--- false     | M     | X (user agents have owners)
+-- 1         | N     | 0 (system agents have no owner)
+-- 0         | M     | X (user agents have owners)
 
 /**
  * ROLLBACK PROCEDURE (if needed):
