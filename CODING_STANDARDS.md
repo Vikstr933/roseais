@@ -420,3 +420,61 @@ console.log('API Base URL:', API_BASE_URL);
 2. Test each fix locally
 3. Commit and deploy
 4. Update this document as patterns evolve
+
+---
+
+## 🔥 CRITICAL BUG FIXED (2025-11-04)
+
+### Issue: Admin Endpoints Returning 403 Even for Superadmins
+
+**Symptoms:**
+- User is superadmin in database
+- OAuth login succeeds
+- Admin endpoints return 403 Forbidden (not 401 Unauthorized)
+
+**Root Cause:**
+The `authenticateUser` middleware was not including the `role` field in `req.user`.
+
+**Code Location:** `server/middleware/auth.ts`
+
+**Before (BROKEN):**
+```typescript
+req.user = {
+  id: user.id,
+  username: user.username,
+  email: user.email,
+  displayName: user.displayName,
+  tier: user.tier || 'free',
+  // ❌ role is MISSING!
+};
+```
+
+**After (FIXED):**
+```typescript
+req.user = {
+  id: user.id,
+  username: user.username,
+  email: user.email,
+  displayName: user.displayName,
+  tier: user.tier || 'free',
+  role: user.role || 'user',  // ✅ NOW INCLUDED
+};
+```
+
+**Why This Broke:**
+- The `requireAdmin` middleware checks `req.user.role`
+- But `authenticateUser` middleware wasn't setting it
+- So `req.user.role` was `undefined`
+- Which failed the admin check: `role !== 'admin' && role !== 'superadmin'`
+- Resulting in 403 Forbidden
+
+**Fix Applied:** Commit `bfdcb4c`
+- Added `role` to TypeScript Request interface
+- Added `role` to `req.user` in `authenticateUser`
+- Added `role` to `req.user` in `optionalAuth`
+
+**Lesson Learned:**
+- ✅ ALWAYS include ALL user fields needed by downstream middleware
+- ✅ Check both TypeScript interfaces AND runtime assignments
+- ✅ Test admin endpoints after any auth middleware changes
+
