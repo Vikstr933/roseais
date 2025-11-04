@@ -450,6 +450,7 @@ export const userGeneratedPlugins = pgTable('user_generated_plugins', {
   requiresAuth: boolean('requires_auth').default(false).notNull(),
   authType: text('auth_type'),
   authConfig: jsonb('auth_config'),
+  credentialsRequired: jsonb('credentials_required').default({}),
 
   // Usage tracking
   installCount: integer('install_count').default(0),
