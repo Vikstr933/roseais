@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useLocation } from 'wouter';
 
 interface SystemStats {
   users: {
@@ -62,7 +62,7 @@ interface Workspace {
 
 export default function AdminDashboard() {
   const { user, isLoading } = useAuth();
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
 
   const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'agents' | 'workspaces'>('stats');
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -75,9 +75,9 @@ export default function AdminDashboard() {
   // Check if user is admin
   useEffect(() => {
     if (!isLoading && (!user || (user.role !== 'admin' && user.role !== 'superadmin'))) {
-      navigate('/');
+      setLocation('/');
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isLoading, setLocation]);
 
   // Fetch data based on active tab
   useEffect(() => {
