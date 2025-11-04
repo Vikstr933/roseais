@@ -106,6 +106,69 @@ export class PluginGeneratorAgent extends BaseAgent {
   }
 
   /**
+   * Robust JSON parsing from Claude responses
+   * Handles markdown code blocks, extra text, trailing commas, etc.
+   */
+  private parseJSONResponse(text: string): any {
+    let cleaned = text.trim();
+
+    try {
+      // Strategy 1: Try parsing as-is first
+      return JSON.parse(cleaned);
+    } catch (e1) {
+      // Strategy 2: Remove markdown code blocks
+      try {
+        cleaned = cleaned.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        return JSON.parse(cleaned);
+      } catch (e2) {
+        // Strategy 3: Extract JSON object between first { and last }
+        try {
+          const firstBrace = cleaned.indexOf('{');
+          const lastBrace = cleaned.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+            return JSON.parse(cleaned);
+          }
+        } catch (e3) {
+          // Strategy 4: Remove trailing commas before closing braces/brackets
+          try {
+            cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+            return JSON.parse(cleaned);
+          } catch (e4) {
+            // Strategy 5: Try extracting from code block with language identifier
+            try {
+              const codeBlockMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+              if (codeBlockMatch && codeBlockMatch[1]) {
+                return JSON.parse(codeBlockMatch[1]);
+              }
+            } catch (e5) {
+              // Strategy 6: Last resort - find and extract JSON-like structure
+              try {
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  let jsonStr = jsonMatch[0];
+                  // Remove trailing commas
+                  jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+                  return JSON.parse(jsonStr);
+                }
+              } catch (e6) {
+                // All strategies failed
+                logger.error('JSON parsing failed after all strategies', {
+                  originalText: text.substring(0, 200),
+                  error: e6 instanceof Error ? e6.message : 'Unknown error'
+                });
+                throw new Error(`Failed to parse JSON response. Last error: ${e6 instanceof Error ? e6.message : 'Unknown'}`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error('Failed to parse JSON response after all strategies');
+  }
+
+  /**
    * Generate a plugin from user request
    */
   async generatePlugin(request: PluginGenerationRequest): Promise<PluginGenerationResult> {
@@ -247,11 +310,8 @@ export class PluginGeneratorAgent extends BaseAgent {
         throw new Error('Unexpected response type');
       }
 
-      // Clean up markdown code blocks if present
-      let jsonText = content.text.trim();
-      jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-      const analysis = JSON.parse(jsonText);
+      // Parse JSON with robust error handling
+      const analysis = this.parseJSONResponse(content.text);
 
       // Additional validation: check for blocked keywords
       const lowerPrompt = prompt.toLowerCase();
@@ -346,11 +406,8 @@ Respond in JSON format (no markdown code blocks):
       throw new Error('Unexpected response type');
     }
 
-    // Clean up markdown code blocks if present
-    let jsonText = content.text.trim();
-    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-    const analysis = JSON.parse(jsonText);
+    // Parse JSON with robust error handling
+    const analysis = this.parseJSONResponse(content.text);
 
     // Additional validation: check for blocked keywords
     const lowerPrompt = prompt.toLowerCase();
