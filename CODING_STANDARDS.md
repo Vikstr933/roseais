@@ -66,7 +66,42 @@ apiFetch('/api/endpoint') // Auth header added automatically
 
 ---
 
-### 4. Environment Variables
+### 4. WebContainer Configuration (Playground Feature)
+
+**Vercel Configuration (vercel.json):**
+WebContainer requires cross-origin isolation to enable SharedArrayBuffer support.
+
+**✅ REQUIRED HEADERS:**
+```json
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "require-corp"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Why:** Without these headers:
+- SharedArrayBuffer is not available
+- WebContainer fails with: `DataCloneError: Failed to execute 'postMessage' on 'Worker'`
+- Playground feature cannot boot WebContainer
+
+**Fixed:** Commit `eddb3e5` (2025-11-04)
+
+---
+
+### 5. Environment Variables
 
 **Frontend (Vercel):**
 ```bash
@@ -91,7 +126,7 @@ SUPABASE_URL=...
 
 ---
 
-### 5. User Authentication & Authorization
+### 6. User Authentication & Authorization
 
 **Always return complete user data from auth endpoints:**
 
@@ -117,7 +152,7 @@ SUPABASE_URL=...
 
 ---
 
-### 6. Admin Route Protection
+### 7. Admin Route Protection
 
 **Backend:**
 ```typescript
@@ -146,7 +181,7 @@ useEffect(() => {
 
 ---
 
-### 7. Database Schema Consistency
+### 8. Database Schema Consistency
 
 **PostgreSQL vs SQLite differences:**
 - ✅ Use `INTEGER` for boolean-like fields in PostgreSQL (not BOOLEAN)
@@ -160,7 +195,7 @@ useEffect(() => {
 
 ---
 
-### 8. Error Handling Patterns
+### 9. Error Handling Patterns
 
 **Backend:**
 ```typescript
@@ -194,7 +229,7 @@ try {
 
 ---
 
-### 9. Security Best Practices
+### 10. Security Best Practices
 
 **Input Validation:**
 - ✅ Validate all user input before using
@@ -217,7 +252,7 @@ try {
 
 ---
 
-### 10. Component Imports
+### 11. Component Imports
 
 **✅ ALWAYS use path aliases:**
 ```typescript
