@@ -11,6 +11,7 @@ declare global {
         email: string;
         displayName: string;
         tier: string;
+        role: 'user' | 'admin' | 'superadmin';
       };
     }
   }
@@ -44,6 +45,7 @@ export const authenticateUser = async (
       email: user.email,
       displayName: user.displayName,
       tier: user.tier || 'free',
+      role: user.role || 'user',
     };
 
     next();
@@ -74,6 +76,7 @@ export const optionalAuth = async (
           email: user.email,
           displayName: user.displayName,
           tier: user.tier || 'free',
+          role: user.role || 'user',
         };
       }
     }
