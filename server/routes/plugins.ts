@@ -112,9 +112,9 @@ router.get('/debug', async (req, res) => {
 });
 
 /**
- * Get all available plugins
+ * Get all available plugins (system + user-generated)
  */
-router.get('/', async (req, res) => {
+router.get('/', authenticateUser, async (req, res) => {
   try {
     // Ensure plugins are initialized
     await initializePlugins();
@@ -126,11 +126,55 @@ router.get('/', async (req, res) => {
       });
     }
 
-    const plugins = pluginRegistry.getAllPlugins();
+    const systemPlugins = pluginRegistry.getAllPlugins();
 
-    res.json({
-      success: true,
-      plugins: plugins.map((p: any) => ({
+    // Fetch user's custom plugins from database
+    const { db: database } = await import('../../db');
+    const { userGeneratedPlugins, pluginInstallations } = await import('../../db/schema-pg');
+    const { eq, and } = await import('drizzle-orm');
+
+    const userId = req.user!.id;
+
+    const userPlugins = await database
+      .select()
+      .from(userGeneratedPlugins)
+      .where(
+        and(
+          eq(userGeneratedPlugins.userId, userId),
+          eq(userGeneratedPlugins.status, 'approved')
+        )
+      );
+
+    // Get installation status for user plugins
+    const userPluginsWithStatus = await Promise.all(
+      userPlugins.map(async (plugin) => {
+        const installation = await database.query.pluginInstallations.findFirst({
+          where: and(
+            eq(pluginInstallations.userId, userId),
+            eq(pluginInstallations.pluginId, plugin.pluginId)
+          ),
+        });
+
+        return {
+          id: plugin.pluginId,
+          name: plugin.pluginName,
+          description: plugin.description,
+          category: 'custom',
+          icon: '🔌',
+          requiresAuth: plugin.requiresAuth || false,
+          authType: plugin.credentialsRequired ? 'api_key' : undefined,
+          capabilities: plugin.capabilities || [],
+          isUserGenerated: true,
+          securityScore: plugin.securityScore,
+          installed: !!installation,
+          credentialsRequired: plugin.credentialsRequired || {},
+        };
+      })
+    );
+
+    // Combine system and user plugins
+    const allPlugins = [
+      ...systemPlugins.map((p: any) => ({
         id: p.id,
         name: p.name,
         description: p.description,
@@ -138,8 +182,15 @@ router.get('/', async (req, res) => {
         icon: p.icon,
         requiresAuth: p.requiresAuth,
         authType: p.authType,
-        capabilities: p.capabilities
-      }))
+        capabilities: p.capabilities,
+        isUserGenerated: false,
+      })),
+      ...userPluginsWithStatus,
+    ];
+
+    res.json({
+      success: true,
+      plugins: allPlugins
     });
   } catch (error) {
     logger.error('Failed to get plugins', error as Error);
@@ -151,7 +202,7 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * Get plugin status for current user
+ * Get plugin status for current user (system + user-generated)
  */
 router.get('/status', authenticateUser, async (req, res) => {
   try {
@@ -170,15 +221,68 @@ router.get('/status', authenticateUser, async (req, res) => {
       });
     }
 
+    // Get system plugin status
     const status = pluginRegistry.getUserPluginStatus(userId);
-    const statusArray = Array.from(status.entries()).map(([pluginId, data]: [string, any]) => ({
+    const systemStatusArray = Array.from(status.entries()).map(([pluginId, data]: [string, any]) => ({
       pluginId,
       ...data
     }));
 
+    // Get user-generated plugin status
+    const { db: database } = await import('../../db');
+    const { userGeneratedPlugins, pluginInstallations } = await import('../../db/schema-pg');
+    const { eq, and } = await import('drizzle-orm');
+
+    const userPlugins = await database
+      .select()
+      .from(userGeneratedPlugins)
+      .where(
+        and(
+          eq(userGeneratedPlugins.userId, userId),
+          eq(userGeneratedPlugins.status, 'approved')
+        )
+      );
+
+    const userPluginStatus = await Promise.all(
+      userPlugins.map(async (plugin) => {
+        const installation = await database.query.pluginInstallations.findFirst({
+          where: and(
+            eq(pluginInstallations.userId, userId),
+            eq(pluginInstallations.pluginId, plugin.pluginId)
+          ),
+        });
+
+        return {
+          pluginId: plugin.pluginId,
+          metadata: {
+            id: plugin.pluginId,
+            name: plugin.pluginName,
+            description: plugin.description,
+            category: 'custom',
+            icon: '🔌',
+            requiresAuth: plugin.requiresAuth || false,
+            authType: plugin.credentialsRequired ? 'api_key' : undefined,
+            capabilities: plugin.capabilities || [],
+          },
+          status: {
+            enabled: installation?.status === 'active',
+            initialized: !!installation,
+            authenticated: installation?.status === 'active',
+            health: installation?.status === 'active' ? 'healthy' : 'warning',
+            healthMessage: installation ? undefined : 'Plugin not installed',
+            lastSync: installation?.lastUsedAt,
+            syncInProgress: false,
+          },
+        };
+      })
+    );
+
+    // Combine system and user plugin status
+    const allStatus = [...systemStatusArray, ...userPluginStatus];
+
     res.json({
       success: true,
-      plugins: statusArray
+      plugins: allStatus
     });
   } catch (error) {
     logger.error('Failed to get plugin status', error as Error);

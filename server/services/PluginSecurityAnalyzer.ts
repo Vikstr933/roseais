@@ -253,10 +253,31 @@ export class PluginSecurityAnalyzer {
     try {
       return parser.parse(code, {
         sourceType: 'module',
-        plugins: ['typescript', 'jsx', 'decorators-legacy'],
+        plugins: [
+          'typescript',
+          'jsx',
+          'decorators-legacy',
+          'classProperties',
+          'classPrivateProperties',
+          'classPrivateMethods',
+          'asyncGenerators',
+          'bigInt',
+          'dynamicImport',
+          'importMeta',
+          'nullishCoalescingOperator',
+          'numericSeparator',
+          'objectRestSpread',
+          'optionalCatchBinding',
+          'optionalChaining',
+          'topLevelAwait',
+          'exportNamespaceFrom',
+        ],
       });
     } catch (error) {
-      logger.error('Failed to parse AST', error);
+      logger.warn('Failed to parse AST - code may contain unsupported syntax', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        codePreview: code.substring(0, 200) + '...',
+      });
       return null;
     }
   }
