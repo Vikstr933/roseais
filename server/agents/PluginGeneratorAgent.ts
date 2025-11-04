@@ -253,7 +253,11 @@ Respond in JSON format:
         throw new Error('Unexpected response type');
       }
 
-      const analysis = JSON.parse(content.text);
+      // Clean up markdown code blocks if present
+      let jsonText = content.text.trim();
+      jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+      const analysis = JSON.parse(jsonText);
 
       // Additional validation: check for blocked keywords
       const lowerPrompt = prompt.toLowerCase();
