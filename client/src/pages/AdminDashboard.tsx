@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useUser } from '../contexts/UserContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 interface SystemStats {
@@ -61,7 +61,7 @@ interface Workspace {
 }
 
 export default function AdminDashboard() {
-  const { user, loading } = useUser();
+  const { user, isLoading } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'agents' | 'workspaces'>('stats');
@@ -74,10 +74,10 @@ export default function AdminDashboard() {
 
   // Check if user is admin
   useEffect(() => {
-    if (!loading && (!user || (user.role !== 'admin' && user.role !== 'superadmin'))) {
+    if (!isLoading && (!user || (user.role !== 'admin' && user.role !== 'superadmin'))) {
       navigate('/');
     }
-  }, [user, loading, navigate]);
+  }, [user, isLoading, navigate]);
 
   // Fetch data based on active tab
   useEffect(() => {
@@ -177,7 +177,7 @@ export default function AdminDashboard() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading...</div>
