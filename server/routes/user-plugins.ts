@@ -218,6 +218,7 @@ router.post('/generate', authenticateUser, async (req, res) => {
       requiresAuth: result.metadata.requiresAuth,
       authType: result.metadata.authType,
       authConfig: null,
+      credentialsRequired: result.metadata.credentialsRequired,
       version: '1.0.0',
     });
 

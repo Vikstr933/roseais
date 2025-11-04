@@ -32,6 +32,7 @@ export interface PluginGenerationResult {
     capabilities: string[];
     requiresAuth: boolean;
     authType?: string;
+    credentialsRequired: Record<string, any>;
   };
 }
 
@@ -258,6 +259,7 @@ export class PluginGeneratorAgent extends BaseAgent {
           capabilities: generationResult.capabilities,
           requiresAuth: generationResult.requiresAuth,
           authType: generationResult.authType,
+          credentialsRequired: generationResult.credentialsRequired,
         },
       };
     } catch (error) {
@@ -444,6 +446,7 @@ Respond in JSON format (no markdown code blocks):
     capabilities: string[];
     requiresAuth: boolean;
     authType?: string;
+    credentialsRequired: Record<string, any>;
     tokensUsed: number;
   }> {
     logger.info('Generating plugin code', { serviceName: params.serviceName });
@@ -514,6 +517,9 @@ Requirements:
     const authType = code.includes('oauth') ? 'oauth2' :
                      code.includes('apiKey') ? 'api_key' : undefined;
 
+      // Detect credential requirements from generated code
+      const credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
+
       // Log usage metrics
       const responseTime = Date.now() - startTime;
       await promptManager.logUsage(
@@ -539,6 +545,7 @@ Requirements:
         capabilities: params.capabilities,
         requiresAuth,
         authType,
+        credentialsRequired,
         tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
       };
     } catch (error) {
@@ -631,6 +638,9 @@ Requirements:
     const authType = code.includes('oauth') ? 'oauth2' :
                      code.includes('apiKey') ? 'api_key' : undefined;
 
+    // Detect credential requirements from generated code
+    const credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
+
     return {
       code,
       pluginName,
@@ -638,6 +648,7 @@ Requirements:
       capabilities: params.capabilities,
       requiresAuth,
       authType,
+      credentialsRequired,
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
     };
   }
@@ -799,6 +810,131 @@ export class {{PLUGIN_NAME}}Plugin extends BaseProductivityPlugin {
 
     // Fallback: use first 100 chars of prompt
     return prompt.length > 100 ? prompt.substring(0, 97) + '...' : prompt;
+  }
+
+  /**
+   * Detect credential requirements from generated code
+   * Analyzes the code to determine what credentials the plugin needs
+   */
+  private detectCredentialRequirements(code: string, serviceName: string): Record<string, any> {
+    const requirements: Record<string, any> = {};
+    const lowerCode = code.toLowerCase();
+    const serviceNameCapitalized = serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+
+    // Detect webhook URLs
+    if (lowerCode.includes('webhook') || code.match(/webhook\s*url/i)) {
+      requirements.webhookUrl = {
+        label: `${serviceNameCapitalized} Webhook URL`,
+        type: 'url',
+        required: true,
+        description: `Webhook URL for ${serviceNameCapitalized}. Check your ${serviceNameCapitalized} integration settings.`,
+        placeholder: 'https://...',
+      };
+    }
+
+    // Detect API keys
+    if (lowerCode.includes('apikey') || lowerCode.includes('api_key') || code.match(/api\s*key/i)) {
+      requirements.apiKey = {
+        label: 'API Key',
+        type: 'password',
+        required: true,
+        description: `API key for ${serviceNameCapitalized}. Find this in your ${serviceNameCapitalized} account settings.`,
+        placeholder: '',
+      };
+    }
+
+    // Detect access tokens
+    if (lowerCode.includes('accesstoken') || lowerCode.includes('access_token')) {
+      requirements.accessToken = {
+        label: 'Access Token',
+        type: 'password',
+        required: true,
+        description: `Access token for ${serviceNameCapitalized}`,
+        placeholder: '',
+      };
+    }
+
+    // Detect bot tokens
+    if (lowerCode.includes('bottoken') || lowerCode.includes('bot_token') || lowerCode.includes('bot token')) {
+      requirements.botToken = {
+        label: 'Bot Token',
+        type: 'password',
+        required: code.includes('required: true') && code.includes('botToken'),
+        description: `Bot token for ${serviceNameCapitalized}. Used for enhanced bot features.`,
+        placeholder: '',
+      };
+    }
+
+    // Detect OAuth client credentials
+    const hasClientId = lowerCode.includes('clientid') || lowerCode.includes('client_id');
+    const hasClientSecret = lowerCode.includes('clientsecret') || lowerCode.includes('client_secret');
+
+    if (hasClientId && hasClientSecret) {
+      requirements.clientId = {
+        label: 'OAuth Client ID',
+        type: 'text',
+        required: true,
+        description: `OAuth Client ID from your ${serviceNameCapitalized} app`,
+        placeholder: '',
+      };
+      requirements.clientSecret = {
+        label: 'OAuth Client Secret',
+        type: 'password',
+        required: true,
+        description: `OAuth Client Secret from your ${serviceNameCapitalized} app`,
+        placeholder: '',
+      };
+    }
+
+    // Detect server/channel IDs for Discord-like services
+    if (serviceName.toLowerCase() === 'discord') {
+      if (lowerCode.includes('serverid') || lowerCode.includes('guildid')) {
+        requirements.serverId = {
+          label: 'Server ID',
+          type: 'text',
+          required: false,
+          description: 'Discord Server (Guild) ID. Enable Developer Mode to copy IDs.',
+          placeholder: '1234567890',
+        };
+      }
+      if (lowerCode.includes('channelid')) {
+        requirements.channelId = {
+          label: 'Channel ID',
+          type: 'text',
+          required: false,
+          description: 'Discord Channel ID. Right-click channel → Copy ID.',
+          placeholder: '1234567890',
+        };
+      }
+    }
+
+    // Detect auth headers or bearer tokens
+    if ((lowerCode.includes('authorization') || lowerCode.includes('bearer')) &&
+        !hasClientId && !requirements.apiKey) {
+      requirements.authToken = {
+        label: 'Authorization Token',
+        type: 'password',
+        required: true,
+        description: `Authorization token for ${serviceNameCapitalized}`,
+        placeholder: '',
+      };
+    }
+
+    // Detect custom base URLs or endpoints
+    if (lowerCode.includes('baseurl') || lowerCode.includes('base_url') || lowerCode.includes('endpoint')) {
+      // Only add if it's not a hardcoded URL in the code
+      if (!code.match(/baseUrl:\s*['"]https?:\/\//)) {
+        requirements.baseUrl = {
+          label: 'API Base URL',
+          type: 'url',
+          required: false,
+          description: `Custom API endpoint URL for ${serviceNameCapitalized} (optional)`,
+          placeholder: 'https://api.example.com',
+        };
+      }
+    }
+
+    return requirements;
   }
 
   /**
