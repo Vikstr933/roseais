@@ -23,6 +23,7 @@ const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const Pricing = lazy(() => import('./pages/Pricing'));
 const Integrations = lazy(() => import('./pages/Integrations'));
 const Settings = lazy(() => import('./pages/Settings'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 
 // Lazy load heavy components
 const AssistantWidget = lazy(() => import('./components/AssistantWidget'));
@@ -134,6 +135,11 @@ function AppContent() {
         <Route path="/settings">
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/admin">
+          <ProtectedRoute>
+            <AdminDashboard />
           </ProtectedRoute>
         </Route>
         </Switch>

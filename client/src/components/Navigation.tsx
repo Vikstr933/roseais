@@ -12,6 +12,7 @@ import {
   LogOut,
   Plug,
   UserCog,
+  Shield,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useState } from 'react';
@@ -24,12 +25,16 @@ export function Navigation() {
   const { user, logout, isSuperAdmin } = useAuth();
   const [location] = useLocation();
 
+  const isAdmin = user && (user.role === 'admin' || user.role === 'superadmin');
+
   const navLinks = [
     { href: '/workspaces', icon: Laptop, text: 'Workspaces', requireAuth: false },
     { href: '/playground', icon: Terminal, text: 'Playground', requireAuth: false },
     { href: '/agent-manager', icon: Settings, text: 'Agent Manager', requireAuth: false },
     { href: '/integrations', icon: Plug, text: 'Integrations', requireAuth: false },
     { href: '/sessions', icon: History, text: 'Sessions', requireAuth: false },
+    // Admin only
+    { href: '/admin', icon: Shield, text: 'Admin', requireAuth: true, adminOnly: true },
     // Superadmin only
     { href: '/', icon: Brain, text: 'Models', requireAuth: true, superadminOnly: true },
     { href: '/companies', icon: Building2, text: 'Companies', requireAuth: true, superadminOnly: true },
@@ -39,6 +44,7 @@ export function Navigation() {
 
   const visibleLinks = navLinks.filter(link => {
     if (link.superadminOnly) return isSuperAdmin;
+    if (link.adminOnly) return isAdmin;
     return true;
   });
 
@@ -84,6 +90,11 @@ export function Navigation() {
                       {link.superadminOnly && (
                         <span className="px-1 py-0.5 text-[10px] lg:text-xs bg-purple-500/30 text-purple-200 rounded hidden lg:inline">
                           SA
+                        </span>
+                      )}
+                      {link.adminOnly && !link.superadminOnly && (
+                        <span className="px-1 py-0.5 text-[10px] lg:text-xs bg-orange-500/30 text-orange-200 rounded hidden lg:inline">
+                          A
                         </span>
                       )}
                     </motion.button>
