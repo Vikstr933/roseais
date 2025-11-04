@@ -73,6 +73,10 @@ router.post('/oauth', async (req, res) => {
         username: user.username,
         email: user.email,
         displayName: user.displayName,
+        role: user.role || 'user',
+        createdAt: user.createdAt,
+        lastActive: user.lastActive,
+        preferences: user.preferences || {},
       },
       sessionToken: sessionId,
     });
