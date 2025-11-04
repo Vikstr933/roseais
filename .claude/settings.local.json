@@ -25,7 +25,8 @@
       "Bash(vercel inspect:*)",
       "Bash(vercel ls:*)",
       "Bash(vercel project:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

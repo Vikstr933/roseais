@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { BaseAgent } from './BaseAgent';
 import { PluginSecurityAnalyzer, SecurityAnalysisResult } from '../services/PluginSecurityAnalyzer';
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { promptManager } from '../services/PromptManager';
 import { nanoid } from 'nanoid';
 
 const logger = new SimpleLogger('PluginGeneratorAgent');
@@ -208,38 +209,31 @@ export class PluginGeneratorAgent extends BaseAgent {
   private async analyzeIntent(prompt: string): Promise<IntentAnalysis> {
     logger.info('Analyzing intent');
 
-    const systemPrompt = `You are a security analyzer for plugin generation. Analyze the user's request and determine:
-1. Is this a safe, legitimate plugin request?
-2. What is the primary intent?
-3. What capabilities are needed?
-4. What service should it integrate with?
-5. What is the complexity level?
-
-BLOCKED INTENTS:
-${PluginGeneratorAgent.BLOCKED_INTENTS.join(', ')}
-
-ALLOWED CAPABILITIES:
-${PluginGeneratorAgent.ALLOWED_CAPABILITIES.join(', ')}
-
-ALLOWED SERVICES:
-Discord, Slack, Trello, Notion, GitHub, GitLab, Linear, Asana, Todoist
-
-Respond in JSON format:
-{
-  "safe": boolean,
-  "intent": string,
-  "blockedReason": string or null,
-  "suggestedCapabilities": string[],
-  "suggestedService": string,
-  "complexity": "simple" | "medium" | "complex"
-}`;
+    const startTime = Date.now();
 
     try {
+      // Load prompt from database with dynamic guidelines
+      const promptConfig = await promptManager.buildSystemPrompt(
+        'plugin_generator.intent_analysis',
+        {
+          blockedIntents: PluginGeneratorAgent.BLOCKED_INTENTS.join(', '),
+          allowedCapabilities: PluginGeneratorAgent.ALLOWED_CAPABILITIES.join(', '),
+          allowedServices: 'Discord, Slack, Trello, Notion, GitHub, GitLab, Linear, Asana, Todoist',
+        },
+        { includeGuidelines: false } // Security analysis doesn't need coding guidelines
+      );
+
+      if (!promptConfig) {
+        // Fallback to hardcoded prompt if database prompt not found
+        logger.warn('Database prompt not found, using fallback');
+        return this.analyzeIntentFallback(prompt);
+      }
+
       const response = await this.anthropic.messages.create({
-        model: this.model,
-        max_tokens: 1000,
-        temperature: 0.3,
-        system: systemPrompt,
+        model: promptConfig.model,
+        max_tokens: promptConfig.maxTokens,
+        temperature: promptConfig.temperature,
+        system: promptConfig.systemPrompt,
         messages: [
           {
             role: 'user',
@@ -276,6 +270,19 @@ Respond in JSON format:
         };
       }
 
+      // Log usage metrics
+      const responseTime = Date.now() - startTime;
+      await promptManager.logUsage(
+        promptConfig ? 'plugin_generator.intent_analysis' : 'fallback',
+        'system',
+        {
+          responseTimeMs: responseTime,
+          tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+          success: true,
+          requestContext: { agentType: 'plugin_generator', action: 'intent_analysis' }
+        }
+      ).catch(() => {}); // Don't fail on logging errors
+
       return analysis;
     } catch (error) {
       logger.error('Intent analysis failed', error);
@@ -289,6 +296,80 @@ Respond in JSON format:
         complexity: 'simple',
       };
     }
+  }
+
+  /**
+   * Fallback intent analysis with hardcoded prompt
+   */
+  private async analyzeIntentFallback(prompt: string): Promise<IntentAnalysis> {
+    const systemPrompt = `You are a security analyzer for plugin generation. Analyze the user's request and determine:
+1. Is this a safe, legitimate plugin request?
+2. What is the primary intent?
+3. What capabilities are needed?
+4. What service should it integrate with?
+5. What is the complexity level?
+
+BLOCKED INTENTS:
+${PluginGeneratorAgent.BLOCKED_INTENTS.join(', ')}
+
+ALLOWED CAPABILITIES:
+${PluginGeneratorAgent.ALLOWED_CAPABILITIES.join(', ')}
+
+ALLOWED SERVICES:
+Discord, Slack, Trello, Notion, GitHub, GitLab, Linear, Asana, Todoist
+
+Respond in JSON format (no markdown code blocks):
+{
+  "safe": boolean,
+  "intent": string,
+  "blockedReason": string or null,
+  "suggestedCapabilities": string[],
+  "suggestedService": string,
+  "complexity": "simple" | "medium" | "complex"
+}`;
+
+    const response = await this.anthropic.messages.create({
+      model: this.model,
+      max_tokens: 1000,
+      temperature: 0.3,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: `Analyze this plugin request: "${prompt}"`,
+        },
+      ],
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type');
+    }
+
+    // Clean up markdown code blocks if present
+    let jsonText = content.text.trim();
+    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+    const analysis = JSON.parse(jsonText);
+
+    // Additional validation: check for blocked keywords
+    const lowerPrompt = prompt.toLowerCase();
+    const foundBlockedIntent = PluginGeneratorAgent.BLOCKED_INTENTS.find(intent =>
+      lowerPrompt.includes(intent)
+    );
+
+    if (foundBlockedIntent) {
+      return {
+        safe: false,
+        intent: foundBlockedIntent,
+        blockedReason: `Request contains blocked intent: ${foundBlockedIntent}`,
+        suggestedCapabilities: [],
+        suggestedService: '',
+        complexity: 'simple',
+      };
+    }
+
+    return analysis;
   }
 
   /**
@@ -310,8 +391,125 @@ Respond in JSON format:
   }> {
     logger.info('Generating plugin code', { serviceName: params.serviceName });
 
+    const startTime = Date.now();
     const template = this.getPluginTemplate(params.serviceName);
 
+    try {
+      // Load prompt from database with coding guidelines
+      const promptConfig = await promptManager.buildSystemPrompt(
+        'plugin_generator.code_generation',
+        {
+          capabilities: params.capabilities.join(', '),
+          serviceName: params.serviceName,
+          complexity: params.complexity,
+          codingGuidelines: '{{codingGuidelines}}', // Will be replaced with actual guidelines
+        },
+        { includeGuidelines: true } // Include coding best practices
+      );
+
+      if (!promptConfig) {
+        // Fallback to hardcoded prompt
+        logger.warn('Database prompt not found for code generation, using fallback');
+        return this.generateSecureCodeFallback(params, template);
+      }
+
+      const userPrompt = `Generate a plugin for: ${params.prompt}
+
+Use this template as a guide:
+
+${template}
+
+Requirements:
+- Plugin should be production-ready
+- Include proper OAuth setup if needed
+- Implement tools for the requested capabilities
+- Add comprehensive error handling
+- Use Zod for parameter validation
+- Include rate limiting configuration`;
+
+      const response = await this.anthropic.messages.create({
+        model: promptConfig.model,
+        max_tokens: promptConfig.maxTokens,
+        temperature: promptConfig.temperature,
+        system: promptConfig.systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+      });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type');
+    }
+
+    let code = content.text;
+
+    // Clean up markdown code blocks if present
+    code = code.replace(/```typescript\n?/g, '').replace(/```\n?/g, '').trim();
+
+    // Extract metadata from generated code
+    const pluginName = this.extractPluginName(code, params.serviceName);
+    const description = this.extractDescription(code, params.prompt);
+    const requiresAuth = code.includes('requiresAuth: true');
+    const authType = code.includes('oauth') ? 'oauth2' :
+                     code.includes('apiKey') ? 'api_key' : undefined;
+
+      // Log usage metrics
+      const responseTime = Date.now() - startTime;
+      await promptManager.logUsage(
+        'plugin_generator.code_generation',
+        'system',
+        {
+          responseTimeMs: responseTime,
+          tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+          success: true,
+          requestContext: {
+            agentType: 'plugin_generator',
+            action: 'code_generation',
+            serviceName: params.serviceName,
+            complexity: params.complexity
+          }
+        }
+      ).catch(() => {}); // Don't fail on logging errors
+
+      return {
+        code,
+        pluginName,
+        description,
+        capabilities: params.capabilities,
+        requiresAuth,
+        authType,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      };
+    } catch (error) {
+      logger.error('Code generation failed, using fallback', error as Error);
+      return this.generateSecureCodeFallback(params, template);
+    }
+  }
+
+  /**
+   * Fallback code generation with hardcoded prompt
+   */
+  private async generateSecureCodeFallback(
+    params: {
+      prompt: string;
+      serviceName: string;
+      capabilities: string[];
+      complexity: 'simple' | 'medium' | 'complex';
+    },
+    template: string
+  ): Promise<{
+    code: string;
+    pluginName: string;
+    description: string;
+    capabilities: string[];
+    requiresAuth: boolean;
+    authType?: string;
+    tokensUsed: number;
+  }> {
     const systemPrompt = `You are an expert plugin developer. Generate a secure, production-ready plugin based on the BaseProductivityPlugin class.
 
 REQUIREMENTS:
@@ -330,7 +528,7 @@ CAPABILITIES REQUESTED: ${params.capabilities.join(', ')}
 SERVICE: ${params.serviceName}
 COMPLEXITY: ${params.complexity}
 
-Return ONLY the TypeScript code, no markdown, no explanations.`;
+Return ONLY the TypeScript code, no markdown code blocks, no explanations.`;
 
     const userPrompt = `Generate a plugin for: ${params.prompt}
 

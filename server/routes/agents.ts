@@ -3,6 +3,7 @@ import { db } from '../../db';
 import { agents } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
+import { promptManager } from '../services/PromptManager';
 
 import { Anthropic } from '@anthropic-ai/sdk';
 
@@ -12,7 +13,17 @@ const anthropic = new Anthropic({
 
 // Function to generate agent configuration based on user prompt using Claude
 async function generateAgentConfig(prompt: string) {
-  const systemPrompt = `You are an expert AI system designer. Analyze the following request for an AI agent and generate a complete configuration that will best serve the user's needs. Consider the specific requirements, domain expertise needed, and best practices for the task.
+  const startTime = Date.now();
+
+  try {
+    // Try loading from database first (with fallback)
+    const promptConfig = await promptManager.buildSystemPrompt(
+      'agent_generator.meta_prompt',
+      {},
+      { includeGuidelines: true } // Include coding guidelines in generated agents
+    );
+
+    const systemPrompt = promptConfig?.systemPrompt || `You are an expert AI system designer. Analyze the following request for an AI agent and generate a complete configuration that will best serve the user's needs. Consider the specific requirements, domain expertise needed, and best practices for the task.
 
 The configuration should include:
 1. A clear name and description for the agent
@@ -39,11 +50,10 @@ Return ONLY a JSON object with these fields, no markdown formatting or additiona
 
 Important: Return ONLY the JSON object, no markdown formatting, no explanations, no additional text.`;
 
-  try {
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 2000,
-      temperature: 0.7,
+      model: promptConfig?.model || 'claude-sonnet-4-5-20250929',
+      max_tokens: promptConfig?.maxTokens || 2000,
+      temperature: promptConfig?.temperature || 0.7,
       system: systemPrompt,
       messages: [
         {
@@ -161,6 +171,21 @@ Important: Return ONLY the JSON object, no markdown formatting, no explanations,
         }, {});
     } else {
       config.expertise = {};
+    }
+
+    // Log usage metrics if we have promptConfig
+    if (promptConfig) {
+      const responseTime = Date.now() - startTime;
+      await promptManager.logUsage(
+        'agent_generator.meta_prompt',
+        'system',
+        {
+          responseTimeMs: responseTime,
+          tokensUsed: message.usage.input_tokens + message.usage.output_tokens,
+          success: true,
+          requestContext: { agentType: 'agent_generator', action: 'generate_config' }
+        }
+      ).catch(() => {}); // Don't fail on logging errors
     }
 
     return {
