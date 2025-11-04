@@ -177,13 +177,13 @@ export class PromptManager {
             SELECT * FROM coding_guidelines
             WHERE enabled = true
               AND category = ${options.category}
-              AND (applies_to @> ARRAY[${agentType}]::varchar[] OR applies_to @> ARRAY['*']::varchar[])
+              AND (applies_to @> ARRAY[${agentType}]::text[] OR applies_to @> ARRAY['*']::text[])
             ORDER BY priority DESC
           `
         : sql`
             SELECT * FROM coding_guidelines
             WHERE enabled = true
-              AND (applies_to @> ARRAY[${agentType}]::varchar[] OR applies_to @> ARRAY['*']::varchar[])
+              AND (applies_to @> ARRAY[${agentType}]::text[] OR applies_to @> ARRAY['*']::text[])
             ORDER BY priority DESC
           `;
 
