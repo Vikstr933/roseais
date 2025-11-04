@@ -170,51 +170,38 @@ const initializeApp = async () => {
       }
     });
 
-    // Conditional CORS - skip for health checks, apply strict CORS for all other routes
-    app.use((req, res, next) => {
-      // Skip CORS entirely for health check endpoints (monitoring services don't send Origin)
-      if (req.path.startsWith('/api/health')) {
-        return next();
-      }
+    // Apply CORS to all routes (including health checks for browser access)
+    app.use(cors({
+      origin: (origin, callback) => {
+        // Allow requests without origin (monitoring services, same-origin requests)
+        if (!origin) {
+          return callback(null, true);
+        }
 
-      // Apply strict CORS for all other routes
-      cors({
-        origin: (origin, callback) => {
-          // In production, reject requests with no origin for security
-          // In development, allow for testing (Postman, curl, etc.)
-          if (!origin) {
-            const isDevelopment = process.env.NODE_ENV !== 'production';
-            if (isDevelopment) {
-              return callback(null, true);
-            } else {
-              return callback(new Error('Origin header required'), false);
-            }
+        // Check if origin is in allowed list (string or regex match)
+        const isAllowed = allowedOrigins.some(allowed => {
+          if (typeof allowed === 'string') {
+            return allowed === origin;
+          } else if (allowed instanceof RegExp) {
+            return allowed.test(origin);
           }
+          return false;
+        });
 
-          // Check if origin is in allowed list (string or regex match)
-          const isAllowed = allowedOrigins.some(allowed => {
-            if (typeof allowed === 'string') {
-              return allowed === origin;
-            } else if (allowed instanceof RegExp) {
-              return allowed.test(origin);
-            }
-            return false;
-          });
-
-          if (isAllowed) {
-            callback(null, true);
-          } else {
-            console.warn(`CORS blocked origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
-          }
-        },
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        credentials: true,
-        allowedHeaders: ['Content-Type', 'Authorization'],
-        preflightContinue: false,
-        optionsSuccessStatus: 204
-      })(req, res, next);
-    });
+        if (isAllowed) {
+          callback(null, true);
+        } else {
+          console.warn(`[CORS] Blocked origin: ${origin}`);
+          console.warn(`[CORS] Allowed origins:`, allowedOrigins.map(o => o.toString()));
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      preflightContinue: false,
+      optionsSuccessStatus: 204
+    }));
 
     // Special CORS handling for SSE endpoints
     app.use('/api/sse', (req, res, next) => {
