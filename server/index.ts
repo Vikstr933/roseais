@@ -98,7 +98,10 @@ const initializeApp = async () => {
           frameSrc: ["'none'"],
         },
       },
-      crossOriginEmbedderPolicy: false, // Disable for WebContainer compatibility
+      // Note: crossOriginEmbedderPolicy and crossOriginOpenerPolicy are set
+      // conditionally later via middleware (only for non-API routes) to support WebContainer
+      crossOriginEmbedderPolicy: false, // Disabled here, set conditionally later
+      crossOriginOpenerPolicy: false, // Disabled here, set conditionally later
       crossOriginResourcePolicy: { policy: "cross-origin" },
       hsts: {
         maxAge: 31536000,
@@ -408,6 +411,17 @@ const initializeApp = async () => {
     app.get('/editor/:component', (req, res) => {
       const componentName = req.params.component;
       res.sendFile(path.join(process.cwd(), 'client/index.html'));
+    });
+
+    // Add Cross-Origin Isolation headers for WebContainer support
+    // These headers enable SharedArrayBuffer which is required by WebContainer
+    app.use((req, res, next) => {
+      // Only add these headers for HTML pages (client routes), not API routes
+      if (!req.path.startsWith('/api/')) {
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+      }
+      next();
     });
 
     // Serve static files from client directory
