@@ -15,9 +15,10 @@ export class UIDesignerAgent extends BaseAgent {
     task: string
   ): Promise<{ components: string[]; styles: string; structure: string }> {
     // Apply ultimate UI designer prompt for enhanced intelligence
-    const enhancedTask = PromptBuilder.buildAgentPrompt('UI_DESIGNER', task);
+    // Now with dynamic database prompts + coding guidelines!
+    const enhancedTask = await PromptBuilder.buildAgentPrompt('UI_DESIGNER', task);
 
-    this.logger.info(`Designing UI with enhanced intelligence for: ${task}`);
+    this.logger.info(`Designing UI with enhanced intelligence (with coding guidelines) for: ${task}`);
 
     // Analyze the requirement for UI components
     const analysis = await this.analyzeUIRequirements(enhancedTask);

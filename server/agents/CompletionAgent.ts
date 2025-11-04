@@ -104,7 +104,8 @@ export class CompletionAgent extends BaseAgent {
 
   async executeTask(task: string): Promise<void> {
     // Apply ultimate completion agent prompt for enhanced intelligence
-    const enhancedTask = PromptBuilder.buildAgentPrompt('COMPLETION_AGENT', task);
+    // Now with dynamic database prompts + coding guidelines!
+    const enhancedTask = await PromptBuilder.buildAgentPrompt('COMPLETION_AGENT', task);
 
     this.state.currentTask = enhancedTask;
     this.state.iterationCount = 0;

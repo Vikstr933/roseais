@@ -37,8 +37,9 @@ export class RequirementsAgent extends BaseAgent {
     console.log('📝 RequirementsAgent: Prompt length:', prompt.length);
 
     // Apply ultimate requirements analyst prompt for enhanced intelligence
-    const enhancedPrompt = PromptBuilder.buildAgentPrompt('REQUIREMENTS_ANALYST', prompt);
-    console.log('✨ RequirementsAgent: Enhanced prompt created');
+    // Now with dynamic database prompts + coding guidelines!
+    const enhancedPrompt = await PromptBuilder.buildAgentPrompt('REQUIREMENTS_ANALYST', prompt);
+    console.log('✨ RequirementsAgent: Enhanced prompt created (with coding guidelines)');
 
     this.logger.info('Analyzing requirements with enhanced intelligence');
     const start = Date.now();

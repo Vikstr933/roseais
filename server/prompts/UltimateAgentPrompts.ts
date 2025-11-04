@@ -4,7 +4,11 @@
  * Compiled from best practices of leading AI coding assistants:
  * - Claude Code, Cursor, v0, Devin AI, Augment Code, Replit
  * - Optimized for multi-agent orchestration and code generation
+ *
+ * Now enhanced with dynamic database prompt management via PromptManager
  */
+
+import { promptManager } from '../services/PromptManager';
 
 export interface AgentPromptConfig {
   role: string;
@@ -349,7 +353,37 @@ Remember: You coordinate the orchestra, but each agent is a virtuoso in their do
 
 // Utility functions for dynamic prompt construction
 export class PromptBuilder {
-  static buildAgentPrompt(agentType: keyof typeof AGENT_PROMPTS, userContext?: string): string {
+  /**
+   * Build agent prompt - tries database first, falls back to hardcoded
+   */
+  static async buildAgentPrompt(agentType: keyof typeof AGENT_PROMPTS, userContext?: string): Promise<string> {
+    // Try loading from database with coding guidelines
+    const promptKey = `code_generator.${agentType.toLowerCase()}`;
+
+    try {
+      const dbPrompt = await promptManager.buildSystemPrompt(
+        promptKey,
+        { userContext: userContext || '' },
+        { includeGuidelines: true }
+      );
+
+      if (dbPrompt) {
+        console.log(`[PromptBuilder] Using database prompt for ${agentType}`);
+        return dbPrompt.systemPrompt;
+      }
+    } catch (error) {
+      console.warn(`[PromptBuilder] Database prompt failed for ${agentType}, using fallback:`, error);
+    }
+
+    // Fallback to hardcoded prompts
+    console.log(`[PromptBuilder] Using hardcoded prompt for ${agentType}`);
+    return this.buildHardcodedPrompt(agentType, userContext);
+  }
+
+  /**
+   * Build hardcoded prompt (original implementation)
+   */
+  private static buildHardcodedPrompt(agentType: keyof typeof AGENT_PROMPTS, userContext?: string): string {
     const config = AGENT_PROMPTS[agentType];
 
     return `# ${config.role}
@@ -384,6 +418,14 @@ ${userContext ? `\n## Current Context\n${userContext}` : ''}
 
 Execute your role with excellence. You are part of a world-class development team.
 `;
+  }
+
+  /**
+   * Synchronous version for backward compatibility
+   * Note: This won't use database prompts, only hardcoded ones
+   */
+  static buildAgentPromptSync(agentType: keyof typeof AGENT_PROMPTS, userContext?: string): string {
+    return this.buildHardcodedPrompt(agentType, userContext);
   }
 
   static buildOrchestrationPrompt(userRequest: string, projectContext?: string): string {

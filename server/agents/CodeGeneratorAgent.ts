@@ -23,9 +23,10 @@ export class CodeGeneratorAgent extends BaseAgent {
     const fileOrchestrator: FileOrchestrator | undefined = sharedMemory?.get('fileOrchestrator');
 
     // Apply ultimate code generator prompt for enhanced intelligence
-    const enhancedPrompt = PromptBuilder.buildAgentPrompt('CODE_GENERATOR', prompt);
+    // Now with dynamic database prompts + coding guidelines!
+    const enhancedPrompt = await PromptBuilder.buildAgentPrompt('CODE_GENERATOR', prompt);
 
-    this.logger.info(`Generating intelligent code with enhanced prompt for: ${prompt}`);
+    this.logger.info(`Generating intelligent code with enhanced prompt (with coding guidelines) for: ${prompt}`);
 
     const files = [];
     const componentName = this.getComponentName(prompt);
