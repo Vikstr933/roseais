@@ -61,8 +61,9 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 // GET /api/workspaces/:id - Get specific workspace with full details
-router.get('/:id', optionalAuth, async (req, res) => {
+router.get('/:id', authenticateUser, async (req, res) => {
   try {
+    const userId = req.user!.id;
     const workspaceId = parseInt(req.params.id);
     const workspace = await db
       .select()
@@ -76,8 +77,18 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     const workspaceData = workspace[0];
 
-    // Get project members
+    // Security: Verify user is owner or member
     const members = await projectService.getProjectMembers(workspaceId);
+    const isOwner = workspaceData.ownerId === userId;
+    const isMember = members.some((m: any) => m.userId === userId);
+
+    if (!isOwner && !isMember) {
+      console.log(`[FORBIDDEN] User ${userId} attempted to access workspace ${workspaceId} (owner: ${workspaceData.ownerId})`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have access to this workspace'
+      });
+    }
 
     // Get file count
     const files = await projectService.getProjectFiles(workspaceId);

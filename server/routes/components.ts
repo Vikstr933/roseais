@@ -138,9 +138,13 @@ const activeServers: Record<string, ServerProcess> = {};
 const activeComponents: Record<string, string> = {}; // Store component names by session
 let nextPort = 5174; // Start after main app's port
 
-router.post('/components/save', async (req, res) => {
+router.post('/components/save', authenticateUser, async (req, res) => {
   try {
+    const userId = req.user!.id;
     const { componentName, files } = req.body;
+
+    // Security: Log component save attempt
+    console.log(`[COMPONENT_SAVE] User ${userId} saving component: ${componentName}`);
     const baseWorkspaceDir = path.join(
       process.cwd(),
       'workspaces',
@@ -1079,9 +1083,16 @@ router.get('/components/instance/:instanceId', optionalAuth, async (req, res) =>
 });
 
 // Route to stop a WebContainer instance
-router.delete('/components/instance/:instanceId', optionalAuth, async (req, res) => {
+router.delete('/components/instance/:instanceId', authenticateUser, async (req, res) => {
   try {
+    const userId = req.user!.id;
     const { instanceId } = req.params;
+
+    // Security: Log instance deletion attempt
+    console.log(`[INSTANCE_DELETE] User ${userId} deleting instance: ${instanceId}`);
+
+    // TODO: Add ownership verification when DeploymentService adds userId tracking
+    // For now, require authentication only
     await deploymentService.stopInstance(instanceId);
     
     res.json({ message: 'Instance stopped successfully' });
@@ -1109,10 +1120,14 @@ router.post('/components/cleanup', authenticateUser, async (req, res) => {
 });
 
 // Get component files for real-time updates
-router.get('/components/:componentName/files', async (req, res) => {
+router.get('/components/:componentName/files', authenticateUser, async (req, res) => {
   try {
+    const userId = req.user!.id;
     const { componentName } = req.params;
-    
+
+    // Security: Log component file access
+    console.log(`[COMPONENT_FILES] User ${userId} accessing files for: ${componentName}`);
+
     // Find the correct workspace directory
     const workspaceDir = await findWorkspaceDirectory(componentName);
     if (!workspaceDir) {
