@@ -244,11 +244,32 @@ router.post('/:id/export', authenticateUser, async (req, res) => {
 });
 
 // PUT /api/workspaces/:id - Update workspace
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateUser, async (req, res) => {
   try {
     const workspaceId = parseInt(req.params.id);
+    const userId = req.user!.id;
     const { name, description, agentConfig, testCases, collaborators, status } =
       req.body;
+
+    // First verify workspace exists and user owns it
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Security: Check if user is the owner
+    if (workspace.ownerId !== userId) {
+      console.log(`[FORBIDDEN] User ${userId} attempted to update workspace ${workspaceId} owned by ${workspace.ownerId}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only the workspace owner can update it'
+      });
+    }
 
     const updateData: any = {
       updatedAt: new Date(),
@@ -267,11 +288,7 @@ router.put('/:id', async (req, res) => {
       .where(eq(workspaces.id, workspaceId))
       .returning();
 
-    if (!updatedWorkspace || updatedWorkspace.length === 0) {
-      return res.status(404).json({ error: 'Workspace not found' });
-    }
-
-    console.log('Updated workspace:', updatedWorkspace[0]);
+    console.log(`Updated workspace ${workspaceId} by owner ${userId}`);
     res.json(updatedWorkspace[0]);
   } catch (error) {
     console.error('Error updating workspace:', error);

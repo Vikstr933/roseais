@@ -98,6 +98,9 @@ export const agents = sqliteTable('agents', {
   bestPractices: text('best_practices').notNull(), // JSON stored as text
   createdAt: text('created_at').notNull().default('CURRENT_TIMESTAMP'),
   updatedAt: text('updated_at').notNull().default('CURRENT_TIMESTAMP'),
+  // User isolation & system agents
+  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }), // NULL for system agents
+  isSystem: integer('is_system').notNull().default(0), // 1 = system agent (visible to all), 0 = user agent
   isActive: integer('is_active').notNull().default(1), // 1 for true, 0 for false
 });
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { userService, apiKeyService } from '../services/APIKeyService';
+import { authenticateUser } from '../middleware/auth';
 
 const router = Router();
 
@@ -70,9 +71,19 @@ router.post('/store', async (req, res) => {
  * GET /api/api-keys/user/:userId
  * Get all API keys for a user (without values)
  */
-router.get('/user/:userId', async (req, res) => {
+router.get('/user/:userId', authenticateUser, async (req, res) => {
   try {
     const { userId } = req.params;
+    const authenticatedUserId = req.user?.id;
+
+    // Security: Users can only access their own API keys
+    if (userId !== authenticatedUserId) {
+      console.log(`[FORBIDDEN] User ${authenticatedUserId} attempted to access keys for user ${userId}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only access your own API keys'
+      });
+    }
 
     console.log(`GET /api/api-keys/user/${userId} - Fetching user API keys`);
 
@@ -94,13 +105,23 @@ router.get('/user/:userId', async (req, res) => {
  * POST /api/api-keys/check-requirements
  * Check if user has required API keys for a prompt
  */
-router.post('/check-requirements', async (req, res) => {
+router.post('/check-requirements', authenticateUser, async (req, res) => {
   try {
     const { userId, prompt } = req.body;
+    const authenticatedUserId = req.user?.id;
 
     if (!userId || !prompt) {
       return res.status(400).json({
         error: 'userId and prompt are required',
+      });
+    }
+
+    // Security: Users can only check their own API keys
+    if (userId !== authenticatedUserId) {
+      console.log(`[FORBIDDEN] User ${authenticatedUserId} attempted to check keys for user ${userId}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only check your own API keys'
       });
     }
 
@@ -134,9 +155,19 @@ router.post('/check-requirements', async (req, res) => {
  * GET /api/api-keys/get/:userId/:serviceName/:keyName
  * Get a specific API key value (decrypted)
  */
-router.get('/get/:userId/:serviceName/:keyName', async (req, res) => {
+router.get('/get/:userId/:serviceName/:keyName', authenticateUser, async (req, res) => {
   try {
     const { userId, serviceName, keyName } = req.params;
+    const authenticatedUserId = req.user?.id;
+
+    // Security: Users can only access their own API keys
+    if (userId !== authenticatedUserId) {
+      console.log(`[FORBIDDEN] User ${authenticatedUserId} attempted to get key for user ${userId}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only access your own API keys'
+      });
+    }
 
     console.log(
       `GET /api/api-keys/get/${userId}/${serviceName}/${keyName} - Getting API key`
@@ -171,9 +202,19 @@ router.get('/get/:userId/:serviceName/:keyName', async (req, res) => {
  * DELETE /api/api-keys/:userId/:keyId
  * Delete an API key
  */
-router.delete('/:userId/:keyId', async (req, res) => {
+router.delete('/:userId/:keyId', authenticateUser, async (req, res) => {
   try {
     const { userId, keyId } = req.params;
+    const authenticatedUserId = req.user?.id;
+
+    // Security: Users can only delete their own API keys
+    if (userId !== authenticatedUserId) {
+      console.log(`[FORBIDDEN] User ${authenticatedUserId} attempted to delete key for user ${userId}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only delete your own API keys'
+      });
+    }
 
     console.log(`DELETE /api/api-keys/${userId}/${keyId} - Deleting API key`);
 
@@ -199,9 +240,19 @@ router.delete('/:userId/:keyId', async (req, res) => {
  * PUT /api/api-keys/:userId/:keyId/deactivate
  * Deactivate an API key
  */
-router.put('/:userId/:keyId/deactivate', async (req, res) => {
+router.put('/:userId/:keyId/deactivate', authenticateUser, async (req, res) => {
   try {
     const { userId, keyId } = req.params;
+    const authenticatedUserId = req.user?.id;
+
+    // Security: Users can only deactivate their own API keys
+    if (userId !== authenticatedUserId) {
+      console.log(`[FORBIDDEN] User ${authenticatedUserId} attempted to deactivate key for user ${userId}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only deactivate your own API keys'
+      });
+    }
 
     console.log(
       `PUT /api/api-keys/${userId}/${keyId}/deactivate - Deactivating API key`

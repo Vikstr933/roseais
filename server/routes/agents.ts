@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { db } from '../../db';
 import { agents } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
+import { requireAdmin, checkAdminStatus } from '../middleware/admin';
 import { promptManager } from '../services/PromptManager';
 
 import { Anthropic } from '@anthropic-ai/sdk';
@@ -230,10 +231,33 @@ const checkAgentStatus = async (req: any, res: any, next: any) => {
 const router = Router();
 
 // GET /api/agents - Get all agents (default system agents available to all users)
-router.get('/agents', optionalAuth, async (req, res) => {
+router.get('/agents', optionalAuth, checkAdminStatus, async (req, res) => {
   try {
-    console.log('GET /api/agents - Fetching all agents');
-    const allAgents = await db.select().from(agents);
+    const isAdmin = (req as any).isAdmin;
+    const userId = req.user?.id;
+
+    console.log('GET /api/agents - Fetching agents', { isAdmin, userId: userId || 'anonymous' });
+
+    let allAgents;
+
+    if (isAdmin) {
+      // Admins see ALL agents
+      console.log('[ADMIN] Fetching all agents in database');
+      allAgents = await db.select().from(agents);
+    } else if (userId) {
+      // Authenticated users see: system agents + their own agents
+      console.log(`[USER] Fetching system agents + user's own agents for userId: ${userId}`);
+      allAgents = await db.select().from(agents).where(
+        or(
+          eq(agents.isSystem, 1),        // System agents (visible to all)
+          eq(agents.userId, userId)       // User's own agents
+        )
+      );
+    } else {
+      // Unauthenticated users: only system agents
+      console.log('[ANONYMOUS] Fetching system agents only');
+      allAgents = await db.select().from(agents).where(eq(agents.isSystem, 1));
+    }
 
     // Transform the data to match the frontend format
     const transformedAgents = allAgents.map(agent => ({
@@ -334,10 +358,13 @@ router.get('/agents/personal-assistant', optionalAuth, async (req, res) => {
 });
 
 // GET /api/agents/:id - Get single agent by ID
-router.get('/agents/:id', optionalAuth, async (req, res) => {
+router.get('/agents/:id', optionalAuth, checkAdminStatus, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`GET /api/agents/${id} - Fetching agent`);
+    const isAdmin = (req as any).isAdmin;
+    const userId = req.user?.id;
+
+    console.log(`GET /api/agents/${id} - Fetching agent`, { isAdmin, userId: userId || 'anonymous' });
 
     // Support both numeric and text IDs
     const agent = await db
@@ -347,6 +374,19 @@ router.get('/agents/:id', optionalAuth, async (req, res) => {
 
     if (agent.length === 0) {
       return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Authorization check: User can only access system agents or their own agents (unless admin)
+    const agentData = agent[0];
+    const isSystemAgent = agentData.isSystem === 1;
+    const isOwner = userId && agentData.userId === userId;
+
+    if (!isAdmin && !isSystemAgent && !isOwner) {
+      console.log(`[FORBIDDEN] User ${userId || 'anonymous'} cannot access agent ${id}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only access system agents or your own agents'
+      });
     }
 
     // Transform the data to match the frontend format
@@ -409,9 +449,12 @@ router.post('/agents/generate', authenticateUser, async (req, res) => {
 });
 
 // POST /api/agents - Create a new agent
-router.post('/agents', async (req, res) => {
+router.post('/agents', authenticateUser, checkAdminStatus, async (req, res) => {
   try {
-    console.log('POST /api/agents - Creating new agent:', req.body);
+    const userId = req.user?.id;
+    const isAdmin = (req as any).isAdmin;
+
+    console.log('POST /api/agents - Creating new agent:', { userId, isAdmin, body: req.body });
 
     // Validate and transform the data
     const {
@@ -427,7 +470,16 @@ router.post('/agents', async (req, res) => {
       frameworks,
       libraries,
       bestPractices,
+      isSystem, // Only admins can create system agents
     } = req.body;
+
+    // Security: Only admins can create system agents
+    const agentIsSystem = isAdmin && isSystem === true ? 1 : 0;
+
+    // If not a system agent, assign to the user who created it
+    const agentUserId = agentIsSystem === 1 ? null : userId;
+
+    console.log(`Creating ${agentIsSystem ? 'system' : 'user'} agent for userId: ${agentUserId || 'none (system)'}`);
 
     // Transform Record fields to ensure correct format
     const transformedData: typeof agents.$inferInsert = {
@@ -443,6 +495,8 @@ router.post('/agents', async (req, res) => {
       frameworks: typeof frameworks === 'object' ? frameworks : {},
       libraries: typeof libraries === 'object' ? libraries : {},
       bestPractices: typeof bestPractices === 'object' ? bestPractices : {},
+      userId: agentUserId,       // Set owner
+      isSystem: agentIsSystem,   // 0 = user agent, 1 = system agent
       isActive: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date(),
@@ -482,13 +536,17 @@ router.post('/agents', async (req, res) => {
 });
 
 // PUT /api/agents/:id - Update an agent
-router.put('/agents/:id', async (req, res) => {
+router.put('/agents/:id', authenticateUser, checkAdminStatus, async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
+    const isAdmin = (req as any).isAdmin;
     const logger = req.app.locals.logger;
 
     await logger?.info('AgentManager', `Updating agent ${id}`, {
       agentId: id,
+      userId,
+      isAdmin,
       updateFields: Object.keys(req.body),
       isActiveChange:
         req.body.isActive !== undefined
@@ -497,7 +555,33 @@ router.put('/agents/:id', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`PUT /api/agents/${id} - Updating agent:`, req.body);
+    console.log(`PUT /api/agents/${id} - Updating agent:`, { userId, isAdmin, body: req.body });
+
+    // First, check if agent exists and verify ownership
+    const existingAgent = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, Number(id)));
+
+    if (existingAgent.length === 0) {
+      await logger?.warning('AgentManager', `Agent ${id} not found for update`, {
+        agentId: id,
+        timestamp: new Date().toISOString(),
+      });
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Authorization check: User can only update their own agents (unless admin)
+    const agentData = existingAgent[0];
+    const isOwner = userId && agentData.userId === userId;
+
+    if (!isAdmin && !isOwner) {
+      console.log(`[FORBIDDEN] User ${userId} cannot update agent ${id} (owner: ${agentData.userId})`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only update your own agents'
+      });
+    }
 
     // If we're deactivating an agent, check for any active tasks
     if (req.body.isActive === false) {
@@ -568,18 +652,6 @@ router.put('/agents/:id', async (req, res) => {
       .where(eq(agents.id, Number(id)))
       .returning();
 
-    if (updatedAgent.length === 0) {
-      await logger?.warning(
-        'AgentManager',
-        `Agent ${id} not found for update`,
-        {
-          agentId: id,
-          timestamp: new Date().toISOString(),
-        }
-      );
-      return res.status(404).json({ error: 'Agent not found' });
-    }
-
     await logger?.info('AgentManager', `Successfully updated agent ${id}`, {
       agentId: id,
       agentName: updatedAgent[0].name,
@@ -611,19 +683,48 @@ router.put('/agents/:id', async (req, res) => {
 });
 
 // DELETE /api/agents/:id - Delete an agent
-router.delete('/agents/:id', async (req, res) => {
+router.delete('/agents/:id', authenticateUser, checkAdminStatus, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`DELETE /api/agents/${id} - Deleting agent`);
+    const userId = req.user?.id;
+    const isAdmin = (req as any).isAdmin;
+
+    console.log(`DELETE /api/agents/${id} - Deleting agent`, { userId, isAdmin });
+
+    // First, check if agent exists and verify ownership
+    const existingAgent = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.id, Number(id)));
+
+    if (existingAgent.length === 0) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Authorization check: User can only delete their own agents (unless admin)
+    const agentData = existingAgent[0];
+    const isOwner = userId && agentData.userId === userId;
+
+    if (!isAdmin && !isOwner) {
+      console.log(`[FORBIDDEN] User ${userId} cannot delete agent ${id} (owner: ${agentData.userId})`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only delete your own agents'
+      });
+    }
+
+    // Prevent deletion of system agents unless admin
+    if (agentData.isSystem === 1 && !isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'System agents can only be deleted by administrators'
+      });
+    }
 
     const deletedAgent = await db
       .delete(agents)
       .where(eq(agents.id, Number(id)))
       .returning();
-
-    if (deletedAgent.length === 0) {
-      return res.status(404).json({ error: 'Agent not found' });
-    }
 
     console.log('Deleted agent:', deletedAgent[0]);
     res.json({ message: 'Agent deleted successfully', agent: deletedAgent[0] });
@@ -636,6 +737,60 @@ router.delete('/agents/:id', async (req, res) => {
 // GET /api/agents/validate/:id - Validate if an agent can be used
 router.get('/agents/validate/:id', checkAgentStatus, (req, res) => {
   res.json({ valid: true, message: 'Agent is active and can be used' });
+});
+
+// ADMIN ROUTES
+// GET /api/admin/agents/all - Get ALL agents in database (admin only)
+router.get('/admin/agents/all', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    console.log('[ADMIN] Fetching all agents in database');
+
+    const allAgents = await db.select().from(agents);
+
+    // Transform and add ownership metadata
+    const transformedAgents = allAgents.map(agent => ({
+      ...agent,
+      capabilities:
+        typeof agent.capabilities === 'string'
+          ? JSON.parse(agent.capabilities)
+          : agent.capabilities,
+      expertise:
+        typeof agent.expertise === 'string'
+          ? JSON.parse(agent.expertise)
+          : agent.expertise,
+      frameworks:
+        typeof agent.frameworks === 'string'
+          ? JSON.parse(agent.frameworks)
+          : agent.frameworks,
+      libraries:
+        typeof agent.libraries === 'string'
+          ? JSON.parse(agent.libraries)
+          : agent.libraries,
+      bestPractices:
+        typeof agent.bestPractices === 'string'
+          ? JSON.parse(agent.bestPractices)
+          : agent.bestPractices,
+      customInstructions: agent.customInstructions
+        ? typeof agent.customInstructions === 'string'
+          ? JSON.parse(agent.customInstructions)
+          : agent.customInstructions
+        : null,
+      enabledPlugins:
+        typeof agent.enabledPlugins === 'string'
+          ? JSON.parse(agent.enabledPlugins)
+          : agent.enabledPlugins || [],
+      isActive: Boolean(agent.isActive),
+      // Metadata for admin view
+      _isSystemAgent: agent.isSystem === 1,
+      _ownerUserId: agent.userId || null,
+    }));
+
+    console.log(`[ADMIN] Fetched ${transformedAgents.length} total agents`);
+    res.json(transformedAgents);
+  } catch (error) {
+    console.error('[ADMIN] Error fetching all agents:', error);
+    res.status(500).json({ error: 'Failed to fetch agents' });
+  }
 });
 
 export default router as Router;
