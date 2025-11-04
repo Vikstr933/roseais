@@ -445,9 +445,20 @@ export default function Integrations() {
   };
 
   const getPluginIcon = (iconStr: string, category: string) => {
+    // Custom user-generated plugins use emoji icons
+    if (category === 'custom' || iconStr === '🔌') {
+      return <span className="text-2xl">{iconStr}</span>;
+    }
     if (iconStr === '📧' || category === 'communication') return <Mail className="w-6 h-6" />;
     if (category === 'productivity') return <ListTodo className="w-6 h-6" />;
     return <Settings className="w-6 h-6" />;
+  };
+
+  const getCategoryLabel = (category: string, isUserGenerated?: boolean) => {
+    if (category === 'custom' || isUserGenerated) {
+      return 'AI Generated';
+    }
+    return category.charAt(0).toUpperCase() + category.slice(1);
   };
 
   const getHealthBadge = (health: string) => {
@@ -597,7 +608,9 @@ export default function Integrations() {
                               </Badge>
                             )}
                           </div>
-                          <Badge variant="outline" className="mt-1">{plugin.category}</Badge>
+                          <Badge variant="outline" className="mt-1">
+                            {getCategoryLabel(plugin.category, (plugin as any).isUserGenerated)}
+                          </Badge>
                         </div>
                       </div>
                       {enabled && (
@@ -701,7 +714,9 @@ export default function Integrations() {
                           {getPluginIcon(plugin.icon, plugin.category)}
                           <div>
                             <CardTitle className="text-lg">{plugin.name}</CardTitle>
-                            <Badge variant="outline" className="mt-1">{plugin.category}</Badge>
+                            <Badge variant="outline" className="mt-1">
+                              {getCategoryLabel(plugin.category, (plugin as any).isUserGenerated)}
+                            </Badge>
                           </div>
                         </div>
                         {status && getHealthBadge(status.status.health)}
@@ -765,7 +780,9 @@ export default function Integrations() {
                       {getPluginIcon(plugin.icon, plugin.category)}
                       <div>
                         <CardTitle className="text-lg">{plugin.name}</CardTitle>
-                        <Badge variant="outline" className="mt-1">{plugin.category}</Badge>
+                        <Badge variant="outline" className="mt-1">
+                          {getCategoryLabel(plugin.category, (plugin as any).isUserGenerated)}
+                        </Badge>
                       </div>
                     </div>
                   </CardHeader>
