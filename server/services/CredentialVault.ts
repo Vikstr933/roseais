@@ -51,6 +51,11 @@ export class CredentialVault {
    */
   decrypt(encryptedData: string): Record<string, any> {
     try {
+      // Validate input
+      if (!encryptedData || typeof encryptedData !== 'string') {
+        throw new Error(`Invalid encrypted data: expected string, got ${typeof encryptedData}`);
+      }
+
       const parts = encryptedData.split(':');
       if (parts.length !== 3) {
         throw new Error('Invalid encrypted data format');

@@ -474,7 +474,7 @@ export class PluginRegistry extends EventEmitter {
           logger.info('Initializing plugin for user', { userId, pluginId: config.pluginId });
           await plugin.initialize(userId);
 
-          if (config.credentials) {
+          if (config.credentials && typeof config.credentials === 'string' && config.credentials.trim() !== '') {
             const decryptedCredentials = this.decryptCredentials(config.credentials);
 
             // Log credential details (without sensitive data)
@@ -488,7 +488,12 @@ export class PluginRegistry extends EventEmitter {
 
             await plugin.enable(userId, decryptedCredentials);
           } else {
-            logger.warn('No credentials found for plugin', { userId, pluginId: config.pluginId });
+            logger.warn('No credentials found for plugin or invalid format', {
+              userId,
+              pluginId: config.pluginId,
+              credentialsType: typeof config.credentials,
+              hasCredentials: !!config.credentials
+            });
           }
 
           // Track enabled plugin
