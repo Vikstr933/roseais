@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Loader2, Sparkles, AlertTriangle, CheckCircle, XCircle, Code, Shield } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 interface PluginGenerationResult {
   success: boolean;
@@ -50,11 +51,7 @@ export default function PluginGenerator() {
   const { data: stats } = useQuery<GenerationStats>({
     queryKey: ['plugin-stats'],
     queryFn: async () => {
-      const res = await fetch('/api/user-plugins/stats/overview', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-        },
-      });
+      const res = await apiFetch('/api/user-plugins/stats/overview');
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
     },
@@ -63,12 +60,8 @@ export default function PluginGenerator() {
   // Generate plugin mutation
   const generateMutation = useMutation({
     mutationFn: async (data: { prompt: string; serviceName?: string; estimatedComplexity?: string }) => {
-      const res = await fetch('/api/user-plugins/generate', {
+      const res = await apiFetch('/api/user-plugins/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-        },
         body: JSON.stringify(data),
       });
 

@@ -7,6 +7,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { Alert, AlertDescription } from '../components/ui/alert';
+import { apiFetch } from '../lib/api';
 import {
   Dialog,
   DialogContent,
@@ -122,11 +123,7 @@ export default function CredentialVault() {
   const { data: credentials, isLoading } = useQuery<{ credentials: Credential[] }>({
     queryKey: ['credentials'],
     queryFn: async () => {
-      const res = await fetch('/api/credentials', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-        },
-      });
+      const res = await apiFetch('/api/credentials');
       if (!res.ok) throw new Error('Failed to fetch credentials');
       return res.json();
     },
@@ -135,12 +132,8 @@ export default function CredentialVault() {
   // Add credential mutation
   const addMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await fetch('/api/credentials', {
+      const res = await apiFetch('/api/credentials', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-        },
         body: JSON.stringify(data),
       });
       if (!res.ok) {
@@ -160,11 +153,8 @@ export default function CredentialVault() {
   // Delete credential mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await fetch(`/api/credentials/${id}`, {
+      const res = await apiFetch(`/api/credentials/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-        },
       });
       if (!res.ok) throw new Error('Failed to delete credential');
       return res.json();
@@ -177,11 +167,8 @@ export default function CredentialVault() {
   // Test credential mutation
   const testMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await fetch(`/api/credentials/${id}/test`, {
+      const res = await apiFetch(`/api/credentials/${id}/test`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-        },
       });
       if (!res.ok) throw new Error('Failed to test credential');
       return res.json();
@@ -215,11 +202,7 @@ export default function CredentialVault() {
 
   const handleOAuthConnect = async (service: string) => {
     try {
-      const res = await fetch(`/api/credentials/oauth/${service}/start`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-        },
-      });
+      const res = await apiFetch(`/api/credentials/oauth/${service}/start`);
       const data = await res.json();
 
       if (data.authUrl) {
