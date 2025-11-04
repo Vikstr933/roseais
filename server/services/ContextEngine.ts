@@ -46,13 +46,16 @@ export class ContextEngine {
   async analyzeContext(
     userId: string,
     currentPage: string,
-    workspaceId?: number
+    workspaceId?: number | string
   ): Promise<UserContext> {
     const contextType = this.mapPageToContextType(currentPage);
 
+    // Validate workspaceId - must be a valid number, not a session ID string
+    const validWorkspaceId = this.validateWorkspaceId(workspaceId);
+
     // Gather context in parallel
     const [currentWorkspace, recentActivity, conversationContext] = await Promise.all([
-      workspaceId ? this.getCurrentWorkspace(workspaceId) : Promise.resolve(undefined),
+      validWorkspaceId ? this.getCurrentWorkspace(validWorkspaceId) : Promise.resolve(undefined),
       this.getRecentActivity(userId, 10),
       this.conversationMemory.getConversationContext(userId, contextType),
     ]);
@@ -65,7 +68,7 @@ export class ContextEngine {
     );
 
     // Gather relevant data based on context type
-    const relevantData = await this.gatherRelevantData(userId, contextType, workspaceId);
+    const relevantData = await this.gatherRelevantData(userId, contextType, validWorkspaceId);
 
     return {
       userId,
@@ -103,6 +106,37 @@ export class ContextEngine {
     }
 
     return 'general';
+  }
+
+  /**
+   * Validate workspaceId - ensure it's a valid number, not a session ID string
+   */
+  private validateWorkspaceId(workspaceId?: number | string): number | undefined {
+    if (!workspaceId) {
+      return undefined;
+    }
+
+    // If it's already a number, validate it's positive
+    if (typeof workspaceId === 'number') {
+      return workspaceId > 0 ? workspaceId : undefined;
+    }
+
+    // If it's a string, check if it's a session ID pattern (starts with "session-")
+    if (typeof workspaceId === 'string') {
+      if (workspaceId.startsWith('session-')) {
+        console.warn(`⚠️ ContextEngine: Received session ID "${workspaceId}" as workspaceId - ignoring`);
+        return undefined;
+      }
+
+      // Try to parse as number
+      const parsed = parseInt(workspaceId, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    console.warn(`⚠️ ContextEngine: Invalid workspaceId "${workspaceId}" - ignoring`);
+    return undefined;
   }
 
   /**
