@@ -22,6 +22,8 @@ interface Plugin {
   requiresAuth: boolean;
   authType?: string;
   capabilities: string[];
+  isUserGenerated?: boolean;
+  credentialsRequired?: Record<string, any>;
 }
 
 interface PluginStatus {
@@ -87,7 +89,10 @@ export default function Integrations() {
 
   // Credential Dialog State
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
-  const [credentialServiceName, setCredentialServiceName] = useState('');
+  const [credentialPluginId, setCredentialPluginId] = useState('');
+  const [credentialPluginName, setCredentialPluginName] = useState('');
+  const [credentialsRequired, setCredentialsRequired] = useState<Record<string, any>>({});
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
 
   // Fetch plugin generation stats
   const { data: stats } = useQuery<GenerationStats>({
@@ -158,6 +163,73 @@ export default function Integrations() {
   const openGenerator = () => {
     handleResetGenerator();
     setGeneratorOpen(true);
+  };
+
+  const handleSaveCredentials = async () => {
+    try {
+      setError(null);
+      setSuccess(null);
+
+      // Validate required fields
+      const requiredFields = Object.entries(credentialsRequired)
+        .filter(([_, config]) => config.required)
+        .map(([key, _]) => key);
+
+      const missingFields = requiredFields.filter(field => !credentialValues[field]?.trim());
+      if (missingFields.length > 0) {
+        setError(`Please fill in required fields: ${missingFields.map(f => credentialsRequired[f].label).join(', ')}`);
+        return;
+      }
+
+      // Save each credential separately
+      for (const [key, value] of Object.entries(credentialValues)) {
+        if (!value) continue; // Skip empty fields
+
+        const response = await apiFetch('/api/credentials', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            serviceName: credentialPluginId,
+            key: key,
+            value: value
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Failed to save ${credentialsRequired[key]?.label || key}`);
+        }
+      }
+
+      // Install the plugin after credentials are saved
+      const installResponse = await apiFetch(`/api/user-plugins/${credentialPluginId}/install`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          credentials: credentialValues
+        })
+      });
+
+      if (!installResponse.ok) {
+        const errorData = await installResponse.json();
+        throw new Error(errorData.error || 'Failed to install plugin');
+      }
+
+      setSuccess(`${credentialPluginName} connected successfully!`);
+      setCredentialDialogOpen(false);
+      setCredentialValues({});
+      await loadPlugins();
+      await loadUserStatus();
+    } catch (err) {
+      console.error('Failed to save credentials:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save credentials');
+    }
   };
 
   useEffect(() => {
@@ -273,6 +345,25 @@ export default function Integrations() {
       setConnecting(prev => new Set(prev).add(pluginId));
 
       console.log(`Connecting ${pluginId}...`);
+
+      // Check if this is a user-generated plugin
+      const plugin = availablePlugins.find(p => p.id === pluginId);
+      if (plugin?.isUserGenerated) {
+        console.log('User-generated plugin detected, showing credential dialog');
+        setCredentialPluginId(pluginId);
+        setCredentialPluginName(plugin.name);
+        setCredentialsRequired(plugin.credentialsRequired || {});
+        setCredentialValues({});
+        setCredentialDialogOpen(true);
+
+        // Remove from connecting state since we're showing a dialog
+        setConnecting(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(pluginId);
+          return newSet;
+        });
+        return;
+      }
 
       // For OAuth plugins, initiate OAuth flow
       if (pluginId === 'gmail') {
@@ -1132,14 +1223,14 @@ export default function Integrations() {
 
       {/* Credential Management Dialog */}
       <Dialog open={credentialDialogOpen} onOpenChange={setCredentialDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="w-6 h-6 text-blue-600" />
-              Add {credentialServiceName || 'Service'} Credentials
+              Connect {credentialPluginName}
             </DialogTitle>
             <DialogDescription>
-              Securely store your API keys and OAuth tokens. All credentials are encrypted with AES-256-GCM.
+              Enter the required credentials to connect this plugin. All credentials are encrypted with AES-256-GCM.
             </DialogDescription>
           </DialogHeader>
 
@@ -1152,76 +1243,57 @@ export default function Integrations() {
               </AlertDescription>
             </Alert>
 
-            <div className="bg-muted p-6 rounded-lg space-y-4">
-              <h3 className="font-semibold text-lg">How to Get Your Credentials:</h3>
-
-              {credentialServiceName.toLowerCase() === 'discord' && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    1. Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center">
-                      Discord Developer Portal <ExternalLink className="w-3 h-3 ml-1" />
-                    </a>
-                  </p>
-                  <p className="text-sm text-muted-foreground">2. Create a new application or select an existing one</p>
-                  <p className="text-sm text-muted-foreground">3. Copy the <strong>Client ID</strong> and <strong>Client Secret</strong></p>
-                  <p className="text-sm text-muted-foreground">4. Optionally, go to the Bot section to get your <strong>Bot Token</strong></p>
-                </div>
-              )}
-
-              {credentialServiceName.toLowerCase() === 'slack' && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    1. Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center">
-                      Slack API Apps <ExternalLink className="w-3 h-3 ml-1" />
-                    </a>
-                  </p>
-                  <p className="text-sm text-muted-foreground">2. Create a new app or select an existing one</p>
-                  <p className="text-sm text-muted-foreground">3. Navigate to OAuth & Permissions</p>
-                  <p className="text-sm text-muted-foreground">4. Copy the <strong>Client ID</strong> and <strong>Client Secret</strong></p>
-                </div>
-              )}
-
-              {credentialServiceName.toLowerCase() === 'trello' && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    1. Go to <a href="https://trello.com/app-key" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center">
-                      Trello API Key Page <ExternalLink className="w-3 h-3 ml-1" />
-                    </a>
-                  </p>
-                  <p className="text-sm text-muted-foreground">2. Copy your <strong>API Key</strong></p>
-                  <p className="text-sm text-muted-foreground">3. Generate and copy an <strong>API Token</strong></p>
-                </div>
-              )}
-
-              {!['discord', 'slack', 'trello'].includes(credentialServiceName.toLowerCase()) && (
-                <p className="text-sm text-muted-foreground">
-                  Check your service's developer documentation for instructions on obtaining API credentials.
-                </p>
-              )}
-            </div>
+            {Object.keys(credentialsRequired).length === 0 ? (
+              <Alert>
+                <AlertDescription>
+                  This plugin doesn't require any credentials. Click "Connect" to install it.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(credentialsRequired).map(([key, config]) => (
+                  <div key={key} className="space-y-2">
+                    <Label htmlFor={key} className="flex items-center gap-2">
+                      {config.label}
+                      {config.required && <span className="text-red-500">*</span>}
+                    </Label>
+                    {config.description && (
+                      <p className="text-sm text-muted-foreground">{config.description}</p>
+                    )}
+                    <Input
+                      id={key}
+                      type={config.type === 'password' ? 'password' : config.type === 'url' ? 'url' : 'text'}
+                      placeholder={config.placeholder || ''}
+                      value={credentialValues[key] || ''}
+                      onChange={(e) => setCredentialValues(prev => ({
+                        ...prev,
+                        [key]: e.target.value
+                      }))}
+                      required={config.required}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="flex gap-3">
               <Button
                 onClick={() => {
-                  // For now, close the dialog and inform user about credential vault
                   setCredentialDialogOpen(false);
-                  setSuccess('Credential vault is available! You can manage credentials from Settings > Credentials (coming soon)');
-                }}
-                className="flex-1"
-              >
-                I'll Add Them Later
-              </Button>
-              <Button
-                onClick={() => {
-                  setCredentialDialogOpen(false);
-                  // TODO: Navigate to credential vault page when route is added
-                  alert('Credential vault page will be added to Settings menu soon. For now, you can use the /api/credentials/store endpoint directly.');
+                  setCredentialValues({});
                 }}
                 variant="outline"
                 className="flex-1"
               >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Manage Credentials
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveCredentials}
+                className="flex-1"
+              >
+                <Key className="w-4 h-4 mr-2" />
+                Connect Plugin
               </Button>
             </div>
           </div>
