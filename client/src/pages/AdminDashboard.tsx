@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation } from 'wouter';
+import { apiFetch } from '../lib/api';
 
 interface SystemStats {
   users: {
@@ -91,30 +92,22 @@ export default function AdminDashboard() {
         if (!sessionToken) throw new Error('No auth token');
 
         if (activeTab === 'stats') {
-          const res = await fetch('/api/admin/stats', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-          });
+          const res = await apiFetch('/api/admin/stats');
           if (!res.ok) throw new Error('Failed to fetch stats');
           const data = await res.json();
           setStats(data);
         } else if (activeTab === 'users') {
-          const res = await fetch('/api/admin/users', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-          });
+          const res = await apiFetch('/api/admin/users');
           if (!res.ok) throw new Error('Failed to fetch users');
           const data = await res.json();
           setUsers(data);
         } else if (activeTab === 'agents') {
-          const res = await fetch('/api/admin/agents', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-          });
+          const res = await apiFetch('/api/admin/agents');
           if (!res.ok) throw new Error('Failed to fetch agents');
           const data = await res.json();
           setAgents(data);
         } else if (activeTab === 'workspaces') {
-          const res = await fetch('/api/admin/workspaces', {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-          });
+          const res = await apiFetch('/api/admin/workspaces');
           if (!res.ok) throw new Error('Failed to fetch workspaces');
           const data = await res.json();
           setWorkspaces(data);
@@ -133,12 +126,8 @@ export default function AdminDashboard() {
   const updateUserRole = async (userId: string, role: string) => {
     try {
       if (!sessionToken) return;
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
+      const res = await apiFetch(`/api/admin/users/${userId}/role`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ role })
       });
 
@@ -156,12 +145,8 @@ export default function AdminDashboard() {
   const updateUserTier = async (userId: string, tier: string) => {
     try {
       if (!sessionToken) return;
-      const res = await fetch(`/api/admin/users/${userId}/tier`, {
+      const res = await apiFetch(`/api/admin/users/${userId}/tier`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ tier })
       });
 
