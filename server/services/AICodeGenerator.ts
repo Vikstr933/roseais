@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Logger } from '../utils/Logger';
 import { RateLimiter } from '../utils/RateLimiter';
 import { multiModelAI, AIRequest } from './MultiModelAIService';
+import { PromptManager } from './PromptManager';
 
 export interface AIGenerationRequest {
   prompt: string;
@@ -40,6 +41,7 @@ export class AICodeGenerator {
   private anthropic: Anthropic;
   private logger: Logger;
   private limiter: RateLimiter;
+  private promptManager: PromptManager;
 
   constructor() {
     this.anthropic = new Anthropic({
@@ -48,6 +50,7 @@ export class AICodeGenerator {
     this.logger = new Logger(process.cwd());
     this.logger.initialize().catch(console.error);
     this.limiter = new RateLimiter(5);
+    this.promptManager = PromptManager.getInstance();
   }
 
   async generateComponent(request: AIGenerationRequest): Promise<AIGenerationResponse> {
@@ -83,8 +86,8 @@ export class AICodeGenerator {
         });
       } else {
         // LEGACY MODE: Build prompts internally (for direct calls not from orchestrator)
-        console.log('🏗️ AICodeGenerator: LEGACY MODE - Building prompts internally');
-        systemPrompt = this.buildSystemPromptMultiFile(request);
+        console.log('🏗️ AICodeGenerator: LEGACY MODE - Building prompts internally (with database lookup)');
+        systemPrompt = await this.buildSystemPromptMultiFile(request);
         userPrompt = this.buildUserPromptMultiFile(request);
         console.log('📊 AICodeGenerator: Built prompt sizes:', {
           system: systemPrompt.length,
@@ -360,7 +363,50 @@ The component should be a complete, functional implementation in ONE SINGLE FILE
     return prompt;
   }
 
-  private buildSystemPromptMultiFile(request: AIGenerationRequest): string {
+  /**
+   * Try to load system prompt from database first, fallback to hardcoded version
+   * This ensures database updates take effect immediately
+   */
+  private async buildSystemPromptMultiFile(request: AIGenerationRequest): Promise<string> {
+    // Try loading from database first
+    try {
+      console.log('🔍 [AICodeGenerator] Attempting to load prompt from database...');
+
+      const dbPrompt = await this.promptManager.buildSystemPrompt(
+        'code_generator.code_generator',
+        {
+          userContext: request.prompt,
+          componentName: request.componentName,
+          features: request.features.join(', '),
+          styling: JSON.stringify(request.styling || {})
+        },
+        {
+          includeGuidelines: true,
+          forceRefresh: false // Use cache for performance, but can be overridden
+        }
+      );
+
+      if (dbPrompt && dbPrompt.systemPrompt) {
+        console.log('✅ [AICodeGenerator] Using DATABASE prompt for code generation');
+        console.log('📊 [AICodeGenerator] Database prompt length:', dbPrompt.systemPrompt.length);
+        return dbPrompt.systemPrompt;
+      } else {
+        console.warn('⚠️ [AICodeGenerator] Database prompt was empty, falling back to hardcoded');
+      }
+    } catch (error) {
+      console.error('❌ [AICodeGenerator] Failed to load database prompt, using hardcoded fallback:', error);
+    }
+
+    // Fallback to hardcoded prompt (emergency only)
+    console.log('🏗️ [AICodeGenerator] Using HARDCODED fallback prompt');
+    return this.buildHardcodedSystemPrompt(request);
+  }
+
+  /**
+   * Hardcoded system prompt as emergency fallback only
+   * This should NOT be the primary code path - database prompts should be used
+   */
+  private buildHardcodedSystemPrompt(request: AIGenerationRequest): string {
     return `# Role
 You are an expert React TypeScript developer specializing in creating modern, production-ready web applications.
 
