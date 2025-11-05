@@ -896,6 +896,22 @@ Suggestions to fix:
             file: file.path
           });
           console.error(`🚨 CRITICAL: Found "${pattern.name}" pattern ${matches.length} times in ${file.path}`);
+
+          // ULTRA-DEBUG: Show first 3 matches with context
+          if (pattern.name.includes('return')) {
+            const lines = content.split('\n');
+            const matchingLines = lines
+              .map((line, idx) => ({ line, idx: idx + 1 }))
+              .filter(({line}) => pattern.regex.test(line))
+              .slice(0, 3);
+
+            if (matchingLines.length > 0) {
+              console.error(`   Sample occurrences:`);
+              matchingLines.forEach(({line, idx}) => {
+                console.error(`     Line ${idx}: "${line.trim()}"`);
+              });
+            }
+          }
         }
       });
 
@@ -1072,8 +1088,22 @@ Suggestions to fix:
       if (criticalErrors.length > 0) {
         console.error(`❌ CRITICAL: Syntax fixer failed to fix errors in ${file.path}:`);
         criticalErrors.forEach(error => console.error(`   - ${error}`));
+
+        // ULTRA-DEBUG: Find and log the actual problematic lines
+        const lines = content.split('\n');
+        const returnBraceLines = lines
+          .map((line, idx) => ({ line, idx: idx + 1 }))
+          .filter(({line}) => /return\s*\{\s*;/.test(line));
+
+        if (returnBraceLines.length > 0) {
+          console.error(`\n🔍 FOUND ${returnBraceLines.length} instances of "return {;" pattern:`);
+          returnBraceLines.forEach(({line, idx}) => {
+            console.error(`   Line ${idx}: ${line.trim()}`);
+          });
+        }
+
         // Log the problematic content for debugging
-        console.error(`Problematic content preview:\n${content.substring(0, 500)}...`);
+        console.error(`\nProblematic content preview:\n${content.substring(0, 500)}...`);
       }
 
       return { ...file, content };
