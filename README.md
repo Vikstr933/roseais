@@ -202,7 +202,7 @@ Eight specialized AI agents work together to deliver high-quality code:
 
 - **Runtime**: Node.js with TypeScript
 - **Framework**: Express.js 4.21
-- **Database**: PostgreSQL (Supabase/Neon)
+- **Database**: PostgreSQL (Supabase/Neon) - See [DATABASE.md](./DATABASE.md)
 - **ORM**: Drizzle ORM 0.44
 - **Authentication**: Passport.js + Express Session
 - **Real-time**: WebSocket (ws 8.18)
@@ -231,9 +231,11 @@ Eight specialized AI agents work together to deliver high-quality code:
 ### Prerequisites
 
 - Node.js 20 or higher
-- PostgreSQL 16 or higher
+- **PostgreSQL 16 or higher** (NOT SQLite, NOT MySQL)
 - npm or yarn
 - Git
+
+**Database Note**: This project uses PostgreSQL exclusively. See [DATABASE.md](./DATABASE.md) for detailed setup instructions.
 
 ### Installation
 
@@ -290,6 +292,8 @@ API_KEY_ENCRYPTION_KEY="your_encryption_key"
 ```
 
 4. **Set up the database**
+
+**Important**: This project uses PostgreSQL. For detailed database setup, see [DATABASE.md](./DATABASE.md).
 
 ```bash
 npm run db:push

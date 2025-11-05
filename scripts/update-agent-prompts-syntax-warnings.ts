@@ -3,9 +3,14 @@
  *
  * This script adds explicit warnings about syntax errors that Claude keeps making,
  * especially the "return {;" and "return (;" patterns.
+ *
+ * ⚠️ DATABASE: PostgreSQL (NOT SQLite)
+ * - Uses: pg (node-postgres)
+ * - Connects via: DATABASE_URL environment variable
+ * - Schema: agents table with system_prompt column
  */
 
-import { Pool } from 'pg';
+import { Pool } from 'pg'; // ✅ PostgreSQL - this project uses PostgreSQL ONLY
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,8 +21,9 @@ const __dirname = path.dirname(__filename);
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+// PostgreSQL connection pool (NOT SQLite)
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL, // Must be PostgreSQL connection string
 });
 
 const SYNTAX_WARNINGS = `

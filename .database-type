@@ -1,0 +1,13 @@
+PostgreSQL
+
+This project uses PostgreSQL exclusively.
+
+NOT SQLite
+NOT MySQL
+NOT MongoDB
+
+Connection Library: pg (node-postgres)
+ORM: Drizzle ORM
+Connection String: DATABASE_URL environment variable
+
+See DATABASE.md for full documentation.

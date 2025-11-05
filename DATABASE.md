@@ -1,0 +1,432 @@
+# Database Configuration
+
+## ⚠️ CRITICAL: Database Type
+
+**This project uses PostgreSQL (NOT SQLite, NOT MySQL, NOT MongoDB)**
+
+- **Database Type**: PostgreSQL 16+
+- **Hosting Options**: Supabase, Neon, Railway, or self-hosted
+- **Connection Library**: `pg` (node-postgres)
+- **ORM**: Drizzle ORM
+
+## Database Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PostgreSQL Database                       │
+│                  (Supabase or Neon Hosted)                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Users & Authentication                                      │
+│  ├── users (auth, profiles, roles)                          │
+│  ├── sessions (active sessions)                             │
+│  └── auth_tokens (JWT tokens)                               │
+│                                                              │
+│  AI Agents & Configuration                                   │
+│  ├── agents (AI agent configs, system prompts)              │
+│  ├── agent_memory (persistent memory)                       │
+│  └── agent_tools (capabilities)                             │
+│                                                              │
+│  Workspaces & Projects                                       │
+│  ├── workspaces (project containers)                        │
+│  ├── project_files (generated code)                         │
+│  ├── deployments (production deploys)                       │
+│  └── collaborators (team members)                           │
+│                                                              │
+│  Code Generation Sessions                                    │
+│  ├── code_generation_sessions (history)                     │
+│  ├── orchestration_runs (multi-agent)                       │
+│  └── generation_metadata (stats)                            │
+│                                                              │
+│  Knowledge Base                                              │
+│  ├── ai_companies (14 companies)                            │
+│  ├── frameworks (8 frameworks)                              │
+│  ├── ai_models (50+ models)                                 │
+│  └── templates (6 workspace types)                          │
+│                                                              │
+│  Usage & Billing                                             │
+│  ├── usage_tracking (token consumption)                     │
+│  ├── subscriptions (Stripe)                                 │
+│  └── invoices (billing history)                             │
+│                                                              │
+│  Plugin System                                               │
+│  ├── plugins (user & system plugins)                        │
+│  ├── plugin_credentials (encrypted keys)                    │
+│  └── plugin_executions (execution logs)                     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Connection Configuration
+
+### Environment Variables
+
+```env
+# PostgreSQL Connection String
+# Format: postgresql://[user[:password]@][host][:port][/database][?param=value]
+
+# Supabase (recommended for production)
+DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT].supabase.co:5432/postgres
+
+# Neon (serverless PostgreSQL)
+DATABASE_URL=postgresql://[USER]:[PASSWORD]@[HOST]/[DATABASE]?sslmode=require
+
+# Local Development
+DATABASE_URL=postgresql://postgres:password@localhost:5432/ai_library
+
+# SSL Options (required for hosted databases)
+?sslmode=require
+?ssl=true
+```
+
+### Connection Pool Settings
+
+The application uses `pg` (node-postgres) with connection pooling:
+
+```typescript
+// db/index.ts
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 20,                    // Maximum connections
+  idleTimeoutMillis: 30000,   // Close idle connections after 30s
+  connectionTimeoutMillis: 10000, // Timeout if connection takes >10s
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : undefined
+});
+```
+
+## Schema Management
+
+### Using Drizzle ORM
+
+```bash
+# Generate migrations from schema changes
+npm run db:generate
+
+# Push schema changes to database (development)
+npm run db:push
+
+# Run migrations (production)
+npm run db:migrate
+
+# Open Drizzle Studio (database GUI)
+npm run db:studio
+```
+
+### Schema Location
+
+- **Schema Definition**: `db/schema-pg.ts`
+- **Migrations**: `migrations/` directory
+- **Connection**: `db/index.ts`
+
+### Key Schema Files
+
+1. **db/schema-pg.ts** - Complete PostgreSQL schema using Drizzle ORM
+2. **db/index.ts** - Database connection and pool configuration
+3. **migrations/** - Migration files (auto-generated by Drizzle)
+
+## Database Setup Guide
+
+### Option 1: Supabase (Recommended)
+
+1. **Create Supabase Project**
+   - Visit [supabase.com](https://supabase.com)
+   - Create new project
+   - Copy database connection string
+
+2. **Configure Environment**
+   ```env
+   DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT].supabase.co:5432/postgres
+   SUPABASE_URL=https://[PROJECT].supabase.co
+   SUPABASE_ANON_KEY=[YOUR_ANON_KEY]
+   SUPABASE_SERVICE_ROLE_KEY=[YOUR_SERVICE_KEY]
+   ```
+
+3. **Push Schema**
+   ```bash
+   npm run db:push
+   ```
+
+4. **Seed Data**
+   ```bash
+   npm run seed
+   ```
+
+### Option 2: Neon (Serverless)
+
+1. **Create Neon Project**
+   - Visit [neon.tech](https://neon.tech)
+   - Create new project
+   - Copy connection string
+
+2. **Configure Environment**
+   ```env
+   DATABASE_URL=postgresql://[USER]:[PASSWORD]@[HOST]/[DATABASE]?sslmode=require
+   ```
+
+3. **Push Schema**
+   ```bash
+   npm run db:push
+   ```
+
+### Option 3: Local PostgreSQL
+
+1. **Install PostgreSQL**
+   ```bash
+   # macOS
+   brew install postgresql@16
+   brew services start postgresql@16
+
+   # Ubuntu
+   sudo apt install postgresql-16
+   sudo systemctl start postgresql
+
+   # Windows
+   # Download from postgresql.org
+   ```
+
+2. **Create Database**
+   ```bash
+   psql -U postgres
+   CREATE DATABASE ai_library;
+   \q
+   ```
+
+3. **Configure Environment**
+   ```env
+   DATABASE_URL=postgresql://postgres:password@localhost:5432/ai_library
+   ```
+
+4. **Push Schema**
+   ```bash
+   npm run db:push
+   ```
+
+## Migration Scripts
+
+### Database Agent Update Script
+
+The project includes migration scripts in the `scripts/` directory:
+
+- **update-agent-prompts-syntax-warnings.ts** - Updates agent system prompts
+
+**IMPORTANT**: All migration scripts use PostgreSQL via `pg` library:
+
+```typescript
+import { Pool } from 'pg'; // ✅ PostgreSQL
+// NOT: import Database from 'better-sqlite3'; // ❌ SQLite
+```
+
+### Running Migration Scripts
+
+```bash
+# Install dependencies (if not already installed)
+npm install
+
+# Run migration script
+npx tsx scripts/update-agent-prompts-syntax-warnings.ts
+```
+
+## Common Database Operations
+
+### Querying with Drizzle ORM
+
+```typescript
+import { db } from '../db/index.js';
+import { users, agents, workspaces } from '../db/schema-pg.js';
+import { eq } from 'drizzle-orm';
+
+// Select
+const allUsers = await db.select().from(users);
+const user = await db.select().from(users).where(eq(users.id, userId));
+
+// Insert
+await db.insert(users).values({
+  username: 'developer',
+  email: 'dev@example.com',
+  passwordHash: hash
+});
+
+// Update
+await db.update(agents)
+  .set({ systemPrompt: updatedPrompt })
+  .where(eq(agents.id, agentId));
+
+// Delete
+await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
+```
+
+### Raw SQL Queries (when needed)
+
+```typescript
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
+
+// Query
+const result = await pool.query(
+  'SELECT * FROM agents WHERE role = $1',
+  ['code_generation']
+);
+
+// Transaction
+const client = await pool.connect();
+try {
+  await client.query('BEGIN');
+  await client.query('UPDATE users SET tokens = tokens - $1 WHERE id = $2', [cost, userId]);
+  await client.query('INSERT INTO usage_tracking (user_id, tokens_used) VALUES ($1, $2)', [userId, cost]);
+  await client.query('COMMIT');
+} catch (error) {
+  await client.query('ROLLBACK');
+  throw error;
+} finally {
+  client.release();
+}
+```
+
+## Backup and Restore
+
+### Backup Database
+
+```bash
+# Supabase/Neon (using pg_dump)
+pg_dump $DATABASE_URL > backup.sql
+
+# With compression
+pg_dump $DATABASE_URL | gzip > backup.sql.gz
+```
+
+### Restore Database
+
+```bash
+# From SQL file
+psql $DATABASE_URL < backup.sql
+
+# From compressed file
+gunzip -c backup.sql.gz | psql $DATABASE_URL
+```
+
+## Performance Optimization
+
+### Indexes
+
+Key indexes are defined in `db/schema-pg.ts`:
+
+```typescript
+// User lookups
+index('users_email_idx').on(users.email)
+index('users_username_idx').on(users.username)
+
+// Session queries
+index('sessions_user_id_idx').on(sessions.userId)
+
+// Workspace queries
+index('workspaces_owner_id_idx').on(workspaces.ownerId)
+```
+
+### Connection Pooling
+
+- **Development**: 5-10 connections
+- **Production**: 20-50 connections (based on load)
+
+### Query Optimization
+
+- Use indexes for frequently queried columns
+- Limit result sets with pagination
+- Use `EXPLAIN ANALYZE` to profile queries
+- Cache frequent queries in Redis
+
+## Troubleshooting
+
+### Connection Issues
+
+```bash
+# Test connection
+psql $DATABASE_URL
+
+# Check connection pool status
+SELECT * FROM pg_stat_activity;
+
+# Kill stuck connections
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle';
+```
+
+### Common Errors
+
+**Error: "no such table: agents"**
+- ❌ You're trying to use SQLite commands
+- ✅ Use PostgreSQL: `psql` not `sqlite3`
+
+**Error: "connection refused"**
+- Check DATABASE_URL is correct
+- Verify PostgreSQL is running
+- Check firewall allows connections
+
+**Error: "password authentication failed"**
+- Verify credentials in DATABASE_URL
+- Check user permissions: `GRANT ALL PRIVILEGES ON DATABASE ai_library TO postgres;`
+
+**Error: "SSL required"**
+- Add `?sslmode=require` to DATABASE_URL
+- Or configure SSL in connection options
+
+## Database Maintenance
+
+### Regular Maintenance
+
+```sql
+-- Vacuum tables (reclaim space)
+VACUUM ANALYZE;
+
+-- Update table statistics
+ANALYZE;
+
+-- Check table sizes
+SELECT
+  schemaname,
+  tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+```
+
+### Monitoring
+
+```sql
+-- Active connections
+SELECT count(*) FROM pg_stat_activity;
+
+-- Slow queries
+SELECT query, calls, total_time, mean_time
+FROM pg_stat_statements
+ORDER BY mean_time DESC
+LIMIT 10;
+```
+
+## Security Best Practices
+
+1. **Never commit .env files** with real credentials
+2. **Use SSL connections** in production (`?sslmode=require`)
+3. **Rotate credentials** regularly
+4. **Use read-only users** for analytics queries
+5. **Enable row-level security** for sensitive data
+6. **Backup regularly** (automated daily backups recommended)
+7. **Monitor for suspicious queries** using `pg_stat_activity`
+
+## Additional Resources
+
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+- [Drizzle ORM Documentation](https://orm.drizzle.team/docs/overview)
+- [Supabase Docs](https://supabase.com/docs)
+- [Neon Docs](https://neon.tech/docs)
+- [pg (node-postgres) Documentation](https://node-postgres.com/)
+
+---
+
+**Remember**: This project uses **PostgreSQL**, not SQLite or any other database system. All migration scripts, connection code, and schema definitions are PostgreSQL-specific.

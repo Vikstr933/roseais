@@ -8,10 +8,21 @@ dotenv.config();
 
 /**
  * Database Configuration
- * Uses PostgreSQL exclusively (Supabase)
- * 
+ *
+ * ⚠️ CRITICAL: This project uses PostgreSQL ONLY
+ *
+ * - Database Type: PostgreSQL (NOT SQLite, NOT MySQL)
+ * - Hosting: Supabase or Neon (cloud) or self-hosted
+ * - Connection Library: pg (node-postgres)
+ * - ORM: Drizzle ORM
+ *
  * Required environment variable:
- * - DATABASE_URL: PostgreSQL connection string
+ * - DATABASE_URL: PostgreSQL connection string (must start with postgresql:// or postgres://)
+ *
+ * Example:
+ * DATABASE_URL=postgresql://postgres:password@db.project.supabase.co:5432/postgres
+ *
+ * For detailed database documentation, see DATABASE.md in the project root.
  */
 
 const DATABASE_URL = process.env.DATABASE_URL;
