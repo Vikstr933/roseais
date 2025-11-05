@@ -155,6 +155,20 @@ const getFileLanguage = (filename: string): string => {
     }
   };
 
+// Normalize agent display names to IDs for visualization
+const normalizeAgentName = (name: string): string => {
+  const nameMap: Record<string, string> = {
+    'Component Architect': 'component-architect',
+    'UI Designer': 'ui-designer',
+    'Component Developer': 'code-generator',
+    'Completion Agent': 'completion-agent',
+    'Requirements Agent': 'requirements-agent',
+    'Style Generator': 'style-generator',
+    'Personal Assistant': 'personal-assistant',
+  };
+  return nameMap[name] || name.toLowerCase().replace(/\s+/g, '-');
+};
+
 export default function PromptPlayground() {
   const { user, sessionToken, isSuperAdmin } = useAuth();
   const {
@@ -182,15 +196,21 @@ export default function PromptPlayground() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Convert orchestration steps to agent status map for visualization
+  // Normalize agent names to match the IDs expected by CircularAgentVisualization
   const agentStatusMap = new Map(
-    orchestrationSteps.map(step => [
-      step.agent,
-      {
-        id: step.agent,
-        status: step.status,
-        startTime: step.status === 'in_progress' || step.status === 'completed' ? Date.now() : undefined,
-      }
-    ])
+    orchestrationSteps.map(step => {
+      const normalizedId = normalizeAgentName(step.agent);
+      // Map status names: 'in_progress' -> 'running', keep others
+      const visualStatus = step.status === 'in_progress' ? 'running' : step.status;
+      return [
+        normalizedId,
+        {
+          id: normalizedId,
+          status: visualStatus as 'pending' | 'running' | 'completed' | 'failed',
+          startTime: step.status === 'in_progress' || step.status === 'completed' ? Date.now() : undefined,
+        }
+      ];
+    })
   );
 
   // Calculate optimistic progress
@@ -199,6 +219,14 @@ export default function PromptPlayground() {
   const actualProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
   const isComplete = totalSteps > 0 && completedSteps === totalSteps && !isLoading;
   const optimisticProgress = useOptimisticProgress(actualProgress, isComplete, isLoading);
+
+  // Debug logging for agent status map
+  useEffect(() => {
+    if (orchestrationSteps.length > 0) {
+      console.log('🎯 OrchestrationSteps:', orchestrationSteps);
+      console.log('🗺️ AgentStatusMap:', Array.from(agentStatusMap.entries()));
+    }
+  }, [orchestrationSteps, agentStatusMap]);
 
   // Use workspace context for chat history (persists across navigation)
   const chatHistory = currentSession?.chatHistory || [];
@@ -1928,17 +1956,19 @@ export default function PromptPlayground() {
           <div className="h-full min-h-0 overflow-hidden">
               {/* Show CircularAgentVisualization while loading */}
               {isLoading && (
-                <div className="h-full flex items-center justify-center bg-slate-950">
-                  <div className="flex flex-col items-center gap-8">
-                    <CircularAgentVisualization
-                      agentStatusMap={agentStatusMap}
-                      isRunning={isLoading}
-                    />
-                    <div className="text-center space-y-3">
-                      <div className="text-4xl font-bold text-white">
+                <div className="h-full flex flex-col items-center justify-center bg-slate-950 overflow-hidden">
+                  <div className="flex flex-col items-center gap-4 max-h-full">
+                    <div className="flex-shrink-0 max-h-[600px] overflow-hidden">
+                      <CircularAgentVisualization
+                        agentStatusMap={agentStatusMap}
+                        isRunning={isLoading}
+                      />
+                    </div>
+                    <div className="text-center space-y-2 flex-shrink-0">
+                      <div className="text-5xl font-bold text-white">
                         {optimisticProgress}%
                       </div>
-                      <div className="text-sm text-gray-400">
+                      <div className="text-base text-gray-400 max-w-md">
                         {currentStep || 'Initializing AI agents...'}
                       </div>
                     </div>

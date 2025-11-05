@@ -49,6 +49,44 @@ const getAgentColor = (agentId: string): string => {
   return colorMap[agentId] || 'from-gray-500 to-gray-600';
 };
 
+// Fallback default agents when API fetch fails
+const getDefaultAgents = (): AgentConfig[] => {
+  return [
+    {
+      id: 'component-architect',
+      name: 'Component Architect',
+      task: 'Planning architecture',
+      icon: getAgentIcon('component-architect'),
+      color: getAgentColor('component-architect'),
+      angle: 0
+    },
+    {
+      id: 'ui-designer',
+      name: 'UI Designer',
+      task: 'Designing interface',
+      icon: getAgentIcon('ui-designer'),
+      color: getAgentColor('ui-designer'),
+      angle: 90
+    },
+    {
+      id: 'code-generator',
+      name: 'Component Developer',
+      task: 'Writing code',
+      icon: getAgentIcon('code-generator'),
+      color: getAgentColor('code-generator'),
+      angle: 180
+    },
+    {
+      id: 'completion-agent',
+      name: 'Completion Agent',
+      task: 'Finalizing',
+      icon: getAgentIcon('completion-agent'),
+      color: getAgentColor('completion-agent'),
+      angle: 270
+    }
+  ];
+};
+
 interface CircularAgentVisualizationProps {
   agentStatusMap: Map<string, AgentStatus>;
   isRunning: boolean;
@@ -91,13 +129,13 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
           setAgents(agentConfigs);
           console.log('✅ Loaded agents for visualization:', agentConfigs);
         } else {
-          console.error('Failed to fetch agents');
+          console.warn('Failed to fetch agents, using fallback defaults');
           // Fallback to default agents
-          setAgents([]);
+          setAgents(getDefaultAgents());
         }
       } catch (error) {
-        console.error('Error fetching agents:', error);
-        setAgents([]);
+        console.warn('Error fetching agents, using fallback defaults:', error);
+        setAgents(getDefaultAgents());
       } finally {
         setLoading(false);
       }
@@ -138,7 +176,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
   // Early return for loading state - MUST be after all hooks
   if (loading) {
     return (
-      <div className="relative h-[700px] flex items-center justify-center">
+      <div className="relative w-full h-full min-h-[400px] max-h-[600px] flex items-center justify-center">
         <Loader2 className="w-12 h-12 animate-spin text-violet-500" />
       </div>
     );
@@ -150,7 +188,7 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
     angle: (360 / agents.length) * index // Distribute evenly based on actual count
   }));
 
-  const getPosition = (angle: number, radius = 240) => { // Reduced from 280 to 240 for better container fit
+  const getPosition = (angle: number, radius = 200) => { // Reduced radius for better fit
     const radian = (angle - 90) * (Math.PI / 180);
     return {
       x: Math.cos(radian) * radius,
@@ -159,14 +197,14 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
   };
 
   return (
-    <div className="relative h-[700px] flex items-center justify-center overflow-hidden">
+    <div className="relative w-full h-full min-h-[400px] max-h-[600px] flex items-center justify-center overflow-hidden">
       {/* Animated background gradient */}
       {isRunning && (
         <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-purple-500/5 to-pink-500/5 animate-pulse" />
       )}
 
       {/* Connection Lines with animated gradient */}
-      <svg className="absolute inset-0 w-full h-full" viewBox="-350 -350 700 700" preserveAspectRatio="xMidYMid meet">
+      <svg className="absolute inset-0 w-full h-full" viewBox="-300 -300 600 600" preserveAspectRatio="xMidYMid meet">
         <defs>
           {/* Gradient for active lines */}
           <linearGradient id="activeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
