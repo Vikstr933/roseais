@@ -40,8 +40,9 @@ import FileExplorer from "../components/FileExplorer/FileExplorer";
 import { EnhancedFileExplorer } from "../components/EnhancedFileExplorer";
 import SessionHistory from "../components/SessionHistory";
 import { ChatAutocomplete } from "../components/ChatAutocomplete";
-import { AgentMonitorPanel } from "../components/AgentMonitor/AgentMonitorPanel";
+import { CircularAgentVisualization } from "../components/AgentMonitor/CircularAgentVisualization";
 import { ComponentLibrary } from "../components/ComponentLibrary";
+import { useOptimisticProgress } from "../hooks/useOptimisticProgress";
 import { ProjectSharing } from "../components/ProjectSharing";
 import { ProductionDeployment } from "../components/ProductionDeployment";
 import { AdvancedPreview } from "../components/AdvancedPreview";
@@ -170,7 +171,7 @@ export default function PromptPlayground() {
 
   const [match, params] = useRoute('/playground/:projectId');
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'agents' | 'sessions' | 'settings'>('editor');
+  const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'sessions' | 'settings'>('editor');
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [response, setResponse] = useState<string | AIResponse | null>(null);
@@ -179,6 +180,25 @@ export default function PromptPlayground() {
   const [overallProgress, setOverallProgress] = useState<number>(0);
   const [error, setError] = useState<{ message: string; suggestion: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Convert orchestration steps to agent status map for visualization
+  const agentStatusMap = new Map(
+    orchestrationSteps.map(step => [
+      step.agent,
+      {
+        id: step.agent,
+        status: step.status,
+        startTime: step.status === 'in_progress' || step.status === 'completed' ? Date.now() : undefined,
+      }
+    ])
+  );
+
+  // Calculate optimistic progress
+  const completedSteps = orchestrationSteps.filter(s => s.status === 'completed').length;
+  const totalSteps = orchestrationSteps.length;
+  const actualProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+  const isComplete = totalSteps > 0 && completedSteps === totalSteps && !isLoading;
+  const optimisticProgress = useOptimisticProgress(actualProgress, isComplete, isLoading);
 
   // Use workspace context for chat history (persists across navigation)
   const chatHistory = currentSession?.chatHistory || [];
@@ -1737,23 +1757,6 @@ export default function PromptPlayground() {
                 )}
               </button>
               <button
-                onClick={() => setActiveTab('agents')}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors relative ${
-                  activeTab === 'agents'
-                    ? 'bg-background text-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <Brain className="h-4 w-4" />
-                Agents
-                {agentsActive && (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </span>
-                )}
-              </button>
-              <button
                 onClick={() => setActiveTab('sessions')}
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeTab === 'sessions'
@@ -1923,8 +1926,29 @@ export default function PromptPlayground() {
         {/* Main Editor Area */}
         <div className="flex-1 min-h-0">
           <div className="h-full min-h-0 overflow-hidden">
-              {typeof response === 'object' && 
-               response?.type === 'component' && 
+              {/* Show CircularAgentVisualization while loading */}
+              {isLoading && (
+                <div className="h-full flex items-center justify-center bg-slate-950">
+                  <div className="flex flex-col items-center gap-8">
+                    <CircularAgentVisualization
+                      agentStatusMap={agentStatusMap}
+                      isRunning={isLoading}
+                    />
+                    <div className="text-center space-y-3">
+                      <div className="text-4xl font-bold text-white">
+                        {optimisticProgress}%
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {currentStep || 'Initializing AI agents...'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Show Editor when files are available and not loading */}
+              {!isLoading && typeof response === 'object' &&
+               response?.type === 'component' &&
                       response.files &&
                       response.files[selectedFileIndex] ? (
                         <Editor
@@ -1967,7 +1991,7 @@ export default function PromptPlayground() {
                     }
                           }}
                         />
-                      ) : (
+                      ) : !isLoading && (
                         <div className="flex items-center justify-center h-full">
                           <div className="text-center">
                     <h3 className="text-lg font-medium mb-2">No File Selected</h3>
@@ -1983,7 +2007,25 @@ export default function PromptPlayground() {
             {/* Preview Tab */}
             {activeTab === 'preview' && (
               <div className="h-full flex flex-col">
-                {typeof response === 'object' &&
+                {/* Show CircularAgentVisualization while loading */}
+                {isLoading ? (
+                  <div className="h-full flex items-center justify-center bg-slate-950">
+                    <div className="flex flex-col items-center gap-8">
+                      <CircularAgentVisualization
+                        agentStatusMap={agentStatusMap}
+                        isRunning={isLoading}
+                      />
+                      <div className="text-center space-y-3">
+                        <div className="text-4xl font-bold text-white">
+                          {optimisticProgress}%
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          {currentStep || 'Initializing AI agents...'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : typeof response === 'object' &&
                  response?.type === 'component' &&
                  response.files &&
                  response.files.length > 0 ? (
@@ -2004,15 +2046,6 @@ export default function PromptPlayground() {
               </div>
             )}
 
-
-            {/* Agents Tab */}
-            {activeTab === 'agents' && (
-              <ScrollArea className="h-full">
-                <div className="p-6 space-y-6">
-                  <AgentMonitorPanel />
-                </div>
-              </ScrollArea>
-            )}
 
             {/* Sessions Tab */}
             {activeTab === 'sessions' && (
