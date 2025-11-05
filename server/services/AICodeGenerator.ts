@@ -395,9 +395,13 @@ Generate a COMPLETE, MULTI-FILE React TypeScript application based STRICTLY on t
 ❌ NEVER put semicolons immediately after opening parentheses: (;
 ❌ NEVER put semicolons immediately after opening braces: {;
 ❌ NEVER put semicolons immediately after opening brackets: [;
+❌ NEVER put semicolons BEFORE closing parentheses in if/while conditions: if (x === 1; ) ← WRONG
+❌ NEVER put semicolons inside conditional expressions: if (a || b; ) ← WRONG
+✅ CORRECT: if (a || b) { } ← No semicolon in condition
 ✅ ALWAYS verify ALL code has valid JavaScript/TypeScript syntax
 ✅ ALWAYS check that ALL parentheses, braces, and brackets are properly closed
 ✅ DOUBLE-CHECK every return statement for correct syntax before responding
+✅ TRIPLE-CHECK that if/while/for conditions do NOT have semicolons inside parentheses
 - **Quality**: Production-ready with error handling
 - **Accessibility**: WCAG 2.1 AA compliant
 - **Performance**: Optimized for fast loading and smooth interactions
@@ -436,6 +440,13 @@ You MUST generate ALL necessary files in this structure:
 - Follow React naming conventions (PascalCase for components)
 - Use semantic HTML elements for accessibility
 - Implement proper form validation and error handling
+
+## React 18+ Modern Patterns (IMPORTANT)
+- ✅ DO: Use function declarations: \`export function Component() {}\` or \`export default function App() {}\`
+- ✅ DO: Use the new JSX transform - NO need to \`import React from 'react'\`
+- ❌ DON'T: Import React unless using React-specific APIs (useState, useEffect, etc. are fine)
+- ✅ DO: Import only what you need: \`import { useState, useEffect } from 'react'\`
+- ✅ DO: Use \`createRoot\` in main.tsx (already handled in boilerplate)
 
 ## TypeScript Excellence
 - Define comprehensive interfaces for all data structures
@@ -860,42 +871,74 @@ Suggestions to fix:
       let content = file.content;
       let fixesApplied = 0;
 
-      console.log(`🔧 [SYNTAX FIX] Checking ${file.path}...`);
+      this.logger.info('AICodeGenerator', `🔧 [SYNTAX FIX] Checking ${file.path}...`);
+      console.log(`🔧 [SYNTAX FIX] Checking ${file.path} (${content.length} chars)`);
 
-      // Fix 0: CRITICAL - Remove "return (;" and "return {;" patterns immediately
-      // These are the most common and critical errors
+      // ULTRA-CRITICAL FIX: Detect and log if we find the problematic patterns BEFORE fixing
+      const criticalPatterns = [
+        { name: 'return (;', regex: /return\s*\(\s*;/g },
+        { name: 'return {;', regex: /return\s*\{\s*;/g },
+        { name: 'return [;', regex: /return\s*\[\s*;/g },
+        { name: '{;', regex: /\{\s*;/g },
+        { name: '(;', regex: /\(\s*;/g },
+        { name: '[;', regex: /\[\s*;/g },
+        { name: ';)', regex: /;\s*\)/g },  // CRITICAL: semicolon before closing paren (if conditions!)
+        { name: ';}', regex: /;\s*\}/g },
+        { name: ';]', regex: /;\s*\]/g },
+      ];
+
+      criticalPatterns.forEach(pattern => {
+        const matches = content.match(pattern.regex);
+        if (matches && matches.length > 0) {
+          this.logger.error('AICodeGenerator', `🚨 DETECTED SYNTAX ERROR IN AI RESPONSE: "${pattern.name}" found ${matches.length} time(s) in ${file.path}`, {
+            pattern: pattern.name,
+            occurrences: matches.length,
+            file: file.path
+          });
+          console.error(`🚨 CRITICAL: Found "${pattern.name}" pattern ${matches.length} times in ${file.path}`);
+        }
+      });
+
+      // Fix 0a: CRITICAL - Remove "return (;" pattern
       content = content.replace(/return\s*\(\s*;/g, (match) => {
-        console.log(`  ⚠️  FOUND CRITICAL ERROR: "${match.replace(/\n/g, '\\n')}" in ${file.path}`);
+        this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ("`, { file: file.path });
         fixesApplied++;
-        console.log(`  ✅ FIXED: "return (;" -> "return ("`);
         return 'return (';
       });
 
+      // Fix 0b: CRITICAL - Remove "return {;" pattern
       content = content.replace(/return\s*\{\s*;/g, (match) => {
-        console.log(`  ⚠️  FOUND CRITICAL ERROR: "${match.replace(/\n/g, '\\n')}" in ${file.path}`);
+        this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return {"`, { file: file.path });
         fixesApplied++;
-        console.log(`  ✅ FIXED: "return {;" -> "return {"`);
         return 'return {';
       });
 
-      // Fix 0b: Remove stray semicolons after ANY opening parentheses/braces
-      // Fixes: (;  -> (
-      //        [;  -> [
-      //        {;  -> {
-      // IMPORTANT: Only match spaces/tabs, NOT newlines to preserve code structure
-      content = content.replace(/([(\[{])[ \t]*;+/g, (match, opener) => {
+      // Fix 0c: CRITICAL - Remove "return [;" pattern
+      content = content.replace(/return\s*\[\s*;/g, (match) => {
+        this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ["`, { file: file.path });
         fixesApplied++;
-        console.log(`  ✅ Fixed opening delimiter: "${match.replace(/\n/g, '\\n')}" -> "${opener}"`);
+        return 'return [';
+      });
+
+      // Fix 0d: Remove ALL remaining stray semicolons after ANY opening delimiter
+      // This catches cases not caught by the specific return fixes above
+      // Fixes: (;  -> (   [;  -> [   {;  -> {
+      // Match with whitespace including newlines to catch all cases
+      content = content.replace(/([(\[{])\s*;+/g, (match, opener) => {
+        this.logger.warning('AICodeGenerator', `Fixing stray semicolon after opening delimiter: "${match}" -> "${opener}"`, { file: file.path });
+        fixesApplied++;
         return opener;
       });
 
-      // Fix 0c: Remove stray semicolons before closing parentheses (SAME LINE ONLY)
-      // Fixes: );  -> )
-      // IMPORTANT: Only match spaces/tabs, NOT newlines to avoid removing valid semicolons
-      content = content.replace(/;+[ \t]*([)\]}])/g, (match, closer) => {
+      // Fix 0e: Remove stray semicolons before closing delimiters
+      // This is CRITICAL for if/while conditions: if (condition; ) should be if (condition )
+      // Fixes: ;)  -> )   ;]  -> ]   ;}  -> }
+      // Match semicolon followed by ANY whitespace (including newlines) followed by closing delimiter
+      const beforeClosingDelimiterRegex = /;(\s*)([)\]}])/g;
+      content = content.replace(beforeClosingDelimiterRegex, (match, whitespace, closer) => {
+        this.logger.warning('AICodeGenerator', `Fixing semicolon before closing delimiter: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`, { file: file.path });
         fixesApplied++;
-        console.log(`  ✅ Fixed closing delimiter: "${match.replace(/\n/g, '\\n')}" -> "${closer}"`);
-        return closer;
+        return whitespace + closer; // Keep the whitespace, remove only the semicolon
       });
 
       // Fix 0d: Fix double semicolons
@@ -1052,9 +1095,15 @@ Suggestions to fix:
       errors.push('Found "return {;" pattern - incomplete return statement');
     }
 
-    // Check 2: Stray semicolons after opening delimiters on same line
-    if (/[(\[{][ \t]+;/.test(content)) {
+    // Check 2: Stray semicolons after opening delimiters
+    if (/[(\[{]\s*;/.test(content)) {
       errors.push('Found stray semicolons after opening delimiters');
+    }
+
+    // Check 2b: CRITICAL - Semicolons BEFORE closing delimiters (if conditions!)
+    if (/;\s*[)\]}]/.test(content)) {
+      const matches = content.match(/;\s*[)\]}]/g);
+      errors.push(`Found ${matches?.length || 0} semicolons before closing delimiters (e.g., "condition; )" in if statements)`);
     }
 
     // Check 3: Multiple semicolons
@@ -1155,12 +1204,12 @@ Suggestions to fix:
     const requiredDevDeps = {
       '@types/react': '^18.3.18',
       '@types/react-dom': '^18.3.5',
-      '@vitejs/plugin-react': '^4.3.4',
+      '@vitejs/plugin-react': '^5.0.0',
       'autoprefixer': '^10.4.20',
       'postcss': '^8.4.47',
       'tailwindcss': '^3.4.14',
       'typescript': '^5.7.2',
-      'vite': '^6.0.11'
+      'vite': '^7.1.7'
     };
 
     // Ensure package.json with proper dependencies
@@ -1433,6 +1482,38 @@ body {
       });
     }
 
+    // 🚨 CRITICAL: Ensure src/App.tsx ALWAYS exists (main.tsx imports it)
+    if (!existingPaths.has('src/App.tsx')) {
+      this.logger.warning('AICodeGenerator', 'AI did not generate src/App.tsx - creating fallback', {
+        componentName
+      });
+
+      result.push({
+        path: 'src/App.tsx',
+        content: `// Main application component
+export default function App() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          ${componentName}
+        </h1>
+        <p className="text-lg text-gray-600 mb-6">
+          Welcome to your new application! This is a starter template.
+        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            💡 <strong>Next steps:</strong> Customize this component to build your application.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}`
+      });
+      existingPaths.add('src/App.tsx');
+    }
+
     this.logger.info('AICodeGenerator', `Ensured all required files. Total files: ${result.length}`, {
       addedFiles: result.length - files.length
     });
@@ -1575,8 +1656,8 @@ export type ${fileName}Type = ${fileName.replace(/[-_]/g, '')};
     }
 
     if (isContext) {
-      // Create context file
-      return `import React, { createContext, useContext, ReactNode } from 'react';
+      // Create context file (React 18+ JSX transform)
+      return `import { createContext, useContext, ReactNode } from 'react';
 
 // Auto-generated stub - imported by: ${importedBy.join(', ')}
 
@@ -1587,7 +1668,7 @@ interface ${fileName}ContextType {
 
 const ${fileName}Context = createContext<${fileName}ContextType | undefined>(undefined);
 
-export const ${fileName}Provider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export function ${fileName}Provider({ children }: { children: ReactNode }) {
   const value = {
     value: null
   };
@@ -1597,15 +1678,15 @@ export const ${fileName}Provider: React.FC<{ children: ReactNode }> = ({ childre
       {children}
     </${fileName}Context.Provider>
   );
-};
+}
 
-export const use${fileName} = () => {
+export function use${fileName}() {
   const context = useContext(${fileName}Context);
   if (context === undefined) {
     throw new Error('use${fileName} must be used within a ${fileName}Provider');
   }
   return context;
-};
+}
 `;
     }
 
@@ -1640,23 +1721,21 @@ export default ${fileName.replace(/[-_]/g, '')};
     }
 
     if (isComponent) {
-      // Create React component file
-      return `import React from 'react';
-
-// Auto-generated stub - imported by: ${importedBy.join(', ')}
+      // Create React component file (React 18+ JSX transform - no React import needed)
+      return `// Auto-generated stub - imported by: ${importedBy.join(', ')}
 
 interface ${fileName}Props {
   [key: string]: any;
 }
 
-export const ${fileName}: React.FC<${fileName}Props> = (props) => {
+export function ${fileName}(props: ${fileName}Props) {
   return (
     <div className="p-4">
       <h2 className="text-xl font-semibold">${fileName}</h2>
       <p className="text-gray-600">This component is under development.</p>
     </div>
   );
-};
+}
 
 export default ${fileName};
 `;
