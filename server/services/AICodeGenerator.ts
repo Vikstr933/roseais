@@ -906,7 +906,7 @@ Suggestions to fix:
       //   Pass 2: Fix "return {;" -> "return {" resulting in "return {\n  foo\n}"
       let previousContent = '';
       let passNumber = 0;
-      const MAX_PASSES = 5;
+      const MAX_PASSES = 10; // Increased from 5 - AI generates MANY syntax errors
 
       while (previousContent !== content && passNumber < MAX_PASSES) {
         previousContent = content;
@@ -919,27 +919,24 @@ Suggestions to fix:
 
         // Fix 0a: CRITICAL - Remove "return (;" pattern
         content = content.replace(/return\s*\(\s*;+/g, (match) => {
-          if (passNumber === 1) {
-            this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ("`, { file: file.path });
-          }
+          console.log(`🔧 [Pass ${passNumber}] Fixing return(; : "${match.replace(/\n/g, '\\n')}" -> "return ("`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing return(;: "${match}" -> "return ("`, { file: file.path });
           fixesApplied++;
           return 'return (';
         });
 
         // Fix 0b: CRITICAL - Remove "return {;" pattern
         content = content.replace(/return\s*\{\s*;+/g, (match) => {
-          if (passNumber === 1) {
-            this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return {"`, { file: file.path });
-          }
+          console.log(`🔧 [Pass ${passNumber}] Fixing return{; : "${match.replace(/\n/g, '\\n')}" -> "return {"`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing return{;: "${match}" -> "return {"`, { file: file.path });
           fixesApplied++;
           return 'return {';
         });
 
         // Fix 0c: CRITICAL - Remove "return [;" pattern
         content = content.replace(/return\s*\[\s*;+/g, (match) => {
-          if (passNumber === 1) {
-            this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ["`, { file: file.path });
-          }
+          console.log(`🔧 [Pass ${passNumber}] Fixing return[; : "${match.replace(/\n/g, '\\n')}" -> "return ["`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing return[;: "${match}" -> "return ["`, { file: file.path });
           fixesApplied++;
           return 'return [';
         });
@@ -949,9 +946,8 @@ Suggestions to fix:
         // Fixes: (;  -> (   [;  -> [   {;  -> {
         // Match with whitespace including newlines to catch all cases
         content = content.replace(/([(\[{])\s*;+/g, (match, opener) => {
-          if (passNumber === 1) {
-            this.logger.warning('AICodeGenerator', `Fixing stray semicolon after opening delimiter: "${match}" -> "${opener}"`, { file: file.path });
-          }
+          console.log(`🔧 [Pass ${passNumber}] Fixing stray ; after opener: "${match.replace(/\n/g, '\\n')}" -> "${opener}"`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing semicolon after delimiter: "${match}" -> "${opener}"`, { file: file.path });
           fixesApplied++;
           return opener;
         });
@@ -961,9 +957,8 @@ Suggestions to fix:
         // Fixes: ;)  -> )   ;]  -> ]   ;}  -> }
         // Match semicolon followed by ANY whitespace (including newlines) followed by closing delimiter
         content = content.replace(/;+(\s*)([)\]}])/g, (match, whitespace, closer) => {
-          if (passNumber === 1) {
-            this.logger.warning('AICodeGenerator', `Fixing semicolon before closing delimiter: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`, { file: file.path });
-          }
+          console.log(`🔧 [Pass ${passNumber}] Fixing ; before closer: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing semicolon before delimiter: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`, { file: file.path });
           fixesApplied++;
           return whitespace + closer; // Keep the whitespace, remove only the semicolon
         });
