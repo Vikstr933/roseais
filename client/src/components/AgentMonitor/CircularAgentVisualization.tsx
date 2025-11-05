@@ -173,19 +173,15 @@ export const CircularAgentVisualization: React.FC<CircularAgentVisualizationProp
     return () => clearInterval(interval);
   }, [targetProgress]); // Remove animatedProgress from dependencies to prevent infinite loop
 
-  // Early return for loading state - MUST be after all hooks
-  if (loading) {
-    return (
-      <div className="relative w-full h-full min-h-[400px] max-h-[600px] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 animate-spin text-violet-500" />
-      </div>
-    );
-  }
+  // Use fallback agents immediately while loading to avoid blank screen
+  // This ensures the visualization shows up instantly without a loading spinner
 
-  // Use fetched agents, distributed evenly in a circle
-  const activeAgentConfigs = agents.map((agent, index) => ({
+  // Use fetched agents or fallback if still loading
+  const agentsToDisplay = loading || agents.length === 0 ? getDefaultAgents() : agents;
+
+  const activeAgentConfigs = agentsToDisplay.map((agent, index) => ({
     ...agent,
-    angle: (360 / agents.length) * index // Distribute evenly based on actual count
+    angle: (360 / agentsToDisplay.length) * index // Distribute evenly based on actual count
   }));
 
   const getPosition = (angle: number, radius = 200) => { // Reduced radius for better fit

@@ -1968,9 +1968,11 @@ export default function PromptPlayground() {
                       <div className="text-5xl font-bold text-white">
                         {optimisticProgress}%
                       </div>
-                      <div className="text-base text-gray-400 max-w-md">
-                        {currentStep || 'Initializing AI agents...'}
-                      </div>
+                      {currentStep && (
+                        <div className="text-base text-gray-400 max-w-md">
+                          {currentStep}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
