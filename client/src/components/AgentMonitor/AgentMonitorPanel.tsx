@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { CircularAgentVisualization } from './CircularAgentVisualization';
 import { getApiUrl } from '@/lib/api';
 import { useAnimatedNumber } from '@/hooks/useAnimatedNumber';
+import { useOptimisticProgress } from '@/hooks/useOptimisticProgress';
 
 type AgentEventType =
   | 'connected'
@@ -352,12 +353,20 @@ export function AgentMonitorPanel() {
   const completeCount = agentStatuses.filter(agent => agent.status === 'completed').length;
   const failedCount = agentStatuses.filter(agent => agent.status === 'failed').length;
   const totalAgents = agentStatuses.length;
-  const overallProgress = totalAgents
+
+  // Calculate actual progress from completed agents
+  const actualProgress = totalAgents
     ? Math.round((completeCount / totalAgents) * 100)
     : 0;
 
   // Check if workflow is running
   const isRunning = agentStatuses.some(a => a.status === 'running') || totalAgents > 0;
+
+  // Check if workflow is complete (all agents done)
+  const isComplete = totalAgents > 0 && (completeCount + failedCount) === totalAgents;
+
+  // Use optimistic progress that smoothly animates even when actual events are slow
+  const overallProgress = useOptimisticProgress(actualProgress, isComplete, isRunning);
 
   return (
     <div className="space-y-6">
