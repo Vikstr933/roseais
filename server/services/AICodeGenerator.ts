@@ -899,53 +899,89 @@ Suggestions to fix:
         }
       });
 
-      // Fix 0a: CRITICAL - Remove "return (;" pattern
-      content = content.replace(/return\s*\(\s*;/g, (match) => {
-        this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ("`, { file: file.path });
-        fixesApplied++;
-        return 'return (';
-      });
+      // 🔥 MULTI-PASS APPROACH: Run fixes iteratively until content stabilizes
+      // This is CRITICAL because some patterns only appear after other fixes are applied
+      // Example: "return {;\n  foo\n;}" needs 2 passes:
+      //   Pass 1: Fix ";}" -> "}" resulting in "return {;\n  foo\n}"
+      //   Pass 2: Fix "return {;" -> "return {" resulting in "return {\n  foo\n}"
+      let previousContent = '';
+      let passNumber = 0;
+      const MAX_PASSES = 5;
 
-      // Fix 0b: CRITICAL - Remove "return {;" pattern
-      content = content.replace(/return\s*\{\s*;/g, (match) => {
-        this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return {"`, { file: file.path });
-        fixesApplied++;
-        return 'return {';
-      });
+      while (previousContent !== content && passNumber < MAX_PASSES) {
+        previousContent = content;
+        passNumber++;
 
-      // Fix 0c: CRITICAL - Remove "return [;" pattern
-      content = content.replace(/return\s*\[\s*;/g, (match) => {
-        this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ["`, { file: file.path });
-        fixesApplied++;
-        return 'return [';
-      });
+        if (passNumber > 1) {
+          this.logger.info('AICodeGenerator', `🔄 Running syntax fix pass #${passNumber} for ${file.path}`);
+          console.log(`🔄 Pass #${passNumber} for ${file.path}`);
+        }
 
-      // Fix 0d: Remove ALL remaining stray semicolons after ANY opening delimiter
-      // This catches cases not caught by the specific return fixes above
-      // Fixes: (;  -> (   [;  -> [   {;  -> {
-      // Match with whitespace including newlines to catch all cases
-      content = content.replace(/([(\[{])\s*;+/g, (match, opener) => {
-        this.logger.warning('AICodeGenerator', `Fixing stray semicolon after opening delimiter: "${match}" -> "${opener}"`, { file: file.path });
-        fixesApplied++;
-        return opener;
-      });
+        // Fix 0a: CRITICAL - Remove "return (;" pattern
+        content = content.replace(/return\s*\(\s*;+/g, (match) => {
+          if (passNumber === 1) {
+            this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ("`, { file: file.path });
+          }
+          fixesApplied++;
+          return 'return (';
+        });
 
-      // Fix 0e: Remove stray semicolons before closing delimiters
-      // This is CRITICAL for if/while conditions: if (condition; ) should be if (condition )
-      // Fixes: ;)  -> )   ;]  -> ]   ;}  -> }
-      // Match semicolon followed by ANY whitespace (including newlines) followed by closing delimiter
-      const beforeClosingDelimiterRegex = /;(\s*)([)\]}])/g;
-      content = content.replace(beforeClosingDelimiterRegex, (match, whitespace, closer) => {
-        this.logger.warning('AICodeGenerator', `Fixing semicolon before closing delimiter: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`, { file: file.path });
-        fixesApplied++;
-        return whitespace + closer; // Keep the whitespace, remove only the semicolon
-      });
+        // Fix 0b: CRITICAL - Remove "return {;" pattern
+        content = content.replace(/return\s*\{\s*;+/g, (match) => {
+          if (passNumber === 1) {
+            this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return {"`, { file: file.path });
+          }
+          fixesApplied++;
+          return 'return {';
+        });
 
-      // Fix 0d: Fix double semicolons
-      content = content.replace(/;;+/g, () => {
-        fixesApplied++;
-        return ';';
-      });
+        // Fix 0c: CRITICAL - Remove "return [;" pattern
+        content = content.replace(/return\s*\[\s*;+/g, (match) => {
+          if (passNumber === 1) {
+            this.logger.warning('AICodeGenerator', `Fixing critical syntax error: "${match}" -> "return ["`, { file: file.path });
+          }
+          fixesApplied++;
+          return 'return [';
+        });
+
+        // Fix 0d: Remove ALL remaining stray semicolons after ANY opening delimiter
+        // This catches cases not caught by the specific return fixes above
+        // Fixes: (;  -> (   [;  -> [   {;  -> {
+        // Match with whitespace including newlines to catch all cases
+        content = content.replace(/([(\[{])\s*;+/g, (match, opener) => {
+          if (passNumber === 1) {
+            this.logger.warning('AICodeGenerator', `Fixing stray semicolon after opening delimiter: "${match}" -> "${opener}"`, { file: file.path });
+          }
+          fixesApplied++;
+          return opener;
+        });
+
+        // Fix 0e: Remove stray semicolons before closing delimiters
+        // This is CRITICAL for if/while conditions: if (condition; ) should be if (condition )
+        // Fixes: ;)  -> )   ;]  -> ]   ;}  -> }
+        // Match semicolon followed by ANY whitespace (including newlines) followed by closing delimiter
+        content = content.replace(/;+(\s*)([)\]}])/g, (match, whitespace, closer) => {
+          if (passNumber === 1) {
+            this.logger.warning('AICodeGenerator', `Fixing semicolon before closing delimiter: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`, { file: file.path });
+          }
+          fixesApplied++;
+          return whitespace + closer; // Keep the whitespace, remove only the semicolon
+        });
+
+        // Fix 0f: Fix double semicolons
+        content = content.replace(/;;+/g, () => {
+          fixesApplied++;
+          return ';';
+        });
+      }
+
+      if (passNumber > 1) {
+        this.logger.info('AICodeGenerator', `✅ Completed ${passNumber} syntax fix passes for ${file.path}`, {
+          totalFixes: fixesApplied,
+          file: file.path
+        });
+        console.log(`✅ Completed ${passNumber} passes with ${fixesApplied} total fixes for ${file.path}`);
+      }
 
       // Fix 1: Add missing semicolons after return statements
       // Match: return (...); that is missing the semicolon
