@@ -941,15 +941,25 @@ Suggestions to fix:
           return 'return [';
         });
 
-        // Fix 0d: Remove ALL remaining stray semicolons after ANY opening delimiter
-        // This catches cases not caught by the specific return fixes above
-        // Fixes: (;  -> (   [;  -> [   {;  -> {
-        // Match with whitespace including newlines to catch all cases
-        content = content.replace(/([(\[{])\s*;+/g, (match, opener) => {
-          console.log(`🔧 [Pass ${passNumber}] Fixing stray ; after opener: "${match.replace(/\n/g, '\\n')}" -> "${opener}"`);
-          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing semicolon after delimiter: "${match}" -> "${opener}"`, { file: file.path });
+        // Fix 0d: Remove stray semicolons after ( and [ delimiters ONLY
+        // NOTE: We deliberately EXCLUDE { from this pattern because return {; is handled by Fix 0b above
+        // This prevents Fix 0d from interfering with Fix 0b by consuming the {; before the full pattern matches
+        // Fixes: (;  -> (   [;  -> [
+        content = content.replace(/([(\[])\s*;+/g, (match, opener) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing stray ; after ( or [: "${match.replace(/\n/g, '\\n')}" -> "${opener}"`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing semicolon after ( or [: "${match}" -> "${opener}"`, { file: file.path });
           fixesApplied++;
           return opener;
+        });
+
+        // Fix 0d2: Remove any remaining stray semicolons after {
+        // This runs AFTER Fix 0b, so return {; has already been handled
+        // Catches cases like: if (x) {; or const obj = {;
+        content = content.replace(/\{\s*;+/g, (match) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing remaining {; : "${match.replace(/\n/g, '\\n')}" -> "{"`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing remaining {;: "${match}" -> "{"`, { file: file.path });
+          fixesApplied++;
+          return '{';
         });
 
         // Fix 0e: Remove stray semicolons before closing delimiters
