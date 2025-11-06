@@ -213,6 +213,11 @@ multiple programming languages and frameworks.`,
     ],
 
     codeQuality: [
+      "🚨 CRITICAL: NEVER write 'return {;' or 'return (;' or 'return [;' - these are FATAL syntax errors",
+      "🚨 CRITICAL: NEVER put semicolons after opening braces/parens/brackets: {; or (; or [;",
+      "🚨 CRITICAL: Verify ALL code has valid JavaScript/TypeScript syntax before responding",
+      "🚨 CRITICAL: Check that ALL parentheses, braces, and brackets are properly closed",
+      "🚨 CRITICAL: Double-check EVERY return statement for correct syntax",
       "Use TypeScript for type safety when applicable",
       "Implement proper error boundaries and exception handling",
       "Write unit tests for critical business logic",
