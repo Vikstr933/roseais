@@ -1955,8 +1955,17 @@ export default function PromptPlayground() {
         <div className="flex-1 min-h-0">
           <div className="h-full min-h-0 overflow-hidden">
               {/* Show CircularAgentVisualization while loading */}
-              {isLoading && (
+              {(() => {
+                console.log('🔍 EDITOR TAB - Checking visualization conditions:', {
+                  isLoading,
+                  agentStatusMapSize: agentStatusMap.size,
+                  orchestrationStepsLength: orchestrationSteps.length,
+                  agentStatusMapEntries: Array.from(agentStatusMap.entries())
+                });
+                return isLoading;
+              })() && (
                 <div className="h-full flex flex-col items-center justify-center bg-slate-950 overflow-hidden">
+                  {console.log('✅ RENDERING CircularAgentVisualization in EDITOR TAB')}
                   <div className="flex flex-col items-center gap-4 max-h-full">
                     <div className="flex-shrink-0 max-h-[600px] overflow-hidden">
                       <CircularAgentVisualization
@@ -2039,9 +2048,15 @@ export default function PromptPlayground() {
             {/* Preview Tab */}
             {activeTab === 'preview' && (
               <div className="h-full flex flex-col">
+                {console.log('🔍 PREVIEW TAB - Checking visualization conditions:', {
+                  isLoading,
+                  agentStatusMapSize: agentStatusMap.size,
+                  orchestrationStepsLength: orchestrationSteps.length
+                })}
                 {/* Show CircularAgentVisualization while loading */}
                 {isLoading ? (
                   <div className="h-full flex items-center justify-center bg-slate-950">
+                    {console.log('✅ RENDERING CircularAgentVisualization in PREVIEW TAB')}
                     <div className="flex flex-col items-center gap-8">
                       <CircularAgentVisualization
                         agentStatusMap={agentStatusMap}

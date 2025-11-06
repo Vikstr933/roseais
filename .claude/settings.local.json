@@ -1,11 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(\" patterns but Fix 0b doesn''t log any\nmatches, creating a contradiction. Need to see the actual content\nto understand what''s happening.\n\nCHANGES:\n1. **Enhanced pre-fix logging** - Shows sample occurrences of detected\n   patterns with line numbers before fixing starts\n\n2. **Enhanced post-fix verification** - Finds and logs ALL lines that\n   still contain \"return {)",
-      "Bash(\" pattern 3 times in src/App.tsx\n   Sample occurrences:\n     Line 104: \"return {)",
-      "Bash(\"\n     Line 140: \"return {)",
-      "Bash(\"\n     Line 180: \"return {)",
-      "Bash(\" pattern - incomplete return statement\n\n🔍 FOUND 3 instances of \"return {)"
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []
