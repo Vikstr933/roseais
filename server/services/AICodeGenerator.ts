@@ -980,9 +980,28 @@ Suggestions to fix:
         }
 
         // Fix 0a: CRITICAL - Remove "return (;" pattern
+        // Enhanced to handle cases where semicolon is immediately after paren (even with newlines after)
         content = content.replace(/return\s*\(\s*;+/g, (match) => {
           console.log(`🔧 [Pass ${passNumber}] Fixing return(; : "${match.replace(/\n/g, '\\n')}" -> "return ("`);
           this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing return(;: "${match}" -> "return ("`, { file: file.path });
+          fixesApplied++;
+          return 'return (';
+        });
+
+        // Fix 0a2: CRITICAL - Ultra-aggressive literal string replacement for "return (;"
+        // This catches the EXACT pattern that keeps appearing
+        if (content.includes('return (;')) {
+          console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found literal "return (;" - replacing ALL occurrences`);
+          const beforeCount = (content.match(/return \(;/g) || []).length;
+          content = content.replace(/return \(;/g, 'return (');
+          const afterCount = (content.match(/return \(;/g) || []).length;
+          console.log(`🔧 [Pass ${passNumber}] Replaced ${beforeCount - afterCount} instances of "return (;"`);
+          fixesApplied += (beforeCount - afterCount);
+        }
+
+        // Fix 0a3: Also try with different whitespace variants
+        content = content.replace(/return\s*\(\s*;/g, (match) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing return(; (variant): "${match.replace(/\n/g, '\\n')}" -> "return ("`);
           fixesApplied++;
           return 'return (';
         });
@@ -995,10 +1014,44 @@ Suggestions to fix:
           return 'return {';
         });
 
+        // Fix 0b2: CRITICAL - Ultra-aggressive literal string replacement for "return {;"
+        if (content.includes('return {;')) {
+          console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found literal "return {;" - replacing ALL occurrences`);
+          const beforeCount = (content.match(/return \{;/g) || []).length;
+          content = content.replace(/return \{;/g, 'return {');
+          const afterCount = (content.match(/return \{;/g) || []).length;
+          console.log(`🔧 [Pass ${passNumber}] Replaced ${beforeCount - afterCount} instances of "return {;"`);
+          fixesApplied += (beforeCount - afterCount);
+        }
+
+        // Fix 0b3: Also try with different whitespace variants
+        content = content.replace(/return\s*\{\s*;/g, (match) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing return{; (variant): "${match.replace(/\n/g, '\\n')}" -> "return {"`);
+          fixesApplied++;
+          return 'return {';
+        });
+
         // Fix 0c: CRITICAL - Remove "return [;" pattern
         content = content.replace(/return\s*\[\s*;+/g, (match) => {
           console.log(`🔧 [Pass ${passNumber}] Fixing return[; : "${match.replace(/\n/g, '\\n')}" -> "return ["`);
           this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing return[;: "${match}" -> "return ["`, { file: file.path });
+          fixesApplied++;
+          return 'return [';
+        });
+
+        // Fix 0c2: CRITICAL - Ultra-aggressive literal string replacement for "return [;"
+        if (content.includes('return [;')) {
+          console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found literal "return [;" - replacing ALL occurrences`);
+          const beforeCount = (content.match(/return \[;/g) || []).length;
+          content = content.replace(/return \[;/g, 'return [');
+          const afterCount = (content.match(/return \[;/g) || []).length;
+          console.log(`🔧 [Pass ${passNumber}] Replaced ${beforeCount - afterCount} instances of "return [;"`);
+          fixesApplied += (beforeCount - afterCount);
+        }
+
+        // Fix 0c3: Also try with different whitespace variants
+        content = content.replace(/return\s*\[\s*;/g, (match) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing return[; (variant): "${match.replace(/\n/g, '\\n')}" -> "return ["`);
           fixesApplied++;
           return 'return [';
         });
