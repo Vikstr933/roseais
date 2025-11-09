@@ -644,6 +644,57 @@ content = content.replace(/return\s*\(\s*;/g, (match) => {
 
 **Fixed:** Commit `feec08b`
 
+### Solution 3: Array Method Syntax Error Fixes (2025-11-09)
+
+**New Pattern Discovered:** AI also generates invalid array method calls!
+
+**Error Example:**
+```typescript
+return !snakeBody.slice(1).some(;
+  segment => segment.x === pos.x && segment.y === pos.y
+)
+```
+
+Should be:
+```typescript
+return !snakeBody.slice(1).some(
+  segment => segment.x === pos.x && segment.y === pos.y
+)
+```
+
+**Code Location:** `server/services/AICodeGenerator.ts:1059-1081`
+
+**Implementation - Two Layers:**
+
+**Layer 1: Specific Array Method Patterns**
+```typescript
+const arrayMethods = ['some', 'map', 'filter', 'forEach', 'reduce', 'find', 'findIndex', 'every', 'flatMap', 'sort'];
+arrayMethods.forEach(method => {
+  const pattern = `.${method}(;`;
+  if (content.includes(pattern)) {
+    content = content.replace(new RegExp(`\\.${method}\\(;`, 'g'), `.${method}(`);
+  }
+});
+```
+
+**Layer 2: General Function/Method Call Pattern**
+```typescript
+// Catches ANY identifier followed by (;
+content = content.replace(/(\w+)\(\s*;/g, (match, identifier) => {
+  return `${identifier}(`;
+});
+```
+
+**Patterns Fixed:**
+- `.some(;` → `.some(`
+- `.map(;` → `.map(`
+- `.filter(;` → `.filter(`
+- `.forEach(;` → `.forEach(`
+- `functionName(;` → `functionName(`
+- Any identifier + `(;` pattern
+
+**Fixed:** Commit `fe66a27`
+
 ### Why Regex Alone Failed
 
 **Problem:**
@@ -734,7 +785,7 @@ Generate a Snake game with score tracking
 ### Related Files
 
 **Backend:**
-- `server/services/AICodeGenerator.ts:982-1057` - Multi-pass syntax fixer
+- `server/services/AICodeGenerator.ts:982-1081` - Multi-pass syntax fixer with array method fixes
 - `server/services/PromptBuilder.ts` - Prompt assembly
 - `server/services/PromptManager.ts` - Database prompt fetching
 - `server/agents/CodeGeneratorAgent.ts` - Uses PromptBuilder
@@ -744,8 +795,10 @@ Generate a Snake game with score tracking
 - `fix-database-prompt.sql` - SQL script to update prompts
 
 **Git Commits:**
+- `fe66a27` - Array method syntax error fixes (2025-11-09)
+- `613bee0` - Documentation update for syntax error fixes
+- `feec08b` - Ultra-aggressive syntax fixer for return statements
 - `18d2451` - SQL script for database prompt update
-- `feec08b` - Ultra-aggressive syntax fixer implementation
 - `ea17d36` - Initial attempt (hardcoded prompts, didn't work)
 - `7846f2b` - Another hardcoded attempt (also didn't work)
 
