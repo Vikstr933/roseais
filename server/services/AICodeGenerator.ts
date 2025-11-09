@@ -1056,6 +1056,30 @@ Suggestions to fix:
           return 'return [';
         });
 
+        // Fix 0d0: CRITICAL - Ultra-aggressive fixes for array method patterns
+        // Common patterns: .some(; .map(; .filter(; .forEach(; .reduce(; .find(; .findIndex(; .every(;
+        const arrayMethods = ['some', 'map', 'filter', 'forEach', 'reduce', 'find', 'findIndex', 'every', 'flatMap', 'sort'];
+        arrayMethods.forEach(method => {
+          const pattern = `.${method}(;`;
+          if (content.includes(pattern)) {
+            console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found literal ".${method}(;" - replacing ALL occurrences`);
+            const beforeCount = (content.match(new RegExp(`\\.${method}\\(;`, 'g')) || []).length;
+            content = content.replace(new RegExp(`\\.${method}\\(;`, 'g'), `.${method}(`);
+            const afterCount = (content.match(new RegExp(`\\.${method}\\(;`, 'g')) || []).length;
+            console.log(`🔧 [Pass ${passNumber}] Replaced ${beforeCount - afterCount} instances of ".${method}(;"`);
+            fixesApplied += (beforeCount - afterCount);
+          }
+        });
+
+        // Fix 0d0b: CRITICAL - General pattern for any method/function call with (;
+        // This catches patterns like: .someMethod(; or functionName(;
+        // Uses a more general approach to catch any identifier followed by (;
+        content = content.replace(/(\w+)\(\s*;/g, (match, identifier) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing ${identifier}(; : "${match.replace(/\n/g, '\\n')}" -> "${identifier}("`);
+          fixesApplied++;
+          return `${identifier}(`;
+        });
+
         // Fix 0d: Remove stray semicolons after ( and [ delimiters ONLY
         // NOTE: We deliberately EXCLUDE { from this pattern because return {; is handled by Fix 0b above
         // This prevents Fix 0d from interfering with Fix 0b by consuming the {; before the full pattern matches

@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(dir:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nCRITICAL: Add array method syntax error fixes to multi-pass fixer\n\nDiscovered new syntax error pattern: .some(; instead of .some(\nAI was generating invalid array method calls like:\n  .some(; .map(; .filter(; etc.\n\nAdded two-layer fix:\n1. Specific patterns for common array methods (some, map, filter, etc.)\n2. General pattern to catch ANY identifier followed by (;\n\nExample fixed patterns:\n- .some(; → .some(\n- .filter(; → .filter(\n- functionName(; → functionName(\n\nLocation: server/services/AICodeGenerator.ts:1059-1081\n- Fix 0d0: Ultra-aggressive array method fixes\n- Fix 0d0b: General pattern for any function/method call\n\nThis extends the existing syntax fixer to handle these additional\nedge cases that the AI continues to generate despite warnings.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
