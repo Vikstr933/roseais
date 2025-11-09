@@ -528,3 +528,224 @@ req.user = {
 - ✅ Check both TypeScript interfaces AND runtime assignments
 - ✅ Test admin endpoints after any auth middleware changes
 
+---
+
+## 🔥 CRITICAL: AI Code Generation Syntax Errors (2025-11-09)
+
+### Issue: AI Consistently Generates Invalid Syntax Patterns
+
+**Symptoms:**
+- Generated React components fail to compile
+- Syntax errors like `return (;`, `return {;`, `return [;`
+- Multi-pass syntax fixer detects errors but regex fails to fix them
+
+**Root Causes:**
+1. ✅ AI ignores prompt warnings (even with ⚠️ symbols and examples)
+2. ✅ Regex patterns fail due to whitespace encoding issues (CRLF vs LF)
+3. ✅ Database prompts override hardcoded prompt fixes
+4. ✅ No literal string matching as fallback
+
+### Architecture: Prompt Loading Flow
+
+**How the system loads prompts:**
+```
+CodeGeneratorAgent → PromptBuilder → PromptManager → prompt_templates (database)
+                                                    ↓ (fallback)
+                                        UltimateAgentPrompts.ts (hardcoded)
+```
+
+**Key Insight:** Database prompts ALWAYS override hardcoded prompts!
+
+**File Locations:**
+- `server/services/PromptBuilder.ts` - Builds final prompts
+- `server/services/PromptManager.ts` - Fetches from database
+- `server/prompts/UltimateAgentPrompts.ts` - Fallback prompts
+- `prompt_templates` table in PostgreSQL - Primary source
+
+### Solution 1: Update Database Prompts (Not Hardcoded Files)
+
+**❌ WRONG APPROACH:**
+```typescript
+// Editing server/prompts/UltimateAgentPrompts.ts
+// This will be IGNORED if database has the prompt!
+```
+
+**✅ CORRECT APPROACH:**
+```sql
+-- Create SQL script to update database
+UPDATE prompt_templates
+SET
+  system_prompt = '⚠️⚠️⚠️ CRITICAL SYNTAX RULES - YOU MUST READ THIS FIRST ⚠️⚠️⚠️
+
+ABSOLUTELY FORBIDDEN SYNTAX PATTERNS:
+❌ NEVER write: return (;
+❌ NEVER write: return {;
+❌ NEVER write: return [;
+
+' || system_prompt,
+  updated_at = NOW()
+WHERE
+  prompt_key = 'code_generator.code_generator'
+  AND is_default = true;
+```
+
+**How to Apply:**
+1. Create `.sql` file with UPDATE statement
+2. Run via Supabase SQL Editor or `psql`
+3. Verify: `SELECT prompt_key, LEFT(system_prompt, 500) FROM prompt_templates WHERE prompt_key = 'code_generator.code_generator'`
+
+**Fixed:** Commit `18d2451` (fix-database-prompt.sql)
+
+### Solution 2: Ultra-Aggressive Multi-Pass Syntax Fixer
+
+**Why Needed:** AI ignores warnings, so post-generation fixing is the ONLY reliable defense.
+
+**Code Location:** `server/services/AICodeGenerator.ts:982-1057`
+
+**Implementation - Three Layers of Protection:**
+
+**Layer 1: Regex with Whitespace Handling**
+```typescript
+// Catches various whitespace patterns
+content = content.replace(/return\s*\(\s*;+/g, (match) => {
+  console.log(`🔧 [Pass ${passNumber}] Fixing return(; : "${match}"`);
+  fixesApplied++;
+  return 'return (';
+});
+```
+
+**Layer 2: Literal String Replacement (NEW - CRITICAL)**
+```typescript
+// Bypasses regex issues by matching exact string
+if (content.includes('return (;')) {
+  console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found literal "return (;"`);
+  const beforeCount = (content.match(/return \(;/g) || []).length;
+  content = content.replace(/return \(;/g, 'return (');
+  const afterCount = (content.match(/return \(;/g) || []).length;
+  console.log(`🔧 Replaced ${beforeCount - afterCount} instances`);
+  fixesApplied += (beforeCount - afterCount);
+}
+```
+
+**Layer 3: Variant Patterns (Backup)**
+```typescript
+// Catches different whitespace encodings
+content = content.replace(/return\s*\(\s*;/g, (match) => {
+  console.log(`🔧 [Pass ${passNumber}] Fixing return(; (variant)`);
+  fixesApplied++;
+  return 'return (';
+});
+```
+
+**Applied to ALL Three Patterns:**
+- `return (;` → `return (` (lines 982-1007)
+- `return {;` → `return {` (lines 1009-1032)
+- `return [;` → `return [` (lines 1034-1057)
+
+**Fixed:** Commit `feec08b`
+
+### Why Regex Alone Failed
+
+**Problem:**
+```typescript
+// This regex SHOULD match "return (;" but often doesn't
+/return\s*\(\s*;+/g
+```
+
+**Suspected Causes:**
+1. Whitespace encoding differences (CRLF vs LF)
+2. Special characters in AI output
+3. Unexpected unicode characters between tokens
+
+**Why Literal String Works:**
+```typescript
+// Simple string matching is immune to encoding issues
+if (content.includes('return (;')) {
+  content = content.replace(/return \(;/g, 'return (');
+}
+```
+
+### Multi-Pass Syntax Fixer Details
+
+**How It Works:**
+1. Runs up to 10 passes iteratively
+2. Each pass applies ALL syntax fixes
+3. Stops when no fixes applied in a pass
+4. Logs each fix for debugging
+
+**Console Output When Working:**
+```
+🔧 [Pass 1] ULTRA-AGGRESSIVE: Found literal "return (;" - replacing ALL occurrences
+🔧 [Pass 1] Replaced 5 instances of "return (;"
+🔧 [Pass 1] Applied 5 fixes total
+🔧 [Pass 2] Applied 0 fixes total (converged)
+✅ Syntax validation completed after 2 passes
+```
+
+**File Processing:**
+- Processes ALL TypeScript/JavaScript files: `.tsx`, `.ts`, `.jsx`, `.js`
+- Runs AFTER AI generates code but BEFORE writing to disk
+- Updates file content in memory, then writes once
+
+### Lesson Learned
+
+**❌ DON'T:**
+- Rely on AI to follow syntax rules (it ignores warnings)
+- Edit hardcoded prompts without checking database
+- Use regex alone for syntax fixing (encoding issues)
+- Assume one-pass fixing is enough (cascading errors)
+
+**✅ DO:**
+- Update database prompts via SQL scripts
+- Use literal string matching as fallback after regex
+- Log all fixes for debugging
+- Run multi-pass fixing (up to 10 passes)
+- Test with actual AI generation, not just unit tests
+
+**✅ ALWAYS:**
+- Check if prompt exists in database before editing hardcoded files
+- Use three-layer defense: regex + literal + variant patterns
+- Monitor console logs during code generation
+- Verify fixes in deployed environment
+
+### Testing the Fix
+
+**1. Generate a Component:**
+```
+Generate a Snake game with score tracking
+```
+
+**2. Watch Console for:**
+```
+🔧 [Pass 1] ULTRA-AGGRESSIVE: Found literal "return (;" - replacing ALL occurrences
+🔧 [Pass 1] Replaced N instances of "return (;"
+```
+
+**3. Verify No Syntax Errors:**
+- Component compiles successfully
+- No `SyntaxError: Unexpected token` errors
+- Code runs in browser without errors
+
+**4. If Errors Still Occur:**
+- Check console for which pass detected the error
+- Check if pattern is in literal replacement list
+- Add new pattern if needed (follow three-layer approach)
+
+### Related Files
+
+**Backend:**
+- `server/services/AICodeGenerator.ts:982-1057` - Multi-pass syntax fixer
+- `server/services/PromptBuilder.ts` - Prompt assembly
+- `server/services/PromptManager.ts` - Database prompt fetching
+- `server/agents/CodeGeneratorAgent.ts` - Uses PromptBuilder
+
+**Database:**
+- `prompt_templates` table - Primary prompt source
+- `fix-database-prompt.sql` - SQL script to update prompts
+
+**Git Commits:**
+- `18d2451` - SQL script for database prompt update
+- `feec08b` - Ultra-aggressive syntax fixer implementation
+- `ea17d36` - Initial attempt (hardcoded prompts, didn't work)
+- `7846f2b` - Another hardcoded attempt (also didn't work)
+
