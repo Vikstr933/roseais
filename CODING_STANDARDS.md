@@ -695,6 +695,87 @@ content = content.replace(/(\w+)\(\s*;/g, (match, identifier) => {
 
 **Fixed:** Commit `fe66a27`
 
+### Solution 4: AI Not Returning Valid JSON (2025-11-10)
+
+**Critical Issue Discovered:** AI was not generating complete applications - only 1-4 files instead of all required files.
+
+**Symptoms:**
+```
+[AICodeGenerator] WARNING: AI did not generate src/App.tsx - creating fallback
+[AICodeGenerator] Extracted 1 files from markdown
+```
+
+Generated apps had stub components like:
+```typescript
+// Auto-generated stub
+export function App(props: AppProps) {
+  return <div>This component is under development.</div>
+}
+```
+
+**Root Cause Chain:**
+1. Database prompt didn't specify JSON output format
+2. AI returned markdown or unstructured text instead of JSON
+3. JSON parsing failed → fallback to markdown extraction
+4. Markdown extraction only found 1-4 files
+5. System created stub fallbacks for missing files (App.tsx, etc.)
+6. Generated apps were incomplete and broken
+
+**Investigation:**
+```
+JSON parsing failed, trying markdown extraction
+Extracted 1 files from markdown
+AI did not generate src/App.tsx - creating fallback
+Ensured all required files. Total files: 11 (mostly stubs!)
+```
+
+**The Fix: Explicit JSON Output Format Instructions**
+
+Added to database prompt:
+```
+# 🎯 OUTPUT FORMAT - CRITICAL!
+
+**YOU MUST RESPOND WITH A JSON ARRAY** containing all files.
+
+**Required Format:**
+[
+  {
+    "path": "src/App.tsx",
+    "content": "import React from 'react'\n\nexport default function App() {\n  return <div>Hello</div>;\n}"
+  },
+  {
+    "path": "src/main.tsx",
+    "content": "..."
+  }
+]
+
+**CRITICAL RULES:**
+1. ✅ MUST be a valid JSON array
+2. ✅ Each object MUST have "path" and "content" keys
+3. ✅ File paths MUST start with "src/"
+4. ✅ Include ALL necessary files
+5. ❌ NO markdown formatting around the JSON
+6. ❌ NO explanatory text before or after
+
+**RESPOND WITH THE JSON ARRAY ONLY - NOTHING ELSE!**
+```
+
+**SQL Script:** `fix-database-prompt-output-format.sql`
+
+**Result:**
+- Prompt length: 4208 → 5690 characters
+- AI now returns proper JSON arrays
+- All files are extracted correctly
+- No more stub fallbacks
+
+**How to Verify Fix:**
+1. Generate any component
+2. Check backend logs for: `Successfully parsed N files from JSON`
+3. Should NOT see: `JSON parsing failed, trying markdown extraction`
+4. Should NOT see: `AI did not generate src/App.tsx - creating fallback`
+
+**Fixed:** Commit `0909eaa`
+
 ### Why Regex Alone Failed
 
 **Problem:**
@@ -792,13 +873,15 @@ Generate a Snake game with score tracking
 
 **Database:**
 - `prompt_templates` table - Primary prompt source
-- `fix-database-prompt.sql` - SQL script to update prompts
+- `fix-database-prompt.sql` - SQL script for syntax warnings
+- `fix-database-prompt-output-format.sql` - SQL script for JSON output format
 
 **Git Commits:**
+- `0909eaa` - JSON output format fix (2025-11-10) ⭐ CRITICAL
 - `fe66a27` - Array method syntax error fixes (2025-11-09)
 - `613bee0` - Documentation update for syntax error fixes
 - `feec08b` - Ultra-aggressive syntax fixer for return statements
-- `18d2451` - SQL script for database prompt update
+- `18d2451` - SQL script for database prompt syntax warnings
 - `ea17d36` - Initial attempt (hardcoded prompts, didn't work)
 - `7846f2b` - Another hardcoded attempt (also didn't work)
 
