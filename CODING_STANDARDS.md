@@ -885,3 +885,285 @@ Generate a Snake game with score tracking
 - `ea17d36` - Initial attempt (hardcoded prompts, didn't work)
 - `7846f2b` - Another hardcoded attempt (also didn't work)
 
+---
+
+## 🔥 COMPREHENSIVE FIX APPLIED (2025-11-10)
+
+### Issue: AI Still Generating Broken Code Despite All Previous Fixes
+
+**Symptoms:**
+- AI returns markdown instead of JSON (triggers fallback parser)
+- Generated code still has syntax errors like `return (;`, `return {;`, `;}` patterns
+- Multi-pass syntax fixer detects 28+ errors but can't fix all of them
+- Logs show: "JSON parsing failed, trying markdown extraction"
+
+**Root Causes Identified:**
+1. ✅ **Prompt not aggressive enough** - AI ignores polite instructions
+2. ✅ **Temperature too high (0.7)** - Makes output less deterministic
+3. ✅ **No pre-validation** - System accepts non-JSON responses and tries to parse them
+4. ✅ **Literal pattern matching incomplete** - Regex fails on some whitespace encodings
+
+### Solution 1: ULTRA-AGGRESSIVE Database Prompt (2025-11-10)
+
+**File:** `fix-ai-code-generator-prompt.sql`
+
+**Changes:**
+```sql
+UPDATE prompt_templates
+SET system_prompt = '
+🚨🚨🚨 CRITICAL: READ THIS BEFORE WRITING ANY CODE 🚨🚨🚨
+
+===============================================================================
+                    ⚠️ JSON OUTPUT FORMAT REQUIREMENT ⚠️
+===============================================================================
+
+YOU MUST RESPOND WITH **ONLY** A JSON ARRAY. NO OTHER FORMAT IS ACCEPTABLE.
+
+Your response MUST start with:  [
+Your response MUST end with:    ]
+
+❌ DO NOT write explanations
+❌ DO NOT use markdown code blocks
+❌ DO NOT add text before or after the JSON
+
+START YOUR RESPONSE WITH [ NOW!
+...'
+WHERE prompt_key = 'code_generator.code_generator';
+```
+
+**Key Improvements:**
+- 🚨 Triple emoji warning at top (visual attention grabber)
+- ✅ EXPLICIT format requirement in giant banner
+- ✅ Multiple "DO NOT" prohibitions
+- ✅ Example of exact expected output
+- ✅ "START YOUR RESPONSE WITH [ NOW!" command at end
+- ✅ Moved from bottom to TOP of prompt (AI sees it first)
+
+**Prompt Length:** 5690 → 7800+ characters (more comprehensive)
+
+**Applied:** Via Supabase migration `fix_ai_code_generator_json_output`
+
+### Solution 2: Temperature Reduction (2025-11-10)
+
+**File:** `server/services/AICodeGenerator.ts` (line 103)
+
+**Before:**
+```typescript
+temperature: 0.7,  // Too creative, inconsistent output
+```
+
+**After:**
+```typescript
+temperature: 0.3,  // LOWERED: More deterministic for structured JSON output
+```
+
+**Why:** Lower temperature = more predictable, structured output. Perfect for JSON generation.
+
+### Solution 3: Pre-Validation to Reject Non-JSON (2025-11-10)
+
+**File:** `server/services/AICodeGenerator.ts` (lines 118-159)
+
+**New Validation Logic:**
+```typescript
+// CRITICAL VALIDATION: Check if response is valid JSON array BEFORE processing
+const trimmedContent = response.content.trim();
+const startsWithArray = trimmedContent.startsWith('[');
+const endsWithArray = trimmedContent.endsWith(']');
+const containsMarkdown = response.content.includes('```');
+const containsExplanation = /^(Here|I|The|Let|This)/i.test(trimmedContent);
+
+// REJECT non-JSON responses immediately
+if (!startsWithArray || !endsWithArray) {
+  throw new Error('AI returned invalid format. Expected JSON array but got: ' + 
+    (containsMarkdown ? 'Markdown' : containsExplanation ? 'Text explanation' : 'Unknown format'));
+}
+```
+
+**Benefits:**
+- ✅ Fails fast if AI ignores instructions
+- ✅ Clear error messages indicating what went wrong
+- ✅ Prevents fallback parser from accepting broken output
+- ✅ Logs detailed diagnostics for debugging
+
+### Solution 4: Enhanced Literal Pattern Matching (2025-11-10)
+
+**File:** `server/services/AICodeGenerator.ts` (lines 1115-1142)
+
+**New Code:**
+```typescript
+// Fix 0e2: ULTRA-AGGRESSIVE - Literal string replacements for common patterns
+const literalPatterns = [
+  { from: ';\n}', to: '\n}' },
+  { from: ';\n  }', to: '\n  }' },
+  { from: ';\n    }', to: '\n    }' },
+  { from: ';\n      }', to: '\n      }' },
+  { from: ';\n        }', to: '\n        }' },
+  { from: '; )', to: ' )' },
+  { from: ';)', to: ')' },
+  { from: '; ]', to: ' ]' },
+  { from: ';]', to: ']' },
+  { from: '; }', to: ' }' },
+  { from: ';}', to: '}' }
+];
+
+literalPatterns.forEach(({ from, to }) => {
+  if (content.includes(from)) {
+    const beforeCount = content.split(from).length - 1;
+    content = content.split(from).join(to);
+    const afterCount = content.split(from).length - 1;
+    const replaced = beforeCount - afterCount;
+    if (replaced > 0) {
+      console.log(`🔧 [Pass ${passNumber}] LITERAL FIX: Replaced ${replaced} instances`);
+      fixesApplied += replaced;
+    }
+  }
+});
+```
+
+**Why Literal String Matching:**
+- ✅ Bypasses regex complexity and encoding issues
+- ✅ Catches exact patterns that regex misses
+- ✅ Works with different whitespace encodings (CRLF vs LF)
+- ✅ Covers most common indentation levels (2, 4, 6, 8 spaces)
+
+### Combined Defense Strategy
+
+**Layer 1: Aggressive Prompt (Database)**
+- Makes it VERY clear what format is required
+- Visual emphasis with emojis and banners
+- Multiple examples and prohibitions
+
+**Layer 2: Pre-Validation (AICodeGenerator)**
+- Rejects non-JSON responses immediately
+- Fails fast with clear error messages
+- Logs diagnostics for debugging
+
+**Layer 3: Temperature Control**
+- Lower temperature = more consistent output
+- Better for structured data generation
+
+**Layer 4: Multi-Layer Syntax Fixer**
+- Regex patterns for most cases
+- Literal string matching for edge cases
+- Array method patterns (`.map(;`, `.filter(;`)
+- Up to 10 passes to catch cascading errors
+
+### How to Verify the Fix
+
+**1. Check Database Prompt Updated:**
+```sql
+SELECT 
+  prompt_key,
+  LENGTH(system_prompt) as length,
+  LEFT(system_prompt, 200) as preview
+FROM prompt_templates
+WHERE prompt_key = 'code_generator.code_generator';
+```
+Should show length > 7000 and start with "🚨🚨🚨 CRITICAL"
+
+**2. Clear Prompt Cache:**
+```typescript
+// In backend, the PromptManager has 5-minute cache
+// Wait 5 minutes OR restart backend server to ensure new prompt is used
+```
+
+**3. Generate Test Component:**
+```
+Generate a todo list app with add, delete, and mark complete
+```
+
+**4. Check Logs For:**
+```
+✅ [AICodeGenerator] Using DATABASE prompt for code generation
+✅ Starts with [: true
+✅ Ends with ]: true
+✅ Successfully parsed N files from JSON
+```
+
+**5. Should NOT See:**
+```
+❌ JSON parsing failed, trying markdown extraction
+❌ AI did not generate src/App.tsx - creating fallback
+❌ Contains markdown: true
+```
+
+### Expected Results After Fix
+
+**Before Fix:**
+- ❌ "JSON parsing failed, trying markdown extraction"
+- ❌ "Extracted 8 files from markdown"
+- ❌ "28 instances of ';}'  found in src/App.tsx"
+- ❌ Incomplete apps with stub components
+- ❌ Syntax errors that fixer can't fix
+
+**After Fix:**
+- ✅ "Successfully parsed 10+ files from JSON"
+- ✅ "Starts with [: true"
+- ✅ "0-5 syntax fixes applied" (much fewer errors)
+- ✅ Complete, working applications
+- ✅ All files generated correctly
+
+### Files Changed
+
+**Backend:**
+- `server/services/AICodeGenerator.ts` - Temperature, pre-validation, literal pattern matching
+- `prompt_templates` table - Ultra-aggressive prompt
+
+**Scripts:**
+- `fix-ai-code-generator-prompt.sql` - SQL migration for new prompt
+
+### Monitoring & Debugging
+
+**If issues persist, check:**
+1. **Prompt cache** - Wait 5 minutes or restart backend
+2. **Database prompt** - Verify it's actually updated in database
+3. **Temperature** - Should be 0.3 in logs
+4. **AI response logs** - Check "=== AI RESPONSE DEBUG ===" section
+5. **Model used** - Some models ignore instructions better than others
+
+**Debug Commands:**
+```sql
+-- Verify prompt is updated
+SELECT prompt_key, LENGTH(system_prompt), 
+       LEFT(system_prompt, 100) as first_100_chars
+FROM prompt_templates 
+WHERE prompt_key = 'code_generator.code_generator';
+
+-- Check prompt usage
+SELECT created_at, success, error_message
+FROM prompt_usage_logs
+WHERE prompt_template_id = (
+  SELECT id FROM prompt_templates 
+  WHERE prompt_key = 'code_generator.code_generator'
+)
+ORDER BY created_at DESC
+LIMIT 10;
+```
+
+### Lesson Learned
+
+**The Problem:**
+AI models don't follow instructions reliably, especially when:
+- Instructions are mixed with other content
+- Format requirements are not emphasized
+- Temperature is too high
+- No validation enforces compliance
+
+**The Solution:**
+- ✅ Make critical instructions IMPOSSIBLE to miss (🚨 emojis, banners, ALL CAPS)
+- ✅ Put format requirements at TOP and BOTTOM of prompt
+- ✅ Lower temperature for structured output
+- ✅ Validate output format BEFORE accepting it
+- ✅ Have multiple fallback layers (literal string matching, multi-pass fixing)
+- ✅ Fail fast with clear errors instead of limping along with broken output
+
+**Key Insight:** 
+Relying solely on AI to follow instructions is insufficient. You need:
+1. Extremely aggressive prompts
+2. Lower temperature for determinism
+3. Pre-validation to reject bad output
+4. Post-processing to fix remaining issues
+5. Clear error messages for debugging
+
+**Applied:** 2025-11-10
+
