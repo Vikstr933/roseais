@@ -1020,15 +1020,27 @@ Suggestions to fix:
         });
 
         // Fix 0a2: CRITICAL - Ultra-aggressive literal string replacement for "return (;"
-        // This catches the EXACT pattern that keeps appearing
-        if (content.includes('return (;')) {
-          console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found literal "return (;" - replacing ALL occurrences`);
-          const beforeCount = (content.match(/return \(;/g) || []).length;
-          content = content.replace(/return \(;/g, 'return (');
-          const afterCount = (content.match(/return \(;/g) || []).length;
-          console.log(`🔧 [Pass ${passNumber}] Replaced ${beforeCount - afterCount} instances of "return (;"`);
-          fixesApplied += (beforeCount - afterCount);
-        }
+        // Check for ALL variations: "return (;" "return(;" "return (\n;"
+        const returnParenPatterns = [
+          { pattern: /return \(;/g, name: 'return (;' },
+          { pattern: /return\(;/g, name: 'return(;' },
+          { pattern: /return \(\s*;\s*\n/g, name: 'return (;\n' },
+          { pattern: /return\(\s*;\s*\n/g, name: 'return(;\n' }
+        ];
+        
+        returnParenPatterns.forEach(({ pattern, name }) => {
+          if (pattern.test(content)) {
+            const beforeCount = (content.match(pattern) || []).length;
+            if (beforeCount > 0) {
+              console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found ${beforeCount} instances of "${name}"`);
+              content = content.replace(pattern, 'return (');
+              const afterCount = (content.match(pattern) || []).length;
+              const fixed = beforeCount - afterCount;
+              console.log(`🔧 [Pass ${passNumber}] Replaced ${fixed} instances of "${name}"`);
+              fixesApplied += fixed;
+            }
+          }
+        });
 
         // Fix 0a3: Also try with different whitespace variants
         content = content.replace(/return\s*\(\s*;/g, (match) => {
@@ -1046,14 +1058,27 @@ Suggestions to fix:
         });
 
         // Fix 0b2: CRITICAL - Ultra-aggressive literal string replacement for "return {;"
-        if (content.includes('return {;')) {
-          console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found literal "return {;" - replacing ALL occurrences`);
-          const beforeCount = (content.match(/return \{;/g) || []).length;
-          content = content.replace(/return \{;/g, 'return {');
-          const afterCount = (content.match(/return \{;/g) || []).length;
-          console.log(`🔧 [Pass ${passNumber}] Replaced ${beforeCount - afterCount} instances of "return {;"`);
-          fixesApplied += (beforeCount - afterCount);
-        }
+        // Check for ALL variations: "return {;" "return{;" "return {\n;"
+        const returnBracePatterns = [
+          { pattern: /return \{;/g, name: 'return {;' },
+          { pattern: /return\{;/g, name: 'return{;' },
+          { pattern: /return \{\s*;\s*\n/g, name: 'return {;\n' },
+          { pattern: /return\{\s*;\s*\n/g, name: 'return{;\n' }
+        ];
+        
+        returnBracePatterns.forEach(({ pattern, name }) => {
+          if (pattern.test(content)) {
+            const beforeCount = (content.match(pattern) || []).length;
+            if (beforeCount > 0) {
+              console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found ${beforeCount} instances of "${name}"`);
+              content = content.replace(pattern, 'return {');
+              const afterCount = (content.match(pattern) || []).length;
+              const fixed = beforeCount - afterCount;
+              console.log(`🔧 [Pass ${passNumber}] Replaced ${fixed} instances of "${name}"`);
+              fixesApplied += fixed;
+            }
+          }
+        });
 
         // Fix 0b3: Also try with different whitespace variants
         content = content.replace(/return\s*\{\s*;/g, (match) => {
