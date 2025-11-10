@@ -513,12 +513,30 @@ Requirements:
     // Extract metadata from generated code
     const pluginName = this.extractPluginName(code, params.serviceName);
     const description = this.extractDescription(code, params.prompt);
-    const requiresAuth = code.includes('requiresAuth: true');
-    const authType = code.includes('oauth') ? 'oauth2' :
-                     code.includes('apiKey') ? 'api_key' : undefined;
+    const requiresAuth = code.includes('requiresAuth: true') || 
+                        code.includes('requiresAuth:true') ||
+                        code.match(/requiresAuth\s*:\s*true/i) !== null;
+    const authType = code.includes('oauth') || code.includes('OAuth') ? 'oauth2' :
+                     code.includes('apiKey') || code.includes('api_key') ? 'api_key' : undefined;
 
       // Detect credential requirements from generated code
-      const credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
+      let credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
+      
+      // If requiresAuth is true but no credentials were detected, provide a default
+      if (requiresAuth && Object.keys(credentialsRequired).length === 0) {
+        logger.warn('Plugin requires auth but no credentials detected, adding default field', {
+          serviceName: params.serviceName
+        });
+        credentialsRequired = {
+          apiKey: {
+            label: `${params.serviceName.charAt(0).toUpperCase() + params.serviceName.slice(1)} API Key`,
+            type: 'password',
+            required: true,
+            description: `API key or access token for ${params.serviceName}. Check your ${params.serviceName} account settings or documentation.`,
+            placeholder: 'Enter your API key or token'
+          }
+        };
+      }
 
       // Log usage metrics
       const responseTime = Date.now() - startTime;
@@ -634,12 +652,30 @@ Requirements:
     // Extract metadata from generated code
     const pluginName = this.extractPluginName(code, params.serviceName);
     const description = this.extractDescription(code, params.prompt);
-    const requiresAuth = code.includes('requiresAuth: true');
-    const authType = code.includes('oauth') ? 'oauth2' :
-                     code.includes('apiKey') ? 'api_key' : undefined;
+    const requiresAuth = code.includes('requiresAuth: true') || 
+                        code.includes('requiresAuth:true') ||
+                        code.match(/requiresAuth\s*:\s*true/i) !== null;
+    const authType = code.includes('oauth') || code.includes('OAuth') ? 'oauth2' :
+                     code.includes('apiKey') || code.includes('api_key') ? 'api_key' : undefined;
 
     // Detect credential requirements from generated code
-    const credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
+    let credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
+    
+    // If requiresAuth is true but no credentials were detected, provide a default
+    if (requiresAuth && Object.keys(credentialsRequired).length === 0) {
+      logger.warn('Plugin requires auth but no credentials detected, adding default field', {
+        serviceName: params.serviceName
+      });
+      credentialsRequired = {
+        apiKey: {
+          label: `${params.serviceName.charAt(0).toUpperCase() + params.serviceName.slice(1)} API Key`,
+          type: 'password',
+          required: true,
+          description: `API key or access token for ${params.serviceName}. Check your ${params.serviceName} account settings or documentation.`,
+          placeholder: 'Enter your API key or token'
+        }
+      };
+    }
 
     return {
       code,
@@ -821,8 +857,11 @@ export class {{PLUGIN_NAME}}Plugin extends BaseProductivityPlugin {
     const lowerCode = code.toLowerCase();
     const serviceNameCapitalized = serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
 
-    // Detect webhook URLs
-    if (lowerCode.includes('webhook') || code.match(/webhook\s*url/i)) {
+    // Detect webhook URLs (more comprehensive patterns)
+    if (lowerCode.includes('webhook') || 
+        code.match(/webhook\s*url/i) || 
+        code.match(/webhookUrl/i) ||
+        code.match(/webhook_url/i)) {
       requirements.webhookUrl = {
         label: `${serviceNameCapitalized} Webhook URL`,
         type: 'url',
@@ -832,8 +871,14 @@ export class {{PLUGIN_NAME}}Plugin extends BaseProductivityPlugin {
       };
     }
 
-    // Detect API keys
-    if (lowerCode.includes('apikey') || lowerCode.includes('api_key') || code.match(/api\s*key/i)) {
+    // Detect API keys (more comprehensive patterns)
+    if (lowerCode.includes('apikey') || 
+        lowerCode.includes('api_key') || 
+        code.match(/api\s*key/i) ||
+        code.match(/apiKey/i) ||
+        code.match(/apikey/i) ||
+        code.match(/getCredential\(['"]api[_-]?key['"]/i) ||
+        code.match(/getCredential\(['"]apiKey['"]/i)) {
       requirements.apiKey = {
         label: 'API Key',
         type: 'password',

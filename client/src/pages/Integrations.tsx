@@ -346,23 +346,77 @@ export default function Integrations() {
 
       console.log(`Connecting ${pluginId}...`);
 
-      // Check if this is a user-generated plugin
+      // Find the plugin
       const plugin = availablePlugins.find(p => p.id === pluginId);
-      if (plugin?.isUserGenerated) {
-        console.log('User-generated plugin detected, showing credential dialog');
-        setCredentialPluginId(pluginId);
-        setCredentialPluginName(plugin.name);
-        setCredentialsRequired(plugin.credentialsRequired || {});
-        setCredentialValues({});
-        setCredentialDialogOpen(true);
+      if (!plugin) {
+        throw new Error(`Plugin ${pluginId} not found`);
+      }
 
-        // Remove from connecting state since we're showing a dialog
-        setConnecting(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(pluginId);
-          return newSet;
+      // Check if this is a user-generated plugin OR requires auth
+      if (plugin.isUserGenerated || plugin.requiresAuth) {
+        console.log('Plugin requires authentication:', {
+          isUserGenerated: plugin.isUserGenerated,
+          requiresAuth: plugin.requiresAuth,
+          authType: plugin.authType,
+          credentialsRequired: plugin.credentialsRequired
         });
-        return;
+
+        // Handle OAuth flow for user-generated plugins
+        if (plugin.isUserGenerated && plugin.authType === 'oauth') {
+          console.log('OAuth flow for user-generated plugin');
+          // Try to initiate OAuth flow
+          try {
+            const response = await apiFetch(`/api/user-plugins/${pluginId}/auth/start`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+              }
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.authUrl) {
+                window.location.href = data.authUrl;
+                return;
+              }
+            }
+          } catch (oauthError) {
+            console.warn('OAuth flow not available, falling back to credential dialog:', oauthError);
+            // Fall through to credential dialog
+          }
+        }
+
+        // Show credential dialog for API key or custom auth
+        // Also show if credentialsRequired is empty but auth is required (user needs to provide credentials)
+        const hasCredentialsRequired = plugin.credentialsRequired && Object.keys(plugin.credentialsRequired).length > 0;
+        
+        if (hasCredentialsRequired || (plugin.requiresAuth && !plugin.authType)) {
+          console.log('Showing credential dialog');
+          setCredentialPluginId(pluginId);
+          setCredentialPluginName(plugin.name);
+          setCredentialsRequired(plugin.credentialsRequired || {
+            // If no credentialsRequired defined but auth is needed, create a default field
+            apiKey: {
+              label: 'API Key',
+              type: 'password',
+              required: true,
+              description: 'Enter your API key or access token'
+            }
+          });
+          setCredentialValues({});
+          setCredentialDialogOpen(true);
+
+          // Remove from connecting state since we're showing a dialog
+          setConnecting(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(pluginId);
+            return newSet;
+          });
+          return;
+        } else if (plugin.requiresAuth && plugin.authType === 'oauth') {
+          // OAuth flow should have been handled above, but if we get here, show error
+          throw new Error('OAuth authentication is required but not configured for this plugin');
+        }
       }
 
       // For OAuth plugins, initiate OAuth flow
