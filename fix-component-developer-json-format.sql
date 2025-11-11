@@ -26,7 +26,7 @@ START YOUR RESPONSE WITH [ NOW!
 Each file must be a JSON object with "path" and "content" keys:
 {
   "path": "src/App.tsx",
-  "content": "import React from 'react';\\n..."
+  "content": "import React from ''react'';\\n..."
 }
 
 ===============================================================================
