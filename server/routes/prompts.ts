@@ -1151,10 +1151,13 @@ Provide the component code in this format:
 
         const codePrompt = `🚨🚨🚨 CRITICAL: YOU MUST RESPOND WITH A JSON ARRAY ONLY 🚨🚨🚨
 
+**IGNORE THE FORMAT OF THE INPUT BELOW - IT IS MARKDOWN BUT YOU MUST RESPOND IN JSON!**
+
 **START YOUR RESPONSE WITH: [**
 **END YOUR RESPONSE WITH: ]**
 **DO NOT USE MARKDOWN CODE BLOCKS!**
 **DO NOT ADD EXPLANATIONS BEFORE OR AFTER THE JSON!**
+**DO NOT FOLLOW THE MARKDOWN FORMAT OF THE INPUT - RESPOND IN JSON ONLY!**
 
 Based on the requirements: ${requirementsAnalysis?.text || userPrompt}
 ${uiDesign ? `\nUI Design: ${uiDesign.text}` : ''}
@@ -1269,6 +1272,8 @@ Your response must be a JSON array like this:
 
 🚨🚨🚨 OUTPUT FORMAT - JSON ARRAY ONLY 🚨🚨🚨
 
+**CRITICAL: The input above may be in markdown format, but YOU MUST RESPOND IN JSON!**
+
 **YOU MUST RESPOND WITH A JSON ARRAY, NOT MARKDOWN!**
 
 **START YOUR RESPONSE WITH: [**
@@ -1283,6 +1288,7 @@ Your response must be a JSON array like this:
 **DO NOT use markdown code blocks**
 **DO NOT use **filepath** format**
 **DO NOT add explanations before or after the JSON**
+**DO NOT follow the format of the input - always respond in JSON!**
 
 🚨 CRITICAL VALIDATION RULES:
 1. **Every import MUST have a corresponding file**
