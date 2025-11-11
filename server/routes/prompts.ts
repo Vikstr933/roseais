@@ -1149,7 +1149,14 @@ Provide the component code in this format:
           timestamp: Date.now(),
         });
 
-        const codePrompt = `Based on the requirements: ${requirementsAnalysis?.text || userPrompt}
+        const codePrompt = `🚨🚨🚨 CRITICAL: YOU MUST RESPOND WITH A JSON ARRAY ONLY 🚨🚨🚨
+
+**START YOUR RESPONSE WITH: [**
+**END YOUR RESPONSE WITH: ]**
+**DO NOT USE MARKDOWN CODE BLOCKS!**
+**DO NOT ADD EXPLANATIONS BEFORE OR AFTER THE JSON!**
+
+Based on the requirements: ${requirementsAnalysis?.text || userPrompt}
 ${uiDesign ? `\nUI Design: ${uiDesign.text}` : ''}
 
 ${existingProjectFiles.length > 0 ? `
@@ -1172,6 +1179,8 @@ ${formatKnowledgeContext(knowledgeContext)}
 
 🎯 CRITICAL: Generate a COMPLETE, PRODUCTION-READY Vite + React + TypeScript application.
 
+**REMEMBER: Your response MUST be a JSON array starting with [ and ending with ]. Each file must be a JSON object with "path" and "content" keys.**
+
 📁 REQUIRED FILE STRUCTURE (you MUST include ALL of these):
 
 1. **index.html** at root level - The Vite entry point
@@ -1181,39 +1190,38 @@ ${formatKnowledgeContext(knowledgeContext)}
 5. **src/App.tsx** - Main application component
 6. **src/index.css** - Global styles
 
-🚨 CRITICAL: You MUST start your response with index.html like this:
+🚨🚨🚨 CRITICAL OUTPUT FORMAT - YOU MUST USE JSON ARRAY 🚨🚨🚨
 
-**index.html**
-\`\`\`html
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Your App Title</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-\`\`\`
+**YOUR RESPONSE MUST BE A JSON ARRAY STARTING WITH [ AND ENDING WITH ]**
 
-Then include:
+**DO NOT USE MARKDOWN CODE BLOCKS!**
 
-**src/package.json**
-- Include ALL necessary dependencies (react, react-dom, typescript, vite, @types/react, @types/react-dom, @vitejs/plugin-react)
-- Add any additional libraries needed for the specific app
+**CORRECT FORMAT:**
+```json
+[
+  {
+    "path": "index.html",
+    "content": "<!DOCTYPE html>\\n<html lang=\\"en\\">\\n  <head>\\n    <meta charset=\\"UTF-8\\" />\\n    <link rel=\\"icon\\" type=\\"image/svg+xml\\" href=\\"/vite.svg\\" />\\n    <meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\" />\\n    <title>Todo List App</title>\\n  </head>\\n  <body>\\n    <div id=\\"root\\"></div>\\n    <script type=\\"module\\" src=\\"/src/main.tsx\\"></script>\\n  </body>\\n</html>"
+  },
+  {
+    "path": "src/package.json",
+    "content": "{...}"
+  },
+  {
+    "path": "src/App.tsx",
+    "content": "import React from 'react';\\n..."
+  }
+]
+```
 
-**src/tsconfig.json**
-- Standard React + TypeScript configuration for Vite
+**REQUIRED FILES (include ALL of these as JSON objects):**
 
-**src/main.tsx** - React entry point that renders App
-
-**src/App.tsx** - Main application component with full logic
-**src/main.tsx** - Entry point (React 18 createRoot)
-**src/index.css** - Complete styling (use Tailwind-style utility classes or CSS)
+1. **index.html** - Vite entry point
+2. **src/package.json** - Dependencies (react, react-dom, typescript, vite, @types/react, @types/react-dom, @vitejs/plugin-react)
+3. **src/tsconfig.json** - TypeScript configuration
+4. **src/main.tsx** - React 18 entry point with createRoot
+5. **src/App.tsx** - Main application component with FULL functionality
+6. **src/index.css** - Complete styling
 
 📋 REQUIREMENTS FOR EACH FILE:
 1. **App.tsx**: Must contain ALL business logic, state management, effects, and UI
@@ -1260,11 +1268,24 @@ Then include:
 - [ ] Loading and error states are shown to users
 - [ ] Data persists appropriately (localStorage, state, etc.)
 
-Format each file as:
-**filepath**
-\`\`\`language
-complete code here
-\`\`\`
+🚨🚨🚨 OUTPUT FORMAT - JSON ARRAY ONLY 🚨🚨🚨
+
+**YOU MUST RESPOND WITH A JSON ARRAY, NOT MARKDOWN!**
+
+**START YOUR RESPONSE WITH: [**
+**END YOUR RESPONSE WITH: ]**
+
+**Each file must be a JSON object:**
+```json
+{
+  "path": "src/App.tsx",
+  "content": "import React from 'react';\\n\\nexport default function App() {\\n  return <div>Hello</div>;\\n}"
+}
+```
+
+**DO NOT use markdown code blocks (```)**
+**DO NOT use **filepath** format**
+**DO NOT add explanations before or after the JSON**
 
 🚨 CRITICAL VALIDATION RULES:
 1. **Every import MUST have a corresponding file**
