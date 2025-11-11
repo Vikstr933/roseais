@@ -548,6 +548,7 @@ async function generateWithProgressUpdates(
     workflowId: string;
     agentId: string;
     messages: string[];
+    skipAICodeGenerator?: boolean; // If true, use direct API call instead of AICodeGenerator
   }
 ): Promise<AIResponse> {
   const { startProgress, endProgress, workflowId, agentId, messages } = options;
@@ -582,7 +583,7 @@ async function generateWithProgressUpdates(
 
   try {
     // Call the actual AI generation
-    const result = await generateWithAI(prompt, systemPrompt, model);
+    const result = await generateWithAI(prompt, systemPrompt, model, options.skipAICodeGenerator);
 
     // Clear the interval
     if (progressInterval) {
@@ -613,11 +614,34 @@ async function generateWithProgressUpdates(
 async function generateWithAI(
   prompt: string,
   systemPrompt: string,
-  model: string
+  model: string,
+  skipAICodeGenerator: boolean = false // If true, use direct API call (for architect, etc.)
 ): Promise<AIResponse> {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY is not set');
+    }
+
+    // Skip AICodeGenerator for non-code-generating agents (like architect)
+    if (skipAICodeGenerator) {
+      console.log('📝 [generateWithAI] Using direct API call (skipAICodeGenerator=true)');
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      
+      const response = await anthropic.messages.create({
+        model: model as any,
+        max_tokens: 8000,
+        temperature: 0.7,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+      
+      return {
+        type: 'text',
+        text: text,
+      };
     }
 
     if (await isComponentRequest(prompt)) {
@@ -967,6 +991,7 @@ Keep your response detailed but concise.`;
           console.log('🏗️ Component Architect: Planning architecture');
 
           // Wrap architect with progress updates
+          // Architect returns markdown analysis, NOT JSON code, so skip AICodeGenerator
           requirementsAnalysis = await generateWithProgressUpdates(
             requirementsPrompt,
             analysisAgent.systemPrompt,
@@ -976,6 +1001,7 @@ Keep your response detailed but concise.`;
               endProgress: 28,
               workflowId,
               agentId: 'component-architect',
+              skipAICodeGenerator: true, // Architect returns markdown, not JSON
               messages: [
                 'Analyzing user requirements...',
                 'Identifying core features...',
