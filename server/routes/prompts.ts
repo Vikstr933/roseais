@@ -1197,7 +1197,7 @@ ${formatKnowledgeContext(knowledgeContext)}
 **DO NOT USE MARKDOWN CODE BLOCKS!**
 
 **CORRECT FORMAT:**
-```json
+Your response must be a JSON array like this:
 [
   {
     "path": "index.html",
@@ -1212,7 +1212,6 @@ ${formatKnowledgeContext(knowledgeContext)}
     "content": "import React from 'react';\\n..."
   }
 ]
-```
 
 **REQUIRED FILES (include ALL of these as JSON objects):**
 
@@ -1276,14 +1275,12 @@ ${formatKnowledgeContext(knowledgeContext)}
 **END YOUR RESPONSE WITH: ]**
 
 **Each file must be a JSON object:**
-```json
 {
   "path": "src/App.tsx",
   "content": "import React from 'react';\\n\\nexport default function App() {\\n  return <div>Hello</div>;\\n}"
 }
-```
 
-**DO NOT use markdown code blocks (```)**
+**DO NOT use markdown code blocks**
 **DO NOT use **filepath** format**
 **DO NOT add explanations before or after the JSON**
 
