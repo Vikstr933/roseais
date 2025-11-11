@@ -116,7 +116,21 @@ export class AICodeGenerator {
       }
 
       // CRITICAL VALIDATION: Check if response is valid JSON array BEFORE processing
-      const trimmedContent = response.content.trim();
+      let trimmedContent = response.content.trim();
+      
+      // Strip markdown code blocks if present (AI sometimes wraps JSON in ```json ... ```)
+      if (trimmedContent.startsWith('```')) {
+        console.log('🔧 [AICodeGenerator] Detected markdown code block wrapper, stripping...');
+        // Remove opening ```json or ```
+        trimmedContent = trimmedContent.replace(/^```(?:json)?\s*\n?/i, '');
+        // Remove closing ```
+        trimmedContent = trimmedContent.replace(/\n?```\s*$/i, '');
+        trimmedContent = trimmedContent.trim();
+        console.log('🔧 [AICodeGenerator] After stripping markdown, starts with:', trimmedContent.substring(0, 50));
+        // Update response.content to use cleaned version
+        response.content = trimmedContent;
+      }
+      
       const startsWithArray = trimmedContent.startsWith('[');
       const endsWithArray = trimmedContent.endsWith(']');
       const containsMarkdown = response.content.includes('```');
@@ -135,7 +149,7 @@ export class AICodeGenerator {
       console.error(response.content.substring(Math.max(0, response.content.length - 1000)));
       console.error('=== AI RESPONSE DEBUG END ===');
 
-      // REJECT non-JSON responses immediately
+      // REJECT non-JSON responses immediately (after stripping markdown)
       if (!startsWithArray || !endsWithArray) {
         const errorMsg = `AI did not return valid JSON array format. Response started with: "${trimmedContent.substring(0, 50)}"`;
         console.error(`❌ ${errorMsg}`);
@@ -158,7 +172,7 @@ export class AICodeGenerator {
         });
       }
 
-      // Parse the multi-file JSON response
+      // Parse the multi-file JSON response (use cleaned content)
       const parseResult = this.parseMultiFileResponse(response.content);
 
       if (parseResult.files.length === 0) {
