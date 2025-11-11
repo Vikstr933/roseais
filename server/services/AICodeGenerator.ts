@@ -96,10 +96,11 @@ export class AICodeGenerator {
       }
 
       // Use multi-model AI service
+      // Increase maxTokens for complex apps that generate many files
       const aiRequest: AIRequest = {
         prompt: userPrompt,
         systemPrompt,
-        maxTokens: 8000,
+        maxTokens: 16000, // INCREASED: Was 8000, now 16000 to handle complex apps with many files
         temperature: 0.3, // LOWERED: More deterministic for structured JSON output
         useCase: 'code_generation',
         priority: request.modelPreference || 'quality'
@@ -132,7 +133,7 @@ export class AICodeGenerator {
       }
       
       const startsWithArray = trimmedContent.startsWith('[');
-      const endsWithArray = trimmedContent.endsWith(']');
+      let endsWithArray = trimmedContent.trimEnd().endsWith(']');
       const containsMarkdown = response.content.includes('```');
       const containsExplanation = /^(Here|I|The|Let|This)/i.test(trimmedContent);
 
@@ -149,7 +150,41 @@ export class AICodeGenerator {
       console.error(response.content.substring(Math.max(0, response.content.length - 1000)));
       console.error('=== AI RESPONSE DEBUG END ===');
 
-      // REJECT non-JSON responses immediately (after stripping markdown)
+      // Handle truncated JSON responses (starts with [ but doesn't end with ])
+      if (startsWithArray && !endsWithArray) {
+        console.warn('⚠️ [AICodeGenerator] Response appears truncated (starts with [ but missing closing ])');
+        console.warn('🔧 [AICodeGenerator] Attempting to fix by adding closing bracket...');
+        
+        // Try to find the last complete JSON object and add closing bracket
+        // Count open brackets vs close brackets
+        const openBrackets = (trimmedContent.match(/\[/g) || []).length;
+        const closeBrackets = (trimmedContent.match(/\]/g) || []).length;
+        const missingBrackets = openBrackets - closeBrackets;
+        
+        if (missingBrackets > 0) {
+          console.log(`🔧 [AICodeGenerator] Missing ${missingBrackets} closing bracket(s), adding...`);
+          // Remove any trailing incomplete content and add closing bracket
+          // Find the last complete JSON object by looking for the last }
+          const lastCompleteObject = trimmedContent.lastIndexOf('}');
+          if (lastCompleteObject > 0) {
+            // Keep everything up to and including the last complete object, then add closing bracket
+            trimmedContent = trimmedContent.substring(0, lastCompleteObject + 1);
+            // Add missing closing brackets
+            trimmedContent += '\n' + ']'.repeat(missingBrackets);
+            response.content = trimmedContent;
+            endsWithArray = true;
+            console.log('✅ [AICodeGenerator] Fixed truncated JSON by adding closing bracket(s)');
+          } else {
+            // If we can't find a complete object, just add the closing bracket
+            trimmedContent = trimmedContent.trimEnd() + '\n]';
+            response.content = trimmedContent;
+            endsWithArray = true;
+            console.log('✅ [AICodeGenerator] Added closing bracket to incomplete JSON');
+          }
+        }
+      }
+
+      // REJECT non-JSON responses immediately (after stripping markdown and fixing truncation)
       if (!startsWithArray || !endsWithArray) {
         const errorMsg = `AI did not return valid JSON array format. Response started with: "${trimmedContent.substring(0, 50)}"`;
         console.error(`❌ ${errorMsg}`);
@@ -158,7 +193,8 @@ export class AICodeGenerator {
           endsWithArray,
           containsMarkdown,
           containsExplanation,
-          preview: trimmedContent.substring(0, 200)
+          preview: trimmedContent.substring(0, 200),
+          responseLength: response.content.length
         });
         throw new Error('AI returned invalid format. Expected JSON array but got: ' + (containsMarkdown ? 'Markdown' : containsExplanation ? 'Text explanation' : 'Unknown format'));
       }
