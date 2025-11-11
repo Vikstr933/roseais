@@ -1310,6 +1310,14 @@ Your response must be a JSON array like this:
 
 REMEMBER: This app must work immediately when deployed to WebContainer. No missing files, no incomplete features, no broken imports!`;
 
+        // Debug: Log the system prompt being used
+        console.log('🔍 [ORCHESTRATOR] Component Developer System Prompt Preview:', {
+          length: codeAgent.systemPrompt?.length || 0,
+          startsWith: codeAgent.systemPrompt?.substring(0, 200) || 'EMPTY',
+          containsJSONRequirement: codeAgent.systemPrompt?.includes('JSON ARRAY') || false,
+          containsMarkdownProhibition: codeAgent.systemPrompt?.includes('DO NOT use markdown') || false
+        });
+
         // Wrap AI generation with real-time progress updates
         const generatedCode = await generateWithProgressUpdates(
           codePrompt,
