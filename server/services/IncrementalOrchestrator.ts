@@ -124,19 +124,26 @@ export class IncrementalOrchestrator {
       let validation: ValidationResult;
 
       do {
-        phaseResult = await this.generatePhase(
-          phase,
-          userPrompt,
-          knowledgeContext,
-          existingPhaseFiles,
-          plan
-        );
+        // Only regenerate on the first attempt
+        if (fixAttempts === 0) {
+          phaseResult = await this.generatePhase(
+            phase,
+            userPrompt,
+            knowledgeContext,
+            existingPhaseFiles,
+            plan
+          );
+        }
 
-        // Validate phase
+        // Validate phase (or re-validate after fixing)
         validation = await this.validatePhase(phaseResult.files, existingPhaseFiles);
 
         if (!validation.valid && fixAttempts < this.maxFixAttempts) {
-          this.logger.warn(`Phase ${phase.phase} validation failed, attempting fix (attempt ${fixAttempts + 1}/${this.maxFixAttempts})`);
+          this.logger.warn(`Phase ${phase.phase} validation failed (attempt ${fixAttempts + 1}/${this.maxFixAttempts})`, {
+            errors: validation.errors.map(e => `${e.file}: ${e.message}`),
+            errorTypes: validation.errors.map(e => e.type),
+            errorCount: validation.errors.length
+          });
           
           if (progressCallback) {
             progressCallback(phase.phase, (i / plan.phases.length) * 100, `Fixing errors in ${phase.phase}...`);
@@ -152,8 +159,16 @@ export class IncrementalOrchestrator {
 
           phaseResult.files = fixedFiles;
           fixAttempts++;
+
+          // Re-validate fixed files immediately (don't regenerate)
+          // The loop will continue if validation still fails
         } else {
           // Either valid or max attempts reached
+          if (!validation.valid) {
+            this.logger.error(`Phase ${phase.phase} failed after ${fixAttempts} fix attempts, continuing with errors`, {
+              remainingErrors: validation.errors.map(e => `${e.file}: ${e.message}`)
+            });
+          }
           phaseResult.errors = validation.errors.map(e => e.message);
           phaseResult.warnings = validation.warnings;
           break;
@@ -353,24 +368,26 @@ OUTPUT FORMAT (JSON ARRAY):
 
     // Check each file
     for (const file of files) {
-      // 1. Syntax validation (basic)
+      // 1. Syntax validation (basic) - CRITICAL, must fix
       const syntaxErrors = this.validateSyntax(file);
       errors.push(...syntaxErrors);
 
-      // 2. Import resolution
+      // 2. Import resolution - WARNING only (may be resolved in later phases)
       const importErrors = this.validateImports(file, fileMap);
-      errors.push(...importErrors);
+      // Convert import errors to warnings - they might be resolved in later phases
+      warnings.push(...importErrors.map(e => `Import warning: ${e.message}`));
 
-      // 3. JSON validity (for config files)
+      // 3. JSON validity (for config files) - CRITICAL, must fix
       if (file.path.endsWith('.json')) {
         const jsonErrors = this.validateJSON(file);
         errors.push(...jsonErrors);
       }
 
-      // 4. TypeScript/React specific checks
+      // 4. TypeScript/React specific checks - WARNING only (may be false positives)
       if (file.path.endsWith('.tsx') || file.path.endsWith('.ts')) {
         const tsErrors = this.validateTypeScript(file, fileMap);
-        errors.push(...tsErrors);
+        // Convert TS errors to warnings - basic checks may have false positives
+        warnings.push(...tsErrors.map(e => `TypeScript warning: ${e.message}`));
       }
     }
 
@@ -535,35 +552,60 @@ OUTPUT FORMAT (JSON ARRAY):
     existingFiles: { path: string; content: string }[],
     phase: GenerationPhase
   ): Promise<{ path: string; content: string }[]> {
+    // Only fix syntax and JSON errors (critical errors)
+    // Import errors are warnings and will be resolved in later phases
+    const criticalErrors = errors.filter(e => e.type === 'syntax' || e.type === 'other');
+    
+    if (criticalErrors.length === 0) {
+      this.logger.info(`No critical errors to fix in phase ${phase.phase}, only warnings`);
+      return files; // Return files as-is if only warnings
+    }
+
     const fixedFiles = files.map(file => {
       let content = file.content;
+      let wasFixed = false;
 
-      // Fix syntax errors
-      const fileErrors = errors.filter(e => e.file === file.path && e.type === 'syntax');
+      // Fix syntax errors for this file
+      const fileErrors = criticalErrors.filter(e => e.file === file.path);
       
       for (const error of fileErrors) {
-        if (error.message.includes(';})')) {
+        if (error.message.includes(';})') || error.message.includes('Semicolon before closing brace')) {
           // Fix ;} pattern
           content = content.replace(/;\s*\n\s*}/g, '\n}');
           content = content.replace(/;\s*}/g, '}');
+          wasFixed = true;
         }
-        if (error.message.includes(';))')) {
+        if (error.message.includes(';))') || error.message.includes('Semicolon before closing parenthesis')) {
           // Fix ;) pattern
           content = content.replace(/;\s*\n\s*\)/g, '\n)');
           content = content.replace(/;\s*\)/g, ')');
+          wasFixed = true;
         }
-        if (error.message.includes('return (;')) {
+        if (error.message.includes('return (;') || error.message.includes('Incomplete return statement')) {
           // Fix return (; pattern
           content = content.replace(/return\s*\(;/g, 'return (');
+          wasFixed = true;
         }
         if (error.message.includes('return {;')) {
           // Fix return {; pattern
           content = content.replace(/return\s*{;/g, 'return {');
+          wasFixed = true;
         }
         if (error.message.includes('return [;')) {
           // Fix return [; pattern
           content = content.replace(/return\s*\[;/g, 'return [');
+          wasFixed = true;
         }
+        if (error.message.includes('Invalid JSON')) {
+          // Try to fix common JSON issues
+          // Remove trailing commas
+          content = content.replace(/,(\s*[}\]])/g, '$1');
+          wasFixed = true;
+        }
+      }
+
+      if (wasFixed) {
+        this.logger.info(`Fixed errors in ${file.path}`);
       }
 
       return {
