@@ -1,6 +1,6 @@
 # 🔄 Code Generation System Flow
 
-**Last Updated:** November 11, 2025  
+**Last Updated:** November 12, 2025  
 **Purpose:** Visual documentation of the complete code generation flow
 
 ---
@@ -46,9 +46,13 @@ flowchart TD
     
     AIResponse --> PreValidate{Pre-Validation}
     PreValidate -->|Has Markdown Wrapper| StripMarkdown[Strip ```json ... ```]
-    PreValidate -->|No Wrapper| CheckFormat
+    PreValidate -->|No Wrapper| CheckTruncation
     
-    StripMarkdown --> CheckFormat{Format Check}
+    StripMarkdown --> CheckTruncation{Truncated?}
+    CheckTruncation -->|Starts with [ but no ]| FixTruncation[Add Missing ] Brackets]
+    CheckTruncation -->|Complete| CheckFormat
+    
+    FixTruncation --> CheckFormat{Format Check}
     CheckFormat -->|Starts with [| ValidJSON[Valid JSON Array]
     CheckFormat -->|Starts with #| RejectMarkdown[Reject: Markdown]
     CheckFormat -->|Other| RejectOther[Reject: Unknown Format]
@@ -234,10 +238,10 @@ if (request.orchestrated) {
 const aiRequest: AIRequest = {
   prompt: userPrompt,
   systemPrompt: systemPrompt,
-  maxTokens: 8000,
+  maxTokens: 16000,  // ← INCREASED: Was 8000, now 16000 to handle complex apps with many files
   temperature: 0.3,  // ← Lowered for deterministic JSON output
   useCase: 'code_generation',
-  preference: 'quality'
+  priority: 'quality'
 }
 
 // Selects best model (usually Claude Sonnet 4.5)
@@ -255,7 +259,7 @@ const response = await anthropic.messages.create({...})
 
 **7.1 Pre-Validation:**
 ```typescript
-// File: server/services/AICodeGenerator.ts:118-132
+// File: server/services/AICodeGenerator.ts:119-185
 
 let trimmedContent = response.content.trim()
 
@@ -268,7 +272,26 @@ if (trimmedContent.startsWith('```')) {
 }
 
 const startsWithArray = trimmedContent.startsWith('[')
-const endsWithArray = trimmedContent.endsWith(']')
+let endsWithArray = trimmedContent.trimEnd().endsWith(']')
+
+// Handle truncated JSON responses (starts with [ but doesn't end with ])
+if (startsWithArray && !endsWithArray) {
+  // Count open brackets vs close brackets
+  const openBrackets = (trimmedContent.match(/\[/g) || []).length
+  const closeBrackets = (trimmedContent.match(/\]/g) || []).length
+  const missingBrackets = openBrackets - closeBrackets
+  
+  if (missingBrackets > 0) {
+    // Find last complete JSON object and add closing bracket(s)
+    const lastCompleteObject = trimmedContent.lastIndexOf('}')
+    if (lastCompleteObject > 0) {
+      trimmedContent = trimmedContent.substring(0, lastCompleteObject + 1)
+      trimmedContent += '\n' + ']'.repeat(missingBrackets)
+      response.content = trimmedContent
+      endsWithArray = true
+    }
+  }
+}
 
 if (!startsWithArray || !endsWithArray) {
   throw new Error('AI returned invalid format...')
@@ -454,7 +477,12 @@ if (startsWithArray && endsWithArray) {
 ### **Layer 4: Temperature Control**
 - Lower temperature (0.3) for deterministic output
 
-### **Layer 5: Multi-Pass Syntax Fixer**
+### **Layer 5: Truncation Handling**
+- Detects truncated JSON (starts with `[` but missing `]`)
+- Automatically adds missing closing brackets
+- Ensures valid JSON even if AI response is cut off
+
+### **Layer 6: Multi-Pass Syntax Fixer**
 - Fixes common syntax errors post-generation
 - Up to 10 passes
 
@@ -500,6 +528,9 @@ if (startsWithArray && endsWithArray) {
 ```
 ❌ AI returned invalid format. Expected JSON array but got: Markdown
 → Solution: Strip markdown wrappers (implemented)
+
+❌ Response appears truncated (starts with [ but missing closing ])
+→ Solution: Automatically add missing closing brackets (implemented)
 ```
 
 ### **Parsing Errors:**
@@ -650,7 +681,9 @@ if (startsWithArray && endsWithArray) {
                          │    wrappers if present   │
                          │ 2. Check starts with [   │
                          │ 3. Check ends with ]     │
-                         │ 4. Reject if invalid     │
+                         │ 4. If truncated, add     │
+                         │    missing ] brackets    │
+                         │ 5. Reject if invalid     │
                          └──────────────────────────┘
                                        │
                                        ▼
@@ -769,8 +802,10 @@ Does response start with ```?
 │
 └─ NO  → Continue validation
 
-Does cleaned response start with [ and end with ]?
-├─ YES → Valid JSON → Parse
+Does cleaned response start with [?
+├─ YES → Check if ends with ]
+│        ├─ YES → Valid JSON → Parse
+│        └─ NO  → Truncated → Add missing ] brackets → Parse
 │
 └─ NO  → Reject with error
 ```
@@ -814,9 +849,12 @@ User Input
     │   ├─→ AICodeGenerator.generateComponent()
     │   │   ├─→ MultiModelAIService
     │   │   │   └─→ Anthropic API (Claude Sonnet 4.5)
+    │   │   │   └─→ maxTokens: 16000 (increased from 8000)
     │   │   │
     │   │   ├─→ Pre-Validation
     │   │   │   ├─→ Strip markdown wrappers
+    │   │   │   ├─→ Detect truncation (starts with [ but no ])
+    │   │   │   ├─→ Fix truncation (add missing ] brackets)
     │   │   │   └─→ Validate JSON format
     │   │   │
     │   │   ├─→ Parse JSON
@@ -843,5 +881,5 @@ User Input
 ---
 
 **Status:** ✅ **COMPLETE**  
-**Last Updated:** November 11, 2025
+**Last Updated:** November 12, 2025
 

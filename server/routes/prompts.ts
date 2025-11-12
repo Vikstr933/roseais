@@ -14,8 +14,12 @@ import fs from 'fs/promises';
 import { AICodeGenerator } from '../services/AICodeGenerator';
 import { agentEventEmitter } from '../index';
 import { agentSelector } from '../services/AgentSelector';
+import { IncrementalOrchestrator } from '../services/IncrementalOrchestrator';
+import { AnalysisAgent } from '../services/AnalysisAgent';
 
 const aiCodeGenerator = new AICodeGenerator();
+const incrementalOrchestrator = new IncrementalOrchestrator();
+const analysisAgent = new AnalysisAgent();
 
 const COMPONENT_FORMAT_GUIDELINES = `When providing React component code and configurations, use the following guidelines:
 
@@ -736,6 +740,7 @@ router.post(
         model = 'claude-sonnet-4-5-20250929',
         temperature = 0.7,
         orchestration = true,
+        incrementalGeneration = true, // ALWAYS ON: Incremental generation is the standard way
         selectedKnowledge = null, // New parameter for manual knowledge selection
         userId = 'anonymous', // User ID for API key management
         projectId = null, // Project ID for context continuation
@@ -866,6 +871,22 @@ router.post(
       // Send orchestration start update
       const workflowId = `workflow-${Date.now()}`;
 
+      // ALWAYS use incremental generation - it's the standard way
+      // This ensures better code quality, fewer errors, and working apps
+      console.log('🔄 Using INCREMENTAL generation mode (always enabled)');
+      return await handleIncrementalGeneration(
+        req,
+        res,
+        userPrompt,
+        knowledgeContext,
+        existingProjectFiles,
+        workflowId
+      );
+
+      // NOTE: Old orchestration code removed - incremental generation is always used
+      // All code below this point is unreachable and kept for reference only
+      // TODO: Remove old orchestration code in future cleanup
+      /*
       sendSSEUpdate(req, 'ORCHESTRATION_START', {
         message: `Starting AI orchestration with ${requiredAgents.length} specialized agents`,
         complexity: agentSelection.complexity,
@@ -1678,6 +1699,7 @@ Return the corrected files:`;
       };
 
       res.json(response);
+      */
     } catch (error) {
       console.error('Error generating prompt response:', error);
       let errorMessage = 'Failed to generate response';
@@ -1730,5 +1752,143 @@ Return the corrected files:`;
 
 // GET endpoint to check rate limit status
 router.get('/prompts/rate-limit-status', authenticateUser, getRateLimitStatus);
+
+/**
+ * Handle incremental generation mode
+ */
+async function handleIncrementalGeneration(
+  req: any,
+  res: any,
+  userPrompt: string,
+  knowledgeContext: any,
+  existingProjectFiles: { path: string; content: string }[],
+  workflowId: string
+) {
+  try {
+    sendSSEUpdate(req, 'INCREMENTAL_GENERATION_START', {
+      message: 'Starting incremental code generation',
+      workflowId
+    });
+
+    // Step 1: Analysis Agent - Create generation plan
+    sendSSEUpdate(req, 'STEP_START', {
+      agent: 'Analysis Agent',
+      task: 'Analyzing requirements and creating generation plan',
+      details: 'Breaking down the application into incremental phases',
+      progress: 0,
+      totalSteps: 1,
+      currentStep: 1
+    });
+
+    const formatKnowledgeContext = (context: any): string => {
+      if (!context || !context.items || context.items.length === 0) return '';
+      return context.items.map((item: any) => 
+        `**${item.title || 'Knowledge Item'}**\n${item.content || item.description || ''}`
+      ).join('\n\n');
+    };
+
+    const plan = await analysisAgent.analyzeAndPlan(
+      userPrompt,
+      formatKnowledgeContext(knowledgeContext),
+      existingProjectFiles
+    );
+
+    sendSSEUpdate(req, 'PLAN_CREATED', {
+      message: `Created generation plan with ${plan.phases.length} phases`,
+      plan: {
+        appName: plan.appName,
+        phases: plan.phases.map(p => ({
+          phase: p.phase,
+          description: p.description,
+          files: p.files.length
+        }))
+      }
+    });
+
+    // Step 2: Incremental Generation
+    sendSSEUpdate(req, 'STEP_START', {
+      agent: 'Incremental Orchestrator',
+      task: 'Generating code incrementally',
+      details: `Building ${plan.appName} in ${plan.phases.length} phases`,
+      progress: 10,
+      totalSteps: plan.phases.length + 1,
+      currentStep: 2
+    });
+
+    const result = await incrementalOrchestrator.generateIncrementally(
+      plan,
+      userPrompt,
+      formatKnowledgeContext(knowledgeContext),
+      existingProjectFiles,
+      (phase, progress, message) => {
+        sendSSEUpdate(req, 'PHASE_PROGRESS', {
+          phase,
+          progress,
+          message,
+          workflowId
+        });
+      }
+    );
+
+    // Step 3: Create workspace and write files
+    const workspaceId = Date.now().toString();
+    const workspaceDir = path.join(process.cwd(), 'workspaces', workspaceId);
+    await fs.mkdir(workspaceDir, { recursive: true });
+
+    // Write all files
+    await Promise.all(
+      result.allFiles.map(async (file: { path: string; content: string }) => {
+        const filePath = path.join(workspaceDir, file.path);
+        const fileDir = path.dirname(filePath);
+        await fs.mkdir(fileDir, { recursive: true });
+        await fs.writeFile(filePath, file.content);
+      })
+    );
+
+    sendSSEUpdate(req, 'GENERATION_COMPLETE', {
+      success: result.success,
+      files: result.allFiles,
+      workspaceId,
+      phases: result.phases.map(p => ({
+        phase: p.phase,
+        success: p.success,
+        filesCount: p.files.length,
+        duration: p.duration
+      })),
+      totalDuration: result.totalDuration
+    });
+
+    // Build response
+    const componentText = result.allFiles
+      .find(f => f.path.includes('App.tsx'))?.content || '';
+
+    return res.json({
+      type: 'component',
+      text: componentText,
+      files: result.allFiles.map(f => ({
+        path: f.path,
+        content: f.content
+      })),
+      metadata: {
+        workspaceId,
+        generationMode: 'incremental',
+        phases: result.phases.length,
+        success: result.success,
+        totalDuration: result.totalDuration
+      }
+    });
+  } catch (error) {
+    console.error('Incremental generation error:', error);
+    sendSSEUpdate(req, 'GENERATION_ERROR', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      workflowId
+    });
+
+    return res.status(500).json({
+      error: 'Incremental generation failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
 
 export default router;
