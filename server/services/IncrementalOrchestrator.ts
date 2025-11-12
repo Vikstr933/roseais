@@ -121,6 +121,7 @@ export class IncrementalOrchestrator {
       // Generate phase files
       let phaseResult: PhaseResult;
       let fixAttempts = 0;
+      let validation: ValidationResult;
 
       do {
         phaseResult = await this.generatePhase(
@@ -132,7 +133,7 @@ export class IncrementalOrchestrator {
         );
 
         // Validate phase
-        const validation = await this.validatePhase(phaseResult.files, existingPhaseFiles);
+        validation = await this.validatePhase(phaseResult.files, existingPhaseFiles);
 
         if (!validation.valid && fixAttempts < this.maxFixAttempts) {
           this.logger.warn(`Phase ${phase.phase} validation failed, attempting fix (attempt ${fixAttempts + 1}/${this.maxFixAttempts})`);
