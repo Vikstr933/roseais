@@ -654,6 +654,8 @@ OUTPUT FORMAT (JSON ARRAY):
       
       const beforeFix = content;
       braceSemicolonPatterns.forEach(pattern => {
+        // Reset regex lastIndex to avoid state issues
+        pattern.lastIndex = 0;
         content = content.replace(pattern, (match) => {
           // Remove semicolon: replace "; " or ";\n" or ";" at end with appropriate whitespace
           // This handles: {; -> {, {\n; -> {\n, {;\n -> {\n
@@ -662,6 +664,10 @@ OUTPUT FORMAT (JSON ARRAY):
           result = result.replace(/;\s*\n/g, '\n');
           // Then handle semicolon at end (with optional trailing whitespace)
           result = result.replace(/;\s*$/, '');
+          // If result still contains semicolon, remove it directly (fallback)
+          if (result.includes(';')) {
+            result = result.replace(/;/, '');
+          }
           return result;
         });
       });

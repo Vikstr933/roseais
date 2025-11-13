@@ -1213,36 +1213,55 @@ Suggestions to fix:
         ];
         
         braceSemicolonPatterns.forEach(({ pattern, name }) => {
-          if (pattern.test(content)) {
-            const beforeCount = (content.match(pattern) || []).length;
-            if (beforeCount > 0) {
-              console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found ${beforeCount} instances of "${name}"`);
-              // Replace pattern by removing the semicolon while preserving structure
-              content = content.replace(pattern, (match) => {
-                // Remove semicolon: replace "; " or ";\n" or ";" at end with appropriate whitespace
-                // This handles: {; -> {, {\n; -> {\n, {;\n -> {\n
-                let result = match;
-                // First handle semicolon followed by newline
-                result = result.replace(/;\s*\n/g, '\n');
-                // Then handle semicolon at end (with optional trailing whitespace)
-                result = result.replace(/;\s*$/, '');
-                return result;
-              });
-              const afterCount = (content.match(pattern) || []).length;
-              const fixed = beforeCount - afterCount;
-              console.log(`🔧 [Pass ${passNumber}] Fixed ${fixed} instances of "${name}"`);
-              fixesApplied += fixed;
-            }
+          // Reset regex lastIndex before each use to avoid state issues
+          pattern.lastIndex = 0;
+          const matches = content.match(pattern);
+          const beforeCount = matches ? matches.length : 0;
+          if (beforeCount > 0) {
+            console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found ${beforeCount} instances of "${name}"`);
+            // Replace pattern by removing the semicolon while preserving structure
+            // Reset lastIndex again before replace
+            pattern.lastIndex = 0;
+            content = content.replace(pattern, (match) => {
+              // Remove semicolon: replace "; " or ";\n" or ";" at end with appropriate whitespace
+              // This handles: {; -> {, {\n; -> {\n, {;\n -> {\n
+              let result = match;
+              // First handle semicolon followed by newline
+              result = result.replace(/;\s*\n/g, '\n');
+              // Then handle semicolon at end (with optional trailing whitespace)
+              result = result.replace(/;\s*$/, '');
+              // If result still contains semicolon, remove it directly
+              if (result.includes(';')) {
+                result = result.replace(/;/, '');
+              }
+              return result;
+            });
+            // Verify fix worked
+            pattern.lastIndex = 0;
+            const afterMatches = content.match(pattern);
+            const afterCount = afterMatches ? afterMatches.length : 0;
+            const fixed = beforeCount - afterCount;
+            console.log(`🔧 [Pass ${passNumber}] Fixed ${fixed} instances of "${name}" (${beforeCount} -> ${afterCount})`);
+            fixesApplied += fixed;
           }
         });
         
-        // Also apply the simple pattern as fallback
-        content = content.replace(/\{\s*;+/g, (match) => {
-          console.log(`🔧 [Pass ${passNumber}] Fixing remaining {; : "${match.replace(/\n/g, '\\n')}" -> "{"`);
-          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing remaining {;: "${match}" -> "{"`, { file: file.path });
-          fixesApplied++;
-          return '{';
-        });
+        // Also apply the simple pattern as fallback - ULTRA-AGGRESSIVE catch-all
+        // This catches ANY {; pattern that might have been missed
+        const simplePattern = /\{\s*;+/g;
+        simplePattern.lastIndex = 0;
+        const remainingMatches = content.match(simplePattern);
+        if (remainingMatches && remainingMatches.length > 0) {
+          console.log(`🔧 [Pass ${passNumber}] FALLBACK: Found ${remainingMatches.length} remaining {; patterns`);
+          simplePattern.lastIndex = 0;
+          content = content.replace(simplePattern, (match) => {
+            console.log(`🔧 [Pass ${passNumber}] Fixing remaining {; : "${match.replace(/\n/g, '\\n')}" -> "{"`);
+            this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing remaining {;: "${match}" -> "{"`, { file: file.path });
+            fixesApplied++;
+            // Remove semicolon but preserve whitespace/newlines after brace
+            return match.replace(/;+/, '');
+          });
+        }
 
         // Fix 0e: Remove stray semicolons before closing delimiters
         // This is CRITICAL for if/while conditions: if (condition; ) should be if (condition )
