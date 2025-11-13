@@ -1220,22 +1220,26 @@ Suggestions to fix:
           const beforeCount = matches ? matches.length : 0;
           if (beforeCount > 0) {
             console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found ${beforeCount} instances of "${name}"`);
-            // Replace pattern by removing the semicolon while preserving structure
             // Reset lastIndex again before replace
             pattern.lastIndex = 0;
+            // SIMPLIFIED: Directly replace the pattern by removing semicolon
+            // Match the pattern and replace with the opening brace/delimiter only
             content = content.replace(pattern, (match) => {
-              // Remove semicolon: replace "; " or ";\n" or ";" at end with appropriate whitespace
-              // This handles: {; -> {, {\n; -> {\n, {;\n -> {\n
-              let result = match;
-              // First handle semicolon followed by newline
-              result = result.replace(/;\s*\n/g, '\n');
-              // Then handle semicolon at end (with optional trailing whitespace)
-              result = result.replace(/;\s*$/, '');
-              // If result still contains semicolon, remove it directly
-              if (result.includes(';')) {
-                result = result.replace(/;/, '');
+              // Extract the opening delimiter ({, interface, export interface, etc.)
+              // Remove semicolon and any whitespace between delimiter and semicolon
+              if (match.includes('interface')) {
+                // For interface patterns: "interface Name {;" -> "interface Name {"
+                return match.replace(/\{\s*;+\s*/g, '{').replace(/;\s*$/, '');
+              } else if (match.includes('export interface')) {
+                // For export interface patterns: "export interface Name {;" -> "export interface Name {"
+                return match.replace(/\{\s*;+\s*/g, '{').replace(/;\s*$/, '');
+              } else if (match.includes('=>')) {
+                // For arrow functions: ") => {;" -> ") => {"
+                return match.replace(/\{\s*;+\s*/g, '{').replace(/;\s*$/, '');
+              } else {
+                // For simple braces: "{;" -> "{"
+                return match.replace(/;+\s*/g, '').trim();
               }
-              return result;
             });
             // Verify fix worked
             pattern.lastIndex = 0;
@@ -1247,6 +1251,13 @@ Suggestions to fix:
           }
         });
         
+        // Fix switch case semicolons: case GameStatus.IDLE:; -> case GameStatus.IDLE:
+        content = content.replace(/case\s+[^:]+:\s*;/g, (match) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing switch case semicolon: "${match}" -> "${match.replace(/;\s*$/, '')}"`);
+          fixesApplied++;
+          return match.replace(/;\s*$/, '');
+        });
+
         // Also apply the simple pattern as fallback - ULTRA-AGGRESSIVE catch-all
         // This catches ANY {; pattern that might have been missed
         const simplePattern = /\{\s*;+/g;
@@ -1259,8 +1270,8 @@ Suggestions to fix:
             console.log(`🔧 [Pass ${passNumber}] Fixing remaining {; : "${match.replace(/\n/g, '\\n')}" -> "{"`);
             this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing remaining {;: "${match}" -> "{"`, { file: file.path });
             fixesApplied++;
-            // Remove semicolon but preserve whitespace/newlines after brace
-            return match.replace(/;+/, '');
+            // Directly replace {; with { (preserve whitespace before {)
+            return match.replace(/\{\s*;+/, '{');
           });
         }
 
@@ -1750,8 +1761,33 @@ export default defineConfig({
       });
     }
 
-    // Ensure tsconfig.json
-    if (!existingPaths.has('tsconfig.json')) {
+    // Ensure tsconfig.node.json FIRST (required by vite.config.ts and referenced by tsconfig.json)
+    if (!existingPaths.has('tsconfig.node.json')) {
+      result.push({
+        path: 'tsconfig.node.json',
+        content: JSON.stringify({
+          compilerOptions: {
+            target: 'ES2022',
+            lib: ['ES2023'],
+            module: 'ESNext',
+            skipLibCheck: true,
+            moduleResolution: 'bundler',
+            allowSyntheticDefaultImports: true,
+            strict: true,
+            resolveJsonModule: true,
+            isolatedModules: true,
+            moduleDetection: 'force',
+            noEmit: true
+          },
+          include: ['vite.config.ts']
+        }, null, 2)
+      });
+    }
+
+    // Ensure tsconfig.json (may reference tsconfig.node.json)
+    const existingTsConfigIndex = result.findIndex(f => f.path === 'tsconfig.json');
+    if (existingTsConfigIndex === -1) {
+      // Create new tsconfig.json without references (simpler, works without tsconfig.node.json)
       result.push({
         path: 'tsconfig.json',
         content: JSON.stringify({
@@ -1776,29 +1812,44 @@ export default defineConfig({
           include: ['src']
         }, null, 2)
       });
-    }
-
-    // Ensure tsconfig.node.json (required by vite.config.ts)
-    if (!existingPaths.has('tsconfig.node.json')) {
-      result.push({
-        path: 'tsconfig.node.json',
-        content: JSON.stringify({
-          compilerOptions: {
-            target: 'ES2022',
-            lib: ['ES2023'],
-            module: 'ESNext',
-            skipLibCheck: true,
-            moduleResolution: 'bundler',
-            allowSyntheticDefaultImports: true,
-            strict: true,
-            resolveJsonModule: true,
-            isolatedModules: true,
-            moduleDetection: 'force',
-            noEmit: true
-          },
-          include: ['vite.config.ts']
-        }, null, 2)
-      });
+    } else {
+      // AI-generated tsconfig.json exists - ensure it doesn't reference tsconfig.node.json if file doesn't exist
+      try {
+        const tsConfig = JSON.parse(result[existingTsConfigIndex].content);
+        // If references exist but tsconfig.node.json doesn't exist, remove references
+        if (tsConfig.references && !existingPaths.has('tsconfig.node.json')) {
+          delete tsConfig.references;
+          result[existingTsConfigIndex].content = JSON.stringify(tsConfig, null, 2);
+          this.logger.info('AICodeGenerator', 'Removed references from tsconfig.json (tsconfig.node.json not found)');
+        }
+      } catch (error) {
+        // If parsing fails, replace with our own
+        this.logger.warning('AICodeGenerator', 'Failed to parse AI-generated tsconfig.json, replacing it', { error });
+        result[existingTsConfigIndex] = {
+          path: 'tsconfig.json',
+          content: JSON.stringify({
+            compilerOptions: {
+              target: 'ES2020',
+              useDefineForClassFields: true,
+              lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+              module: 'ESNext',
+              skipLibCheck: true,
+              moduleResolution: 'bundler',
+              allowImportingTsExtensions: true,
+              isolatedModules: true,
+              moduleDetection: 'force',
+              noEmit: true,
+              jsx: 'react-jsx',
+              strict: true,
+              noUnusedLocals: true,
+              noUnusedParameters: true,
+              noFallthroughCasesInSwitch: true,
+              noUncheckedSideEffectImports: true
+            },
+            include: ['src']
+          }, null, 2)
+        };
+      }
     }
 
     // Ensure tailwind.config.js
