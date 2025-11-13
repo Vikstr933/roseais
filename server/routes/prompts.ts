@@ -1858,23 +1858,31 @@ async function handleIncrementalGeneration(
       totalDuration: result.totalDuration
     });
 
-    // Build response
+    // Build response - ALWAYS include files even if validation had warnings
     const componentText = result.allFiles
       .find(f => f.path.includes('App.tsx'))?.content || '';
+
+    // Ensure files are always included, even if empty (shouldn't happen but safety check)
+    const responseFiles = result.allFiles.length > 0 
+      ? result.allFiles.map(f => ({
+          path: f.path,
+          content: f.content
+        }))
+      : [];
+
+    console.log(`📦 Returning ${responseFiles.length} files in response`);
 
     return res.json({
       type: 'component',
       text: componentText,
-      files: result.allFiles.map(f => ({
-        path: f.path,
-        content: f.content
-      })),
+      files: responseFiles,
       metadata: {
         workspaceId,
         generationMode: 'incremental',
         phases: result.phases.length,
         success: result.success,
-        totalDuration: result.totalDuration
+        totalDuration: result.totalDuration,
+        filesGenerated: responseFiles.length
       }
     });
   } catch (error) {

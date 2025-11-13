@@ -348,12 +348,24 @@ TECH STACK:
 - Build Tool: ${plan.techStack.buildTool}
 - Language: ${plan.techStack.language}
 
+🚨 CRITICAL SYNTAX RULES - READ CAREFULLY:
+- ❌ NEVER write: interface Name {;  (semicolon after opening brace)
+- ❌ NEVER write: export interface Name {;  (semicolon after opening brace)
+- ❌ NEVER write: return (;  (incomplete return statement)
+- ❌ NEVER write: return {;  (incomplete return statement)
+- ❌ NEVER write: return [;  (incomplete return statement)
+- ✅ ALWAYS write: interface Name {  (no semicolon after opening brace)
+- ✅ ALWAYS write: return (  (complete return statement)
+- ✅ ALWAYS write: return {  (complete return statement)
+- ✅ ALWAYS write: return [  (complete return statement)
+
 IMPORTANT:
 - You can import from existing files listed above
 - Follow patterns from existing code
 - Ensure all imports resolve (files exist)
 - Generate ONLY the files listed for this phase
 - Each file must be a JSON object with "path" and "content" keys
+- Generate COMPLETE, working code - no placeholders, no incomplete statements
 
 OUTPUT FORMAT (JSON ARRAY):
 [

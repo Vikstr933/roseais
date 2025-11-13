@@ -1263,8 +1263,17 @@ export default function PromptPlayground() {
                       timestamp: Date.now()
                     });
                   } else if (data.type === 'COMPLETE' || data.type === 'GENERATION_COMPLETE') {
-                    console.log('ðŸŽ‰ Generation complete');
-                    finalResult = data.data;
+                    console.log('🎉 Generation complete', data.data);
+                    // Format finalResult to match expected structure with files
+                    finalResult = {
+                      response: {
+                        type: 'component',
+                        text: data.data?.files?.[0]?.content || data.data?.files?.find((f: any) => f.path?.includes('App.tsx'))?.content || '',
+                        files: data.data?.files || []
+                      },
+                      ...data.data
+                    };
+                    console.log('📁 Final result files:', finalResult.response?.files?.length);
                   }
                 } catch (e) {
                   console.warn('Failed to parse SSE event:', line, e);
