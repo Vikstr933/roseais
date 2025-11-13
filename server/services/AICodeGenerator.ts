@@ -462,8 +462,9 @@ The component should be a complete, functional implementation in ONE SINGLE FILE
           styling: JSON.stringify(request.styling || {})
         },
         {
-          includeGuidelines: true,
-          forceRefresh: false // Use cache for performance, but can be overridden
+          includeGuidelines: true
+          // Note: forceRefresh is not available in buildSystemPrompt options
+          // Caching is handled internally by PromptManager
         }
       );
 
