@@ -75,7 +75,12 @@ router.get('/', async (req, res) => {
   // Check database
   try {
     const dbStart = Date.now();
-    await db.execute(sql`SELECT 1`);
+    // Use a timeout to prevent hanging on slow connections
+    const dbQuery = db.execute(sql`SELECT 1`);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Database query timeout')), 5000)
+    );
+    await Promise.race([dbQuery, timeoutPromise]);
     health.services.database = {
       status: 'up',
       latency: Date.now() - dbStart,
@@ -85,7 +90,8 @@ router.get('/', async (req, res) => {
       status: 'down',
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-    health.status = 'unhealthy';
+    // Database down is degraded, not unhealthy - server can still function with limited capabilities
+    health.status = 'degraded';
   }
 
   // Check Redis

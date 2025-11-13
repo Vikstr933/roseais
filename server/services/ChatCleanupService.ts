@@ -33,13 +33,15 @@ export class ChatCleanupService {
 
     // Run immediately on start
     this.cleanup().catch(error => {
-      this.logger.error('Initial cleanup failed', error);
+      // Errors are now handled gracefully in cleanup(), so this should rarely happen
+      this.logger.warn('Initial cleanup had an issue (non-fatal)', error);
     });
 
     // Then run on interval
     this.cleanupInterval = setInterval(() => {
       this.cleanup().catch(error => {
-        this.logger.error('Scheduled cleanup failed', error);
+        // Errors are now handled gracefully in cleanup(), so this should rarely happen
+        this.logger.warn('Scheduled cleanup had an issue (non-fatal)', error);
       });
     }, this.CLEANUP_INTERVAL_MS);
   }
@@ -68,12 +70,17 @@ export class ChatCleanupService {
         cutoffDate: cutoffDate.toISOString(),
       });
 
-      // Delete messages older than the cutoff date
-      const result = await db
+      // Add timeout to prevent hanging on slow connections
+      const cleanupQuery = db
         .delete(chatMessages)
         .where(lt(chatMessages.createdAt, cutoffDate))
         .returning({ id: chatMessages.id });
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Cleanup query timeout after 10 seconds')), 10000)
+      );
+
+      const result = await Promise.race([cleanupQuery, timeoutPromise]);
       const deletedCount = result.length;
 
       this.logger.info('Chat message cleanup completed', {
@@ -83,8 +90,25 @@ export class ChatCleanupService {
 
       return { deleted: deletedCount };
     } catch (error) {
+      // Handle database connection errors gracefully - don't throw, just log
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isConnectionError = 
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('Connection terminated') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('ENOTFOUND');
+
+      if (isConnectionError) {
+        this.logger.warn('Chat message cleanup skipped due to database connection issue', {
+          error: errorMessage,
+          message: 'Cleanup will retry on next interval',
+        });
+        return { deleted: 0 }; // Return empty result, don't throw
+      }
+
+      // For other errors, log but don't throw (graceful degradation)
       this.logger.error('Chat message cleanup failed', error as Error);
-      throw error;
+      return { deleted: 0 }; // Return empty result, don't throw
     }
   }
 

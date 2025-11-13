@@ -253,7 +253,8 @@ export class GenerationLockService {
     try {
       const now = new Date().toISOString();
 
-      const result = await db
+      // Add timeout to prevent hanging on slow connections
+      const cleanupQuery = db
         .update(generationLocks)
         .set({
           status: 'expired',
@@ -267,6 +268,11 @@ export class GenerationLockService {
         )
         .returning();
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Lock cleanup query timeout after 10 seconds')), 10000)
+      );
+
+      const result = await Promise.race([cleanupQuery, timeoutPromise]);
       const cleanedCount = result.length;
       if (cleanedCount > 0) {
         console.log(`Cleaned up ${cleanedCount} expired generation locks`);
@@ -274,8 +280,21 @@ export class GenerationLockService {
 
       return cleanedCount;
     } catch (error) {
+      // Handle database connection errors gracefully
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isConnectionError = 
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('Connection terminated') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('ENOTFOUND');
+
+      if (isConnectionError) {
+        console.warn('Lock cleanup skipped due to database connection issue:', errorMessage);
+        return 0; // Return 0, don't throw
+      }
+
       console.error('Error cleaning up expired locks:', error);
-      return 0;
+      return 0; // Return 0 on any error (graceful degradation)
     }
   }
 

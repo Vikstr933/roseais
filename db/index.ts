@@ -54,7 +54,7 @@ const pool = new Pool({
   min: 2,                        // Minimum number of clients (always maintained)
   max: 10,                       // Maximum number of clients in the pool
   idleTimeoutMillis: 30000,      // Close idle clients after 30s
-  connectionTimeoutMillis: 10000, // Timeout for new connections (10s)
+  connectionTimeoutMillis: 20000, // Timeout for new connections (20s - increased for Supabase)
 
   // Advanced pooling configuration
   allowExitOnIdle: false,         // Keep the pool alive even when all clients are idle
