@@ -1872,10 +1872,13 @@ async function handleIncrementalGeneration(
 
     console.log(`📦 Returning ${responseFiles.length} files in response`);
 
+    // Format response to match frontend expectations (wrapped in 'response' object)
     return res.json({
-      type: 'component',
-      text: componentText,
-      files: responseFiles,
+      response: {
+        type: 'component',
+        text: componentText,
+        files: responseFiles
+      },
       metadata: {
         workspaceId,
         generationMode: 'incremental',
