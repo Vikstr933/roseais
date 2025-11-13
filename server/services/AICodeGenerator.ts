@@ -1199,7 +1199,44 @@ Suggestions to fix:
 
         // Fix 0d2: Remove any remaining stray semicolons after {
         // This runs AFTER Fix 0b, so return {; has already been handled
-        // Catches cases like: if (x) {; or const obj = {;
+        // Catches cases like: if (x) {; or const obj = {; or interface Name {;
+        // ULTRA-AGGRESSIVE: Handle ALL variations including newlines
+        const braceSemicolonPatterns = [
+          { pattern: /\{\s*;/g, name: '{;' },
+          { pattern: /\{\s*\n\s*;/g, name: '{\n;' },
+          { pattern: /\{\s*;\s*\n/g, name: '{;\n' },
+          { pattern: /interface\s+\w+\s*\{\s*;/g, name: 'interface {;' },
+          { pattern: /export\s+interface\s+\w+\s*\{\s*;/g, name: 'export interface {;' },
+          { pattern: /type\s+\w+\s*=\s*\{\s*;/g, name: 'type = {;' },
+          { pattern: /const\s+\w+\s*=\s*\{\s*;/g, name: 'const = {;' },
+          { pattern: /\)\s*=>\s*\{\s*;/g, name: ') => {;' }
+        ];
+        
+        braceSemicolonPatterns.forEach(({ pattern, name }) => {
+          if (pattern.test(content)) {
+            const beforeCount = (content.match(pattern) || []).length;
+            if (beforeCount > 0) {
+              console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found ${beforeCount} instances of "${name}"`);
+              // Replace pattern by removing the semicolon while preserving structure
+              content = content.replace(pattern, (match) => {
+                // Remove semicolon: replace "; " or ";\n" or ";" at end with appropriate whitespace
+                // This handles: {; -> {, {\n; -> {\n, {;\n -> {\n
+                let result = match;
+                // First handle semicolon followed by newline
+                result = result.replace(/;\s*\n/g, '\n');
+                // Then handle semicolon at end (with optional trailing whitespace)
+                result = result.replace(/;\s*$/, '');
+                return result;
+              });
+              const afterCount = (content.match(pattern) || []).length;
+              const fixed = beforeCount - afterCount;
+              console.log(`🔧 [Pass ${passNumber}] Fixed ${fixed} instances of "${name}"`);
+              fixesApplied += fixed;
+            }
+          }
+        });
+        
+        // Also apply the simple pattern as fallback
         content = content.replace(/\{\s*;+/g, (match) => {
           console.log(`🔧 [Pass ${passNumber}] Fixing remaining {; : "${match.replace(/\n/g, '\\n')}" -> "{"`);
           this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing remaining {;: "${match}" -> "{"`, { file: file.path });

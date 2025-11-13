@@ -640,11 +640,35 @@ OUTPUT FORMAT (JSON ARRAY):
       // This ensures we catch syntax errors even if validation didn't flag them
       
       // Fix all {; patterns (most common issue) - apply to ALL files
+      // ULTRA-AGGRESSIVE: Handle ALL variations including newlines and specific contexts
+      const braceSemicolonPatterns = [
+        /\{\s*;/g,                    // Simple {;
+        /\{\s*\n\s*;/g,                // {\n;
+        /\{\s*;\s*\n/g,                // {;\n
+        /interface\s+\w+\s*\{\s*;/g,   // interface Name {;
+        /export\s+interface\s+\w+\s*\{\s*;/g,  // export interface Name {;
+        /type\s+\w+\s*=\s*\{\s*;/g,   // type Name = {;
+        /const\s+\w+\s*=\s*\{\s*;/g,  // const name = {;
+        /\)\s*=>\s*\{\s*;/g           // () => {;
+      ];
+      
       const beforeFix = content;
-      content = content.replace(/\{\s*;/g, '{');
+      braceSemicolonPatterns.forEach(pattern => {
+        content = content.replace(pattern, (match) => {
+          // Remove semicolon: replace "; " or ";\n" or ";" at end with appropriate whitespace
+          // This handles: {; -> {, {\n; -> {\n, {;\n -> {\n
+          let result = match;
+          // First handle semicolon followed by newline
+          result = result.replace(/;\s*\n/g, '\n');
+          // Then handle semicolon at end (with optional trailing whitespace)
+          result = result.replace(/;\s*$/, '');
+          return result;
+        });
+      });
+      
       if (content !== beforeFix) {
         wasFixed = true;
-        this.logger.info(`Fixed {; pattern in ${file.path}`);
+        this.logger.info(`Fixed {; patterns in ${file.path}`);
       }
       
       // Fix return (; patterns
