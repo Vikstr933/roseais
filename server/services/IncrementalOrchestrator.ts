@@ -123,57 +123,67 @@ export class IncrementalOrchestrator {
       let fixAttempts = 0;
       let validation: ValidationResult;
 
-      do {
-        // Only regenerate on the first attempt
-        if (fixAttempts === 0) {
-          phaseResult = await this.generatePhase(
-            phase,
-            userPrompt,
-            knowledgeContext,
-            existingPhaseFiles,
-            plan
-          );
-        }
-
-        // Validate phase (or re-validate after fixing)
-        validation = await this.validatePhase(phaseResult.files, existingPhaseFiles);
-
-        if (!validation.valid && fixAttempts < this.maxFixAttempts) {
-          this.logger.warn(`Phase ${phase.phase} validation failed (attempt ${fixAttempts + 1}/${this.maxFixAttempts})`, {
-            errors: validation.errors.map(e => `${e.file}: ${e.message}`),
-            errorTypes: validation.errors.map(e => e.type),
-            errorCount: validation.errors.length
-          });
-          
-          if (progressCallback) {
-            progressCallback(phase.phase, (i / plan.phases.length) * 100, `Fixing errors in ${phase.phase}...`);
+        do {
+          // Only regenerate on the first attempt
+          if (fixAttempts === 0) {
+            phaseResult = await this.generatePhase(
+              phase,
+              userPrompt,
+              knowledgeContext,
+              existingPhaseFiles,
+              plan
+            );
+            
+            // ALWAYS apply syntax fixes immediately after generation, even before validation
+            // This catches {; patterns and other syntax errors proactively
+            this.logger.info(`Applying proactive syntax fixes to phase ${phase.phase} files...`);
+            phaseResult.files = await this.fixPhase(
+              phaseResult.files,
+              [], // Empty errors array - we're fixing proactively
+              existingPhaseFiles,
+              phase
+            );
           }
 
-          // Try to fix errors
-          const fixedFiles = await this.fixPhase(
-            phaseResult.files,
-            validation.errors,
-            existingPhaseFiles,
-            phase
-          );
+          // Validate phase (or re-validate after fixing)
+          validation = await this.validatePhase(phaseResult.files, existingPhaseFiles);
 
-          phaseResult.files = fixedFiles;
-          fixAttempts++;
-
-          // Re-validate fixed files immediately (don't regenerate)
-          // The loop will continue if validation still fails
-        } else {
-          // Either valid or max attempts reached
-          if (!validation.valid) {
-            this.logger.error(`Phase ${phase.phase} failed after ${fixAttempts} fix attempts, continuing with errors`, {
-              remainingErrors: validation.errors.map(e => `${e.file}: ${e.message}`)
+          if (!validation.valid && fixAttempts < this.maxFixAttempts) {
+            this.logger.warn(`Phase ${phase.phase} validation failed (attempt ${fixAttempts + 1}/${this.maxFixAttempts})`, {
+              errors: validation.errors.map(e => `${e.file}: ${e.message}`),
+              errorTypes: validation.errors.map(e => e.type),
+              errorCount: validation.errors.length
             });
+            
+            if (progressCallback) {
+              progressCallback(phase.phase, (i / plan.phases.length) * 100, `Fixing errors in ${phase.phase}...`);
+            }
+
+            // Try to fix errors
+            const fixedFiles = await this.fixPhase(
+              phaseResult.files,
+              validation.errors,
+              existingPhaseFiles,
+              phase
+            );
+
+            phaseResult.files = fixedFiles;
+            fixAttempts++;
+
+            // Re-validate fixed files immediately (don't regenerate)
+            // The loop will continue if validation still fails
+          } else {
+            // Either valid or max attempts reached
+            if (!validation.valid) {
+              this.logger.error(`Phase ${phase.phase} failed after ${fixAttempts} fix attempts, continuing with errors`, {
+                remainingErrors: validation.errors.map(e => `${e.file}: ${e.message}`)
+              });
+            }
+            phaseResult.errors = validation.errors.map(e => e.message);
+            phaseResult.warnings = validation.warnings;
+            break;
           }
-          phaseResult.errors = validation.errors.map(e => e.message);
-          phaseResult.warnings = validation.warnings;
-          break;
-        }
-      } while (!validation.valid && fixAttempts < this.maxFixAttempts);
+        } while (!validation.valid && fixAttempts < this.maxFixAttempts);
 
       // Add phase files to all files
       phaseResult.files.forEach(file => {
@@ -348,16 +358,32 @@ TECH STACK:
 - Build Tool: ${plan.techStack.buildTool}
 - Language: ${plan.techStack.language}
 
-🚨 CRITICAL SYNTAX RULES - READ CAREFULLY:
-- ❌ NEVER write: interface Name {;  (semicolon after opening brace)
-- ❌ NEVER write: export interface Name {;  (semicolon after opening brace)
-- ❌ NEVER write: return (;  (incomplete return statement)
-- ❌ NEVER write: return {;  (incomplete return statement)
-- ❌ NEVER write: return [;  (incomplete return statement)
-- ✅ ALWAYS write: interface Name {  (no semicolon after opening brace)
-- ✅ ALWAYS write: return (  (complete return statement)
-- ✅ ALWAYS write: return {  (complete return statement)
-- ✅ ALWAYS write: return [  (complete return statement)
+🚨🚨🚨 CRITICAL SYNTAX RULES - READ CAREFULLY 🚨🚨🚨
+
+BEFORE writing ANY code, remember these FORBIDDEN patterns:
+
+❌ FORBIDDEN: interface Name {;  (NEVER put semicolon after opening brace)
+❌ FORBIDDEN: export interface Name {;  (NEVER put semicolon after opening brace)
+❌ FORBIDDEN: const obj = {;  (NEVER put semicolon after opening brace)
+❌ FORBIDDEN: () => {;  (NEVER put semicolon after opening brace in arrow function)
+❌ FORBIDDEN: return (;  (NEVER put semicolon after opening parenthesis)
+❌ FORBIDDEN: return {;  (NEVER put semicolon after opening brace)
+❌ FORBIDDEN: return [;  (NEVER put semicolon after opening bracket)
+
+✅ CORRECT: interface Name {  (NO semicolon after {)
+✅ CORRECT: export interface Name {  (NO semicolon after {)
+✅ CORRECT: const obj = {  (NO semicolon after {)
+✅ CORRECT: () => {  (NO semicolon after {)
+✅ CORRECT: return (  (NO semicolon after ()
+✅ CORRECT: return {  (NO semicolon after {)
+✅ CORRECT: return [  (NO semicolon after [)
+
+CRITICAL CHECKLIST - Before submitting your code:
+1. Search for "{;" in your code - if found, REMOVE the semicolon
+2. Search for "return (;" - if found, REMOVE the semicolon
+3. Search for "return {;" - if found, REMOVE the semicolon
+4. Search for "return [;" - if found, REMOVE the semicolon
+5. Search for ") => {;" - if found, REMOVE the semicolon
 
 IMPORTANT:
 - You can import from existing files listed above
@@ -602,48 +628,68 @@ OUTPUT FORMAT (JSON ARRAY):
     existingFiles: { path: string; content: string }[],
     phase: GenerationPhase
   ): Promise<{ path: string; content: string }[]> {
-    // Only fix syntax and JSON errors (critical errors)
-    // Import errors are warnings and will be resolved in later phases
-    const criticalErrors = errors.filter(e => e.type === 'syntax' || e.type === 'other');
-    
-    if (criticalErrors.length === 0) {
-      this.logger.info(`No critical errors to fix in phase ${phase.phase}, only warnings`);
-      return files; // Return files as-is if only warnings
-    }
+    // ALWAYS apply syntax fixes, even if no errors reported
+    // This ensures we catch {; patterns and other syntax errors proactively
+    // The errors array may be empty when called proactively after generation
 
     const fixedFiles = files.map(file => {
       let content = file.content;
       let wasFixed = false;
 
-      // Fix syntax errors for this file
-      const fileErrors = criticalErrors.filter(e => e.file === file.path);
+      // Apply comprehensive fixes to ALL files, regardless of error messages
+      // This ensures we catch syntax errors even if validation didn't flag them
       
-      for (const error of fileErrors) {
-        if (error.message.includes('Semicolon after opening brace') || error.message.includes('{;')) {
-          // Fix {; pattern (e.g., "interface Position {;" -> "interface Position {")
-          content = content.replace(/\{\s*;/g, '{');
+      // Fix all {; patterns (most common issue) - apply to ALL files
+      const beforeFix = content;
+      content = content.replace(/\{\s*;/g, '{');
+      if (content !== beforeFix) {
+        wasFixed = true;
+        this.logger.info(`Fixed {; pattern in ${file.path}`);
+      }
+      
+      // Fix return (; patterns
+      const beforeReturnParen = content;
+      content = content.replace(/return\s*\(\s*;/g, 'return (');
+      content = content.replace(/return\s*\(\s*\n\s*;/g, 'return (');
+      if (content !== beforeReturnParen) {
+        wasFixed = true;
+        this.logger.info(`Fixed return (; pattern in ${file.path}`);
+      }
+      
+      // Fix return {; patterns
+      const beforeReturnBrace = content;
+      content = content.replace(/return\s*\{\s*;/g, 'return {');
+      content = content.replace(/return\s*\{\s*\n\s*;/g, 'return {');
+      if (content !== beforeReturnBrace) {
+        wasFixed = true;
+        this.logger.info(`Fixed return {; pattern in ${file.path}`);
+      }
+      
+      // Fix return [; patterns
+      const beforeReturnBracket = content;
+      content = content.replace(/return\s*\[\s*;/g, 'return [');
+      content = content.replace(/return\s*\[\s*\n\s*;/g, 'return [');
+      if (content !== beforeReturnBracket) {
+        wasFixed = true;
+        this.logger.info(`Fixed return [; pattern in ${file.path}`);
+      }
+      
+      // Fix arrow function {; patterns: () => {;
+      const beforeArrow = content;
+      content = content.replace(/\)\s*=>\s*\{\s*;/g, ') => {');
+      content = content.replace(/\)\s*=>\s*\{\s*\n\s*;/g, ') => {');
+      if (content !== beforeArrow) {
+        wasFixed = true;
+        this.logger.info(`Fixed arrow function {; pattern in ${file.path}`);
+      }
+      
+      // Fix JSON trailing commas (for JSON files)
+      if (file.path.endsWith('.json')) {
+        const beforeJSON = content;
+        content = content.replace(/,(\s*[}\]])/g, '$1');
+        if (content !== beforeJSON) {
           wasFixed = true;
-        }
-        if (error.message.includes('return (;') || error.message.includes('Incomplete return statement')) {
-          // Fix return (; pattern
-          content = content.replace(/return\s*\(;/g, 'return (');
-          wasFixed = true;
-        }
-        if (error.message.includes('return {;')) {
-          // Fix return {; pattern
-          content = content.replace(/return\s*{;/g, 'return {');
-          wasFixed = true;
-        }
-        if (error.message.includes('return [;')) {
-          // Fix return [; pattern
-          content = content.replace(/return\s*\[;/g, 'return [');
-          wasFixed = true;
-        }
-        if (error.message.includes('Invalid JSON')) {
-          // Try to fix common JSON issues
-          // Remove trailing commas
-          content = content.replace(/,(\s*[}\]])/g, '$1');
-          wasFixed = true;
+          this.logger.info(`Fixed JSON trailing commas in ${file.path}`);
         }
       }
 
