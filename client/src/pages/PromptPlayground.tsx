@@ -992,7 +992,7 @@ export default function PromptPlayground() {
       const result = await response.json();
       console.log('🤖 AI Intent Detection:', { intent: result.intent, confidence: result.confidence, reasoning: result.reasoning });
       
-      return result.intent as 'deploy' | 'modify' | 'generate';
+      return result.intent as 'deploy' | 'modify' | 'generate' | 'describe';
     } catch (error) {
       console.warn('⚠️ AI intent detection failed, using fallback keyword matching:', error);
       
@@ -1003,6 +1003,9 @@ export default function PromptPlayground() {
       if (hasExistingFiles) {
         if (lowerPrompt.match(/\b(run|start|restart|launch|preview|show|open|deploy)\b/)) {
           return 'deploy';
+        }
+        if (lowerPrompt.match(/\b(describe|explain|what|tell|about|summary|overview|info)\b.*\b(project|app|code|this|it)\b/)) {
+          return 'describe';
         }
         if (lowerPrompt.match(/\b(fix|change|update|modify|edit|add|remove|improve|enhance|make|style|color|animated)\b/)) {
           return 'modify';
