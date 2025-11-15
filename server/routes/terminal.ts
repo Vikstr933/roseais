@@ -42,6 +42,11 @@ router.get('/terminal/:componentName/stream', (req, res) => {
     'Access-Control-Allow-Headers': 'Cache-Control',
   });
 
+  // Initialize empty array if component doesn't exist yet
+  if (!terminalOutputs[componentName]) {
+    terminalOutputs[componentName] = [];
+  }
+
   // Send existing output
   const existingOutput = terminalOutputs[componentName] || [];
   existingOutput.forEach(line => {

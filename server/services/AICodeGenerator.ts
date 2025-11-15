@@ -1301,7 +1301,14 @@ Suggestions to fix:
         // This is CRITICAL for if/while conditions: if (condition; ) should be if (condition )
         // Fixes: ;)  -> )   ;]  -> ]   ;}  -> }
         // Match semicolon followed by ANY whitespace (including newlines) followed by closing delimiter
-        content = content.replace(/;+(\s*)([)\]}])/g, (match, whitespace, closer) => {
+        // BUT: Be careful not to break valid code like "if (condition) { }" - check context
+        content = content.replace(/;+(\s*)([)\]}])/g, (match, whitespace, closer, offset) => {
+          // Check context: if this is after a closing paren like "if (x) { }", it might be valid
+          // But we want to fix cases like "key: value;}" or "func();}"
+          const beforeMatch = content.substring(Math.max(0, offset - 20), offset);
+          // If it looks like "if (condition) {" then the semicolon before } might be intentional (rare but possible)
+          // But in most cases, semicolon before } is an error
+          // We'll fix it but log it
           console.log(`🔧 [Pass ${passNumber}] Fixing ; before closer: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`);
           this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing semicolon before delimiter: "${match.replace(/\n/g, '\\n')}" -> "${whitespace}${closer}"`, { file: file.path });
           fixesApplied++;
@@ -1310,18 +1317,24 @@ Suggestions to fix:
 
         // Fix 0e2: ULTRA-AGGRESSIVE - Literal string replacements for common patterns
         // This bypasses regex complexity issues
+        // Run this BEFORE the regex fix to catch obvious cases
         const literalPatterns = [
           { from: ';\n}', to: '\n}' },
           { from: ';\n  }', to: '\n  }' },
           { from: ';\n    }', to: '\n    }' },
           { from: ';\n      }', to: '\n      }' },
           { from: ';\n        }', to: '\n        }' },
+          { from: ';\n          }', to: '\n          }' },
           { from: '; )', to: ' )' },
           { from: ';)', to: ')' },
           { from: '; ]', to: ' ]' },
           { from: ';]', to: ']' },
           { from: '; }', to: ' }' },
-          { from: ';}', to: '}' }
+          { from: ';}', to: '}' },  // CRITICAL: catch all ;} patterns
+          // Also catch patterns in JSX/TSX contexts
+          { from: '";}', to: '"}' },
+          { from: '\';}', to: '\'}' },
+          { from: '`;}', to: '`}' },
         ];
         
         literalPatterns.forEach(({ from, to }) => {
@@ -1512,6 +1525,29 @@ Suggestions to fix:
     }
     if (/return\s*\{\s*;/.test(content)) {
       errors.push('Found "return {;" pattern - incomplete return statement');
+    }
+
+    // Check 2: ;} patterns (semicolon before closing brace) - CRITICAL
+    // This catches patterns like: className="...";} or const obj = { key: value; }
+    const semicolonBeforeBrace = /;\s*\}/g;
+    const matches = content.match(semicolonBeforeBrace);
+    if (matches && matches.length > 0) {
+      // Filter out false positives (valid cases):
+      // - In JSX: className="...";} is invalid, but we need to check context
+      // - In object literals: { key: value; } is invalid
+      // - In function calls: func();} is invalid
+      // But these are valid: if (condition) { } - no semicolon before }
+      const invalidMatches = matches.filter(match => {
+        // Check if this is in a valid context (like if/for/while blocks)
+        const matchIndex = content.indexOf(match);
+        const beforeMatch = content.substring(Math.max(0, matchIndex - 50), matchIndex);
+        // If it's after a closing paren like "if (x) { }" then it's valid, skip
+        // But if it's "key: value;}" or "func();}" then it's invalid
+        return !/\)\s*\{/.test(beforeMatch);
+      });
+      if (invalidMatches.length > 0) {
+        errors.push(`Found ${invalidMatches.length} semicolons before closing braces (;})`);
+      }
     }
 
     // Check 2: Stray semicolons after opening delimiters

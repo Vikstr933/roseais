@@ -761,6 +761,37 @@ OUTPUT FORMAT (JSON ARRAY):
         }
       }
 
+      // Fix semicolons before closing braces - ULTRA-AGGRESSIVE literal replacements
+      // This catches patterns like: className="...";} or const obj = { key: value; }
+      const beforeSemicolonBrace = content;
+      const semicolonBracePatterns = [
+        { from: ';\n}', to: '\n}' },
+        { from: ';\n  }', to: '\n  }' },
+        { from: ';\n    }', to: '\n    }' },
+        { from: ';\n      }', to: '\n      }' },
+        { from: ';\n        }', to: '\n        }' },
+        { from: '; }', to: ' }' },
+        { from: ';}', to: '}' },
+        { from: '";}', to: '"}' },
+        { from: '\';}', to: '\'}' },
+        { from: '`;}', to: '`}' },
+      ];
+      
+      semicolonBracePatterns.forEach(({ from, to }) => {
+        if (content.includes(from)) {
+          const beforeCount = content.split(from).length - 1;
+          content = content.split(from).join(to);
+          const afterCount = content.split(from).length - 1;
+          if (beforeCount > afterCount) {
+            wasFixed = true;
+          }
+        }
+      });
+      
+      if (content !== beforeSemicolonBrace) {
+        this.logger.info(`Fixed semicolons before closing braces in ${file.path}`);
+      }
+
       // Fix JSON trailing commas (for JSON files)
       if (file.path.endsWith('.json')) {
         const beforeJSON = content;

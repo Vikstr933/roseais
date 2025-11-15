@@ -130,6 +130,12 @@ export class ErrorChecker {
         message: 'Semicolon after interface opening brace',
         fixable: true,
         suggestion: 'Remove semicolon: interface Name {; -> interface Name {'
+      },
+      {
+        regex: /;\s*\}/g,
+        message: 'Semicolon before closing brace',
+        fixable: true,
+        suggestion: 'Remove semicolon before closing brace: ;} -> }'
       }
     ];
 
