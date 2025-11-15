@@ -1008,13 +1008,41 @@ export default function PromptPlayground() {
       'make it',
       'make the',
       'make this',
+      'make more',
+      'make [',
       'update the',
       'change the',
       'fix the',
       'add a',
       'add an',
+      'add more',
       'remove the',
-      'delete the'
+      'delete the',
+      'style',
+      'styling',
+      'color',
+      'colors',
+      'animated',
+      'animation',
+      'theme',
+      'design',
+      'ui',
+      'ux'
+    ];
+    
+    // Phrases that indicate new generation (only if at start of prompt)
+    const newGenerationPhrases = [
+      'create a',
+      'create an',
+      'build a',
+      'build an',
+      'generate a',
+      'generate an',
+      'make a new',
+      'make an new',
+      'new app',
+      'new project',
+      'new component'
     ];
     
     // Check if prompt matches deploy intent
@@ -1022,6 +1050,9 @@ export default function PromptPlayground() {
     
     // Check if prompt matches modification intent
     const isModifyIntent = modifyKeywords.some(keyword => lowerPrompt.includes(keyword));
+    
+    // Check if prompt starts with new generation phrases
+    const isNewGenerationIntent = newGenerationPhrases.some(phrase => lowerPrompt.startsWith(phrase));
     
     // Priority: deploy > modify > generate
     if (isDeployIntent && hasExistingFiles) {
@@ -1033,9 +1064,17 @@ export default function PromptPlayground() {
       return 'modify';
     }
     
-    // If we have existing files but no clear intent, assume modification
-    if (hasExistingFiles && !lowerPrompt.match(/\b(create|build|make|generate|new)\b/)) {
-      return 'modify';
+    // If we have existing files and it's NOT a new generation intent, assume modification
+    // This catches cases like "make the template more animated" where "make" alone might confuse
+    if (hasExistingFiles && !isNewGenerationIntent) {
+      // Double-check: if it contains "make" but also modification keywords, it's a modification
+      if (lowerPrompt.includes('make') && (lowerPrompt.includes('more') || lowerPrompt.includes('the') || lowerPrompt.includes('this'))) {
+        return 'modify';
+      }
+      // If it doesn't explicitly say "create new" or "build new", treat as modification
+      if (!lowerPrompt.match(/\b(create|build|generate)\s+(a|an|new)\b/)) {
+        return 'modify';
+      }
     }
     
     // Otherwise, generate new code
