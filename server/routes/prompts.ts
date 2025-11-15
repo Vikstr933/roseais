@@ -1872,12 +1872,35 @@ async function handleIncrementalGeneration(
 
     const errorCheckResult = await errorChecker.checkErrors(result.allFiles);
     
-    sendSSEUpdate(req, 'ERROR_CHECK_COMPLETE', {
-      errors: errorCheckResult.errors,
-      warnings: errorCheckResult.warnings,
-      info: errorCheckResult.info,
+    // Log error check results for debugging
+    console.log('🔍 Error check results:', {
+      errors: errorCheckResult.errors.length,
+      warnings: errorCheckResult.warnings.length,
+      info: errorCheckResult.info.length,
       summary: errorCheckResult.summary
     });
+    
+    // Ensure arrays are properly serialized
+    const errorData = {
+      errors: Array.isArray(errorCheckResult.errors) ? errorCheckResult.errors : [],
+      warnings: Array.isArray(errorCheckResult.warnings) ? errorCheckResult.warnings : [],
+      info: Array.isArray(errorCheckResult.info) ? errorCheckResult.info : [],
+      summary: errorCheckResult.summary || {
+        total: 0,
+        errors: 0,
+        warnings: 0,
+        info: 0,
+        fixable: 0
+      }
+    };
+    
+    console.log('📤 Sending ERROR_CHECK_COMPLETE SSE event:', {
+      errorsCount: errorData.errors.length,
+      warningsCount: errorData.warnings.length,
+      summaryTotal: errorData.summary.total
+    });
+    
+    sendSSEUpdate(req, 'ERROR_CHECK_COMPLETE', errorData);
 
     sendSSEUpdate(req, 'GENERATION_COMPLETE', {
       success: result.success,

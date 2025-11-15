@@ -1368,20 +1368,36 @@ export default function PromptPlayground() {
                     });
                   } else if (data.type === 'ERROR_CHECK_COMPLETE') {
                     console.log('🔍 Error check complete', data.data);
-                    const { errors, warnings, summary } = data.data;
+                    const { errors = [], warnings = [], summary } = data.data || {};
                     
-                    if (summary.total > 0) {
-                      let errorMessage = `🔍 Found ${summary.errors} error${summary.errors !== 1 ? 's' : ''}`;
-                      if (summary.warnings > 0) {
-                        errorMessage += ` and ${summary.warnings} warning${summary.warnings !== 1 ? 's' : ''}`;
+                    // Ensure errors and warnings are arrays
+                    const errorArray = Array.isArray(errors) ? errors : [];
+                    const warningArray = Array.isArray(warnings) ? warnings : [];
+                    
+                    console.log('📊 Error check results:', {
+                      errors: errorArray.length,
+                      warnings: warningArray.length,
+                      summary
+                    });
+                    
+                    if (summary && summary.total > 0) {
+                      let errorMessage = `🔍 Found ${summary.errors || errorArray.length} error${(summary.errors || errorArray.length) !== 1 ? 's' : ''}`;
+                      if ((summary.warnings || warningArray.length) > 0) {
+                        errorMessage += ` and ${summary.warnings || warningArray.length} warning${(summary.warnings || warningArray.length) !== 1 ? 's' : ''}`;
                       }
+                      
+                      console.log('📝 Adding error message to chat:', {
+                        content: errorMessage,
+                        errors: errorArray.length,
+                        warnings: warningArray.length
+                      });
                       
                       addChatMessage({
                         role: 'assistant',
                         content: errorMessage,
                         timestamp: Date.now(),
-                        errors: errors,
-                        warnings: warnings,
+                        errors: errorArray,
+                        warnings: warningArray,
                         errorSummary: summary
                       });
                     } else {
