@@ -5,6 +5,9 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Brain, MessageSquare, Copy, Check, AlertTriangle, AlertCircle, Info, Wrench, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
 interface CodeError {
   file: string;
