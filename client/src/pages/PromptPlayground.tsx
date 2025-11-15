@@ -968,117 +968,53 @@ export default function PromptPlayground() {
     },
   });
 
-  // Detect user intent: deploy, modify, or generate new
-  const detectIntent = (prompt: string, hasExistingFiles: boolean): 'deploy' | 'modify' | 'generate' => {
-    const lowerPrompt = prompt.toLowerCase().trim();
-    
-    // Keywords that indicate "run dev server" intent
-    const deployKeywords = [
-      'run dev server',
-      'start dev server',
-      'restart dev server',
-      'start preview',
-      'show preview',
-      'open preview',
-      'deploy',
-      'run the app',
-      'start the app',
-      'launch',
-      'preview',
-      'run it',
-      'start it'
-    ];
-    
-    // Keywords that indicate modification intent (fix, change, update, add, etc.)
-    const modifyKeywords = [
-      'fix',
-      'change',
-      'update',
-      'modify',
-      'edit',
-      'add',
-      'remove',
-      'delete',
-      'improve',
-      'enhance',
-      'refactor',
-      'adjust',
-      'alter',
-      'replace',
-      'make it',
-      'make the',
-      'make this',
-      'make more',
-      'make [',
-      'update the',
-      'change the',
-      'fix the',
-      'add a',
-      'add an',
-      'add more',
-      'remove the',
-      'delete the',
-      'style',
-      'styling',
-      'color',
-      'colors',
-      'animated',
-      'animation',
-      'theme',
-      'design',
-      'ui',
-      'ux'
-    ];
-    
-    // Phrases that indicate new generation (only if at start of prompt)
-    const newGenerationPhrases = [
-      'create a',
-      'create an',
-      'build a',
-      'build an',
-      'generate a',
-      'generate an',
-      'make a new',
-      'make an new',
-      'new app',
-      'new project',
-      'new component'
-    ];
-    
-    // Check if prompt matches deploy intent
-    const isDeployIntent = deployKeywords.some(keyword => lowerPrompt.includes(keyword));
-    
-    // Check if prompt matches modification intent
-    const isModifyIntent = modifyKeywords.some(keyword => lowerPrompt.includes(keyword));
-    
-    // Check if prompt starts with new generation phrases
-    const isNewGenerationIntent = newGenerationPhrases.some(phrase => lowerPrompt.startsWith(phrase));
-    
-    // Priority: deploy > modify > generate
-    if (isDeployIntent && hasExistingFiles) {
-      return 'deploy';
-    }
-    
-    // If modification intent AND we have existing files, treat as modification
-    if (isModifyIntent && hasExistingFiles) {
-      return 'modify';
-    }
-    
-    // If we have existing files and it's NOT a new generation intent, assume modification
-    // This catches cases like "make the template more animated" where "make" alone might confuse
-    if (hasExistingFiles && !isNewGenerationIntent) {
-      // Double-check: if it contains "make" but also modification keywords, it's a modification
-      if (lowerPrompt.includes('make') && (lowerPrompt.includes('more') || lowerPrompt.includes('the') || lowerPrompt.includes('this'))) {
-        return 'modify';
+  // AI-based intent detection: uses AI to classify user intent instead of keyword matching
+  const detectIntent = async (prompt: string, hasExistingFiles: boolean, fileCount: number): Promise<'deploy' | 'modify' | 'generate'> => {
+    try {
+      // Call AI-based intent detection endpoint
+      const response = await apiFetch('/api/intent/detect', {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(sessionToken),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          hasExistingFiles,
+          fileCount
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Intent detection failed: ${response.status}`);
       }
-      // If it doesn't explicitly say "create new" or "build new", treat as modification
-      if (!lowerPrompt.match(/\b(create|build|generate)\s+(a|an|new)\b/)) {
-        return 'modify';
+
+      const result = await response.json();
+      console.log('🤖 AI Intent Detection:', { intent: result.intent, confidence: result.confidence, reasoning: result.reasoning });
+      
+      return result.intent as 'deploy' | 'modify' | 'generate';
+    } catch (error) {
+      console.warn('⚠️ AI intent detection failed, using fallback keyword matching:', error);
+      
+      // Fallback to keyword-based detection if AI fails
+      const lowerPrompt = prompt.toLowerCase().trim();
+      
+      // Quick keyword checks for fallback
+      if (hasExistingFiles) {
+        if (lowerPrompt.match(/\b(run|start|restart|launch|preview|show|open|deploy)\b/)) {
+          return 'deploy';
+        }
+        if (lowerPrompt.match(/\b(fix|change|update|modify|edit|add|remove|improve|enhance|make|style|color|animated)\b/)) {
+          return 'modify';
+        }
+        // Default to modify if files exist and not explicitly creating new
+        if (!lowerPrompt.match(/\b(create|build|generate)\s+(a|an|new)\b/)) {
+          return 'modify';
+        }
       }
+      
+      return 'generate';
     }
-    
-    // Otherwise, generate new code
-    return 'generate';
   };
 
   const generateMutation = useMutation({
@@ -1091,7 +1027,7 @@ export default function PromptPlayground() {
         : currentSession?.generatedFiles || [];
       
       const hasExistingFiles = existingFiles.length > 0;
-      const intent = detectIntent(data.userPrompt, hasExistingFiles);
+      const intent = await detectIntent(data.userPrompt, hasExistingFiles, existingFiles.length);
       
       // Add user message to chat history
       addChatMessage({

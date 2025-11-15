@@ -43,6 +43,7 @@ import activityRouter from './routes/activity';
 import omniassistantRouter from './routes/omniassistant';
 import userPluginsRouter from './routes/user-plugins';
 import credentialsRouter from './routes/credentials';
+import intentDetectionRouter from './routes/intent-detection';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -332,6 +333,7 @@ const initializeApp = async () => {
     app.use('/api/companies', companiesRouter);
     app.use('/api/frameworks', frameworksRouter);
     app.use('/api/knowledge', knowledgeRouter);
+    app.use('/api/intent', intentDetectionRouter);
     app.use('/api/github-knowledge', githubKnowledgeRouter);
     app.use('/api/api-keys', apiKeysRouter);
     app.use('/api/monetization', monetizationRouter);
