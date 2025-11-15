@@ -968,17 +968,92 @@ export default function PromptPlayground() {
     },
   });
 
+  // Detect if user wants to run dev server vs create new app
+  const detectIntent = (prompt: string, hasExistingFiles: boolean): 'deploy' | 'generate' => {
+    const lowerPrompt = prompt.toLowerCase().trim();
+    
+    // Keywords that indicate "run dev server" intent
+    const deployKeywords = [
+      'run dev server',
+      'start dev server',
+      'restart dev server',
+      'start preview',
+      'show preview',
+      'open preview',
+      'deploy',
+      'run the app',
+      'start the app',
+      'launch',
+      'preview',
+      'run it',
+      'start it'
+    ];
+    
+    // Check if prompt matches deploy intent
+    const isDeployIntent = deployKeywords.some(keyword => lowerPrompt.includes(keyword));
+    
+    // If it's deploy intent AND we have existing files, reuse them
+    if (isDeployIntent && hasExistingFiles) {
+      return 'deploy';
+    }
+    
+    // Otherwise, generate new code
+    return 'generate';
+  };
+
   const generateMutation = useMutation({
     mutationFn: async (data: PromptForm) => {
       setError(null);
-      // Preserve existing response and terminal logs for iterative workflow
-
+      
+      // Check if we have existing files
+      const existingFiles = response && typeof response === 'object' && 'files' in response 
+        ? (response as AIResponse).files || []
+        : currentSession?.generatedFiles || [];
+      
+      const hasExistingFiles = existingFiles.length > 0;
+      const intent = detectIntent(data.userPrompt, hasExistingFiles);
+      
       // Add user message to chat history
       addChatMessage({
         role: 'user',
         content: data.userPrompt,
         timestamp: Date.now()
       });
+
+      // If intent is to deploy and we have files, skip generation and just deploy
+      if (intent === 'deploy' && hasExistingFiles) {
+        console.log('🚀 Detected deploy intent - reusing existing files');
+        
+        addChatMessage({
+          role: 'assistant',
+          content: `🔄 Restarting dev server with your existing ${existingFiles.length} files...`,
+          timestamp: Date.now()
+        });
+        
+        // Clear the form input
+        form.reset({
+          userPrompt: "",
+          model: data.model,
+          temperature: data.temperature,
+          projectType: data.projectType
+        });
+        
+        // Switch to preview tab
+        setActiveTab('preview');
+        
+        // Get component name from existing files or use default
+        const componentName = currentComponentName || 'App';
+        
+        // Deploy existing files
+        setTimeout(() => {
+          deployToRuntime(existingFiles, componentName);
+        }, 500);
+        
+        // Return early - don't call generation API
+        return { response: { type: 'text', text: 'Deploying existing files...', files: existingFiles } };
+      }
+      
+      // Preserve existing response and terminal logs for iterative workflow
 
       // Clear the form input after sending
       form.reset({
