@@ -16,6 +16,7 @@ import { agentEventEmitter } from '../index';
 import { agentSelector } from '../services/AgentSelector';
 import { IncrementalOrchestrator } from '../services/IncrementalOrchestrator';
 import { AnalysisAgent } from '../services/AnalysisAgent';
+import { errorChecker } from '../services/ErrorChecker';
 
 const aiCodeGenerator = new AICodeGenerator();
 const incrementalOrchestrator = new IncrementalOrchestrator();
@@ -1859,6 +1860,25 @@ async function handleIncrementalGeneration(
       })
     );
 
+    // Step 4: Error Checking
+    sendSSEUpdate(req, 'STEP_START', {
+      agent: 'Error Checker',
+      task: 'Checking for errors',
+      details: 'Analyzing generated code for syntax errors, missing files, and configuration issues',
+      progress: 90,
+      totalSteps: plan.phases.length + 2,
+      currentStep: plan.phases.length + 2
+    });
+
+    const errorCheckResult = await errorChecker.checkErrors(result.allFiles);
+    
+    sendSSEUpdate(req, 'ERROR_CHECK_COMPLETE', {
+      errors: errorCheckResult.errors,
+      warnings: errorCheckResult.warnings,
+      info: errorCheckResult.info,
+      summary: errorCheckResult.summary
+    });
+
     sendSSEUpdate(req, 'GENERATION_COMPLETE', {
       success: result.success,
       files: result.allFiles,
@@ -1869,7 +1889,10 @@ async function handleIncrementalGeneration(
         filesCount: p.files.length,
         duration: p.duration
       })),
-      totalDuration: result.totalDuration
+      totalDuration: result.totalDuration,
+      errors: errorCheckResult.errors,
+      warnings: errorCheckResult.warnings,
+      errorSummary: errorCheckResult.summary
     });
 
     // Build response - ALWAYS include files even if validation had warnings

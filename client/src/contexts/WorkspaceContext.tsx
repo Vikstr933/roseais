@@ -18,11 +18,33 @@ interface GeneratedFile {
   language: string;
 }
 
+interface CodeError {
+  file: string;
+  line?: number;
+  column?: number;
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  category: 'syntax' | 'type' | 'import' | 'runtime' | 'build' | 'other';
+  suggestion?: string;
+  fixable: boolean;
+}
+
+interface ErrorSummary {
+  total: number;
+  errors: number;
+  warnings: number;
+  info: number;
+  fixable: number;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
   files?: GeneratedFile[];
+  errors?: CodeError[];
+  warnings?: CodeError[];
+  errorSummary?: ErrorSummary;
 }
 
 interface WorkspaceSession {

@@ -1366,6 +1366,31 @@ export default function PromptPlayground() {
                       content: data.data.message || 'Loaded project context',
                       timestamp: Date.now()
                     });
+                  } else if (data.type === 'ERROR_CHECK_COMPLETE') {
+                    console.log('🔍 Error check complete', data.data);
+                    const { errors, warnings, summary } = data.data;
+                    
+                    if (summary.total > 0) {
+                      let errorMessage = `🔍 Found ${summary.errors} error${summary.errors !== 1 ? 's' : ''}`;
+                      if (summary.warnings > 0) {
+                        errorMessage += ` and ${summary.warnings} warning${summary.warnings !== 1 ? 's' : ''}`;
+                      }
+                      
+                      addChatMessage({
+                        role: 'assistant',
+                        content: errorMessage,
+                        timestamp: Date.now(),
+                        errors: errors,
+                        warnings: warnings,
+                        errorSummary: summary
+                      });
+                    } else {
+                      addChatMessage({
+                        role: 'assistant',
+                        content: '✅ No errors found! Code looks good.',
+                        timestamp: Date.now()
+                      });
+                    }
                   } else if (data.type === 'COMPLETE' || data.type === 'GENERATION_COMPLETE') {
                     console.log('🎉 Generation complete', data.data);
                     // Format finalResult to match expected structure with files
@@ -1378,6 +1403,16 @@ export default function PromptPlayground() {
                       ...data.data
                     };
                     console.log('📁 Final result files:', finalResult.response?.files?.length);
+                    
+                    // Show error summary if present
+                    if (data.data?.errorSummary && data.data.errorSummary.total > 0) {
+                      const { errorSummary } = data.data;
+                      addChatMessage({
+                        role: 'assistant',
+                        content: `📊 Generation complete! Found ${errorSummary.errors} error${errorSummary.errors !== 1 ? 's' : ''} and ${errorSummary.warnings} warning${errorSummary.warnings !== 1 ? 's' : ''}. Check the errors above for details.`,
+                        timestamp: Date.now()
+                      });
+                    }
                   }
                 } catch (e) {
                   console.warn('Failed to parse SSE event:', line, e);
@@ -1820,6 +1855,9 @@ export default function PromptPlayground() {
                               role={message.role}
                               content={message.content}
                               timestamp={message.timestamp}
+                              errors={message.errors}
+                              warnings={message.warnings}
+                              errorSummary={message.errorSummary}
                             />
                           ))}
 

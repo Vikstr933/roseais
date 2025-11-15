@@ -2,14 +2,36 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Brain, MessageSquare, Copy, Check } from 'lucide-react';
+import { Brain, MessageSquare, Copy, Check, AlertTriangle, AlertCircle, Info, Wrench, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+
+interface CodeError {
+  file: string;
+  line?: number;
+  column?: number;
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  category: 'syntax' | 'type' | 'import' | 'runtime' | 'build' | 'other';
+  suggestion?: string;
+  fixable: boolean;
+}
+
+interface ErrorSummary {
+  total: number;
+  errors: number;
+  warnings: number;
+  info: number;
+  fixable: number;
+}
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string;
   timestamp?: number;
+  errors?: CodeError[];
+  warnings?: CodeError[];
+  errorSummary?: ErrorSummary;
 }
 
 // Helper function to clean message content
@@ -57,8 +79,10 @@ function cleanMessageContent(content: string): string {
   return cleaned;
 }
 
-export function ChatMessage({ role, content, timestamp }: ChatMessageProps) {
+export function ChatMessage({ role, content, timestamp, errors, warnings, errorSummary }: ChatMessageProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [errorsExpanded, setErrorsExpanded] = useState(true);
+  const [warningsExpanded, setWarningsExpanded] = useState(false);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -66,8 +90,41 @@ export function ChatMessage({ role, content, timestamp }: ChatMessageProps) {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  const handleFixError = async (error: CodeError) => {
+    // TODO: Implement error fixing
+    console.log('Fix error:', error);
+  };
+
   // Clean the content before rendering
   const cleanedContent = cleanMessageContent(content);
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'error':
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'warning':
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case 'info':
+        return <Info className="h-4 w-4 text-blue-500" />;
+      default:
+        return <AlertCircle className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'syntax':
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+      case 'type':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400';
+      case 'import':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+      case 'build':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400';
+    }
+  };
 
   return (
     <motion.div
@@ -154,6 +211,116 @@ export function ChatMessage({ role, content, timestamp }: ChatMessageProps) {
           </div>
         ) : (
           <p className="text-sm whitespace-pre-wrap">{cleanedContent}</p>
+        )}
+
+        {/* Error Display */}
+        {errors && errors.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <Collapsible open={errorsExpanded} onOpenChange={setErrorsExpanded}>
+              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left hover:opacity-80 transition-opacity">
+                <XCircle className="h-4 w-4 text-red-500" />
+                <span className="font-semibold text-red-600 dark:text-red-400">
+                  {errors.length} Error{errors.length !== 1 ? 's' : ''}
+                </span>
+                {errorsExpanded ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-2">
+                {errors.map((error, index) => (
+                  <div
+                    key={index}
+                    className="p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {getSeverityIcon(error.severity)}
+                          <span className="font-medium text-sm">{error.file}</span>
+                          {error.line && (
+                            <span className="text-xs text-muted-foreground">
+                              Line {error.line}{error.column ? `:${error.column}` : ''}
+                            </span>
+                          )}
+                          <Badge variant="outline" className={`text-xs ${getCategoryColor(error.category)}`}>
+                            {error.category}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-foreground mb-1">{error.message}</p>
+                        {error.suggestion && (
+                          <p className="text-xs text-muted-foreground italic">💡 {error.suggestion}</p>
+                        )}
+                      </div>
+                      {error.fixable && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleFixError(error)}
+                          className="flex-shrink-0"
+                        >
+                          <Wrench className="h-3 w-3 mr-1" />
+                          Fix
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        )}
+
+        {/* Warnings Display */}
+        {warnings && warnings.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <Collapsible open={warningsExpanded} onOpenChange={setWarningsExpanded}>
+              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left hover:opacity-80 transition-opacity">
+                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                <span className="font-semibold text-yellow-600 dark:text-yellow-400">
+                  {warnings.length} Warning{warnings.length !== 1 ? 's' : ''}
+                </span>
+                {warningsExpanded ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-2">
+                {warnings.map((warning, index) => (
+                  <div
+                    key={index}
+                    className="p-3 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {getSeverityIcon(warning.severity)}
+                          <span className="font-medium text-sm">{warning.file}</span>
+                          {warning.line && (
+                            <span className="text-xs text-muted-foreground">
+                              Line {warning.line}{warning.column ? `:${warning.column}` : ''}
+                            </span>
+                          )}
+                          <Badge variant="outline" className={`text-xs ${getCategoryColor(warning.category)}`}>
+                            {warning.category}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-foreground mb-1">{warning.message}</p>
+                        {warning.suggestion && (
+                          <p className="text-xs text-muted-foreground italic">💡 {warning.suggestion}</p>
+                        )}
+                      </div>
+                      {warning.fixable && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleFixError(warning)}
+                          className="flex-shrink-0"
+                        >
+                          <Wrench className="h-3 w-3 mr-1" />
+                          Fix
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
         )}
 
         {timestamp && (
