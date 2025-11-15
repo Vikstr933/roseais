@@ -182,13 +182,13 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
 
   const getMetricColor = (value: number, thresholds: { good: number; poor: number }, reverse = false) => {
     if (reverse) {
-      if (value <= thresholds.good) return 'text-green-600';
-      if (value <= thresholds.poor) return 'text-yellow-600';
-      return 'text-red-600';
+      if (value <= thresholds.good) return 'text-green-700 dark:text-green-400';
+      if (value <= thresholds.poor) return 'text-yellow-700 dark:text-yellow-400';
+      return 'text-red-700 dark:text-red-400';
     } else {
-      if (value >= thresholds.good) return 'text-green-600';
-      if (value >= thresholds.poor) return 'text-yellow-600';
-      return 'text-red-600';
+      if (value >= thresholds.good) return 'text-green-700 dark:text-green-400';
+      if (value >= thresholds.poor) return 'text-yellow-700 dark:text-yellow-400';
+      return 'text-red-700 dark:text-red-400';
     }
   };
 
@@ -429,41 +429,41 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                 {performanceMetrics && (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-foreground">LCP</span>
-                      <span className={`text-sm font-mono ${getMetricColor(performanceMetrics.lcp, { good: 2500, poor: 4000 }, true)}`}>
+                      <span className="text-sm text-foreground font-medium">LCP</span>
+                      <span className={`text-sm font-mono font-semibold ${getMetricColor(performanceMetrics.lcp, { good: 2500, poor: 4000 }, true)}`}>
                         {formatTime(performanceMetrics.lcp)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-foreground">FID</span>
-                      <span className={`text-sm font-mono ${getMetricColor(performanceMetrics.fid, { good: 100, poor: 300 }, true)}`}>
+                      <span className="text-sm text-foreground font-medium">FID</span>
+                      <span className={`text-sm font-mono font-semibold ${getMetricColor(performanceMetrics.fid, { good: 100, poor: 300 }, true)}`}>
                         {formatTime(performanceMetrics.fid)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-foreground">CLS</span>
-                      <span className={`text-sm font-mono ${getMetricColor(performanceMetrics.cls, { good: 0.1, poor: 0.25 }, true)}`}>
+                      <span className="text-sm text-foreground font-medium">CLS</span>
+                      <span className={`text-sm font-mono font-semibold ${getMetricColor(performanceMetrics.cls, { good: 0.1, poor: 0.25 }, true)}`}>
                         {performanceMetrics.cls.toFixed(3)}
                       </span>
                     </div>
 
-                    <Separator />
+                    <Separator className="my-3" />
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-foreground">Load Time</span>
-                      <span className="text-sm font-mono text-foreground">{formatTime(performanceMetrics.loadTime)}</span>
+                      <span className="text-sm text-foreground font-medium">Load Time</span>
+                      <span className="text-sm font-mono font-semibold text-foreground">{formatTime(performanceMetrics.loadTime)}</span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-foreground">Bundle Size</span>
-                      <span className="text-sm font-mono text-foreground">{formatBytes(performanceMetrics.bundleSize)}</span>
+                      <span className="text-sm text-foreground font-medium">Bundle Size</span>
+                      <span className="text-sm font-mono font-semibold text-foreground">{formatBytes(performanceMetrics.bundleSize)}</span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-foreground">Memory Usage</span>
-                      <span className="text-sm font-mono text-foreground">{performanceMetrics.memoryUsage.toFixed(1)} MB</span>
+                      <span className="text-sm text-foreground font-medium">Memory Usage</span>
+                      <span className="text-sm font-mono font-semibold text-foreground">{performanceMetrics.memoryUsage.toFixed(1)} MB</span>
                     </div>
                   </div>
                 )}
