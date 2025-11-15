@@ -12,7 +12,7 @@ interface IntentDetectionRequest {
 }
 
 interface IntentDetectionResponse {
-  intent: 'deploy' | 'modify' | 'generate';
+  intent: 'deploy' | 'modify' | 'generate' | 'describe';
   confidence: number;
   reasoning: string;
 }
@@ -48,7 +48,12 @@ Intent Categories:
    - Only valid if user has existing files
    - Includes requests to add features, change styling, fix bugs, improve UX
 
-3. **generate**: User wants to create a new app/project/component from scratch
+3. **describe**: User wants to understand or get information about the existing project
+   - Examples: "describe the project", "what does this app do", "explain the code", "tell me about this project", "what is this app"
+   - Only valid if user has existing files
+   - Should NOT trigger code generation, just provide a description
+
+4. **generate**: User wants to create a new app/project/component from scratch
    - Examples: "create a todo app", "build a new dashboard", "make a calculator", "generate a new project"
    - Valid whether or not user has existing files
 
@@ -56,12 +61,14 @@ Rules:
 - If user has NO existing files, intent can only be 'generate'
 - If user has existing files and asks to run/start/preview, intent is 'deploy'
 - If user has existing files and asks to change/update/add/improve, intent is 'modify'
+- If user has existing files and asks to describe/explain/tell about the project, intent is 'describe'
 - If user has existing files but explicitly says "create new" or "build new", intent is 'generate'
 - Be smart about context: "make the template more animated" = modify, not generate
+- "describe", "explain", "what is", "tell me about" = describe intent
 
 Respond with ONLY a JSON object in this exact format:
 {
-  "intent": "deploy" | "modify" | "generate",
+  "intent": "deploy" | "modify" | "generate" | "describe",
   "confidence": 0.0-1.0,
   "reasoning": "Brief explanation of why this intent was chosen"
 }`;
@@ -113,7 +120,7 @@ Classify the intent.`;
       }
 
       // Validate intent value
-      if (!['deploy', 'modify', 'generate'].includes(intentResult.intent)) {
+      if (!['deploy', 'modify', 'generate', 'describe'].includes(intentResult.intent)) {
         throw new Error(`Invalid intent: ${intentResult.intent}`);
       }
 
@@ -132,11 +139,13 @@ Classify the intent.`;
       
       // Fallback to keyword-based detection if AI response is invalid
       const lowerPrompt = prompt.toLowerCase();
-      let fallbackIntent: 'deploy' | 'modify' | 'generate' = 'generate';
+      let fallbackIntent: 'deploy' | 'modify' | 'generate' | 'describe' = 'generate';
       
       if (hasExistingFiles) {
         if (lowerPrompt.match(/\b(run|start|restart|launch|preview|show|open|deploy)\b/)) {
           fallbackIntent = 'deploy';
+        } else if (lowerPrompt.match(/\b(describe|explain|what|tell|about|summary|overview|info)\b.*\b(project|app|code|this|it)\b/)) {
+          fallbackIntent = 'describe';
         } else if (lowerPrompt.match(/\b(fix|change|update|modify|edit|add|remove|improve|enhance|make|style|color|animated)\b/)) {
           fallbackIntent = 'modify';
         } else if (!lowerPrompt.match(/\b(create|build|generate|new)\s+(a|an|app|project|component)\b/)) {

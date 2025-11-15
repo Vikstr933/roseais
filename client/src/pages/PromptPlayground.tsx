@@ -969,7 +969,7 @@ export default function PromptPlayground() {
   });
 
   // AI-based intent detection: uses AI to classify user intent instead of keyword matching
-  const detectIntent = async (prompt: string, hasExistingFiles: boolean, fileCount: number): Promise<'deploy' | 'modify' | 'generate'> => {
+  const detectIntent = async (prompt: string, hasExistingFiles: boolean, fileCount: number): Promise<'deploy' | 'modify' | 'generate' | 'describe'> => {
     try {
       // Call AI-based intent detection endpoint
       const response = await apiFetch('/api/intent/detect', {
@@ -1035,6 +1035,52 @@ export default function PromptPlayground() {
         content: data.userPrompt,
         timestamp: Date.now()
       });
+
+      // If intent is to describe, analyze project and return description without generation
+      if (intent === 'describe' && hasExistingFiles) {
+        try {
+          setIsLoading(true);
+          addChatMessage({
+            role: 'assistant',
+            content: '📖 Analyzing your project...',
+            timestamp: Date.now()
+          });
+
+          const describeResponse = await apiFetch('/api/project/describe', {
+            method: 'POST',
+            headers: {
+              ...getAuthHeaders(sessionToken),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              files: existingFiles,
+              projectId: params?.projectId || null
+            }),
+          });
+
+          const describeData = await describeResponse.json();
+          
+          if (describeData.success && describeData.description) {
+            addChatMessage({
+              role: 'assistant',
+              content: describeData.description,
+              timestamp: Date.now()
+            });
+          } else {
+            throw new Error(describeData.error || 'Failed to generate description');
+          }
+        } catch (error: any) {
+          console.error('Failed to describe project:', error);
+          addChatMessage({
+            role: 'assistant',
+            content: `❌ Sorry, I couldn't analyze the project: ${error.message || 'Unknown error'}`,
+            timestamp: Date.now()
+          });
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
 
       // If intent is to deploy and we have files, skip generation and just deploy
       if (intent === 'deploy' && hasExistingFiles) {
