@@ -751,9 +751,19 @@ router.post(
         message: 'Starting multi-agent orchestration process',
       });
 
-      // Load existing project files if projectId is provided (for context continuation)
+      // Load existing project files (priority: direct from request > projectId lookup)
       let existingProjectFiles: { path: string; content: string }[] = [];
-      if (projectId) {
+      
+      // First, check if files were passed directly in the request (for modification requests)
+      if (req.body.existingFiles && Array.isArray(req.body.existingFiles)) {
+        existingProjectFiles = req.body.existingFiles.map((f: any) => ({
+          path: f.path,
+          content: f.content
+        }));
+        console.log(`📦 Using ${existingProjectFiles.length} files passed directly from frontend`);
+      }
+      // Otherwise, load from projectId if provided
+      else if (projectId) {
         try {
           const { projectFiles } = await import('../../db/schema');
           const { eq, and } = await import('drizzle-orm');
@@ -774,15 +784,19 @@ router.post(
           }));
           
           console.log(`📂 Loaded ${existingProjectFiles.length} existing files for project ${projectId}`);
-          
-          sendSSEUpdate(req, 'PROJECT_CONTEXT_LOADED', {
-            message: `Loading ${existingProjectFiles.length} existing files for context...`,
-            fileCount: existingProjectFiles.length
-          });
         } catch (error) {
           console.error('Failed to load project files:', error);
           // Continue without project context if loading fails
         }
+      }
+      
+      // Send update if we have existing files
+      if (existingProjectFiles.length > 0) {
+        sendSSEUpdate(req, 'PROJECT_CONTEXT_LOADED', {
+          message: `Using ${existingProjectFiles.length} existing files for context...`,
+          fileCount: existingProjectFiles.length,
+          isModification: true
+        });
       }
 
       // Check for required API keys first (skip if system ANTHROPIC_API_KEY is set)

@@ -78,12 +78,36 @@ export class AnalysisAgent {
     knowledgeContext: string,
     existingFiles: { path: string; content: string }[]
   ): string {
+    const isModification = existingFiles.length > 0;
+    const modificationKeywords = ['fix', 'change', 'update', 'modify', 'edit', 'add', 'remove', 'delete', 'improve', 'enhance'];
+    const isModifyRequest = modificationKeywords.some(keyword => userPrompt.toLowerCase().includes(keyword));
+    
     const existingFilesSection = existingFiles.length > 0 ? `
-EXISTING FILES IN PROJECT:
+🔄 EXISTING PROJECT FILES (${existingFiles.length} files):
 ${existingFiles.map(f => `- ${f.path}`).join('\n')}
+
+${isModifyRequest ? '⚠️ MODIFICATION REQUEST DETECTED ⚠️' : '📦 PROJECT CONTINUATION'}
 ` : '';
 
-    return `Analyze the following user request and create a detailed generation plan for building the application incrementally.
+    const modificationInstructions = isModification ? `
+CRITICAL: This is a MODIFICATION request for an existing project.
+
+IMPORTANT RULES FOR MODIFICATIONS:
+1. **PRESERVE UNCHANGED FILES**: Only modify files that need changes based on the user's request
+2. **MAINTAIN CONSISTENCY**: Keep the same coding style, patterns, and structure as existing files
+3. **INCREMENTAL CHANGES**: Make minimal changes - only what's requested
+4. **PRESERVE IMPORTS**: Keep existing imports unless they're no longer needed
+5. **FILE STRUCTURE**: Don't reorganize files unless explicitly requested
+6. **DEPENDENCIES**: Maintain compatibility with existing code
+
+When creating phases:
+- Only include files that NEED to be modified or added
+- Skip phases for files that don't need changes
+- If a file needs a small change, include it in the appropriate phase
+- If adding new features, create new files but keep existing ones intact
+` : '';
+
+    return `Analyze the following user request and create a detailed generation plan for ${isModification ? 'modifying' : 'building'} the application incrementally.
 
 USER REQUEST:
 ${userPrompt}
@@ -92,10 +116,13 @@ ${knowledgeContext ? `RELEVANT KNOWLEDGE:\n${knowledgeContext}\n` : ''}
 
 ${existingFilesSection}
 
-Your task is to create a generation plan that breaks down the application into phases. Each phase should:
+${modificationInstructions}
+
+Your task is to create a generation plan that breaks down the ${isModification ? 'modification' : 'application'} into phases. Each phase should:
 1. Build on previous phases
 2. Include only related files
 3. Be independently validatable
+${isModification ? '4. Preserve files that don\'t need changes' : ''}
 
 Create a plan with the following structure:
 

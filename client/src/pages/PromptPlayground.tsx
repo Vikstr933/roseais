@@ -968,8 +968,8 @@ export default function PromptPlayground() {
     },
   });
 
-  // Detect if user wants to run dev server vs create new app
-  const detectIntent = (prompt: string, hasExistingFiles: boolean): 'deploy' | 'generate' => {
+  // Detect user intent: deploy, modify, or generate new
+  const detectIntent = (prompt: string, hasExistingFiles: boolean): 'deploy' | 'modify' | 'generate' => {
     const lowerPrompt = prompt.toLowerCase().trim();
     
     // Keywords that indicate "run dev server" intent
@@ -989,12 +989,53 @@ export default function PromptPlayground() {
       'start it'
     ];
     
+    // Keywords that indicate modification intent (fix, change, update, add, etc.)
+    const modifyKeywords = [
+      'fix',
+      'change',
+      'update',
+      'modify',
+      'edit',
+      'add',
+      'remove',
+      'delete',
+      'improve',
+      'enhance',
+      'refactor',
+      'adjust',
+      'alter',
+      'replace',
+      'make it',
+      'make the',
+      'make this',
+      'update the',
+      'change the',
+      'fix the',
+      'add a',
+      'add an',
+      'remove the',
+      'delete the'
+    ];
+    
     // Check if prompt matches deploy intent
     const isDeployIntent = deployKeywords.some(keyword => lowerPrompt.includes(keyword));
     
-    // If it's deploy intent AND we have existing files, reuse them
+    // Check if prompt matches modification intent
+    const isModifyIntent = modifyKeywords.some(keyword => lowerPrompt.includes(keyword));
+    
+    // Priority: deploy > modify > generate
     if (isDeployIntent && hasExistingFiles) {
       return 'deploy';
+    }
+    
+    // If modification intent AND we have existing files, treat as modification
+    if (isModifyIntent && hasExistingFiles) {
+      return 'modify';
+    }
+    
+    // If we have existing files but no clear intent, assume modification
+    if (hasExistingFiles && !lowerPrompt.match(/\b(create|build|make|generate|new)\b/)) {
+      return 'modify';
     }
     
     // Otherwise, generate new code
@@ -1148,21 +1189,34 @@ export default function PromptPlayground() {
       setCurrentStep('');
       setOverallProgress(0);
 
+      // Prepare request body with project context
+      const requestBody: any = {
+        ...data,
+        systemPrompt: SYSTEM_PROMPT,
+        orchestration: true, // Always use multi-agent orchestration
+        incrementalGeneration: true, // ALWAYS ON: Incremental generation is the standard way
+        sessionId: currentSessionId,
+        projectId: currentProject?.id, // Pass project ID if working in a project context
+        projectType: data.projectType,
+      };
+
+      // If we have existing files and it's a modification request, pass them directly
+      // This ensures the AI has the latest file contents even if projectId lookup fails
+      if (intent === 'modify' && hasExistingFiles && existingFiles.length > 0) {
+        requestBody.existingFiles = existingFiles.map(f => ({
+          path: f.path,
+          content: f.content
+        }));
+        console.log(`📦 Passing ${existingFiles.length} existing files for modification context`);
+      }
+
       const res = await apiFetch("/api/prompts/generate", {
         method: "POST",
         headers: {
           ...getAuthHeaders(sessionToken),
           'Accept': 'text/event-stream',
         },
-        body: JSON.stringify({
-          ...data,
-          systemPrompt: SYSTEM_PROMPT,
-          orchestration: true, // Always use multi-agent orchestration
-          incrementalGeneration: true, // ALWAYS ON: Incremental generation is the standard way
-          sessionId: currentSessionId,
-          projectId: currentProject?.id, // Pass project ID if working in a project context
-          projectType: data.projectType,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!res.ok) {

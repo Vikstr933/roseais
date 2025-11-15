@@ -329,9 +329,21 @@ export class IncrementalOrchestrator {
     existingFiles: { path: string; content: string }[],
     plan: GenerationPlan
   ): string {
+    const isModification = existingFiles.length > 0;
+    const modificationKeywords = ['fix', 'change', 'update', 'modify', 'edit', 'add', 'remove', 'delete', 'improve', 'enhance'];
+    const isModifyRequest = modificationKeywords.some(keyword => userPrompt.toLowerCase().includes(keyword));
+    
     const existingFilesSection = existingFiles.length > 0 ? `
-EXISTING FILES IN PROJECT (you can import from these):
-${existingFiles.map(f => `**${f.path}**\n\`\`\`typescript\n${f.content.substring(0, 500)}${f.content.length > 500 ? '...' : ''}\n\`\`\``).join('\n\n')}
+🔄 EXISTING FILES IN PROJECT (${existingFiles.length} files - you can import from these):
+${existingFiles.map(f => `**${f.path}**\n\`\`\`typescript\n${f.content.substring(0, 1000)}${f.content.length > 1000 ? '...' : ''}\n\`\`\``).join('\n\n')}
+
+${isModifyRequest ? `
+⚠️ MODIFICATION MODE ⚠️
+- If a file listed above is NOT in the "files to generate" list for this phase, DO NOT modify it
+- Only generate/modify files explicitly listed for this phase
+- Preserve existing code patterns and structure
+- Maintain compatibility with existing imports and dependencies
+` : ''}
 ` : '';
 
     return `🚨🚨🚨 CRITICAL: YOU MUST RESPOND WITH A JSON ARRAY ONLY 🚨🚨🚨
@@ -357,6 +369,17 @@ TECH STACK:
 - Framework: ${plan.techStack.framework}
 - Build Tool: ${plan.techStack.buildTool}
 - Language: ${plan.techStack.language}
+
+${isModification ? `
+📋 MODIFICATION RULES (CRITICAL):
+- You are modifying an EXISTING project with ${existingFiles.length} files
+- ONLY generate files listed in "YOUR TASK" above
+- DO NOT include files that are NOT in the list above (they will be preserved automatically)
+- If a file exists and is in the list, MODIFY it according to the user's request
+- If a file doesn't exist and is in the list, CREATE it
+- Maintain consistency with existing code style and patterns
+- Preserve existing imports and dependencies unless explicitly asked to change them
+` : ''}
 
 🚨🚨🚨 CRITICAL SYNTAX RULES - READ CAREFULLY 🚨🚨🚨
 
@@ -384,6 +407,7 @@ CRITICAL CHECKLIST - Before submitting your code:
 3. Search for "return {;" - if found, REMOVE the semicolon
 4. Search for "return [;" - if found, REMOVE the semicolon
 5. Search for ") => {;" - if found, REMOVE the semicolon
+${isModification ? '6. Verify you are ONLY generating files listed in "YOUR TASK" above' : ''}
 
 IMPORTANT:
 - You can import from existing files listed above
@@ -392,6 +416,7 @@ IMPORTANT:
 - Generate ONLY the files listed for this phase
 - Each file must be a JSON object with "path" and "content" keys
 - Generate COMPLETE, working code - no placeholders, no incomplete statements
+${isModification ? '- DO NOT include files that are NOT in the phase file list - they will be preserved automatically' : ''}
 
 OUTPUT FORMAT (JSON ARRAY):
 [
