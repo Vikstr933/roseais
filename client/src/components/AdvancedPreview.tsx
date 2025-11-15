@@ -421,7 +421,7 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
 
             <TabsContent value="performance" className="p-4 space-y-4">
               <div>
-                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <h3 className="font-semibold mb-2 flex items-center gap-2 text-foreground">
                   <Gauge className="h-4 w-4" />
                   Core Web Vitals
                 </h3>
@@ -429,21 +429,21 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                 {performanceMetrics && (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm">LCP</span>
+                      <span className="text-sm text-foreground">LCP</span>
                       <span className={`text-sm font-mono ${getMetricColor(performanceMetrics.lcp, { good: 2500, poor: 4000 }, true)}`}>
                         {formatTime(performanceMetrics.lcp)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm">FID</span>
+                      <span className="text-sm text-foreground">FID</span>
                       <span className={`text-sm font-mono ${getMetricColor(performanceMetrics.fid, { good: 100, poor: 300 }, true)}`}>
                         {formatTime(performanceMetrics.fid)}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm">CLS</span>
+                      <span className="text-sm text-foreground">CLS</span>
                       <span className={`text-sm font-mono ${getMetricColor(performanceMetrics.cls, { good: 0.1, poor: 0.25 }, true)}`}>
                         {performanceMetrics.cls.toFixed(3)}
                       </span>
@@ -452,18 +452,18 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                     <Separator />
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm">Load Time</span>
-                      <span className="text-sm font-mono">{formatTime(performanceMetrics.loadTime)}</span>
+                      <span className="text-sm text-foreground">Load Time</span>
+                      <span className="text-sm font-mono text-foreground">{formatTime(performanceMetrics.loadTime)}</span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm">Bundle Size</span>
-                      <span className="text-sm font-mono">{formatBytes(performanceMetrics.bundleSize)}</span>
+                      <span className="text-sm text-foreground">Bundle Size</span>
+                      <span className="text-sm font-mono text-foreground">{formatBytes(performanceMetrics.bundleSize)}</span>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm">Memory Usage</span>
-                      <span className="text-sm font-mono">{performanceMetrics.memoryUsage.toFixed(1)} MB</span>
+                      <span className="text-sm text-foreground">Memory Usage</span>
+                      <span className="text-sm font-mono text-foreground">{performanceMetrics.memoryUsage.toFixed(1)} MB</span>
                     </div>
                   </div>
                 )}
@@ -477,14 +477,14 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
 
             <TabsContent value="console" className="p-4">
               <div className="space-y-2">
-                <h3 className="font-semibold flex items-center gap-2">
+                <h3 className="font-semibold flex items-center gap-2 text-foreground">
                   <Bug className="h-4 w-4" />
                   Console Output
                 </h3>
 
-                <div className="bg-black text-green-400 p-3 rounded text-xs font-mono h-64 overflow-y-auto">
+                <div className="bg-gray-900 dark:bg-black text-green-400 p-3 rounded text-xs font-mono h-64 overflow-y-auto border border-gray-700">
                   {consoleMessages.length === 0 ? (
-                    <div className="text-gray-500">No console messages</div>
+                    <div className="text-gray-400">No console messages</div>
                   ) : (
                     consoleMessages.map((msg, index) => (
                       <div key={index} className={`mb-1 ${
@@ -492,7 +492,7 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                         msg.type === 'warn' ? 'text-yellow-400' :
                         'text-green-400'
                       }`}>
-                        [{msg.timestamp.toLocaleTimeString()}] {msg.message}
+                        <span className="text-gray-500">[{msg.timestamp.toLocaleTimeString()}]</span> {msg.message}
                       </div>
                     ))
                   )}
@@ -502,32 +502,32 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
 
             <TabsContent value="info" className="p-4 space-y-4">
               <div>
-                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <h3 className="font-semibold mb-2 flex items-center gap-2 text-foreground">
                   <Globe className="h-4 w-4" />
                   Project Info
                 </h3>
 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span>Project:</span>
-                    <span className="font-mono">{projectName}</span>
+                    <span className="text-foreground">Project:</span>
+                    <span className="font-mono text-foreground">{projectName}</span>
                   </div>
 
                   <div className="flex justify-between">
-                    <span>Files:</span>
-                    <span className="font-mono">{files.length}</span>
+                    <span className="text-foreground">Files:</span>
+                    <span className="font-mono text-foreground">{files.length}</span>
                   </div>
 
                   <div className="flex justify-between">
-                    <span>Total Size:</span>
-                    <span className="font-mono">
+                    <span className="text-foreground">Total Size:</span>
+                    <span className="font-mono text-foreground">
                       {formatBytes(files.reduce((acc, f) => acc + f.content.length, 0))}
                     </span>
                   </div>
 
                   <div className="flex justify-between">
-                    <span>Last Updated:</span>
-                    <span className="font-mono">{new Date().toLocaleTimeString()}</span>
+                    <span className="text-foreground">Last Updated:</span>
+                    <span className="font-mono text-foreground">{new Date().toLocaleTimeString()}</span>
                   </div>
                 </div>
               </div>

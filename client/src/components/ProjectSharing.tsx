@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -26,6 +26,7 @@ interface ProjectSharingProps {
   projectName: string;
   files: Array<{ path: string; content: string }>;
   isPublic?: boolean;
+  previewUrl?: string; // Optional preview URL for sharing
   onUpdateSharing?: (settings: SharingSettings) => void;
 }
 
@@ -51,6 +52,7 @@ export function ProjectSharing({
   projectName,
   files,
   isPublic = false,
+  previewUrl,
   onUpdateSharing
 }: ProjectSharingProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -59,24 +61,38 @@ export function ProjectSharing({
     allowComments: true,
     allowFork: true,
   });
-  const [shareLinks, setShareLinks] = useState<ShareLink[]>([
-    {
-      id: 'view-link',
-      url: `https://yourapp.com/share/${projectId}`,
-      type: 'view',
-      description: 'Anyone with this link can view the project',
-      clicks: 42,
-      createdAt: new Date(),
-    },
-    {
-      id: 'preview-link',
-      url: `https://yourapp.com/preview/${projectId}`,
-      type: 'preview',
-      description: 'Interactive preview of the generated app',
-      clicks: 18,
-      createdAt: new Date(),
-    },
-  ]);
+  
+  // Generate actual shareable links based on preview URL
+  const getShareLinks = React.useCallback((): ShareLink[] => {
+    const baseUrl = previewUrl || window.location.origin;
+    const shareToken = btoa(`${projectId}-${Date.now()}`).replace(/[+/=]/g, '').substring(0, 16);
+    
+    return [
+      {
+        id: 'preview-link',
+        url: previewUrl || `${baseUrl}/preview/${projectId}`,
+        type: 'preview',
+        description: previewUrl ? 'Live preview of your app' : 'Preview link (generate app first)',
+        clicks: 0,
+        createdAt: new Date(),
+      },
+      {
+        id: 'view-link',
+        url: `${baseUrl}/share/${projectId}?token=${shareToken}`,
+        type: 'view',
+        description: 'Shareable link to view the project',
+        clicks: 0,
+        createdAt: new Date(),
+      },
+    ];
+  }, [previewUrl, projectId]);
+  
+  const [shareLinks, setShareLinks] = useState<ShareLink[]>(getShareLinks());
+  
+  // Update links when previewUrl changes
+  useEffect(() => {
+    setShareLinks(getShareLinks());
+  }, [getShareLinks]);
   const [showQR, setShowQR] = useState(false);
   const { toast } = useToast();
 
@@ -89,11 +105,28 @@ export function ProjectSharing({
   };
 
   const generateNewLink = (type: 'view' | 'edit' | 'preview') => {
+    const baseUrl = previewUrl || window.location.origin;
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    
+    let url: string;
+    let description: string;
+    
+    if (type === 'preview' && previewUrl) {
+      url = previewUrl;
+      description = 'Live preview link';
+    } else if (type === 'view') {
+      url = `${baseUrl}/share/${projectId}?token=${token}`;
+      description = 'View-only link with access token';
+    } else {
+      url = `${baseUrl}/edit/${projectId}?token=${token}`;
+      description = 'Edit link with access token';
+    }
+    
     const newLink: ShareLink = {
       id: `${type}-${Date.now()}`,
-      url: `https://yourapp.com/${type}/${projectId}?token=${Math.random().toString(36).substring(7)}`,
+      url,
       type,
-      description: `${type.charAt(0).toUpperCase() + type.slice(1)} link with custom token`,
+      description,
       clicks: 0,
       createdAt: new Date(),
     };

@@ -1768,6 +1768,7 @@ export default function PromptPlayground() {
                 projectId={currentProject?.id?.toString() || 'temp'}
                 projectName={currentProject?.name || currentComponentName || 'My App'}
                 files={response.files}
+                previewUrl={livePreviewUrl || undefined}
                 isPublic={false}
                 onUpdateSharing={(settings) => {
                   console.log('Sharing settings updated:', settings);
