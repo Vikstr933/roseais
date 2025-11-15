@@ -1258,6 +1258,28 @@ Suggestions to fix:
           return match.replace(/;\s*$/, '');
         });
 
+        // Fix semicolons in object literals: { key: value; } -> { key: value, }
+        // This catches patterns like: export const tapScale = { scale: 0.95; };
+        // Match: key: value; followed by } or another key
+        const objectLiteralSemicolonPattern = /([a-zA-Z_$][a-zA-Z0-9_$]*\s*:\s*[^;]+);(\s*[},])/g;
+        const objectLiteralMatches = content.match(objectLiteralSemicolonPattern);
+        if (objectLiteralMatches && objectLiteralMatches.length > 0) {
+          console.log(`🔧 [Pass ${passNumber}] Found ${objectLiteralMatches.length} object literal semicolon errors`);
+          content = content.replace(objectLiteralSemicolonPattern, (match, keyValue, after) => {
+            fixesApplied++;
+            // Replace semicolon with comma if followed by } or another key
+            if (after.trim().startsWith('}')) {
+              // Last property, remove semicolon (no comma needed before closing brace)
+              console.log(`🔧 [Pass ${passNumber}] Fixing object literal (last prop): "${match}" -> "${keyValue + after}"`);
+              return keyValue + after;
+            } else {
+              // Not last property, replace semicolon with comma
+              console.log(`🔧 [Pass ${passNumber}] Fixing object literal (not last): "${match}" -> "${keyValue + ',' + after}"`);
+              return keyValue + ',' + after;
+            }
+          });
+        }
+
         // Also apply the simple pattern as fallback - ULTRA-AGGRESSIVE catch-all
         // This catches ANY {; pattern that might have been missed
         const simplePattern = /\{\s*;+/g;
