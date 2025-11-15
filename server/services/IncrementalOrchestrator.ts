@@ -738,6 +738,29 @@ OUTPUT FORMAT (JSON ARRAY):
         this.logger.info(`Fixed arrow function {; pattern in ${file.path}`);
       }
       
+      // Fix semicolons in object literals: { key: value; } -> { key: value, }
+      // This catches patterns like: export const tapScale = { scale: 0.95; };
+      const beforeObjectLiteral = content;
+      const objectLiteralSemicolonPattern = /([a-zA-Z_$][a-zA-Z0-9_$]*\s*:\s*[^;]+);(\s*[},])/g;
+      const objectLiteralMatches = content.match(objectLiteralSemicolonPattern);
+      if (objectLiteralMatches && objectLiteralMatches.length > 0) {
+        this.logger.info(`Found ${objectLiteralMatches.length} object literal semicolon errors in ${file.path}`);
+        content = content.replace(objectLiteralSemicolonPattern, (match, keyValue, after) => {
+          // Replace semicolon with comma if followed by } or another key
+          if (after.trim().startsWith('}')) {
+            // Last property, remove semicolon (no comma needed before closing brace)
+            return keyValue + after;
+          } else {
+            // Not last property, replace semicolon with comma
+            return keyValue + ',' + after;
+          }
+        });
+        if (content !== beforeObjectLiteral) {
+          wasFixed = true;
+          this.logger.info(`Fixed object literal semicolons in ${file.path}`);
+        }
+      }
+
       // Fix JSON trailing commas (for JSON files)
       if (file.path.endsWith('.json')) {
         const beforeJSON = content;
