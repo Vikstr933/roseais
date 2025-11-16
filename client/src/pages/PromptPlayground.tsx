@@ -1288,14 +1288,14 @@ export default function PromptPlayground() {
         projectType: data.projectType,
       };
 
-      // If we have existing files and it's a modification request, pass them directly
+      // If we have existing files and it requires project context, pass them directly
       // This ensures the AI has the latest file contents even if projectId lookup fails
-      if (intent === 'modify' && hasExistingFiles && existingFiles.length > 0) {
+      if (shouldGenerateCode && requiresProjectFiles && hasExistingFiles && existingFiles.length > 0) {
         requestBody.existingFiles = existingFiles.map(f => ({
           path: f.path,
           content: f.content
         }));
-        console.log(`📦 Passing ${existingFiles.length} existing files for modification context`);
+        console.log(`📦 Passing ${existingFiles.length} existing files for context`);
       }
 
       const res = await apiFetch("/api/prompts/generate", {
