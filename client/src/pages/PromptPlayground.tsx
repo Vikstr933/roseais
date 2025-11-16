@@ -27,8 +27,20 @@ import {
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
+import { CreateProjectDialog } from "../components/CreateProjectDialog";
 import { Badge } from "../components/ui/badge";
 import { ChatMessage } from "../components/ChatMessage";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -236,6 +248,9 @@ export default function PromptPlayground() {
   const [currentComponentName, setCurrentComponentName] = useState<string>('');
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
   const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' } | null>(null);
+  const [projects, setProjects] = useState<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>>([]);
+  const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
+  const [showStartFreshDialog, setShowStartFreshDialog] = useState(false);
   const [agentsActive, setAgentsActive] = useState(false); // Track if agents are currently working
   // Incremental generation is ALWAYS enabled - it's the standard way to generate code
 
@@ -481,6 +496,30 @@ export default function PromptPlayground() {
         });
     }
   }, [params?.projectId, sessionToken]);
+
+  // Load user projects list
+  const { data: userProjects = [] } = useQuery<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>>({
+    queryKey: ['/api/workspaces'],
+    queryFn: async () => {
+      if (!sessionToken) return [];
+      const response = await apiFetch('/api/workspaces', {
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!sessionToken,
+  });
+
+  // Update projects state when data loads
+  useEffect(() => {
+    if (userProjects && userProjects.length > 0) {
+      setProjects(userProjects);
+    }
+  }, [userProjects]);
 
   // Removed agent query since we always use orchestration now
 
@@ -1861,6 +1900,107 @@ export default function PromptPlayground() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Project Selector */}
+          {projects.length > 0 && (
+            <Select
+              value={currentProject?.id?.toString() || ''}
+              onValueChange={(value) => {
+                const projectId = parseInt(value);
+                if (projectId && projectId !== currentProject?.id) {
+                  // Navigate to selected project
+                  window.location.href = `/playground/${projectId}`;
+                }
+              }}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Select project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id.toString()}>
+                    <div className="flex items-center gap-2">
+                      <Laptop className="h-3 w-3" />
+                      <span>{project.name}</span>
+                      {project.workspaceType === 'team' && (
+                        <Users className="h-3 w-3 ml-auto" />
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* New Project Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCreateProjectDialog(true)}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            New Project
+          </Button>
+
+          {/* Start Fresh Button */}
+          {(response && typeof response === 'object' && response.files && response.files.length > 0) || chatHistory.length > 0 ? (
+            <AlertDialog open={showStartFreshDialog} onOpenChange={setShowStartFreshDialog}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Start Fresh
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Start Fresh?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will clear all files, chat history, and reset the workspace. This action cannot be undone.
+                    {currentProject && (
+                      <span className="block mt-2 font-semibold">
+                        Current project: {currentProject.name}
+                      </span>
+                    )}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      // Clear all state
+                      setResponse(null);
+                      clearChat();
+                      updateGeneratedFiles([]);
+                      setSelectedFileIndex(0);
+                      setLivePreviewUrl(null);
+                      setCurrentComponentName('');
+                      setShowStartFreshDialog(false);
+                      
+                      // Add confirmation message
+                      addChatMessage({
+                        role: 'assistant',
+                        content: '✨ Workspace cleared! Ready to start fresh. What would you like to build?',
+                        timestamp: Date.now()
+                      });
+
+                      toast({
+                        title: "Workspace Cleared",
+                        description: "All files and chat history have been cleared.",
+                      });
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Start Fresh
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
+
           <ComponentLibrary
             onSelectComponent={(component) => {
               // Add component code to current file or create new file
@@ -2483,6 +2623,45 @@ export default function PromptPlayground() {
         </div>
       </div>
       </div>
+
+      {/* Create Project Dialog */}
+      <CreateProjectDialog
+        open={showCreateProjectDialog}
+        onOpenChange={setShowCreateProjectDialog}
+        onCreateProject={async (projectData: any) => {
+          try {
+            const response = await apiFetch('/api/workspaces', {
+              method: 'POST',
+              headers: {
+                ...getAuthHeaders(sessionToken),
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(projectData),
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to create project');
+            }
+
+            const newProject = await response.json();
+            
+            toast({
+              title: "Project Created",
+              description: `${newProject.name} has been created successfully!`,
+            });
+
+            // Navigate to new project
+            window.location.href = `/playground/${newProject.id}`;
+          } catch (error: any) {
+            toast({
+              title: "Error",
+              description: error.message || "Failed to create project",
+              variant: "destructive",
+            });
+          }
+        }}
+        isLoading={false}
+      />
     </div>
   );
 }
