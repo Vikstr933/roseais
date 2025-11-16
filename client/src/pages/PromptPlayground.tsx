@@ -27,7 +27,7 @@ import {
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X, Power, PowerOff, Edit2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import {
   AlertDialog,
@@ -41,6 +41,14 @@ import {
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
 import { CreateProjectDialog } from "../components/CreateProjectDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import { Badge } from "../components/ui/badge";
 import { ChatMessage } from "../components/ChatMessage";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -62,6 +70,7 @@ import { useAuth, getAuthHeaders } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import { useRoute } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 // Agent interface removed - using orchestration only
 
@@ -251,6 +260,10 @@ export default function PromptPlayground() {
   const [projects, setProjects] = useState<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>>([]);
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
   const [showStartFreshDialog, setShowStartFreshDialog] = useState(false);
+  const [showDeleteProjectDialog, setShowDeleteProjectDialog] = useState(false);
+  const [showRenameProjectDialog, setShowRenameProjectDialog] = useState(false);
+  const [devServerRunning, setDevServerRunning] = useState(false);
+  const [devServerStopping, setDevServerStopping] = useState(false);
   const [agentsActive, setAgentsActive] = useState(false); // Track if agents are currently working
   // Incremental generation is ALWAYS enabled - it's the standard way to generate code
 
@@ -1827,6 +1840,16 @@ export default function PromptPlayground() {
       {/* Extended header background to cover navigation area */}
       <div className="absolute top-0 left-0 right-0 h-24 bg-muted/30 z-0"></div>
       
+      <ErrorBoundary
+        onError={(error, errorInfo) => {
+          console.error('Playground error:', error, errorInfo);
+          toast({
+            title: "Error",
+            description: "An error occurred. Please try refreshing the page.",
+            variant: "destructive",
+          });
+        }}
+      >
       {/* Spacer for floating navigation */}
       <div className="h-16 flex-shrink-0"></div>
       
@@ -2000,6 +2023,152 @@ export default function PromptPlayground() {
               </AlertDialogContent>
             </AlertDialog>
           ) : null}
+
+          {/* Dev Server Controls */}
+          {devServerRunning && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setDevServerStopping(true);
+                    const existingFiles = response && typeof response === 'object' && 'files' in response 
+                      ? (response as AIResponse).files || []
+                      : currentSession?.generatedFiles || [];
+                    
+                    if (existingFiles.length > 0) {
+                      const componentName = currentComponentName || 'App';
+                      // Restart dev server
+                      setLivePreviewUrl(null);
+                      setDevServerRunning(false);
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      await deployToRuntime(existingFiles, componentName);
+                    }
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to restart dev server",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setDevServerStopping(false);
+                  }
+                }}
+                disabled={devServerStopping}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${devServerStopping ? 'animate-spin' : ''}`} />
+                Restart
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setDevServerStopping(true);
+                    await webContainerService.stopDevServer();
+                    setLivePreviewUrl(null);
+                    setDevServerRunning(false);
+                    setCurrentComponentName('');
+                    toast({
+                      title: "Dev Server Stopped",
+                      description: "The development server has been stopped.",
+                    });
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to stop dev server",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setDevServerStopping(false);
+                  }
+                }}
+                disabled={devServerStopping}
+                className="flex items-center gap-2 text-destructive hover:text-destructive"
+              >
+                <PowerOff className={`h-4 w-4 ${devServerStopping ? 'animate-pulse' : ''}`} />
+                Stop
+              </Button>
+            </div>
+          )}
+
+          {/* Project Actions Menu */}
+          {currentProject && (
+            <div className="flex items-center gap-1">
+              <AlertDialog open={showDeleteProjectDialog} onOpenChange={setShowDeleteProjectDialog}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center gap-2 text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Project?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete "{currentProject.name}" and all its files, chat history, and settings.
+                      <span className="block mt-2 font-semibold text-destructive">
+                        This action cannot be undone.
+                      </span>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={async () => {
+                        try {
+                          const response = await apiFetch(`/api/workspaces/${currentProject.id}`, {
+                            method: 'DELETE',
+                            headers: {
+                              ...getAuthHeaders(sessionToken),
+                              'Content-Type': 'application/json',
+                            },
+                          });
+
+                          if (!response.ok) {
+                            throw new Error('Failed to delete project');
+                          }
+
+                          toast({
+                            title: "Project Deleted",
+                            description: `${currentProject.name} has been deleted.`,
+                          });
+
+                          // Navigate to workspaces page or create new project
+                          window.location.href = '/workspaces';
+                        } catch (error: any) {
+                          toast({
+                            title: "Error",
+                            description: error.message || "Failed to delete project",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setShowDeleteProjectDialog(false);
+                        }
+                      }}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Delete Project
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowRenameProjectDialog(true)}
+                className="flex items-center gap-2"
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
 
           <ComponentLibrary
             onSelectComponent={(component) => {
@@ -2662,6 +2831,85 @@ export default function PromptPlayground() {
         }}
         isLoading={false}
       />
+
+      {/* Rename Project Dialog */}
+      <Dialog open={showRenameProjectDialog} onOpenChange={setShowRenameProjectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Project</DialogTitle>
+            <DialogDescription>
+              Enter a new name for "{currentProject?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const newName = formData.get('name') as string;
+
+              if (!newName || !currentProject) return;
+
+              try {
+                const response = await apiFetch(`/api/workspaces/${currentProject.id}`, {
+                  method: 'PUT',
+                  headers: {
+                    ...getAuthHeaders(sessionToken),
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ name: newName }),
+                });
+
+                if (!response.ok) {
+                  throw new Error('Failed to rename project');
+                }
+
+                const updatedProject = await response.json();
+                setCurrentProject({ ...currentProject, name: updatedProject.name });
+                
+                // Update projects list
+                setProjects(prev => prev.map(p => 
+                  p.id === currentProject.id ? { ...p, name: updatedProject.name } : p
+                ));
+
+                toast({
+                  title: "Project Renamed",
+                  description: `Project renamed to "${updatedProject.name}"`,
+                });
+
+                setShowRenameProjectDialog(false);
+              } catch (error: any) {
+                toast({
+                  title: "Error",
+                  description: error.message || "Failed to rename project",
+                  variant: "destructive",
+                });
+              }
+            }}
+          >
+            <div className="space-y-4 py-4">
+              <Input
+                name="name"
+                defaultValue={currentProject?.name || ''}
+                placeholder="Project name"
+                required
+                minLength={1}
+                maxLength={100}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowRenameProjectDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">Rename</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      </ErrorBoundary>
     </div>
   );
 }
