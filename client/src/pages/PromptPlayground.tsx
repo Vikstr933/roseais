@@ -968,8 +968,18 @@ export default function PromptPlayground() {
     },
   });
 
-  // AI-based intent detection: uses AI to classify user intent instead of keyword matching
-  const detectIntent = async (prompt: string, hasExistingFiles: boolean, fileCount: number): Promise<'deploy' | 'modify' | 'generate' | 'describe'> => {
+  // Fully AI-driven intent detection - NO keyword fallbacks
+  const detectIntent = async (
+    prompt: string, 
+    hasExistingFiles: boolean, 
+    fileCount: number
+  ): Promise<{
+    intent: 'deploy' | 'modify' | 'generate' | 'describe' | 'conversational';
+    shouldGenerateCode: boolean;
+    requiresProjectFiles: boolean;
+    confidence: number;
+    reasoning: string;
+  }> => {
     try {
       // Call AI-based intent detection endpoint
       const response = await apiFetch('/api/intent/detect', {
@@ -990,33 +1000,31 @@ export default function PromptPlayground() {
       }
 
       const result = await response.json();
-      console.log('🤖 AI Intent Detection:', { intent: result.intent, confidence: result.confidence, reasoning: result.reasoning });
+      console.log('🤖 AI Intent Detection:', { 
+        intent: result.intent, 
+        confidence: result.confidence, 
+        reasoning: result.reasoning,
+        shouldGenerateCode: result.shouldGenerateCode,
+        requiresProjectFiles: result.requiresProjectFiles
+      });
       
-      return result.intent as 'deploy' | 'modify' | 'generate' | 'describe';
+      return {
+        intent: result.intent,
+        shouldGenerateCode: result.shouldGenerateCode ?? false,
+        requiresProjectFiles: result.requiresProjectFiles ?? false,
+        confidence: result.confidence ?? 0.8,
+        reasoning: result.reasoning ?? 'AI classification'
+      };
     } catch (error) {
-      console.warn('⚠️ AI intent detection failed, using fallback keyword matching:', error);
-      
-      // Fallback to keyword-based detection if AI fails
-      const lowerPrompt = prompt.toLowerCase().trim();
-      
-      // Quick keyword checks for fallback
-      if (hasExistingFiles) {
-        if (lowerPrompt.match(/\b(run|start|restart|launch|preview|show|open|deploy)\b/)) {
-          return 'deploy';
-        }
-        if (lowerPrompt.match(/\b(describe|explain|what|tell|about|summary|overview|info)\b.*\b(project|app|code|this|it)\b/)) {
-          return 'describe';
-        }
-        if (lowerPrompt.match(/\b(fix|change|update|modify|edit|add|remove|improve|enhance|make|style|color|animated)\b/)) {
-          return 'modify';
-        }
-        // Default to modify if files exist and not explicitly creating new
-        if (!lowerPrompt.match(/\b(create|build|generate)\s+(a|an|new)\b/)) {
-          return 'modify';
-        }
-      }
-      
-      return 'generate';
+      console.error('⚠️ AI intent detection failed:', error);
+      // Safe fallback: conversational (won't break anything)
+      return {
+        intent: 'conversational',
+        shouldGenerateCode: false,
+        requiresProjectFiles: false,
+        confidence: 0.5,
+        reasoning: 'AI detection failed, defaulting to conversational'
+      };
     }
   };
 
@@ -1030,7 +1038,8 @@ export default function PromptPlayground() {
         : currentSession?.generatedFiles || [];
       
       const hasExistingFiles = existingFiles.length > 0;
-      const intent = await detectIntent(data.userPrompt, hasExistingFiles, existingFiles.length);
+      const intentResult = await detectIntent(data.userPrompt, hasExistingFiles, existingFiles.length);
+      const { intent, shouldGenerateCode, requiresProjectFiles } = intentResult;
       
       // Add user message to chat history
       addChatMessage({
@@ -1038,6 +1047,61 @@ export default function PromptPlayground() {
         content: data.userPrompt,
         timestamp: Date.now()
       });
+
+      // If intent is conversational, use conversational AI instead of code generation
+      if (intent === 'conversational') {
+        try {
+          setIsLoading(true);
+          addChatMessage({
+            role: 'assistant',
+            content: '💭 Thinking...',
+            timestamp: Date.now()
+          });
+
+          // Use OmniAssistant/PersonalAssistant for conversational responses
+          const chatResponse = await apiFetch('/api/omniassistant/chat', {
+            method: 'POST',
+            headers: {
+              ...getAuthHeaders(sessionToken),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              message: data.userPrompt,
+              sessionId: currentSession?.id?.toString() || 'playground',
+              currentPage: '/playground',
+              workspaceId: params?.projectId ? parseInt(params.projectId) : undefined,
+              features: {
+                persistConversation: false,
+                generateInsights: false,
+                useContextEngine: false
+              }
+            }),
+          });
+
+          const chatData = await chatResponse.json();
+          
+          if (chatData.success && chatData.response) {
+            // Remove the "thinking" message and add the actual response
+            addChatMessage({
+              role: 'assistant',
+              content: chatData.response,
+              timestamp: Date.now()
+            });
+          } else {
+            throw new Error(chatData.error || 'Failed to get conversational response');
+          }
+        } catch (error: any) {
+          console.error('Failed to get conversational response:', error);
+          addChatMessage({
+            role: 'assistant',
+            content: `I'm here to help! ${error.message || 'Could you rephrase that?'}`,
+            timestamp: Date.now()
+          });
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
 
       // If intent is to describe, analyze project and return description without generation
       if (intent === 'describe' && hasExistingFiles) {
@@ -1086,7 +1150,7 @@ export default function PromptPlayground() {
       }
 
       // If intent is to deploy and we have files, skip generation and just deploy
-      if (intent === 'deploy' && hasExistingFiles) {
+      if (intent === 'deploy' && hasExistingFiles && requiresProjectFiles) {
         console.log('🚀 Detected deploy intent - reusing existing files');
         
         addChatMessage({

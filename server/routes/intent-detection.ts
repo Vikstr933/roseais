@@ -12,9 +12,11 @@ interface IntentDetectionRequest {
 }
 
 interface IntentDetectionResponse {
-  intent: 'deploy' | 'modify' | 'generate' | 'describe';
+  intent: 'deploy' | 'modify' | 'generate' | 'describe' | 'conversational';
   confidence: number;
   reasoning: string;
+  shouldGenerateCode?: boolean; // Whether this requires code generation
+  requiresProjectFiles?: boolean; // Whether this needs project context
 }
 
 /**
@@ -31,46 +33,56 @@ router.post('/detect', async (req, res) => {
 
     logger.info('Detecting intent for prompt', { prompt: prompt.substring(0, 100), hasExistingFiles, fileCount });
 
-    // Build context-aware system prompt
-    const systemPrompt = `You are an intent classification system. Your task is to analyze a user's prompt and determine their intent.
+    // Build context-aware system prompt - FULLY AI-DRIVEN, NO KEYWORDS
+    const systemPrompt = `You are an intelligent intent classification system. Analyze the user's message and determine their true intent using natural language understanding, NOT keyword matching.
 
 Context:
 - User has ${hasExistingFiles ? `${fileCount} existing files` : 'no existing files'} in their project
-- You need to classify the intent into one of three categories: 'deploy', 'modify', or 'generate'
+- You need to classify the intent into one of these categories: 'deploy', 'modify', 'generate', 'describe', or 'conversational'
 
-Intent Categories:
-1. **deploy**: User wants to run/start/restart the dev server or preview the app
-   - Examples: "run dev server", "start preview", "show me the app", "launch it"
+Intent Categories (understand the MEANING, not keywords):
+
+1. **conversational**: User wants to chat, ask questions, get help, or have a general conversation
+   - Examples: "how are you?", "what can you do?", "help me understand React hooks", "explain TypeScript", "thanks!", "that's great"
+   - General questions, greetings, explanations, clarifications
+   - Does NOT require code generation or file modifications
+   - Should get a conversational AI response
+
+2. **deploy**: User wants to run/start/restart the dev server or preview the app
+   - Examples: "run dev server", "start preview", "show me the app", "launch it", "open it"
    - Only valid if user has existing files
+   - Requires: shouldGenerateCode=false, requiresProjectFiles=true
 
-2. **modify**: User wants to change, update, or enhance existing code
-   - Examples: "make it more colorful", "add animations", "change the button style", "fix the layout", "improve the design"
+3. **modify**: User wants to change, update, or enhance existing code
+   - Examples: "make it more colorful", "add animations", "change the button style", "fix the layout", "improve the design", "make it responsive"
    - Only valid if user has existing files
-   - Includes requests to add features, change styling, fix bugs, improve UX
+   - Requires: shouldGenerateCode=true, requiresProjectFiles=true
 
-3. **describe**: User wants to understand or get information about the existing project
+4. **describe**: User wants to understand or get information about the existing project
    - Examples: "describe the project", "what does this app do", "explain the code", "tell me about this project", "what is this app"
    - Only valid if user has existing files
-   - Should NOT trigger code generation, just provide a description
+   - Requires: shouldGenerateCode=false, requiresProjectFiles=true
 
-4. **generate**: User wants to create a new app/project/component from scratch
+5. **generate**: User wants to create a new app/project/component from scratch
    - Examples: "create a todo app", "build a new dashboard", "make a calculator", "generate a new project"
    - Valid whether or not user has existing files
+   - Requires: shouldGenerateCode=true, requiresProjectFiles=false
 
-Rules:
-- If user has NO existing files, intent can only be 'generate'
-- If user has existing files and asks to run/start/preview, intent is 'deploy'
-- If user has existing files and asks to change/update/add/improve, intent is 'modify'
-- If user has existing files and asks to describe/explain/tell about the project, intent is 'describe'
-- If user has existing files but explicitly says "create new" or "build new", intent is 'generate'
-- Be smart about context: "make the template more animated" = modify, not generate
-- "describe", "explain", "what is", "tell me about" = describe intent
+CRITICAL RULES:
+- Use NATURAL LANGUAGE UNDERSTANDING, not keyword matching
+- Understand context and intent, not just surface-level words
+- If the message is conversational (greeting, question, explanation request), use 'conversational'
+- If user asks "how do I..." or "what is..." or "explain...", it's likely conversational unless they're asking about THEIR project specifically
+- "describe MY project" = describe, "explain React" = conversational
+- Be smart about context and nuance
 
 Respond with ONLY a JSON object in this exact format:
 {
-  "intent": "deploy" | "modify" | "generate" | "describe",
+  "intent": "deploy" | "modify" | "generate" | "describe" | "conversational",
   "confidence": 0.0-1.0,
-  "reasoning": "Brief explanation of why this intent was chosen"
+  "reasoning": "Brief explanation of why this intent was chosen based on natural language understanding",
+  "shouldGenerateCode": boolean,
+  "requiresProjectFiles": boolean
 }`;
 
     const userPrompt = `User prompt: "${prompt}"
@@ -120,8 +132,16 @@ Classify the intent.`;
       }
 
       // Validate intent value
-      if (!['deploy', 'modify', 'generate', 'describe'].includes(intentResult.intent)) {
+      if (!['deploy', 'modify', 'generate', 'describe', 'conversational'].includes(intentResult.intent)) {
         throw new Error(`Invalid intent: ${intentResult.intent}`);
+      }
+
+      // Ensure boolean fields exist
+      if (typeof intentResult.shouldGenerateCode !== 'boolean') {
+        intentResult.shouldGenerateCode = ['modify', 'generate'].includes(intentResult.intent);
+      }
+      if (typeof intentResult.requiresProjectFiles !== 'boolean') {
+        intentResult.requiresProjectFiles = ['deploy', 'modify', 'describe'].includes(intentResult.intent);
       }
 
       // Validate confidence
@@ -135,29 +155,68 @@ Classify the intent.`;
       }
 
     } catch (parseError) {
-      logger.warning('Failed to parse AI response, using fallback logic', { error: parseError, content: response.content });
+      logger.warning('Failed to parse AI response, retrying with AI', { error: parseError, content: response.content });
       
-      // Fallback to keyword-based detection if AI response is invalid
-      const lowerPrompt = prompt.toLowerCase();
-      let fallbackIntent: 'deploy' | 'modify' | 'generate' | 'describe' = 'generate';
-      
-      if (hasExistingFiles) {
-        if (lowerPrompt.match(/\b(run|start|restart|launch|preview|show|open|deploy)\b/)) {
-          fallbackIntent = 'deploy';
-        } else if (lowerPrompt.match(/\b(describe|explain|what|tell|about|summary|overview|info)\b.*\b(project|app|code|this|it)\b/)) {
-          fallbackIntent = 'describe';
-        } else if (lowerPrompt.match(/\b(fix|change|update|modify|edit|add|remove|improve|enhance|make|style|color|animated)\b/)) {
-          fallbackIntent = 'modify';
-        } else if (!lowerPrompt.match(/\b(create|build|generate|new)\s+(a|an|app|project|component)\b/)) {
-          fallbackIntent = 'modify'; // Default to modify if files exist
+      // Retry with AI instead of keyword fallback - FULLY AI-DRIVEN
+      try {
+        const retryPrompt = `The previous classification attempt failed. Please analyze this user message again and classify it:
+
+User message: "${prompt}"
+Context: ${hasExistingFiles ? `User has ${fileCount} existing files` : 'User has no existing files'}
+
+Respond with ONLY a JSON object:
+{
+  "intent": "deploy" | "modify" | "generate" | "describe" | "conversational",
+  "confidence": 0.0-1.0,
+  "reasoning": "Brief explanation",
+  "shouldGenerateCode": boolean,
+  "requiresProjectFiles": boolean
+}`;
+
+        const retryResponse = await multiModelAI.generate({
+          prompt: retryPrompt,
+          systemPrompt: 'You are an intent classification system. Analyze the user message and classify intent.',
+          maxTokens: 300,
+          temperature: 0.1,
+          useCase: 'classification',
+          priority: 'speed'
+        });
+
+        if (retryResponse.content) {
+          let retryContent = retryResponse.content.trim();
+          if (retryContent.startsWith('```')) {
+            retryContent = retryContent.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
+          }
+          const jsonMatch = retryContent.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            intentResult = JSON.parse(jsonMatch[0]);
+            // Validate and set defaults
+            if (!['deploy', 'modify', 'generate', 'describe', 'conversational'].includes(intentResult.intent)) {
+              throw new Error(`Invalid intent: ${intentResult.intent}`);
+            }
+            if (typeof intentResult.shouldGenerateCode !== 'boolean') {
+              intentResult.shouldGenerateCode = ['modify', 'generate'].includes(intentResult.intent);
+            }
+            if (typeof intentResult.requiresProjectFiles !== 'boolean') {
+              intentResult.requiresProjectFiles = ['deploy', 'modify', 'describe'].includes(intentResult.intent);
+            }
+          } else {
+            throw new Error('No JSON found in retry response');
+          }
+        } else {
+          throw new Error('No content in retry response');
         }
+      } catch (retryError) {
+        logger.error('AI retry also failed, using safe default', { error: retryError });
+        // Last resort: use conversational as safe default (won't break anything)
+        intentResult = {
+          intent: 'conversational',
+          confidence: 0.5,
+          reasoning: 'AI classification failed, defaulting to conversational',
+          shouldGenerateCode: false,
+          requiresProjectFiles: false
+        };
       }
-      
-      intentResult = {
-        intent: fallbackIntent,
-        confidence: 0.7,
-        reasoning: 'Fallback classification used due to AI response parsing error'
-      };
     }
 
     logger.info('Intent detected', { intent: intentResult.intent, confidence: intentResult.confidence, reasoning: intentResult.reasoning });
@@ -168,9 +227,11 @@ Classify the intent.`;
     logger.error('Intent detection failed', { error });
     res.status(500).json({ 
       error: 'Failed to detect intent',
-      intent: 'generate', // Safe default
+      intent: 'conversational', // Safe default - won't trigger code generation
       confidence: 0.5,
-      reasoning: 'Error occurred during intent detection'
+      reasoning: 'Error occurred during intent detection, defaulting to conversational',
+      shouldGenerateCode: false,
+      requiresProjectFiles: false
     });
   }
 });
