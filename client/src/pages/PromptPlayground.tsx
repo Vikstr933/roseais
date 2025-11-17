@@ -1597,10 +1597,12 @@ export default function PromptPlayground() {
                         console.log(`👁️ Switched to file ${fileIndex + 1}/${updatedFiles.length}: ${data.data.file.path}`);
                       }, 0);
 
-                      return {
+                      const newResponse = {
                         ...prev,
                         files: updatedFiles
                       };
+                      console.log('✅ Updated response with', updatedFiles.length, 'files');
+                      return newResponse;
                     });
 
                     // Removed chat messages - files update silently in real-time via setResponse above
@@ -2559,10 +2561,12 @@ export default function PromptPlayground() {
                 {(() => {
                   const isComponent = response?.type === 'component';
                   const fileCount = isComponent ? (response?.files?.length || 0) : 0;
-                  console.log('FileExplorer check - response type:', typeof response, 'is component:', isComponent, 'files count:', fileCount);
+                  const fileList = response?.files || [];
+                  console.log('🗂️ FileExplorer render - files:', fileCount, 'paths:', fileList.map(f => f.path));
                   return isComponent && fileCount > 0;
                 })() ? (
                     <EnhancedFileExplorer
+                    key={`files-${response?.files?.length || 0}-${Date.now()}`}
                     workspacePath="/workspaces"
                     files={(response?.files || []).map((file) => {
                       const cleanedPath = file.path.replace(/^\/workspaces\//, '');
