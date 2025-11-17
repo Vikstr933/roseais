@@ -66,6 +66,7 @@ import { ProductionDeployment } from "../components/ProductionDeployment";
 import { AdvancedPreview } from "../components/AdvancedPreview";
 import { useAuth, getAuthHeaders } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
+import type { GeneratedFile } from "../contexts/WorkspaceContext";
 import { useRoute } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -76,13 +77,15 @@ import { Skeleton } from "../components/ui/skeleton";
 
 // Agent interface removed - using orchestration only
 
+type RawGeneratedFile = {
+  path: string;
+  content: string;
+};
+
 interface AIResponse {
   type: 'text' | 'component';
   text: string;
-  files?: {
-    path: string;
-  content: string;
-  }[];
+  files?: RawGeneratedFile[];
 }
 
 interface OrchestrationStep {
@@ -99,6 +102,8 @@ interface GenerateResponse {
     subtasks: OrchestrationStep[];
   } | null;
 }
+
+type PlaygroundResponse = Omit<AIResponse, 'files'> & { files?: GeneratedFile[] };
 
 interface Session {
   id: string;
@@ -178,6 +183,27 @@ const getFileLanguage = (filename: string): string => {
     }
   };
 
+const stripWorkspacePrefix = (filePath: string): string =>
+  filePath.replace(/^\/?workspaces\/[^/]+\//, '');
+
+const createGeneratedFile = (path: string, content: string): GeneratedFile => ({
+  path,
+  content,
+  language: getFileLanguage(path),
+});
+
+const mapRawFilesToGenerated = (files: RawGeneratedFile[]): GeneratedFile[] =>
+  files.map((file) => {
+    const normalizedPath = stripWorkspacePrefix(file.path);
+    return createGeneratedFile(normalizedPath, file.content);
+  });
+
+const toPlaygroundResponse = (raw: AIResponse): PlaygroundResponse => ({
+  type: raw.type,
+  text: raw.text,
+  files: raw.files ? mapRawFilesToGenerated(raw.files) : undefined,
+});
+
 // Normalize agent display names to IDs for visualization
 // Removed normalizeAgentName - no longer needed without animation components
 
@@ -200,7 +226,7 @@ export default function PromptPlayground() {
   const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'sessions' | 'settings'>('editor');
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
   const [editorLanguage, setEditorLanguage] = useState('typescript');
-  const [response, setResponse] = useState<string | AIResponse | null>(null);
+  const [response, setResponse] = useState<PlaygroundResponse | null>(null);
   const [orchestrationSteps, setOrchestrationSteps] = useState<OrchestrationStep[]>([]);
   const [currentStep, setCurrentStep] = useState<string>('');
   const [overallProgress, setOverallProgress] = useState<number>(0);
@@ -296,13 +322,17 @@ export default function PromptPlayground() {
       // Always restore files from workspace session when currentSession changes
       // This ensures files are visible even after tab switches or refreshes
       setResponse(prevResponse => {
-        // Only update if files are different to avoid infinite loops
-        const currentFiles = prevResponse?.type === 'component' ? prevResponse.files : [];
-        const sessionFiles = currentSession.generatedFiles;
+        const currentFiles: GeneratedFile[] =
+          prevResponse?.type === 'component' && prevResponse.files ? prevResponse.files : [];
+        const sessionFiles = currentSession.generatedFiles ?? [];
 
-        // Check if files are actually different
-        const filesChanged = currentFiles?.length !== sessionFiles.length ||
-          !currentFiles?.every((f, i) => f.path === sessionFiles[i]?.path && f.content === sessionFiles[i]?.content);
+        const filesChanged =
+          currentFiles.length !== sessionFiles.length ||
+          !currentFiles.every((file, index) => {
+            const sessionFile = sessionFiles[index];
+            if (!sessionFile) return false;
+            return file.path === sessionFile.path && file.content === sessionFile.content;
+          });
 
         if (filesChanged) {
           console.log(`✅ Restoring ${sessionFiles.length} files from workspace session`);
@@ -473,10 +503,12 @@ export default function PromptPlayground() {
           console.log('Raw files from API:', files);
           if (files && files.length > 0) {
             // Transform to response format - handle both fileContent and content
-            const fileList = files.map((f: any) => ({
-              path: f.filePath || f.path,
-              content: f.fileContent || f.content || ''
-            }));
+            const fileList: GeneratedFile[] = files.map((f: any) => {
+              const rawPath = f.filePath || f.path || '';
+              const normalizedPath = stripWorkspacePrefix(rawPath);
+              const content = f.fileContent || f.content || '';
+              return createGeneratedFile(normalizedPath, content);
+            });
             setResponse({
               type: 'component',
               text: '',
@@ -530,19 +562,14 @@ export default function PromptPlayground() {
     }, 'New Project', { ctrl: true }),
     createShortcut('s', () => {
       // Save current files to project
-      if (!isLoading && currentProject && response && typeof response === 'object' && 'files' in response) {
-        const files = (response as AIResponse).files || [];
-        if (files.length > 0) {
-          saveProjectFiles(currentProject.id, files, currentComponentName || 'App');
-        }
+      if (!isLoading && currentProject && response?.type === 'component' && response.files?.length) {
+        saveProjectFiles(currentProject.id, response.files, currentComponentName || 'App');
       }
     }, 'Save Project', { ctrl: true }),
     createShortcut('r', () => {
       // Restart dev server if running
       if (!isLoading && devServerRunning && !devServerStopping) {
-        const existingFiles = response && typeof response === 'object' && 'files' in response 
-          ? (response as AIResponse).files || []
-          : currentSession?.generatedFiles || [];
+        const existingFiles = response?.files?.length ? response.files : currentSession?.generatedFiles || [];
         if (existingFiles.length > 0) {
           deployToRuntime(existingFiles, currentComponentName || 'App');
         }
@@ -681,7 +708,12 @@ export default function PromptPlayground() {
       const session = event.detail;
 
       // Parse the generated code back into files
-      const files = JSON.parse(session.generatedCode);
+      const rawFiles = JSON.parse(session.generatedCode || '[]') as RawGeneratedFile[];
+      const files: GeneratedFile[] = rawFiles.map(file => ({
+        path: file.path,
+        content: file.content,
+        language: getFileLanguage(file.path),
+      }));
 
       // Add messages to workspace context
       addChatMessage({
@@ -1128,9 +1160,7 @@ export default function PromptPlayground() {
       setError(null);
       
       // Check if we have existing files
-      const existingFiles = response && typeof response === 'object' && 'files' in response 
-        ? (response as AIResponse).files || []
-        : currentSession?.generatedFiles || [];
+      const existingFiles = response?.files?.length ? response.files : currentSession?.generatedFiles || [];
       
       const hasExistingFiles = existingFiles.length > 0;
       const intentResult = await detectIntent(data.userPrompt, hasExistingFiles, existingFiles.length);
@@ -1509,11 +1539,13 @@ export default function PromptPlayground() {
 
                     // Add file to response in real-time! (Silently - no chat spam)
                     setResponse(prev => {
-                      if (!prev || typeof prev === 'string') {
-                        const newResponse = {
-                          type: 'component' as const,
+                      const generatedFile = createGeneratedFile(data.data.file.path, data.data.file.content);
+
+                      if (!prev) {
+                        const newResponse: PlaygroundResponse = {
+                          type: 'component',
                           text: '',
-                          files: [{ path: data.data.file.path, content: data.data.file.content }]
+                          files: [generatedFile]
                         };
                         // Auto-select first file when it arrives
                         if (data.data.index === 1) {
@@ -1531,11 +1563,11 @@ export default function PromptPlayground() {
                       if (existingIndex !== undefined && existingIndex >= 0 && prev.files) {
                         // Update existing file
                         const newFiles = [...prev.files];
-                        newFiles[existingIndex] = { path: data.data.file.path, content: data.data.file.content };
+                        newFiles[existingIndex] = generatedFile;
                         return { ...prev, files: newFiles };
                       } else {
                         // Add new file
-                        const newFiles = [...(prev.files || []), { path: data.data.file.path, content: data.data.file.content }];
+                        const newFiles = [...(prev.files || []), generatedFile];
                         // Auto-select first file when it arrives
                         if (data.data.index === 1 && newFiles.length === 1) {
                           setTimeout(() => {
@@ -1670,10 +1702,7 @@ export default function PromptPlayground() {
         }
 
         // âœ¨ Display files one by one with animation - BOLT.NEW STYLE!
-        const displayFiles = data.response.files.map(file => ({
-          ...file,
-          path: file.path.replace(/^workspaces\/[^/]+\//, '').replace(/^\/workspaces\/[^/]+\//, '')
-        }));
+        const displayFiles = mapRawFilesToGenerated(data.response.files);
 
         console.log('ðŸ"‚ Files to display:', displayFiles.length);
 
@@ -1703,7 +1732,7 @@ export default function PromptPlayground() {
           
           if (isConfigFile && file.path.startsWith('src/')) {
             console.log(`ðŸ“¦ Moving ${file.path} â†’ ${filename} (root level for display)`);
-            return { ...file, path: filename };
+            return createGeneratedFile(filename, file.content);
           }
           return file;
         });
@@ -1838,15 +1867,18 @@ export default function PromptPlayground() {
         // Merge text responses into chat without resetting state
         if (data.response?.type === 'text') {
           addChatMessage({ role: 'assistant', content: data.response.text, timestamp: Date.now() });
-        } else {
+        } else if (data.response) {
           setResponse(prev => {
-            if (prev && typeof prev === 'object' && 'files' in prev && data.response?.files) {
+            if (prev?.files && data.response?.files) {
               // Merge files by path, preserving existing
-              const existing = new Map((prev.files || []).map(f => [f.path, f]));
-              for (const f of data.response.files) existing.set(f.path, f);
-              return { ...(prev as any), files: Array.from(existing.values()) };
+              const existing = new Map(prev.files.map(f => [f.path, f]));
+              const newFiles = mapRawFilesToGenerated(data.response.files);
+              for (const file of newFiles) {
+                existing.set(file.path, file);
+              }
+              return { ...prev, files: Array.from(existing.values()) };
             }
-            return data.response;
+            return toPlaygroundResponse(data.response);
           });
         }
       setIsLoading(false);
@@ -2082,9 +2114,7 @@ export default function PromptPlayground() {
                 onClick={async () => {
                   try {
                     setDevServerStopping(true);
-                    const existingFiles = response && typeof response === 'object' && 'files' in response 
-                      ? (response as AIResponse).files || []
-                      : currentSession?.generatedFiles || [];
+                    const existingFiles = response?.files?.length ? response.files : currentSession?.generatedFiles || [];
                     
                     if (existingFiles.length > 0) {
                       const componentName = currentComponentName || 'App';
@@ -2200,23 +2230,21 @@ export default function PromptPlayground() {
           <ComponentLibrary
             onSelectComponent={(component) => {
               // Add component code to current file or create new file
-              const componentFile = {
-                path: `src/components/${component.name}.tsx`,
-                content: component.code
-              };
+              const componentFile = createGeneratedFile(
+                `src/components/${component.name}.tsx`,
+                component.code
+              );
 
-              if (response && typeof response === 'object' && response.files) {
-                setResponse(prev => ({
-                  ...prev as AIResponse,
-                  files: [...(prev as AIResponse).files!, componentFile]
-                }));
-              } else {
-                setResponse({
-                  type: 'component',
-                  text: `Added ${component.name} component`,
-                  files: [componentFile]
-                });
-              }
+              const updatedFiles = response?.files?.length ? [...response.files, componentFile] : [componentFile];
+
+              setResponse(prev => ({
+                ...(prev || {}),
+                type: 'component',
+                text: prev?.text || `Added ${component.name} component`,
+                files: updatedFiles,
+              }));
+
+              updateGeneratedFiles(updatedFiles);
 
               toast({
                 title: "Component Added!",
@@ -2224,11 +2252,17 @@ export default function PromptPlayground() {
               });
             }}
             onSelectTemplate={(template) => {
+              const templateFiles: GeneratedFile[] = (template.files || []).map((file: any) =>
+                createGeneratedFile(file.path, file.content)
+              );
+
               setResponse({
                 type: 'component',
                 text: `Loaded ${template.name} template`,
-                files: template.files
+                files: templateFiles
               });
+
+              updateGeneratedFiles(templateFiles);
 
               toast({
                 title: "Template Loaded!",
@@ -2512,78 +2546,58 @@ export default function PromptPlayground() {
             <ScrollArea className="flex-1 min-h-0">
               <div className="p-2">
                 {(() => {
-                  const isComponent = typeof response === 'object' && response !== null && response.type === 'component';
-                  const fileCount = isComponent ? (response.files?.length || 0) : 0;
-                  console.log('ðŸ” FileExplorer check - response type:', typeof response, 'is component:', isComponent, 'files count:', fileCount);
+                  const isComponent = response?.type === 'component';
+                  const fileCount = isComponent ? (response?.files?.length || 0) : 0;
+                  console.log('FileExplorer check - response type:', typeof response, 'is component:', isComponent, 'files count:', fileCount);
                   return isComponent && fileCount > 0;
                 })() ? (
                     <EnhancedFileExplorer
                     workspacePath="/workspaces"
-                    files={(response as AIResponse).files?.map((file: any) => ({
-                      ...file,
-                      path: file.path.replace(/^\/workspaces\//, '')
-                    })) || []}
+                    files={(response?.files || []).map((file) => {
+                      const cleanedPath = file.path.replace(/^\/workspaces\//, '');
+                      return cleanedPath === file.path ? file : createGeneratedFile(cleanedPath, file.content);
+                    })}
                     onSelectFile={(index: number) => {
                       setSelectedFileIndex(index);
-                      const selectedFile = (response as AIResponse).files?.[index];
+                      const selectedFile = response?.files?.[index];
                       if (selectedFile) {
                         setEditorLanguage(getFileLanguage(selectedFile.path));
                       }
                     }}
                     selectedFileIndex={selectedFileIndex}
                     onCreateFile={(path: string, content: string) => {
-                      const newFile = { path, content };
-                      if (response && typeof response === 'object' && response.files) {
-                        const updatedFiles = [...(response as AIResponse).files!, newFile];
-                        setResponse(prev => ({
-                          ...prev as AIResponse,
-                          files: updatedFiles
-                        }));
-                        // Sync with workspace session
-                        updateGeneratedFiles(updatedFiles);
-                      }
+                      const newFile = createGeneratedFile(path, content);
+                      const updatedFiles = response?.files?.length ? [...response.files, newFile] : [newFile];
+                      setResponse({
+                        type: 'component',
+                        text: response?.text || '',
+                        files: updatedFiles
+                      });
+                      updateGeneratedFiles(updatedFiles);
                     }}
                     onDeleteFile={(path: string) => {
-                      if (response && typeof response === 'object' && response.files) {
-                        const updatedFiles = (response as AIResponse).files!.filter(f => f.path !== path);
-                        setResponse(prev => ({
-                          ...prev as AIResponse,
-                          files: updatedFiles
-                        }));
-                        // Sync with workspace session
-                        updateGeneratedFiles(updatedFiles);
-                      }
+                      if (!response?.files) return;
+                      const updatedFiles = response.files.filter(f => f.path !== path);
+                      setResponse(prev => (prev ? { ...prev, files: updatedFiles } : prev));
+                      updateGeneratedFiles(updatedFiles);
                     }}
                     onRenameFile={(oldPath: string, newPath: string) => {
-                      if (response && typeof response === 'object' && response.files) {
-                        const updatedFiles = (response as AIResponse).files!.map(f =>
-                          f.path === oldPath ? { ...f, path: newPath } : f
-                        );
-                        setResponse(prev => ({
-                          ...prev as AIResponse,
-                          files: updatedFiles
-                        }));
-                        // Sync with workspace session
-                        updateGeneratedFiles(updatedFiles);
-                      }
+                      if (!response?.files) return;
+                      const updatedFiles = response.files.map(f =>
+                        f.path === oldPath ? createGeneratedFile(newPath, f.content) : f
+                      );
+                      setResponse(prev => (prev ? { ...prev, files: updatedFiles } : prev));
+                      updateGeneratedFiles(updatedFiles);
                     }}
                     onDuplicateFile={(path: string) => {
-                      if (response && typeof response === 'object' && response.files) {
-                        const originalFile = (response as AIResponse).files!.find(f => f.path === path);
-                        if (originalFile) {
-                          const duplicatedFile = {
-                            ...originalFile,
-                            path: path.replace(/(\.[^.]+)$/, '_copy$1')
-                          };
-                          const updatedFiles = [...(response as AIResponse).files!, duplicatedFile];
-                          setResponse(prev => ({
-                            ...prev as AIResponse,
-                            files: updatedFiles
-                          }));
-                          // Sync with workspace session
-                          updateGeneratedFiles(updatedFiles);
-                        }
-                      }
+                      if (!response?.files) return;
+                      const originalFile = response.files.find(f => f.path === path);
+                      if (!originalFile) return;
+                      const duplicatePath = path.replace(/(\.[^.]+)$/, '_copy$1');
+                      const duplicatedFile = createGeneratedFile(duplicatePath, originalFile.content);
+                      const updatedFiles = [...response.files, duplicatedFile];
+                      setResponse(prev => (prev ? { ...prev, files: updatedFiles } : prev));
+                      updateGeneratedFiles(updatedFiles);
                     }}
                   />
                 ) : (
@@ -2615,7 +2629,7 @@ export default function PromptPlayground() {
                           theme={editorTheme}
                           onChange={(value) => {
                             // Update the file content in local state
-                            if (value !== undefined && response && typeof response === 'object' && response.files) {
+                            if (value !== undefined && response?.files) {
                               const updatedFiles = response.files.map((file, idx) =>
                                 idx === selectedFileIndex ? { ...file, content: value } : file
                               );
