@@ -1563,41 +1563,35 @@ export default function PromptPlayground() {
                       // Check if file already exists (avoid duplicates)
                       const existingIndex = prev.files?.findIndex(f => f.path === data.data.file.path);
                       let updatedFiles: GeneratedFile[];
+                      let fileIndex: number;
                       
                       if (existingIndex !== undefined && existingIndex >= 0 && prev.files) {
                         // Update existing file
                         updatedFiles = [...prev.files];
                         updatedFiles[existingIndex] = generatedFile;
+                        fileIndex = existingIndex;
                       } else {
                         // Add new file
                         updatedFiles = [...(prev.files || []), generatedFile];
-                        // Auto-select first file when it arrives
-                        if (data.data.index === 1 && updatedFiles.length === 1) {
-                          setTimeout(() => {
-                            setSelectedFileIndex(0);
-                            setActiveTab('editor');
-                            setEditorLanguage(getFileLanguage(data.data.file.path));
-                          }, 0);
-                        }
+                        fileIndex = updatedFiles.length - 1; // Index of the newly added file
                       }
 
                       // Persist to workspace immediately for real-time persistence
                       updateGeneratedFiles(updatedFiles);
+
+                      // 🎯 AUTO-SWITCH TO CURRENTLY GENERATING FILE - Watch code appear in real-time!
+                      setTimeout(() => {
+                        setSelectedFileIndex(fileIndex);
+                        setActiveTab('editor');
+                        setEditorLanguage(getFileLanguage(data.data.file.path));
+                        console.log(`👁️ Switched to file ${fileIndex + 1}/${updatedFiles.length}: ${data.data.file.path}`);
+                      }, 0);
 
                       return {
                         ...prev,
                         files: updatedFiles
                       };
                     });
-
-                    // Auto-select the first file and switch to editor tab
-                    if (data.data.index === 1) {
-                      setSelectedFileIndex(0);
-                      setActiveTab('editor');
-                      setEditorLanguage(getFileLanguage(data.data.file.path));
-
-                      // Removed animation chat message - files update silently
-                    }
 
                     // Removed chat messages - files update silently in real-time via setResponse above
                   } else if (data.type === 'PROJECT_CONTEXT_LOADED') {
