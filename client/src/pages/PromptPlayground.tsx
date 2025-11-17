@@ -72,6 +72,7 @@ import { useRoute } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useKeyboardShortcuts, createShortcut } from "../hooks/useKeyboardShortcuts";
+import { useProjectManagement } from "../hooks/useProjectManagement";
 
 // Agent interface removed - using orchestration only
 
@@ -268,6 +269,34 @@ export default function PromptPlayground() {
   const [agentsActive, setAgentsActive] = useState(false); // Track if agents are currently working
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   // Incremental generation is ALWAYS enabled - it's the standard way to generate code
+
+  // Project management hook
+  const {
+    createProject: createProjectHook,
+    deleteProject: deleteProjectHook,
+    renameProject: renameProjectHook,
+    saveProjectFiles,
+    isCreating,
+    isDeleting,
+    isRenaming,
+  } = useProjectManagement(sessionToken, {
+    onProjectCreated: (project) => {
+      // Navigate to new project
+      window.location.href = `/playground/${project.id}`;
+    },
+    onProjectDeleted: () => {
+      // Navigate to workspaces page
+      window.location.href = '/workspaces';
+    },
+    onProjectRenamed: (project) => {
+      // Update current project state
+      setCurrentProject(prev => prev ? { ...prev, name: project.name } : null);
+      // Update projects list
+      setProjects(prev => prev.map(p => 
+        p.id === project.id ? { ...p, name: project.name } : p
+      ));
+    },
+  });
 
   // Refs
   const chatMessagesRef = useRef<HTMLDivElement>(null);
@@ -546,32 +575,7 @@ export default function PromptPlayground() {
       if (!isLoading && currentProject && response && typeof response === 'object' && 'files' in response) {
         const files = (response as AIResponse).files || [];
         if (files.length > 0) {
-          apiFetch(`/api/workspaces/${currentProject.id}/export`, {
-            method: 'POST',
-            headers: {
-              ...getAuthHeaders(sessionToken),
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              files,
-              componentName: currentComponentName || 'App',
-            }),
-          })
-            .then(res => {
-              if (res.ok) {
-                toast({
-                  title: "Saved",
-                  description: "Project files saved successfully",
-                });
-              }
-            })
-            .catch(err => {
-              toast({
-                title: "Save Failed",
-                description: err.message || "Could not save files",
-                variant: "destructive",
-              });
-            });
+          saveProjectFiles(currentProject.id, files, currentComponentName || 'App');
         }
       }
     }, 'Save Project', { ctrl: true }),
@@ -2042,9 +2046,10 @@ export default function PromptPlayground() {
             onClick={() => setShowCreateProjectDialog(true)}
             className="flex items-center gap-2"
             title="New Project (Ctrl+N)"
+            disabled={isCreating}
           >
             <Plus className="h-4 w-4" />
-            New Project
+            {isCreating ? 'Creating...' : 'New Project'}
           </Button>
 
           {/* Keyboard Shortcuts Help */}
@@ -2214,39 +2219,17 @@ export default function PromptPlayground() {
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={async () => {
-                        try {
-                          const response = await apiFetch(`/api/workspaces/${currentProject.id}`, {
-                            method: 'DELETE',
-                            headers: {
-                              ...getAuthHeaders(sessionToken),
-                              'Content-Type': 'application/json',
-                            },
-                          });
-
-                          if (!response.ok) {
-                            throw new Error('Failed to delete project');
+                        if (currentProject) {
+                          const success = await deleteProjectHook(currentProject.id);
+                          if (success) {
+                            setShowDeleteProjectDialog(false);
                           }
-
-                          toast({
-                            title: "Project Deleted",
-                            description: `${currentProject.name} has been deleted.`,
-                          });
-
-                          // Navigate to workspaces page or create new project
-                          window.location.href = '/workspaces';
-                        } catch (error: any) {
-                          toast({
-                            title: "Error",
-                            description: error.message || "Failed to delete project",
-                            variant: "destructive",
-                          });
-                        } finally {
-                          setShowDeleteProjectDialog(false);
                         }
                       }}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      disabled={isDeleting}
                     >
-                      Delete Project
+                      {isDeleting ? 'Deleting...' : 'Delete Project'}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -2890,39 +2873,8 @@ export default function PromptPlayground() {
       <CreateProjectDialog
         open={showCreateProjectDialog}
         onOpenChange={setShowCreateProjectDialog}
-        onCreateProject={async (projectData: any) => {
-          try {
-            const response = await apiFetch('/api/workspaces', {
-              method: 'POST',
-              headers: {
-                ...getAuthHeaders(sessionToken),
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(projectData),
-            });
-
-            if (!response.ok) {
-              throw new Error('Failed to create project');
-            }
-
-            const newProject = await response.json();
-            
-            toast({
-              title: "Project Created",
-              description: `${newProject.name} has been created successfully!`,
-            });
-
-            // Navigate to new project
-            window.location.href = `/playground/${newProject.id}`;
-          } catch (error: any) {
-            toast({
-              title: "Error",
-              description: error.message || "Failed to create project",
-              variant: "destructive",
-            });
-          }
-        }}
-        isLoading={false}
+        onCreateProject={createProjectHook}
+        isLoading={isCreating}
       />
 
       {/* Rename Project Dialog */}
@@ -2942,40 +2894,11 @@ export default function PromptPlayground() {
 
               if (!newName || !currentProject) return;
 
-              try {
-                const response = await apiFetch(`/api/workspaces/${currentProject.id}`, {
-                  method: 'PUT',
-                  headers: {
-                    ...getAuthHeaders(sessionToken),
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ name: newName }),
-                });
-
-                if (!response.ok) {
-                  throw new Error('Failed to rename project');
+              if (currentProject) {
+                const updatedProject = await renameProjectHook(currentProject.id, newName);
+                if (updatedProject) {
+                  setShowRenameProjectDialog(false);
                 }
-
-                const updatedProject = await response.json();
-                setCurrentProject({ ...currentProject, name: updatedProject.name });
-                
-                // Update projects list
-                setProjects(prev => prev.map(p => 
-                  p.id === currentProject.id ? { ...p, name: updatedProject.name } : p
-                ));
-
-                toast({
-                  title: "Project Renamed",
-                  description: `Project renamed to "${updatedProject.name}"`,
-                });
-
-                setShowRenameProjectDialog(false);
-              } catch (error: any) {
-                toast({
-                  title: "Error",
-                  description: error.message || "Failed to rename project",
-                  variant: "destructive",
-                });
               }
             }}
           >
