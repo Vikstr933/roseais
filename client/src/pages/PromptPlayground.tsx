@@ -2566,7 +2566,7 @@ export default function PromptPlayground() {
                   return isComponent && fileCount > 0;
                 })() ? (
                     <EnhancedFileExplorer
-                    key={`files-${response?.files?.length || 0}-${Date.now()}`}
+                    key={`files-${response?.files?.length || 0}-${response?.files?.map(f => f.path).join(',') || ''}`}
                     workspacePath="/workspaces"
                     files={(response?.files || []).map((file) => {
                       const cleanedPath = file.path.replace(/^\/workspaces\//, '');
