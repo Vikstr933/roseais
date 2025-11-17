@@ -1560,24 +1560,7 @@ export default function PromptPlayground() {
                       // Removed animation chat message - files update silently
                     }
 
-                    // Removed chat messages - files update silently in real-time via setResponse above `ðŸ“ Generated ${data.data.file.path} (${data.data.index}/${data.data.total})`,
-                      timestamp: Date.now()
-                    });
-
-                    // Add chat message for first and last file
-                    if (data.data.index === 1) {
-                      addChatMessage({
-                        role: 'assistant',
-                        content: `ðŸ“ Writing ${data.data.total} files to your project...`,
-                        timestamp: Date.now()
-                      });
-                    } else if (data.data.index === data.data.total) {
-                      addChatMessage({
-                        role: 'assistant',
-                        content: `âœ… All ${data.data.total} files generated!`,
-                        timestamp: Date.now()
-                      });
-                    }
+                    // Removed chat messages - files update silently in real-time via setResponse above
                   } else if (data.type === 'PROJECT_CONTEXT_LOADED') {
                     addChatMessage({
                       role: 'assistant',
