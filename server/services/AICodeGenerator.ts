@@ -1207,6 +1207,25 @@ Suggestions to fix:
           return '})';
         });
 
+        // Fix 0d4: Remove semicolons INSTEAD of closing parentheses
+        // This catches patterns like: functionCall(arg1, arg2; where ; should be )
+        // Pattern: word/identifier followed by semicolon before newline where ) is expected
+        content = content.replace(/([a-zA-Z_$][a-zA-Z0-9_$]*)\s*;\s*$/gm, (match, identifier) => {
+          // Check if the next line starts with ) - if so, the ; should be )
+          const lines = content.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes(match)) {
+              const nextLine = lines[i + 1];
+              if (nextLine && nextLine.trim().startsWith(')')) {
+                console.log(`🔧 [Pass ${passNumber}] Fixing semicolon instead of closing paren: "${identifier};" -> "${identifier})"`);
+                fixesApplied++;
+                return `${identifier})`;
+              }
+            }
+          }
+          return match;
+        });
+
         // Fix 0d2: Remove any remaining stray semicolons after {
         // This runs AFTER Fix 0b, so return {; has already been handled
         // Catches cases like: if (x) {; or const obj = {; or interface Name {;

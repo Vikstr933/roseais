@@ -1653,14 +1653,14 @@ export default function PromptPlayground() {
                         timestamp: Date.now()
                       });
                     }
-                  } else if (data.type === 'COMPLETE' || data.type === 'GENERATION_COMPLETE') {
+                  } else if (data.type === 'COMPLETE' || data.type === 'GENERATION_COMPLETE' || data.type === 'FINAL_RESPONSE') {
                     console.log('🎉 Generation complete', data.data);
                     // Format finalResult to match expected structure with files
-                    finalResult = {
+                    finalResult = data.data?.response ? data.data : {
                       response: {
                         type: 'component',
                         text: data.data?.files?.[0]?.content || data.data?.files?.find((f: any) => f.path?.includes('App.tsx'))?.content || '',
-                        files: data.data?.files || []
+                        files: data.data?.files || data.data?.response?.files || []
                       },
                       ...data.data
                     };

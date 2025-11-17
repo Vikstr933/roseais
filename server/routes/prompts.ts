@@ -747,6 +747,25 @@ router.post(
         projectId = null, // Project ID for context continuation
       } = req.body;
 
+      // 🔥 SET UP SSE HEADERS FIRST - This enables real-time file streaming
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no', // Disable buffering for real-time updates
+      });
+
+      // Initialize SSE client for this request
+      if (!req.app.locals.sseClients) {
+        req.app.locals.sseClients = new Set();
+      }
+      req.app.locals.sseClients.add(res);
+
+      // Clean up on client disconnect
+      req.on('close', () => {
+        req.app.locals.sseClients?.delete(res);
+      });
+
       // Send initial status
       sendSSEUpdate(req, 'GENERATION_START', {
         message: 'Starting multi-agent orchestration process',
@@ -1942,10 +1961,10 @@ async function handleIncrementalGeneration(
         }))
       : [];
 
-    console.log(`📦 Returning ${responseFiles.length} files in response`);
+    console.log(`📦 Sending final SSE event with ${responseFiles.length} files`);
 
-    // Format response to match frontend expectations (wrapped in 'response' object)
-    return res.json({
+    // 🔥 DON'T CALL res.json() for SSE - Send final event and end the stream
+    sendSSEUpdate(req, 'FINAL_RESPONSE', {
       response: {
         type: 'component',
         text: componentText,
@@ -1960,6 +1979,9 @@ async function handleIncrementalGeneration(
         filesGenerated: responseFiles.length
       }
     });
+
+    // End the SSE stream
+    res.end();
   } catch (error) {
     console.error('Incremental generation error:', error);
     sendSSEUpdate(req, 'GENERATION_ERROR', {
