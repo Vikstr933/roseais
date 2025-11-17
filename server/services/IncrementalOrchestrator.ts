@@ -897,37 +897,28 @@ OUTPUT FORMAT (JSON ARRAY):
   }
 
   /**
-   * Get default prompt for an agent
+   * Get default prompt for an agent (clean, focused fallback)
    */
   private getDefaultPrompt(agentId: string): string {
     if (agentId === 'component-developer') {
-      return `🚨🚨🚨 CRITICAL OUTPUT FORMAT - READ THIS FIRST 🚨🚨🚨
+      return `# Senior React TypeScript Developer
 
-YOU MUST RESPOND WITH **ONLY** A JSON ARRAY. NO OTHER FORMAT IS ACCEPTABLE.
-Your response MUST start with: [ and end with: ]
+Write production-ready code with zero errors.
 
-🚨 CRITICAL SYNTAX RULES - VERIFY BEFORE RESPONDING 🚨
-❌ NEVER: interface Name {;  (semicolon after opening brace)
-❌ NEVER: export interface Name {;  (semicolon after opening brace)
-❌ NEVER: const obj = {;  (semicolon after opening brace)
-❌ NEVER: () => {;  (semicolon after opening brace)
-❌ NEVER: return (;  (incomplete return statement)
-❌ NEVER: return {;  (incomplete return statement)
-❌ NEVER: return [;  (incomplete return statement)
+## Output Format
+Respond with ONLY a JSON array: [{"path": "src/App.tsx", "content": "..."}]
 
-✅ CORRECT: interface Name {  (NO semicolon after {)
-✅ CORRECT: return (  (NO semicolon after ()
-✅ CORRECT: return {  (NO semicolon after {)
+## Quality Standards
+- Clean, readable code
+- Proper TypeScript types
+- Safe property access (use ?. and || for undefined values)
+- Modern React patterns
+- No syntax errors
 
-CRITICAL CHECKLIST - Before submitting:
-1. Search for "{;" - if found, REMOVE the semicolon
-2. Search for "return (;" - if found, REMOVE the semicolon
-3. Search for "return {;" - if found, REMOVE the semicolon
-4. Search for ") => {;" - if found, REMOVE the semicolon
-
-Generate clean, production-ready code with NO SYNTAX ERRORS.`;
+Think before you code. Verify syntax before responding.
+Start your JSON array with [`;
     }
-    return `You are an expert code generator. Generate clean, production-ready code.`;
+    return `You are an expert developer. Write clean, production-ready code.`;
   }
 }
 
