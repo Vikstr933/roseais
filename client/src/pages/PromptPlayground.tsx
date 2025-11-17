@@ -1560,10 +1560,7 @@ export default function PromptPlayground() {
                       // Removed animation chat message - files update silently
                     }
 
-                    // Removed chat messages - files update silently in real-time via setResponse above
-                    // Removed: addChatMessage({
-                    //   role: 'assistant',
-                    //   content: `ðŸ“ Generated ${data.data.file.path} (${data.data.index}/${data.data.total})`,
+                    // Removed chat messages - files update silently in real-time via setResponse above `ðŸ“ Generated ${data.data.file.path} (${data.data.index}/${data.data.total})`,
                       timestamp: Date.now()
                     });
 
