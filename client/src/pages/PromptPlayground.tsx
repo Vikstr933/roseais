@@ -1555,32 +1555,39 @@ export default function PromptPlayground() {
                             setEditorLanguage(getFileLanguage(data.data.file.path));
                           }, 0);
                         }
+                        // Persist to workspace immediately
+                        updateGeneratedFiles([generatedFile]);
                         return newResponse;
                       }
 
                       // Check if file already exists (avoid duplicates)
                       const existingIndex = prev.files?.findIndex(f => f.path === data.data.file.path);
+                      let updatedFiles: GeneratedFile[];
+                      
                       if (existingIndex !== undefined && existingIndex >= 0 && prev.files) {
                         // Update existing file
-                        const newFiles = [...prev.files];
-                        newFiles[existingIndex] = generatedFile;
-                        return { ...prev, files: newFiles };
+                        updatedFiles = [...prev.files];
+                        updatedFiles[existingIndex] = generatedFile;
                       } else {
                         // Add new file
-                        const newFiles = [...(prev.files || []), generatedFile];
+                        updatedFiles = [...(prev.files || []), generatedFile];
                         // Auto-select first file when it arrives
-                        if (data.data.index === 1 && newFiles.length === 1) {
+                        if (data.data.index === 1 && updatedFiles.length === 1) {
                           setTimeout(() => {
                             setSelectedFileIndex(0);
                             setActiveTab('editor');
                             setEditorLanguage(getFileLanguage(data.data.file.path));
                           }, 0);
                         }
-                        return {
-                          ...prev,
-                          files: newFiles
-                        };
                       }
+
+                      // Persist to workspace immediately for real-time persistence
+                      updateGeneratedFiles(updatedFiles);
+
+                      return {
+                        ...prev,
+                        files: updatedFiles
+                      };
                     });
 
                     // Auto-select the first file and switch to editor tab
