@@ -73,6 +73,8 @@ import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useKeyboardShortcuts, createShortcut } from "../hooks/useKeyboardShortcuts";
 import { useProjectManagement } from "../hooks/useProjectManagement";
+import { EmptyState } from "../components/EmptyState";
+import { Skeleton } from "../components/ui/skeleton";
 
 // Agent interface removed - using orchestration only
 
@@ -1939,24 +1941,24 @@ export default function PromptPlayground() {
       <div className="h-16 flex-shrink-0"></div>
       
       {/* Top Bar - Fixed height */}
-      <div className="h-12 border-b flex items-center justify-between px-4 bg-muted/30 flex-shrink-0 relative z-10">
+      <div className="h-14 border-b flex items-center justify-between px-6 bg-gradient-to-r from-background via-muted/30 to-background flex-shrink-0 relative z-10 shadow-sm">
         <div className="flex items-center space-x-4">
           {currentProject && (
             <div className="flex items-center gap-2">
-              <div className="flex items-center px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
-                <Laptop className="h-3.5 w-3.5 mr-2 text-primary" />
-                <span className="text-xs font-semibold text-primary">{currentProject.name}</span>
+              <div className="flex items-center px-3 py-1.5 bg-brand-gradient-subtle rounded-full border border-purple-200 dark:border-purple-800 shadow-sm hover-lift transition-smooth">
+                <Laptop className="icon-xs mr-2 text-purple-600 dark:text-purple-400" />
+                <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">{currentProject.name}</span>
               </div>
               {/* Workspace Type Badge */}
               {currentProject.workspaceType === 'team' ? (
-                <div className="flex items-center px-2 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full border border-blue-200 dark:border-blue-800">
-                  <Users className="h-3 w-3 mr-1 text-blue-600 dark:text-blue-400" />
-                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Team</span>
+                <div className="flex items-center px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-full border border-blue-200 dark:border-blue-800 transition-smooth">
+                  <Users className="icon-xs mr-1.5 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Team</span>
                 </div>
               ) : (
-                <div className="flex items-center px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-full border border-green-200 dark:border-green-800">
-                  <User className="h-3 w-3 mr-1 text-green-600 dark:text-green-400" />
-                  <span className="text-xs font-medium text-green-600 dark:text-green-400">Personal</span>
+                <div className="flex items-center px-2 py-1 bg-green-50 dark:bg-green-900/30 rounded-full border border-green-200 dark:border-green-800 transition-smooth">
+                  <User className="icon-xs mr-1.5 text-green-600 dark:text-green-400" />
+                  <span className="text-xs font-medium text-green-700 dark:text-green-300">Personal</span>
                 </div>
               )}
             </div>
@@ -1964,28 +1966,28 @@ export default function PromptPlayground() {
           
           {/* Superadmin Only - Status Indicators */}
           {isSuperAdmin && (
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-              <h1 className="text-sm font-medium">Multi-Agent App Generator</h1>
-              <div className="flex items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 ${isLoading ? "bg-blue-500 animate-pulse" : "bg-green-500"}`}></div>
-                {isLoading ? "AI Agents Working..." : "Ready for Ideas"}
+            <div className="flex items-center gap-4 text-body-sm">
+              <h1 className="text-body font-semibold text-foreground">Multi-Agent App Generator</h1>
+              <div className="flex items-center gap-2 px-2 py-1 bg-muted rounded-full">
+                <div className={`w-2 h-2 rounded-full ${isLoading ? "bg-purple-500 animate-pulse" : "bg-green-500"}`}></div>
+                <span className="text-xs font-medium text-foreground">{isLoading ? "AI Agents Working..." : "Ready for Ideas"}</span>
               </div>
-              <div className="flex items-center px-2 py-1 bg-blue-100 dark:bg-blue-900/20 rounded-full">
+              <div className="flex items-center px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-full border border-blue-200 dark:border-blue-800 transition-smooth">
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mr-2"></div>
                 <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Orchestration Mode</span>
               </div>
               {/* Incremental Generation Status - Always Enabled */}
-              <div className="flex items-center px-2 py-1 bg-green-100 dark:bg-green-900/20 rounded-full">
+              <div className="flex items-center px-2 py-1 bg-green-50 dark:bg-green-900/30 rounded-full border border-green-200 dark:border-green-800 transition-smooth">
                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-2"></div>
                 <span className="text-xs font-medium text-green-700 dark:text-green-300">
                   Incremental Generation
                 </span>
               </div>
               {/* WebContainer Status */}
-              <div className={`flex items-center px-2 py-1 rounded-full ${
-                webContainerReady ? 'bg-green-100 dark:bg-green-900/20' :
-                webContainerBooting ? 'bg-yellow-100 dark:bg-yellow-900/20' :
-                'bg-gray-100 dark:bg-gray-800'
+              <div className={`flex items-center px-2 py-1 rounded-full border transition-smooth ${
+                webContainerReady ? 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800' :
+                webContainerBooting ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800' :
+                'bg-muted border-border'
               }`}>
                 <div className={`w-1.5 h-1.5 rounded-full mr-2 ${
                   webContainerReady ? 'bg-green-500' :
@@ -1995,7 +1997,7 @@ export default function PromptPlayground() {
                 <span className={`text-xs font-medium ${
                   webContainerReady ? 'text-green-700 dark:text-green-300' :
                   webContainerBooting ? 'text-yellow-700 dark:text-yellow-300' :
-                  'text-gray-600 dark:text-gray-400'
+                  'text-muted-foreground'
                 }`}>
                   {webContainerReady ? 'WebContainer Ready' :
                    webContainerBooting ? 'Booting...' :
@@ -2044,11 +2046,11 @@ export default function PromptPlayground() {
             variant="outline"
             size="sm"
             onClick={() => setShowCreateProjectDialog(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 transition-smooth hover-lift focus-ring"
             title="New Project (Ctrl+N)"
             disabled={isCreating}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="icon-sm" />
             {isCreating ? 'Creating...' : 'New Project'}
           </Button>
 
@@ -2057,10 +2059,10 @@ export default function PromptPlayground() {
             variant="ghost"
             size="sm"
             onClick={() => setShowKeyboardShortcuts(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 transition-smooth hover:bg-accent focus-ring"
             title="Keyboard Shortcuts (Ctrl+K)"
           >
-            <Keyboard className="h-4 w-4" />
+            <Keyboard className="icon-sm" />
           </Button>
 
           {/* Start Fresh Button */}
@@ -2322,11 +2324,11 @@ export default function PromptPlayground() {
           {/* Chat Panel - Left Side - Responsive sizing */}
           <div className="w-[25%] min-w-[280px] max-w-[400px] lg:w-[28%] xl:w-[30%] border-r border-border flex flex-col bg-card relative">
           {/* Chat Header */}
-          <div className="p-4 border-b border-border flex-shrink-0 bg-card relative z-10">
+          <div className="panel-padding border-b border-border flex-shrink-0 bg-card relative z-10">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Brain className="h-5 w-5" />
-                AI Assistant
+              <h2 className="text-h4 flex items-center gap-2">
+                <Brain className="icon-md text-purple-600 dark:text-purple-400" />
+                <span className="brand-gradient-text font-bold">AI Assistant</span>
               </h2>
               {chatHistory.length > 0 && (
                 <Button
@@ -2340,7 +2342,7 @@ export default function PromptPlayground() {
                 </Button>
               )}
             </div>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-body-sm text-muted-foreground mt-2">
               Describe what you want to build
             </p>
                   </div>
@@ -2348,47 +2350,51 @@ export default function PromptPlayground() {
                       {/* Chat Messages - Scrollable area that takes remaining space */}
           <div
             ref={chatMessagesRef}
-            className="flex-1 overflow-y-auto p-3 min-h-0 relative"
+            className="flex-1 overflow-y-auto panel-padding min-h-0 relative"
           >
-            <div className="space-y-4">
+            <div className="item-gap">
               {chatHistory.length === 0 && (
-                <div className="text-center py-12">
-                  <Brain className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    What would you like to build today?
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Try: "Build an egg timer with smooth animations"
-                  </p>
-                  </div>
+                <EmptyState
+                  icon={Brain}
+                  title="What would you like to build today?"
+                  description="Describe your app idea and our AI agents will generate a complete, production-ready application for you. Start with something simple like 'a todo app' or 'a weather dashboard'."
+                  action={{
+                    label: "Get Started",
+                    onClick: () => {
+                      const chatInput = document.querySelector('textarea[placeholder*="Describe"]') as HTMLTextAreaElement;
+                      if (chatInput) chatInput.focus();
+                    }
+                  }}
+                />
               )}
 
                           {chatHistory.map((message, index) => (
-                            <ChatMessage
-                              key={index}
-                              role={message.role}
-                              content={message.content}
-                              timestamp={message.timestamp}
-                              errors={message.errors}
-                              warnings={message.warnings}
-                              errorSummary={message.errorSummary}
-                            />
+                            <div key={index} className="transition-smooth">
+                              <ChatMessage
+                                role={message.role}
+                                content={message.content}
+                                timestamp={message.timestamp}
+                                errors={message.errors}
+                                warnings={message.warnings}
+                                errorSummary={message.errorSummary}
+                              />
+                            </div>
                           ))}
 
               {/* Generation Status */}
                           {isLoading && (
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                    <Brain className="h-4 w-4 text-primary-foreground" />
+                <div className="flex gap-4 transition-smooth">
+                  <div className="w-10 h-10 rounded-full bg-brand-gradient flex items-center justify-center flex-shrink-0 shadow-lg hover-lift">
+                    <Brain className="icon-sm text-white pulse-brand" />
                                 </div>
                   
-                  <div className="rounded-lg px-4 py-3 bg-muted max-w-[80%] flex-1">
+                  <div className="rounded-lg px-4 py-3 bg-muted max-w-[80%] flex-1 border border-border transition-smooth hover:shadow-sm">
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-                        <span>I'll get started on your app right away! ðŸŽ¯</span>
+                      <div className="flex items-center gap-2 text-body">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-purple-500 border-t-transparent"></div>
+                        <span className="text-foreground font-medium">I'll get started on your app right away! 🚀</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-body-sm text-muted-foreground">
                         Watch the Editor tab light up as code appears!
                       </p>
                     </div>
@@ -2399,9 +2405,9 @@ export default function PromptPlayground() {
                       </div>
 
                       {/* Chat Input - Always visible at bottom */}
-          <div className="p-2 border-t border-border flex-shrink-0 bg-card relative z-20">
+          <div className="panel-padding border-t border-border flex-shrink-0 bg-card relative z-20">
                         <Form {...form}>
-              <form onSubmit={form.handleSubmit((data) => generateMutation.mutate(data))} className="space-y-1">
+              <form onSubmit={form.handleSubmit((data) => generateMutation.mutate(data))} className="tight-gap">
                             <FormField
                               control={form.control}
                               name="userPrompt"
@@ -2412,7 +2418,7 @@ export default function PromptPlayground() {
                           <textarea
                             {...field}
                             placeholder="Describe your app or request changes..."
-                            className="w-full min-h-[40px] max-h-[80px] p-2 pr-10 text-sm rounded-lg border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full min-h-[48px] max-h-[120px] px-4 py-3 pr-12 text-body rounded-lg border border-input bg-background resize-none focus-ring transition-smooth"
                                         disabled={isLoading}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {
@@ -2425,12 +2431,12 @@ export default function PromptPlayground() {
                                         type="submit"
                             disabled={isLoading || !field.value?.trim()}
                             size="sm"
-                            className="absolute bottom-2 right-2 h-8 w-8 p-0"
+                            className="absolute bottom-3 right-3 h-9 w-9 p-0 btn-primary rounded-lg hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
                                         {isLoading ? (
                               <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                                         ) : (
-                                          <Send className="h-4 w-4" />
+                                          <Send className="icon-sm" />
                                         )}
                                       </Button>
                                     </div>
@@ -2438,8 +2444,8 @@ export default function PromptPlayground() {
                                 </FormItem>
                               )}
                             />
-                <p className="text-xs text-muted-foreground">
-                  Press Enter to send, Shift+Enter for new line
+                <p className="text-caption">
+                  Press <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted border rounded">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted border rounded">Shift+Enter</kbd> for new line
                 </p>
                           </form>
                         </Form>
@@ -2454,55 +2460,55 @@ export default function PromptPlayground() {
               <div className="flex items-center gap-6">
               <button
                 onClick={() => setActiveTab('editor')}
-                className={`flex items-center gap-2 px-2 py-1.5 text-xs font-medium rounded-md transition-colors relative ${
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-smooth relative focus-ring ${
                   activeTab === 'editor'
-                    ? 'bg-background text-foreground'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                } ${isLoading && activeTab === 'editor' ? 'animate-pulse' : ''}`}
+                }`}
               >
-                <Code className="h-4 w-4" />
+                <Code className="icon-sm" />
                 Editor
                 {isLoading && activeTab === 'editor' && (
                   <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500"></span>
                   </span>
                 )}
               </button>
               <button
                 onClick={() => setActiveTab('preview')}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-smooth focus-ring ${
                   activeTab === 'preview'
-                    ? 'bg-background text-foreground'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <Eye className="h-4 w-4" />
+                <Eye className="icon-sm" />
                 Preview
                 {currentComponentName && livePreviewUrl && (
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                 )}
               </button>
               <button
                 onClick={() => setActiveTab('sessions')}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-smooth focus-ring ${
                   activeTab === 'sessions'
-                    ? 'bg-background text-foreground'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <MessageSquare className="h-4 w-4" />
+                <MessageSquare className="icon-sm" />
                 Sessions
               </button>
               <button
                 onClick={() => setActiveTab('settings')}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-smooth focus-ring ${
                   activeTab === 'settings'
-                    ? 'bg-background text-foreground'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <Settings className="h-4 w-4" />
+                <Settings className="icon-sm" />
                 Settings
               </button>
                             </div>
@@ -2527,8 +2533,8 @@ export default function PromptPlayground() {
                 {/* File Explorer - Fixed Width */}
                 <div className="w-[240px] bg-muted/30 min-h-0 border-r border-border flex-shrink-0">
           <div className="h-full min-h-0 flex flex-col">
-            <div className="px-2 py-1.5 border-b flex items-center justify-between">
-              <h2 className="text-xs font-semibold">EXPLORER</h2>
+            <div className="px-3 py-2 border-b flex items-center justify-between bg-muted/50">
+              <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">EXPLORER</h2>
               {/* Clear All Files Button */}
               {response && typeof response === 'object' && response.files && response.files.length > 0 && (
                 <button
@@ -2632,18 +2638,12 @@ export default function PromptPlayground() {
                     }}
                   />
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    <Code className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No files yet</p>
-                    <p className="text-xs mt-1">
-                      {isLoading ? 'Generating code...' : 'Start a conversation to generate code'}
-                    </p>
-                    {response && typeof response === 'object' && (
-                      <p className="text-xs mt-2 text-red-400">
-                        Debug: Type={(response as AIResponse).type}, Files={(response as AIResponse).files?.length || 0}
-                      </p>
-                    )}
-                        </div>
+                  <EmptyState
+                    icon={Code}
+                    title={isLoading ? "Generating code..." : "No files yet"}
+                    description={isLoading ? "Our AI agents are creating your application files. They'll appear here shortly!" : "Start a conversation to generate code. Describe what you want to build and watch the magic happen."}
+                    className="py-8"
+                  />
                       )}
                     </div>
             </ScrollArea>
@@ -2732,12 +2732,12 @@ export default function PromptPlayground() {
                           }}
                         />
                       ) : !isLoading && (
-                        <div className="flex items-center justify-center h-full">
-                          <div className="text-center">
-                    <h3 className="text-lg font-medium mb-2">No File Selected</h3>
-                    <p className="text-sm text-muted-foreground">Generate a component to see the code here</p>
-                          </div>
-                        </div>
+                        <EmptyState
+                          icon={FileCode}
+                          title="No File Selected"
+                          description="Select a file from the explorer to view and edit its code. Generate a component to get started."
+                          className="h-full"
+                        />
                       )}
                     </div>
         </div>

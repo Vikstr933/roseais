@@ -131,25 +131,26 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`flex gap-3 ${role === 'user' ? 'justify-end' : 'justify-start'}`}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className={`flex gap-4 transition-smooth ${role === 'user' ? 'justify-end' : 'justify-start'}`}
     >
       {role === 'assistant' && (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-          <Brain className="h-4 w-4 text-white" />
+        <div className="w-10 h-10 rounded-full bg-brand-gradient flex items-center justify-center flex-shrink-0 shadow-lg hover-lift">
+          <Brain className="icon-sm text-white" />
         </div>
       )}
 
       <div
-        className={`rounded-xl px-4 py-3 max-w-[85%] ${
+        className={`rounded-xl px-4 py-3 max-w-[85%] transition-smooth ${
           role === 'user'
-            ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg'
-            : 'bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700'
+            ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl'
+            : 'chat-message-assistant border border-border hover:shadow-md'
         }`}
       >
         {role === 'assistant' ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className={`prose prose-sm dark:prose-invert max-w-none chat-message-assistant rounded-lg p-4 transition-smooth hover:shadow-sm`}>
             <ReactMarkdown
               components={{
                 code({ node, inline, className, children, ...props }) {
