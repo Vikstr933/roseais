@@ -27,7 +27,7 @@ import {
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X, Power, PowerOff, Edit2 } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X, Power, PowerOff, Edit2, Keyboard } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import {
   AlertDialog,
@@ -71,6 +71,7 @@ import { useWorkspace } from "../contexts/WorkspaceContext";
 import { useRoute } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { useKeyboardShortcuts, createShortcut } from "../hooks/useKeyboardShortcuts";
 
 // Agent interface removed - using orchestration only
 
@@ -265,6 +266,7 @@ export default function PromptPlayground() {
   const [devServerRunning, setDevServerRunning] = useState(false);
   const [devServerStopping, setDevServerStopping] = useState(false);
   const [agentsActive, setAgentsActive] = useState(false); // Track if agents are currently working
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   // Incremental generation is ALWAYS enabled - it's the standard way to generate code
 
   // Refs
@@ -533,6 +535,85 @@ export default function PromptPlayground() {
       setProjects(userProjects);
     }
   }, [userProjects]);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    createShortcut('n', () => {
+      if (!isLoading) setShowCreateProjectDialog(true);
+    }, 'New Project', { ctrl: true }),
+    createShortcut('s', () => {
+      // Save current files to project
+      if (!isLoading && currentProject && response && typeof response === 'object' && 'files' in response) {
+        const files = (response as AIResponse).files || [];
+        if (files.length > 0) {
+          apiFetch(`/api/workspaces/${currentProject.id}/export`, {
+            method: 'POST',
+            headers: {
+              ...getAuthHeaders(sessionToken),
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              files,
+              componentName: currentComponentName || 'App',
+            }),
+          })
+            .then(res => {
+              if (res.ok) {
+                toast({
+                  title: "Saved",
+                  description: "Project files saved successfully",
+                });
+              }
+            })
+            .catch(err => {
+              toast({
+                title: "Save Failed",
+                description: err.message || "Could not save files",
+                variant: "destructive",
+              });
+            });
+        }
+      }
+    }, 'Save Project', { ctrl: true }),
+    createShortcut('r', () => {
+      // Restart dev server if running
+      if (!isLoading && devServerRunning && !devServerStopping) {
+        const existingFiles = response && typeof response === 'object' && 'files' in response 
+          ? (response as AIResponse).files || []
+          : currentSession?.generatedFiles || [];
+        if (existingFiles.length > 0) {
+          deployToRuntime(existingFiles, currentComponentName || 'App');
+        }
+      }
+    }, 'Restart Dev Server', { ctrl: true, shift: true }),
+    createShortcut('k', () => {
+      // Toggle keyboard shortcuts dialog or focus chat input
+      if (showKeyboardShortcuts) {
+        setShowKeyboardShortcuts(false);
+      } else {
+        const chatInput = document.querySelector('textarea[placeholder*="Describe"]') as HTMLTextAreaElement;
+        if (chatInput && document.activeElement !== chatInput) {
+          chatInput.focus();
+        } else {
+          setShowKeyboardShortcuts(true);
+        }
+      }
+    }, 'Focus Chat / Show Shortcuts', { ctrl: true }),
+    createShortcut('1', () => {
+      if (!isLoading) setActiveTab('editor');
+    }, 'Switch to Editor', { ctrl: true }),
+    createShortcut('2', () => {
+      if (!isLoading) setActiveTab('preview');
+    }, 'Switch to Preview', { ctrl: true }),
+    createShortcut('3', () => {
+      if (!isLoading) setActiveTab('sessions');
+    }, 'Switch to Sessions', { ctrl: true }),
+    createShortcut('4', () => {
+      if (!isLoading) setActiveTab('settings');
+    }, 'Switch to Settings', { ctrl: true }),
+    ],
+    { enabled: true }
+  );
 
   // Removed agent query since we always use orchestration now
 
@@ -1960,9 +2041,21 @@ export default function PromptPlayground() {
             size="sm"
             onClick={() => setShowCreateProjectDialog(true)}
             className="flex items-center gap-2"
+            title="New Project (Ctrl+N)"
           >
             <Plus className="h-4 w-4" />
             New Project
+          </Button>
+
+          {/* Keyboard Shortcuts Help */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowKeyboardShortcuts(true)}
+            className="flex items-center gap-2"
+            title="Keyboard Shortcuts (Ctrl+K)"
+          >
+            <Keyboard className="h-4 w-4" />
           </Button>
 
           {/* Start Fresh Button */}
@@ -2907,6 +3000,75 @@ export default function PromptPlayground() {
               <Button type="submit">Rename</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Keyboard Shortcuts Dialog */}
+      <Dialog open={showKeyboardShortcuts} onOpenChange={setShowKeyboardShortcuts}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Keyboard className="h-5 w-5" />
+              Keyboard Shortcuts
+            </DialogTitle>
+            <DialogDescription>
+              Use these shortcuts to work faster in the playground
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm">Project Management</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>New Project</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+N</kbd>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>Save Project</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+S</kbd>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>Restart Dev Server</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+Shift+R</kbd>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm">Navigation</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>Focus Chat</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+K</kbd>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>Editor Tab</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+1</kbd>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>Preview Tab</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+2</kbd>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>Sessions Tab</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+3</kbd>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                    <span>Settings Tab</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-background border rounded">Ctrl+4</kbd>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="pt-4 border-t">
+              <p className="text-xs text-muted-foreground">
+                <strong>Note:</strong> Shortcuts work when not typing in input fields. Press Escape to close dialogs.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowKeyboardShortcuts(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       </ErrorBoundary>
