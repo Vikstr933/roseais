@@ -85,7 +85,8 @@ export class IncrementalOrchestrator {
     userPrompt: string,
     knowledgeContext: string = '',
     existingFiles: { path: string; content: string }[] = [],
-    progressCallback?: (phase: string, progress: number, message: string) => void
+    progressCallback?: (phase: string, progress: number, message: string) => void,
+    fileCallback?: (file: { path: string; content: string }, index: number, total: number) => void
   ): Promise<IncrementalGenerationResult> {
     const startTime = Date.now();
     const phaseResults: PhaseResult[] = [];
@@ -185,9 +186,15 @@ export class IncrementalOrchestrator {
           }
         } while (!validation.valid && fixAttempts < this.maxFixAttempts);
 
-      // Add phase files to all files
-      phaseResult.files.forEach(file => {
+      // Add phase files to all files and stream them in real-time
+      phaseResult.files.forEach((file, fileIndex) => {
         allFiles.set(file.path, file.content);
+        
+        // Stream file to client in real-time
+        if (fileCallback) {
+          const totalFilesSoFar = Array.from(allFiles.keys()).length;
+          fileCallback(file, totalFilesSoFar - 1, totalFilesSoFar);
+        }
       });
 
       phaseResult.duration = Date.now() - phaseStartTime;
@@ -664,20 +671,40 @@ OUTPUT FORMAT (JSON ARRAY):
       // Apply comprehensive fixes to ALL files, regardless of error messages
       // This ensures we catch syntax errors even if validation didn't flag them
       
-      // Fix all {; patterns (most common issue) - apply to ALL files
-      // ULTRA-AGGRESSIVE: Handle ALL variations including newlines and specific contexts
+      // CRITICAL FIX: Handle interface/type declarations with extends/implements first
+      const interfacePatterns = [
+        // Match: export interface Name extends ... {;
+        { pattern: /(export\s+interface\s+\w+(?:\s+extends\s+[^{]+)?\s*)\{\s*;/g, name: 'export interface ... {;' },
+        // Match: interface Name extends ... {;
+        { pattern: /(interface\s+\w+(?:\s+extends\s+[^{]+)?\s*)\{\s*;/g, name: 'interface ... {;' },
+        // Match: export type Name = {;
+        { pattern: /(export\s+type\s+\w+\s*=\s*)\{\s*;/g, name: 'export type = {;' },
+        // Match: type Name = {;
+        { pattern: /(type\s+\w+\s*=\s*)\{\s*;/g, name: 'type = {;' },
+      ];
+      
+      const beforeFix = content;
+      interfacePatterns.forEach(({ pattern, name }) => {
+        pattern.lastIndex = 0;
+        const beforeCount = (content.match(pattern) || []).length;
+        if (beforeCount > 0) {
+          content = content.replace(pattern, '$1{');
+          const afterCount = (content.match(pattern) || []).length;
+          if (beforeCount > afterCount) {
+            this.logger.info(`Fixed ${beforeCount - afterCount} ${name} patterns in ${file.path}`);
+          }
+        }
+      });
+      
+      // Fix other brace semicolon patterns
       const braceSemicolonPatterns = [
         /\{\s*;/g,                    // Simple {;
         /\{\s*\n\s*;/g,                // {\n;
         /\{\s*;\s*\n/g,                // {;\n
-        /interface\s+\w+\s*\{\s*;/g,   // interface Name {;
-        /export\s+interface\s+\w+\s*\{\s*;/g,  // export interface Name {;
-        /type\s+\w+\s*=\s*\{\s*;/g,   // type Name = {;
         /const\s+\w+\s*=\s*\{\s*;/g,  // const name = {;
         /\)\s*=>\s*\{\s*;/g           // () => {;
       ];
       
-      const beforeFix = content;
       braceSemicolonPatterns.forEach(pattern => {
         // Reset regex lastIndex to avoid state issues
         pattern.lastIndex = 0;
@@ -736,6 +763,15 @@ OUTPUT FORMAT (JSON ARRAY):
       if (content !== beforeArrow) {
         wasFixed = true;
         this.logger.info(`Fixed arrow function {; pattern in ${file.path}`);
+      }
+
+      // Fix semicolons before closing parentheses in function calls
+      // This catches patterns like: .map((item) => { ... }; ) -> .map((item) => { ... })
+      const beforeParenSemicolon = content;
+      content = content.replace(/\}\s*;\s*\)/g, '})');
+      if (content !== beforeParenSemicolon) {
+        wasFixed = true;
+        this.logger.info(`Fixed semicolon before closing parenthesis in ${file.path}`);
       }
       
       // Fix semicolons in object literals: { key: value; } -> { key: value, }

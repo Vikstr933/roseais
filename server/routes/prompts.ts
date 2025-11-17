@@ -1842,6 +1842,18 @@ async function handleIncrementalGeneration(
           message,
           workflowId
         });
+      },
+      (file, index, total) => {
+        // Stream files to client in real-time as they're generated
+        sendSSEUpdate(req, 'FILE_GENERATED', {
+          file: {
+            path: file.path,
+            content: file.content
+          },
+          index: index + 1,
+          total: total,
+          progress: Math.round(((index + 1) / total) * 100)
+        });
       }
     );
 

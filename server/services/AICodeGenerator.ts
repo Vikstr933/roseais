@@ -1198,17 +1198,55 @@ Suggestions to fix:
           return opener;
         });
 
+        // Fix 0d3: Remove semicolons before closing parentheses in function calls
+        // This catches patterns like: .map((item) => { ... }; ) -> .map((item) => { ... })
+        // Pattern matches: } followed by optional whitespace, semicolon, optional whitespace, then )
+        content = content.replace(/\}\s*;\s*\)/g, (match) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing semicolon before closing paren: "${match.replace(/\n/g, '\\n')}" -> "})"`);
+          fixesApplied++;
+          return '})';
+        });
+
         // Fix 0d2: Remove any remaining stray semicolons after {
         // This runs AFTER Fix 0b, so return {; has already been handled
         // Catches cases like: if (x) {; or const obj = {; or interface Name {;
         // ULTRA-AGGRESSIVE: Handle ALL variations including newlines
+        // CRITICAL FIX: Handle interface/type declarations with extends/implements
+        // Pattern must match: "export interface Name extends Something {;" or "interface Name {;"
+        // Use a more comprehensive pattern that handles the full declaration
+        const interfacePatterns = [
+          // Match: export interface Name extends ... {;
+          { pattern: /(export\s+interface\s+\w+(?:\s+extends\s+[^{]+)?\s*)\{\s*;/g, name: 'export interface ... {;' },
+          // Match: interface Name extends ... {;
+          { pattern: /(interface\s+\w+(?:\s+extends\s+[^{]+)?\s*)\{\s*;/g, name: 'interface ... {;' },
+          // Match: export type Name = {;
+          { pattern: /(export\s+type\s+\w+\s*=\s*)\{\s*;/g, name: 'export type = {;' },
+          // Match: type Name = {;
+          { pattern: /(type\s+\w+\s*=\s*)\{\s*;/g, name: 'type = {;' },
+        ];
+        
+        interfacePatterns.forEach(({ pattern, name }) => {
+          pattern.lastIndex = 0;
+          const matches = content.match(pattern);
+          const beforeCount = matches ? matches.length : 0;
+          if (beforeCount > 0) {
+            console.log(`🔧 [Pass ${passNumber}] ULTRA-AGGRESSIVE: Found ${beforeCount} instances of "${name}"`);
+            pattern.lastIndex = 0;
+            content = content.replace(pattern, '$1{');
+            pattern.lastIndex = 0;
+            const afterMatches = content.match(pattern);
+            const afterCount = afterMatches ? afterMatches.length : 0;
+            const fixed = beforeCount - afterCount;
+            console.log(`🔧 [Pass ${passNumber}] Fixed ${fixed} instances of "${name}" (${beforeCount} -> ${afterCount})`);
+            fixesApplied += fixed;
+          }
+        });
+        
+        // Fix other brace semicolon patterns
         const braceSemicolonPatterns = [
           { pattern: /\{\s*;/g, name: '{;' },
           { pattern: /\{\s*\n\s*;/g, name: '{\n;' },
           { pattern: /\{\s*;\s*\n/g, name: '{;\n' },
-          { pattern: /interface\s+\w+\s*\{\s*;/g, name: 'interface {;' },
-          { pattern: /export\s+interface\s+\w+\s*\{\s*;/g, name: 'export interface {;' },
-          { pattern: /type\s+\w+\s*=\s*\{\s*;/g, name: 'type = {;' },
           { pattern: /const\s+\w+\s*=\s*\{\s*;/g, name: 'const = {;' },
           { pattern: /\)\s*=>\s*\{\s*;/g, name: ') => {;' }
         ];
@@ -1223,17 +1261,8 @@ Suggestions to fix:
             // Reset lastIndex again before replace
             pattern.lastIndex = 0;
             // SIMPLIFIED: Directly replace the pattern by removing semicolon
-            // Match the pattern and replace with the opening brace/delimiter only
             content = content.replace(pattern, (match) => {
-              // Extract the opening delimiter ({, interface, export interface, etc.)
-              // Remove semicolon and any whitespace between delimiter and semicolon
-              if (match.includes('interface')) {
-                // For interface patterns: "interface Name {;" -> "interface Name {"
-                return match.replace(/\{\s*;+\s*/g, '{').replace(/;\s*$/, '');
-              } else if (match.includes('export interface')) {
-                // For export interface patterns: "export interface Name {;" -> "export interface Name {"
-                return match.replace(/\{\s*;+\s*/g, '{').replace(/;\s*$/, '');
-              } else if (match.includes('=>')) {
+              if (match.includes('=>')) {
                 // For arrow functions: ") => {;" -> ") => {"
                 return match.replace(/\{\s*;+\s*/g, '{').replace(/;\s*$/, '');
               } else {

@@ -60,9 +60,7 @@ import FileExplorer from "../components/FileExplorer/FileExplorer";
 import { EnhancedFileExplorer } from "../components/EnhancedFileExplorer";
 import SessionHistory from "../components/SessionHistory";
 import { ChatAutocomplete } from "../components/ChatAutocomplete";
-import { CircularAgentVisualization } from "../components/AgentMonitor/CircularAgentVisualization";
 import { ComponentLibrary } from "../components/ComponentLibrary";
-import { useOptimisticProgress } from "../hooks/useOptimisticProgress";
 import { ProjectSharing } from "../components/ProjectSharing";
 import { ProductionDeployment } from "../components/ProductionDeployment";
 import { AdvancedPreview } from "../components/AdvancedPreview";
@@ -181,18 +179,7 @@ const getFileLanguage = (filename: string): string => {
   };
 
 // Normalize agent display names to IDs for visualization
-const normalizeAgentName = (name: string): string => {
-  const nameMap: Record<string, string> = {
-    'Component Architect': 'component-architect',
-    'UI Designer': 'ui-designer',
-    'Component Developer': 'code-generator',
-    'Completion Agent': 'completion-agent',
-    'Requirements Agent': 'requirements-agent',
-    'Style Generator': 'style-generator',
-    'Personal Assistant': 'personal-assistant',
-  };
-  return nameMap[name] || name.toLowerCase().replace(/\s+/g, '-');
-};
+// Removed normalizeAgentName - no longer needed without animation components
 
 export default function PromptPlayground() {
   const { user, sessionToken, isSuperAdmin } = useAuth();
@@ -220,38 +207,7 @@ export default function PromptPlayground() {
   const [error, setError] = useState<{ message: string; suggestion: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Convert orchestration steps to agent status map for visualization
-  // Normalize agent names to match the IDs expected by CircularAgentVisualization
-  const agentStatusMap = new Map(
-    orchestrationSteps.map(step => {
-      const normalizedId = normalizeAgentName(step.agent);
-      // Map status names: 'in_progress' -> 'running', keep others
-      const visualStatus = step.status === 'in_progress' ? 'running' : step.status;
-      return [
-        normalizedId,
-        {
-          id: normalizedId,
-          status: visualStatus as 'pending' | 'running' | 'completed' | 'failed',
-          startTime: step.status === 'in_progress' || step.status === 'completed' ? Date.now() : undefined,
-        }
-      ];
-    })
-  );
-
-  // Calculate optimistic progress
-  const completedSteps = orchestrationSteps.filter(s => s.status === 'completed').length;
-  const totalSteps = orchestrationSteps.length;
-  const actualProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
-  const isComplete = totalSteps > 0 && completedSteps === totalSteps && !isLoading;
-  const optimisticProgress = useOptimisticProgress(actualProgress, isComplete, isLoading);
-
-  // Debug logging for agent status map
-  useEffect(() => {
-    if (orchestrationSteps.length > 0) {
-      console.log('🎯 OrchestrationSteps:', orchestrationSteps);
-      console.log('🗺️ AgentStatusMap:', Array.from(agentStatusMap.entries()));
-    }
-  }, [orchestrationSteps, agentStatusMap]);
+  // Removed animation-related code - editor/preview are always visible during generation
 
   // Use workspace context for chat history (persists across navigation)
   const chatHistory = currentSession?.chatHistory || [];
@@ -1551,14 +1507,23 @@ export default function PromptPlayground() {
                   } else if (data.type === 'FILE_GENERATED') {
                     console.log('ðŸ“„ File generated:', data.data.file.path);
 
-                    // Add file to response in real-time!
+                    // Add file to response in real-time! (Silently - no chat spam)
                     setResponse(prev => {
                       if (!prev || typeof prev === 'string') {
-                        return {
-                          type: 'component',
+                        const newResponse = {
+                          type: 'component' as const,
                           text: '',
                           files: [{ path: data.data.file.path, content: data.data.file.content }]
                         };
+                        // Auto-select first file when it arrives
+                        if (data.data.index === 1) {
+                          setTimeout(() => {
+                            setSelectedFileIndex(0);
+                            setActiveTab('editor');
+                            setEditorLanguage(getFileLanguage(data.data.file.path));
+                          }, 0);
+                        }
+                        return newResponse;
                       }
 
                       // Check if file already exists (avoid duplicates)
@@ -1570,9 +1535,18 @@ export default function PromptPlayground() {
                         return { ...prev, files: newFiles };
                       } else {
                         // Add new file
+                        const newFiles = [...(prev.files || []), { path: data.data.file.path, content: data.data.file.content }];
+                        // Auto-select first file when it arrives
+                        if (data.data.index === 1 && newFiles.length === 1) {
+                          setTimeout(() => {
+                            setSelectedFileIndex(0);
+                            setActiveTab('editor');
+                            setEditorLanguage(getFileLanguage(data.data.file.path));
+                          }, 0);
+                        }
                         return {
                           ...prev,
-                          files: [...(prev.files || []), { path: data.data.file.path, content: data.data.file.content }]
+                          files: newFiles
                         };
                       }
                     });
@@ -1583,18 +1557,13 @@ export default function PromptPlayground() {
                       setActiveTab('editor');
                       setEditorLanguage(getFileLanguage(data.data.file.path));
 
-                      // Add a glow animation to the editor tab
-                      addChatMessage({
-                        role: 'assistant',
-                        content: `âœ¨ Watch the magic happen! Code is being generated in real-time...`,
-                        timestamp: Date.now()
-                      });
+                      // Removed animation chat message - files update silently
                     }
 
-                    // Show real-time file generation progress
-                    addChatMessage({
-                      role: 'assistant',
-                      content: `ðŸ“ Generated ${data.data.file.path} (${data.data.index}/${data.data.total})`,
+                    // Removed chat messages - files update silently in real-time via setResponse above
+                    // Removed: addChatMessage({
+                    //   role: 'assistant',
+                    //   content: `ðŸ“ Generated ${data.data.file.path} (${data.data.index}/${data.data.total})`,
                       timestamp: Date.now()
                     });
 
@@ -2653,41 +2622,8 @@ export default function PromptPlayground() {
         {/* Main Editor Area */}
         <div className="flex-1 min-h-0">
           <div className="h-full min-h-0 overflow-hidden">
-              {/* Show CircularAgentVisualization while loading */}
-              {(() => {
-                console.log('🔍 EDITOR TAB - Checking visualization conditions:', {
-                  isLoading,
-                  agentStatusMapSize: agentStatusMap.size,
-                  orchestrationStepsLength: orchestrationSteps.length,
-                  agentStatusMapEntries: Array.from(agentStatusMap.entries())
-                });
-                return isLoading;
-              })() && (
-                <div className="h-full flex flex-col items-center justify-center bg-slate-950 overflow-hidden">
-                  {console.log('✅ RENDERING CircularAgentVisualization in EDITOR TAB')}
-                  <div className="flex flex-col items-center gap-4 max-h-full">
-                    <div className="flex-shrink-0 max-h-[600px] overflow-hidden">
-                      <CircularAgentVisualization
-                        agentStatusMap={agentStatusMap}
-                        isRunning={isLoading}
-                      />
-                    </div>
-                    <div className="text-center space-y-2 flex-shrink-0">
-                      <div className="text-5xl font-bold text-white">
-                        {optimisticProgress}%
-                      </div>
-                      {currentStep && (
-                        <div className="text-base text-gray-400 max-w-md">
-                          {currentStep}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Show Editor when files are available and not loading */}
-              {!isLoading && typeof response === 'object' &&
+              {/* Show Editor - Always visible, updates in real-time as files are generated */}
+              {typeof response === 'object' &&
                response?.type === 'component' &&
                       response.files &&
                       response.files[selectedFileIndex] ? (
@@ -2747,31 +2683,8 @@ export default function PromptPlayground() {
             {/* Preview Tab */}
             {activeTab === 'preview' && (
               <div className="h-full flex flex-col">
-                {console.log('🔍 PREVIEW TAB - Checking visualization conditions:', {
-                  isLoading,
-                  agentStatusMapSize: agentStatusMap.size,
-                  orchestrationStepsLength: orchestrationSteps.length
-                })}
-                {/* Show CircularAgentVisualization while loading */}
-                {isLoading ? (
-                  <div className="h-full flex items-center justify-center bg-slate-950">
-                    {console.log('✅ RENDERING CircularAgentVisualization in PREVIEW TAB')}
-                    <div className="flex flex-col items-center gap-8">
-                      <CircularAgentVisualization
-                        agentStatusMap={agentStatusMap}
-                        isRunning={isLoading}
-                      />
-                      <div className="text-center space-y-3">
-                        <div className="text-4xl font-bold text-white">
-                          {optimisticProgress}%
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          {currentStep || 'Initializing AI agents...'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : typeof response === 'object' &&
+                {/* Preview - Always visible, updates in real-time */}
+                {typeof response === 'object' &&
                  response?.type === 'component' &&
                  response.files &&
                  response.files.length > 0 ? (
@@ -2784,8 +2697,8 @@ export default function PromptPlayground() {
                   <div className="h-full flex items-center justify-center bg-background">
                     <div className="text-center text-muted-foreground">
                       <Eye className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg">Preview will appear here</p>
-                      <p className="text-sm mt-2">Generate a component to see the preview</p>
+                      <p className="text-lg">{isLoading ? "Generating code..." : "Preview will appear here"}</p>
+                      <p className="text-sm mt-2">{isLoading ? "Files are being generated in real-time..." : "Generate a component to see the preview"}</p>
                     </div>
                   </div>
                 )}
