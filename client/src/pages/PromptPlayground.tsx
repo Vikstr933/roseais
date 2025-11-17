@@ -1307,7 +1307,17 @@ export default function PromptPlayground() {
         return { response: { type: 'text', text: 'Deploying existing files...', files: existingFiles } };
       }
       
-      // Preserve existing response and terminal logs for iterative workflow
+      // Clear old files if this is a NEW generation (not a modification)
+      // For modifications, we preserve existing files for context
+      if (intent === 'generate' && !requiresProjectFiles) {
+        console.log('🆕 New generation detected - clearing old files');
+        setResponse(null);
+        updateGeneratedFiles([]);
+        setSelectedFileIndex(0);
+        setLivePreviewUrl(null);
+      } else {
+        console.log('🔄 Modification/deploy intent - preserving existing files');
+      }
 
       // Clear the form input after sending
       form.reset({
