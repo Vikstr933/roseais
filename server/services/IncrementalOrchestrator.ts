@@ -793,6 +793,14 @@ OUTPUT FORMAT (JSON ARRAY):
         this.logger.info(`Fixed arrow function {; pattern in ${file.path}`);
       }
 
+      // Fix arrow function callback patterns: (_, index) => (;
+      const beforeArrowParen = content;
+      content = content.replace(/=>\s*\(\s*;/g, '=> (');
+      if (content !== beforeArrowParen) {
+        wasFixed = true;
+        this.logger.info(`Fixed arrow function => (; pattern in ${file.path}`);
+      }
+
       // Fix semicolons before closing parentheses in function calls
       // This catches patterns like: .map((item) => { ... }; ) -> .map((item) => { ... })
       const beforeParenSemicolon = content;

@@ -1178,6 +1178,16 @@ Suggestions to fix:
           }
         });
 
+        // Fix 0d0a: CRITICAL - Arrow function callback patterns like (_, index) => (;
+        // This catches patterns like: Array.from({ length: 5 }, (_, index) => (;
+        // Pattern: arrow function params => (; or => (;
+        content = content.replace(/=>\s*\(\s*;/g, (match) => {
+          console.log(`🔧 [Pass ${passNumber}] Fixing arrow function => (; : "${match.replace(/\n/g, '\\n')}" -> "=> ("`);
+          this.logger.warning('AICodeGenerator', `[Pass ${passNumber}] Fixing arrow function => (;: "${match}" -> "=> ("`, { file: file.path });
+          fixesApplied++;
+          return '=> (';
+        });
+
         // Fix 0d0b: CRITICAL - General pattern for any method/function call with (;
         // This catches patterns like: .someMethod(; or functionName(;
         // Uses a more general approach to catch any identifier followed by (;

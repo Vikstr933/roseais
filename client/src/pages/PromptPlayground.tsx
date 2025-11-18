@@ -1274,6 +1274,20 @@ export default function PromptPlayground() {
           });
 
           // Use OmniAssistant/PersonalAssistant for conversational responses
+          // Include playground context: current files, project state, errors
+          const playgroundContext = {
+            currentProject: currentProject?.name || 'Untitled Project',
+            projectId: params?.projectId || 'default',
+            filesCount: response?.files?.length || 0,
+            filePaths: response?.files?.map(f => f.path) || [],
+            hasLivePreview: !!livePreviewUrl,
+            currentComponent: currentComponentName || 'None',
+            recentErrors: error ? [error] : [],
+            isGenerating: isLoading,
+            orchestrationSteps: orchestrationSteps.length,
+            currentStep: currentStep || 'None'
+          };
+
           const chatResponse = await apiFetch('/api/omniassistant/chat', {
             method: 'POST',
             headers: {
@@ -1285,10 +1299,11 @@ export default function PromptPlayground() {
               sessionId: currentSession?.id?.toString() || 'playground',
               currentPage: '/playground',
               workspaceId: params?.projectId ? parseInt(params.projectId) : undefined,
+              playgroundContext, // Add playground-specific context
               features: {
                 persistConversation: false,
                 generateInsights: false,
-                useContextEngine: false
+                useContextEngine: true // Enable context engine for playground awareness
               }
             }),
           });

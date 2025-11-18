@@ -35,7 +35,7 @@ const omniAssistant = new OmniAssistantService(
 router.post('/chat', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
-    const { message, sessionId, currentPage, workspaceId, features } = req.body;
+    const { message, sessionId, currentPage, workspaceId, features, playgroundContext } = req.body;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({
@@ -57,6 +57,7 @@ router.post('/chat', authenticateUser, async (req, res) => {
       features: featureFlags,
       currentPage,
       workspaceId,
+      hasPlaygroundContext: !!playgroundContext,
     });
 
     // Process request with OmniAssistant
@@ -64,6 +65,7 @@ router.post('/chat', authenticateUser, async (req, res) => {
       sessionId,
       currentPage,
       workspaceId,
+      playgroundContext, // Pass playground context
       ...featureFlags,
     });
 

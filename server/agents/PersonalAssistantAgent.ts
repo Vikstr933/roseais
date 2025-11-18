@@ -59,6 +59,18 @@ export class PersonalAssistantAgent {
       sessionId?: string;
       includeContext?: boolean;
       maxContextItems?: number;
+      playgroundContext?: {
+        currentProject?: string;
+        projectId?: string;
+        filesCount?: number;
+        filePaths?: string[];
+        hasLivePreview?: boolean;
+        currentComponent?: string;
+        recentErrors?: string[];
+        isGenerating?: boolean;
+        orchestrationSteps?: number;
+        currentStep?: string;
+      };
     }
   ): Promise<{
     response: string;
@@ -72,7 +84,8 @@ export class PersonalAssistantAgent {
       logger.info('Processing personal assistant request', {
         userId,
         sessionId,
-        messageLength: userMessage.length
+        messageLength: userMessage.length,
+        hasPlaygroundContext: !!options?.playgroundContext
       });
 
       // Get conversation history
@@ -91,10 +104,10 @@ export class PersonalAssistantAgent {
       const tools = [...pluginTools, ...additionalToolsForUser];
 
       // Build system prompt
-      const systemPrompt = this.buildSystemPrompt(context, tools);
+      const systemPrompt = this.buildSystemPrompt(context, tools, options?.playgroundContext);
 
       // Build user message with context
-      const enhancedMessage = this.buildEnhancedMessage(userMessage, context);
+      const enhancedMessage = this.buildEnhancedMessage(userMessage, context, options?.playgroundContext);
 
       // Call Claude with tools (increased token limit for more detailed responses)
       const response = await this.anthropic.messages.create({
@@ -246,7 +259,22 @@ export class PersonalAssistantAgent {
   /**
    * Build system prompt with available context and tools
    */
-  private buildSystemPrompt(context: KnowledgeItem[], tools: Tool[]): string {
+  private buildSystemPrompt(
+    context: KnowledgeItem[], 
+    tools: Tool[], 
+    playgroundContext?: {
+      currentProject?: string;
+      projectId?: string;
+      filesCount?: number;
+      filePaths?: string[];
+      hasLivePreview?: boolean;
+      currentComponent?: string;
+      recentErrors?: string[];
+      isGenerating?: boolean;
+      orchestrationSteps?: number;
+      currentStep?: string;
+    }
+  ): string {
     const basePrompt = `You are an enthusiastic and highly capable personal AI assistant with direct access to the user's productivity tools. Think of yourself as their trusted companion who genuinely cares about helping them stay organized and productive.
 
 Your personality:
@@ -265,15 +293,24 @@ Your capabilities:
 - Display interactive maps and location information (show maps, find places, get directions)
 - Search for businesses, restaurants, and points of interest
 - Provide location-based recommendations and information
+${playgroundContext ? `
+- **IMPORTANT: You are currently in the AI Code Playground** - a tool for generating and editing React applications
+- When the user asks about the playground, code generation, or their project, respond with awareness of their current project state
+- You have access to information about their current project, files, and generation status` : ''}
 
 Communication style:
 - Use natural, flowing language - avoid robotic or clinical responses
 - When sharing email information, include: sender, subject, key points, and why it matters
 - Be specific with details - instead of "you have emails", say "you have 3 unread emails: one from John about the project deadline, one from Sarah with quarterly results..."
 - Add context and personality - "I noticed this email came in just an hour ago and seems urgent" or "This looks like it might need a quick response"
-- Use emojis sparingly but appropriately to add warmth (e.g., 📧 for emails, ✅ for completed tasks, 📍 for locations)
+- Use emojis sparingly but appropriately to add warmth (e.g., 📧 for emails, ✅ for completed tasks, 📍 for locations, 💻 for code/playground)
 - If you use tools, explain what you're doing: "Let me check your inbox for you..." or "I'll search through your recent emails..."
 - When you find something important, highlight it with enthusiasm: "Oh! I found something that needs attention..."
+${playgroundContext ? `
+- **When discussing the playground**: Reference their current project, files, and state naturally
+- If they ask "what's going on in the playground", describe their current project status, files, and any active generation
+- If they have errors, acknowledge them and offer helpful suggestions
+- If they're generating code, acknowledge the progress and current step` : ''}
 
 For location and map queries:
 - When the user asks about locations, places, or needs directions, include the specific location or search query in your response
@@ -329,24 +366,71 @@ Remember: You're not just reporting data - you're helping a real person manage t
   /**
    * Build enhanced user message with context references
    */
-  private buildEnhancedMessage(userMessage: string, context: KnowledgeItem[]): string {
-    if (context.length === 0) {
-      return userMessage;
+  private buildEnhancedMessage(
+    userMessage: string, 
+    context: KnowledgeItem[],
+    playgroundContext?: {
+      currentProject?: string;
+      projectId?: string;
+      filesCount?: number;
+      filePaths?: string[];
+      hasLivePreview?: boolean;
+      currentComponent?: string;
+      recentErrors?: string[];
+      isGenerating?: boolean;
+      orchestrationSteps?: number;
+      currentStep?: string;
+    }
+  ): string {
+    let enhancedMessage = userMessage;
+
+    // Add playground context if available
+    if (playgroundContext) {
+      let playgroundInfo = `\n\n[Playground Context - You are in the AI Code Playground:\n`;
+      playgroundInfo += `- Current Project: ${playgroundContext.currentProject || 'Untitled Project'}\n`;
+      playgroundInfo += `- Project ID: ${playgroundContext.projectId || 'default'}\n`;
+      playgroundInfo += `- Files: ${playgroundContext.filesCount || 0} file(s)`;
+      if (playgroundContext.filePaths && playgroundContext.filePaths.length > 0) {
+        playgroundInfo += ` (${playgroundContext.filePaths.slice(0, 5).join(', ')}${playgroundContext.filePaths.length > 5 ? '...' : ''})`;
+      }
+      playgroundInfo += `\n`;
+      if (playgroundContext.currentComponent && playgroundContext.currentComponent !== 'None') {
+        playgroundInfo += `- Current Component: ${playgroundContext.currentComponent}\n`;
+      }
+      if (playgroundContext.hasLivePreview) {
+        playgroundInfo += `- Live Preview: Active\n`;
+      }
+      if (playgroundContext.isGenerating) {
+        playgroundInfo += `- Status: Currently generating code`;
+        if (playgroundContext.currentStep && playgroundContext.currentStep !== 'None') {
+          playgroundInfo += ` (${playgroundContext.currentStep})`;
+        }
+        playgroundInfo += `\n`;
+      }
+      if (playgroundContext.recentErrors && playgroundContext.recentErrors.length > 0) {
+        playgroundInfo += `- Recent Errors: ${playgroundContext.recentErrors.length} error(s) detected\n`;
+      }
+      playgroundInfo += `\nWhen the user asks about the playground, their project, or code generation, use this context to provide relevant, specific information.]`;
+      enhancedMessage += playgroundInfo;
     }
 
-    const emailCount = context.filter(c => c.type === 'email').length;
-    const taskCount = context.filter(c => c.type === 'task').length;
-    const otherCount = context.length - emailCount - taskCount;
+    // Add plugin context if available
+    if (context.length > 0) {
+      const emailCount = context.filter(c => c.type === 'email').length;
+      const taskCount = context.filter(c => c.type === 'task').length;
+      const otherCount = context.length - emailCount - taskCount;
 
-    let contextSummary = `\n\n[Assistant Note: I have access to `;
-    const parts: string[] = [];
-    if (emailCount > 0) parts.push(`${emailCount} email${emailCount > 1 ? 's' : ''}`);
-    if (taskCount > 0) parts.push(`${taskCount} task${taskCount > 1 ? 's' : ''}`);
-    if (otherCount > 0) parts.push(`${otherCount} other item${otherCount > 1 ? 's' : ''}`);
+      let contextSummary = `\n\n[Assistant Note: I have access to `;
+      const parts: string[] = [];
+      if (emailCount > 0) parts.push(`${emailCount} email${emailCount > 1 ? 's' : ''}`);
+      if (taskCount > 0) parts.push(`${taskCount} task${taskCount > 1 ? 's' : ''}`);
+      if (otherCount > 0) parts.push(`${otherCount} other item${otherCount > 1 ? 's' : ''}`);
 
-    contextSummary += parts.join(', ') + ' from your connected services that are relevant to this request. Use this information to provide a detailed, personalized response.]';
+      contextSummary += parts.join(', ') + ' from your connected services that are relevant to this request. Use this information to provide a detailed, personalized response.]';
+      enhancedMessage += contextSummary;
+    }
 
-    return userMessage + contextSummary;
+    return enhancedMessage;
   }
 
   /**

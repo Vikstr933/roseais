@@ -21,6 +21,18 @@ export interface OmniAssistantOptions {
   sessionId?: string;
   currentPage?: string;
   workspaceId?: number;
+  playgroundContext?: {
+    currentProject?: string;
+    projectId?: string;
+    filesCount?: number;
+    filePaths?: string[];
+    hasLivePreview?: boolean;
+    currentComponent?: string;
+    recentErrors?: string[];
+    isGenerating?: boolean;
+    orchestrationSteps?: number;
+    currentStep?: string;
+  };
   persistConversation?: boolean; // Feature flag: enable persistent storage
   generateInsights?: boolean; // Feature flag: enable proactive insights
   useContextEngine?: boolean; // Feature flag: enable enhanced context
@@ -65,6 +77,7 @@ export class OmniAssistantService {
       sessionId,
       currentPage = '/playground',
       workspaceId,
+      playgroundContext,
       persistConversation = false, // Default OFF for backward compatibility
       generateInsights = false,
       useContextEngine = false,
@@ -78,6 +91,7 @@ export class OmniAssistantService {
       sessionId,
       includeContext: true,
       maxContextItems: 10,
+      playgroundContext, // Pass playground context to PersonalAssistantAgent
     };
 
     if (useContextEngine) {
