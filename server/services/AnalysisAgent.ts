@@ -29,21 +29,14 @@ export class AnalysisAgent {
     knowledgeContext: string = '',
     existingFiles: { path: string; content: string }[] = []
   ): Promise<GenerationPlan> {
-    this.logger.info('Analyzing requirements and creating generation plan', {
-      promptLength: userPrompt.length,
-      hasKnowledgeContext: !!knowledgeContext,
-      existingFilesCount: existingFiles.length
-    });
+    this.logger.info(`Analyzing requirements and creating generation plan - promptLength: ${userPrompt.length}, hasKnowledgeContext: ${!!knowledgeContext}, existingFilesCount: ${existingFiles.length}`);
 
     const analysisPrompt = this.buildAnalysisPrompt(userPrompt, knowledgeContext, existingFiles);
 
     try {
       // Get agent configuration from database (system prompt, model, temperature)
       const agentConfig = await this.getAgentConfig();
-      this.logger.info('Using component-architect agent for analysis', {
-        model: agentConfig.model,
-        temperature: agentConfig.temperature
-      });
+      this.logger.info(`Using component-architect agent for analysis - model: ${agentConfig.model}, temperature: ${agentConfig.temperature}`);
       
       const response = await this.multiModelAI.generate({
         prompt: analysisPrompt,
@@ -57,10 +50,7 @@ export class AnalysisAgent {
       // Parse the response to extract the plan
       const plan = this.parsePlanResponse(response.content, userPrompt);
 
-      this.logger.info('Generation plan created', {
-        appName: plan.appName,
-        phases: plan.phases.length
-      });
+      this.logger.info(`Generation plan created - appName: ${plan.appName}, phases: ${plan.phases.length}`);
 
       return plan;
     } catch (error) {
@@ -124,6 +114,21 @@ Your task is to create a generation plan that breaks down the ${isModification ?
 3. Be independently validatable
 ${isModification ? '4. Preserve files that don\'t need changes' : ''}
 
+CRITICAL REQUIREMENTS FOR LANDING PAGES:
+- **ALWAYS include CSS/styling files** for every component that needs visual design
+- For landing pages: **MUST generate comprehensive, modern, visually appealing CSS** with:
+  * **Modern color schemes**: Use gradients, vibrant colors, or sophisticated color palettes (not just basic blue/gray)
+  * **Typography**: Large, bold headings (48px+ for hero), readable body text (16-18px), proper font weights and line heights
+  * **Spacing**: Generous whitespace, proper padding (40-80px for sections), consistent margins
+  * **Visual hierarchy**: Clear distinction between sections, proper heading sizes, visual separation
+  * **Modern design elements**: Subtle shadows, rounded corners, smooth transitions, hover effects
+  * **Layout**: Proper containers (max-width: 1200px), centered content, flexbox/grid for responsive layouts
+  * **Buttons**: Prominent, well-styled CTAs with hover effects, proper sizing (min-height: 48px), rounded corners
+  * **Responsive design**: Mobile-first approach with breakpoints at 640px, 768px, 1024px
+  * **Animations**: Smooth transitions (0.2s-0.3s), subtle hover effects, fade-ins if appropriate
+- If the user requests a "landing page", "nice landing page", or mentions "design", the CSS MUST be production-ready and visually impressive
+- Do NOT generate minimal or basic CSS - landing pages need full, comprehensive styling
+
 Create a plan with the following structure:
 
 PHASE 1: BASE FOUNDATION
@@ -131,13 +136,23 @@ PHASE 1: BASE FOUNDATION
 - Purpose: Set up project configuration and entry points
 - Dependencies: None
 
-PHASE 2: CORE COMPONENT
-- Files: src/App.tsx, src/index.css
-- Purpose: Create main application component and styling
+PHASE 2: CORE COMPONENT WITH STYLING
+- Files: src/App.tsx, src/index.css (with FULL, MODERN styling)
+- Purpose: Create main application component and comprehensive, visually appealing styling
 - Dependencies: Phase 1
+- **CRITICAL FOR LANDING PAGES**: The CSS file MUST include:
+  * **Modern color palette**: CSS variables for primary/secondary/accent colors, gradients for hero sections
+  * **Typography system**: Large hero headings (3-4rem), readable body text (1rem), proper font weights (400, 600, 700)
+  * **Layout system**: Max-width containers (1200px), proper padding (2-4rem), flexbox/grid for responsive layouts
+  * **Component styles**: Styled buttons (primary/secondary variants), navigation bars, hero sections, feature cards
+  * **Spacing system**: Consistent spacing scale (0.5rem, 1rem, 1.5rem, 2rem, 3rem, 4rem)
+  * **Responsive breakpoints**: @media queries for mobile (<640px), tablet (640-1024px), desktop (>1024px)
+  * **Modern effects**: Box shadows, border-radius (8-16px), smooth transitions (0.2s ease), hover states
+  * **Visual polish**: Proper contrast ratios, smooth animations, professional appearance
 
-PHASE 3+: ADDITIONAL FEATURES
-- Add phases for types, hooks, utilities, additional components as needed
+PHASE 3+: ADDITIONAL FEATURES WITH STYLING
+- Add phases for types, hooks, utilities, additional components
+- **Each component phase MUST include its CSS/styling file** if the component needs visual design
 - Each phase should depend on previous phases
 
 Respond with a JSON object in this format:
@@ -200,7 +215,7 @@ IMPORTANT:
       // Validate and normalize the plan
       return this.normalizePlan(planData, userPrompt);
     } catch (error) {
-      this.logger.warn('Failed to parse plan response, using default plan', error as Error);
+      this.logger.warn(`Failed to parse plan response, using default plan: ${error instanceof Error ? error.message : String(error)}`);
       return this.createDefaultPlan(userPrompt);
     }
   }
@@ -347,10 +362,7 @@ IMPORTANT:
 
       if (agentResults.length > 0) {
         const agent = agentResults[0];
-        this.logger.info('Using component-architect agent from database for analysis', {
-          model: agent.model,
-          temperature: agent.temperature
-        });
+        this.logger.info(`Using component-architect agent from database for analysis - model: ${agent.model}, temperature: ${agent.temperature}`);
         
         return {
           systemPrompt: agent.systemPrompt || this.getDefaultPrompt(),

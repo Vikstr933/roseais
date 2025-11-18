@@ -284,12 +284,102 @@ export default function PromptPlayground() {
 
   // Refs
   const chatMessagesRef = useRef<HTMLDivElement>(null);
+  
+  // Typewriter streaming state - tracks displayed content per file path
+  const streamingContentRef = useRef<Map<string, { fullContent: string; displayedContent: string; intervalId?: NodeJS.Timeout }>>(new Map());
+  
+  /**
+   * Streams file content character-by-character with typewriter effect
+   * @param filePath - Path of the file being streamed
+   * @param fullContent - Complete file content to stream
+   * @param onUpdate - Callback called each time content updates
+   */
+  const streamFileContent = (filePath: string, fullContent: string, onUpdate: (content: string) => void) => {
+    // Clear any existing stream for this file
+    const existing = streamingContentRef.current.get(filePath);
+    if (existing?.intervalId) {
+      clearInterval(existing.intervalId);
+    }
+    
+    // Initialize streaming state
+    streamingContentRef.current.set(filePath, {
+      fullContent,
+      displayedContent: '',
+      intervalId: undefined
+    });
+    
+    let currentIndex = 0;
+    const charsPerTick = 3; // Characters to reveal per animation frame (adjust for speed)
+    
+    const streamInterval = setInterval(() => {
+      const streamState = streamingContentRef.current.get(filePath);
+      if (!streamState) {
+        clearInterval(streamInterval);
+        return;
+      }
+      
+      // Calculate how many characters to reveal (word boundaries preferred)
+      let nextIndex = currentIndex + charsPerTick;
+      
+      // If we're in the middle of a word, try to complete it
+      if (nextIndex < fullContent.length) {
+        const remaining = fullContent.substring(currentIndex, nextIndex);
+        // If we hit a space or newline, we can stop at word boundary
+        const lastSpace = remaining.lastIndexOf(' ');
+        const lastNewline = remaining.lastIndexOf('\n');
+        const lastBoundary = Math.max(lastSpace, lastNewline);
+        
+        if (lastBoundary > 0) {
+          nextIndex = currentIndex + lastBoundary + 1;
+        }
+      }
+      
+      // Ensure we don't exceed content length
+      nextIndex = Math.min(nextIndex, fullContent.length);
+      
+      // Update displayed content
+      const displayedContent = fullContent.substring(0, nextIndex);
+      streamState.displayedContent = displayedContent;
+      streamingContentRef.current.set(filePath, streamState);
+      
+      // Notify update
+      onUpdate(displayedContent);
+      
+      // Check if streaming is complete
+      if (nextIndex >= fullContent.length) {
+        clearInterval(streamInterval);
+        streamState.intervalId = undefined;
+        streamingContentRef.current.set(filePath, streamState);
+      }
+      
+      currentIndex = nextIndex;
+    }, 16); // ~60fps (16ms per frame)
+    
+    // Store interval ID
+    const streamState = streamingContentRef.current.get(filePath);
+    if (streamState) {
+      streamState.intervalId = streamInterval;
+      streamingContentRef.current.set(filePath, streamState);
+    }
+  };
 
   // WebContainer state
   const [webContainerReady, setWebContainerReady] = useState(false);
   const [webContainerBooting, setWebContainerBooting] = useState(false);
   const [useWebContainer, setUseWebContainer] = useState(true); // Toggle for fallback
   const { toast } = useToast();
+  
+  // Cleanup streaming intervals on unmount
+  useEffect(() => {
+    return () => {
+      streamingContentRef.current.forEach((streamState) => {
+        if (streamState.intervalId) {
+          clearInterval(streamState.intervalId);
+        }
+      });
+      streamingContentRef.current.clear();
+    };
+  }, []);
 
   // Initialize or switch workspace session based on projectId
   useEffect(() => {
@@ -1309,12 +1399,25 @@ export default function PromptPlayground() {
       
       // Clear old files if this is a NEW generation (not a modification)
       // For modifications, we preserve existing files for context
-      if (intent === 'generate' && !requiresProjectFiles) {
+      const shouldClearFiles = intent === 'generate' && !requiresProjectFiles;
+      
+      if (shouldClearFiles) {
         console.log('🆕 New generation detected - clearing old files');
+        
+        // Clear streaming state
+        streamingContentRef.current.forEach((streamState) => {
+          if (streamState.intervalId) {
+            clearInterval(streamState.intervalId);
+          }
+        });
+        streamingContentRef.current.clear();
+        
         setResponse(null);
         updateGeneratedFiles([]);
         setSelectedFileIndex(0);
         setLivePreviewUrl(null);
+        setCurrentComponentName('');
+        setError(null);
       } else {
         console.log('🔄 Modification/deploy intent - preserving existing files');
       }
@@ -1545,11 +1648,14 @@ export default function PromptPlayground() {
                       timestamp: Date.now()
                     });
                   } else if (data.type === 'FILE_GENERATED') {
-                    console.log('ðŸ“„ File generated:', data.data.file.path);
+                    console.log('📄 File generated:', data.data.file.path);
+                    const filePath = data.data.file.path;
+                    const fullContent = data.data.file.content;
 
-                    // Add file to response in real-time! (Silently - no chat spam)
+                    // Add file to response with empty content initially (will be streamed)
                     setResponse(prev => {
-                      const generatedFile = createGeneratedFile(data.data.file.path, data.data.file.content);
+                      // Create file with empty content initially - will be streamed
+                      const generatedFile = createGeneratedFile(filePath, '');
 
                       if (!prev) {
                         const newResponse: PlaygroundResponse = {
@@ -1562,46 +1668,70 @@ export default function PromptPlayground() {
                           setTimeout(() => {
                             setSelectedFileIndex(0);
                             setActiveTab('editor');
-                            setEditorLanguage(getFileLanguage(data.data.file.path));
+                            setEditorLanguage(getFileLanguage(filePath));
                           }, 0);
                         }
-                        // Persist to workspace immediately
-                        updateGeneratedFiles([generatedFile]);
+                        // Start streaming content
+                        streamFileContent(filePath, fullContent, (streamedContent) => {
+                          setResponse(current => {
+                            if (!current || !current.files) return current;
+                            const updatedFiles = current.files.map(f => 
+                              f.path === filePath ? { ...f, content: streamedContent } : f
+                            );
+                            // Update workspace with full content (for persistence) but display streamed
+                            if (streamedContent === fullContent) {
+                              updateGeneratedFiles(updatedFiles);
+                            }
+                            return { ...current, files: updatedFiles };
+                          });
+                        });
                         return newResponse;
                       }
 
                       // Check if file already exists (avoid duplicates)
-                      const existingIndex = prev.files?.findIndex(f => f.path === data.data.file.path);
+                      const existingIndex = prev.files?.findIndex(f => f.path === filePath);
                       let updatedFiles: GeneratedFile[];
                       let fileIndex: number;
                       
                       if (existingIndex !== undefined && existingIndex >= 0 && prev.files) {
-                        // Update existing file
+                        // Update existing file (restart streaming if needed)
                         updatedFiles = [...prev.files];
-                        updatedFiles[existingIndex] = generatedFile;
+                        updatedFiles[existingIndex] = { ...updatedFiles[existingIndex], content: '' };
                         fileIndex = existingIndex;
                       } else {
                         // Add new file
                         updatedFiles = [...(prev.files || []), generatedFile];
-                        fileIndex = updatedFiles.length - 1; // Index of the newly added file
+                        fileIndex = updatedFiles.length - 1;
                       }
-
-                      // Persist to workspace immediately for real-time persistence
-                      updateGeneratedFiles(updatedFiles);
 
                       // 🎯 AUTO-SWITCH TO CURRENTLY GENERATING FILE - Watch code appear in real-time!
                       setTimeout(() => {
                         setSelectedFileIndex(fileIndex);
                         setActiveTab('editor');
-                        setEditorLanguage(getFileLanguage(data.data.file.path));
-                        console.log(`👁️ Switched to file ${fileIndex + 1}/${updatedFiles.length}: ${data.data.file.path}`);
+                        setEditorLanguage(getFileLanguage(filePath));
+                        console.log(`👁️ Switched to file ${fileIndex + 1}/${updatedFiles.length}: ${filePath}`);
                       }, 0);
+
+                      // Start streaming content with typewriter effect
+                      streamFileContent(filePath, fullContent, (streamedContent) => {
+                        setResponse(current => {
+                          if (!current || !current.files) return current;
+                          const updatedFiles = current.files.map(f => 
+                            f.path === filePath ? { ...f, content: streamedContent } : f
+                          );
+                          // Update workspace with full content when streaming completes
+                          if (streamedContent === fullContent) {
+                            updateGeneratedFiles(updatedFiles);
+                          }
+                          return { ...current, files: updatedFiles };
+                        });
+                      });
 
                       const newResponse = {
                         ...prev,
                         files: updatedFiles
                       };
-                      console.log('✅ Updated response with', updatedFiles.length, 'files');
+                      console.log('✅ Started streaming file:', filePath);
                       return newResponse;
                     });
 
@@ -2088,13 +2218,24 @@ export default function PromptPlayground() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {
-                      // Clear all state
+                      // Clear all state including streaming
+                      streamingContentRef.current.forEach((streamState) => {
+                        if (streamState.intervalId) {
+                          clearInterval(streamState.intervalId);
+                        }
+                      });
+                      streamingContentRef.current.clear();
+                      
                       setResponse(null);
                       clearChat();
                       updateGeneratedFiles([]);
                       setSelectedFileIndex(0);
                       setLivePreviewUrl(null);
                       setCurrentComponentName('');
+                      setError(null);
+                      setOrchestrationSteps([]);
+                      setCurrentStep('');
+                      setOverallProgress(0);
                       setShowStartFreshDialog(false);
                       
                       // Add confirmation message

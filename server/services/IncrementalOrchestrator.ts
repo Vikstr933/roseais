@@ -370,6 +370,16 @@ ${existingFilesSection}
 ORIGINAL USER REQUEST:
 ${userPrompt}
 
+${userPrompt.toLowerCase().includes('landing page') || userPrompt.toLowerCase().includes('nice landing') || userPrompt.toLowerCase().includes('design') ? `
+🎨 LANDING PAGE DETECTED - CRITICAL STYLING REQUIREMENTS:
+- This is a LANDING PAGE request - CSS MUST be comprehensive and visually impressive
+- Include modern gradients, large typography, generous spacing, professional styling
+- Hero sections need: large headings (3-4rem), padding (4-6rem), modern color schemes
+- Buttons need: proper sizing (1rem 2rem padding), hover effects, rounded corners
+- Ensure responsive design with proper breakpoints
+- Make it visually appealing and production-ready
+` : ''}
+
 ${knowledgeContext ? `RELEVANT KNOWLEDGE:\n${knowledgeContext}\n` : ''}
 
 TECH STACK:
@@ -415,6 +425,24 @@ CRITICAL CHECKLIST - Before submitting your code:
 4. Search for "return [;" - if found, REMOVE the semicolon
 5. Search for ") => {;" - if found, REMOVE the semicolon
 ${isModification ? '6. Verify you are ONLY generating files listed in "YOUR TASK" above' : ''}
+
+CRITICAL CSS/STYLING REQUIREMENTS:
+- **If generating a CSS file (e.g., index.css, styles.css, component.css), it MUST include COMPLETE, MODERN styling**
+- CSS files should NOT be empty or minimal - they must include:
+  * **Full color scheme**: CSS variables (:root), modern color palettes, gradients for visual interest
+  * **Typography**: Proper font hierarchy (hero: 3-4rem, headings: 2-2.5rem, body: 1rem), font weights (400, 600, 700), line heights (1.5-1.6)
+  * **Layout**: Max-width containers (1200px), proper padding/margins (2-4rem for sections), flexbox/grid for responsive layouts
+  * **Component-specific styles**: Fully styled buttons (with hover states), navigation bars, hero sections, cards, sections
+  * **Spacing system**: Consistent spacing scale (0.5rem, 1rem, 1.5rem, 2rem, 3rem, 4rem)
+  * **Responsive design**: Mobile-first with breakpoints (@media (min-width: 640px), 768px, 1024px)
+  * **Modern effects**: Box shadows, border-radius (8-16px), smooth transitions (transition: all 0.2s ease), hover effects
+- **For landing pages specifically**: CSS must be visually impressive with:
+  * Large, bold hero text (font-size: 3-4rem, font-weight: 700)
+  * Generous whitespace (padding: 4-6rem for hero sections)
+  * Modern buttons (padding: 1rem 2rem, border-radius: 8px, hover effects)
+  * Professional color schemes (consider gradients, modern palettes)
+  * Smooth animations and transitions
+- Do NOT generate CSS files with just a basic reset - include full, production-ready, visually appealing styling
 
 IMPORTANT:
 - You can import from existing files listed above

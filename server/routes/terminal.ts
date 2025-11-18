@@ -23,14 +23,14 @@ export function addTerminalOutput(componentName: string, output: string) {
 }
 
 // Get terminal output for a component
-router.get('/terminal/:componentName', (req, res) => {
+router.get('/:componentName', (req, res) => {
   const { componentName } = req.params;
   const output = terminalOutputs[componentName] || [];
   res.json({ output });
 });
 
 // Subscribe to terminal output updates (Server-Sent Events)
-router.get('/terminal/:componentName/stream', (req, res) => {
+router.get('/:componentName/stream', (req, res) => {
   const { componentName } = req.params;
 
   // Set up SSE headers
@@ -82,7 +82,7 @@ router.get('/terminal/:componentName/stream', (req, res) => {
 });
 
 // Clear terminal output for a component
-router.delete('/terminal/:componentName', (req, res) => {
+router.delete('/:componentName', (req, res) => {
   const { componentName } = req.params;
   delete terminalOutputs[componentName];
   res.json({ success: true });
