@@ -32,7 +32,7 @@ export class PersonalAssistantAgent {
    */
   public registerToolsForUser(userId: string, tools: Tool[]): void {
     this.additionalTools.set(userId, tools);
-    logger.info('Additional tools registered for user', { userId, toolCount: tools.length });
+    logger.info(`Additional tools registered for user: ${userId}, toolCount: ${tools.length}`);
   }
 
   /**
@@ -40,7 +40,7 @@ export class PersonalAssistantAgent {
    */
   public clearToolsForUser(userId: string): void {
     this.additionalTools.delete(userId);
-    logger.info('Additional tools cleared for user', { userId });
+    logger.info(`Additional tools cleared for user: ${userId}`);
   }
 
   /**
@@ -81,12 +81,7 @@ export class PersonalAssistantAgent {
     const sessionId = options?.sessionId || userId;
 
     try {
-      logger.info('Processing personal assistant request', {
-        userId,
-        sessionId,
-        messageLength: userMessage.length,
-        hasPlaygroundContext: !!options?.playgroundContext
-      });
+      logger.info(`Processing personal assistant request: userId=${userId}, sessionId=${sessionId}, messageLength=${userMessage.length}, hasPlaygroundContext=${!!options?.playgroundContext}`);
 
       // Get conversation history
       const history = this.conversationHistory.get(sessionId) || [];
@@ -133,11 +128,7 @@ export class PersonalAssistantAgent {
           finalResponse += content.text;
         } else if (content.type === 'tool_use') {
           try {
-            logger.info('Executing tool', {
-              userId,
-              toolName: content.name,
-              toolId: content.id
-            });
+            logger.info(`Executing tool: userId=${userId}, toolName=${content.name}, toolId=${content.id}`);
 
             const tool = tools.find(t => t.name === content.name);
             if (tool) {
@@ -181,12 +172,7 @@ export class PersonalAssistantAgent {
             }
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            logger.error('Tool execution failed', error as Error, {
-              userId,
-              toolName: content.name,
-              errorMessage,
-              toolInput: content.input
-            });
+            logger.error(`Tool execution failed: userId=${userId}, toolName=${content.name}, errorMessage=${errorMessage}, toolInput=${JSON.stringify(content.input)}`, error as Error);
             finalResponse += `\n\nNote: I tried to use ${content.name} but encountered an error: ${errorMessage}`;
           }
         }
@@ -213,11 +199,7 @@ export class PersonalAssistantAgent {
       // Generate proactive suggestions
       const suggestions = await this.generateSuggestions(userId, context, finalResponse);
 
-      logger.info('Personal assistant request completed', {
-        userId,
-        toolsUsed: toolsUsed.length,
-        contextItems: context.length
-      });
+      logger.info(`Personal assistant request completed: userId=${userId}, toolsUsed=${toolsUsed.length}, contextItems=${context.length}`);
 
       return {
         response: finalResponse,
@@ -226,7 +208,7 @@ export class PersonalAssistantAgent {
         suggestions
       };
     } catch (error) {
-      logger.error('Failed to process personal assistant request', error as Error, { userId });
+      logger.error(`Failed to process personal assistant request: userId=${userId}`, error as Error);
       throw error;
     }
   }
@@ -244,14 +226,11 @@ export class PersonalAssistantAgent {
         limit: maxItems
       });
 
-      logger.info('Context gathered', {
-        userId,
-        itemCount: knowledge.length
-      });
+      logger.info(`Context gathered: userId=${userId}, itemCount=${knowledge.length}`);
 
       return knowledge;
     } catch (error) {
-      logger.error('Failed to gather context', error as Error, { userId });
+      logger.error(`Failed to gather context: userId=${userId}`, error as Error);
       return [];
     }
   }
@@ -500,14 +479,11 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
         .filter(s => s.length > 0 && !s.match(/^\d+\./)) // Remove numbering if present
         .slice(0, 3); // Limit to 3
 
-      logger.info('Generated contextual suggestions', {
-        userId,
-        suggestionCount: suggestions.length
-      });
+      logger.info(`Generated contextual suggestions: userId=${userId}, suggestionCount=${suggestions.length}`);
 
       return suggestions;
     } catch (error) {
-      logger.error('Failed to generate suggestions', error as Error, { userId });
+      logger.error(`Failed to generate suggestions: userId=${userId}`, error as Error);
 
       // Fallback to simple context-based suggestions
       const fallbackSuggestions: string[] = [];
@@ -535,7 +511,7 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
    */
   public clearHistory(sessionId: string): void {
     this.conversationHistory.delete(sessionId);
-    logger.info('Conversation history cleared', { sessionId });
+    logger.info(`Conversation history cleared: sessionId=${sessionId}`);
   }
 
   /**
@@ -641,11 +617,11 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
 
       const summary = response.content[0].type === 'text' ? response.content[0].text : '';
 
-      logger.info('Daily summary generated', { userId, itemCount: knowledge.length });
+      logger.info(`Daily summary generated: userId=${userId}, itemCount=${knowledge.length}`);
 
       return summary;
     } catch (error) {
-      logger.error('Failed to generate daily summary', error as Error, { userId });
+      logger.error(`Failed to generate daily summary: userId=${userId}`, error as Error);
       throw error;
     }
   }
