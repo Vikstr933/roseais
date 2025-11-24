@@ -418,21 +418,15 @@ export function OmniAssistant() {
 function FeatureIndicators({ features }: { features: any }) {
   return (
     <div className="flex gap-1">
-      {features.persistConversation && (
-        <Badge variant="secondary" className="h-5 px-1.5">
-          <Database className="h-3 w-3" />
-        </Badge>
-      )}
-      {features.generateInsights && (
-        <Badge variant="secondary" className="h-5 px-1.5">
-          <Sparkles className="h-3 w-3" />
-        </Badge>
-      )}
-      {features.useContextEngine && (
-        <Badge variant="secondary" className="h-5 px-1.5">
-          <Brain className="h-3 w-3" />
-        </Badge>
-      )}
+      <Badge variant="secondary" className="h-5 px-1.5">
+        <Database className="h-3 w-3" />
+      </Badge>
+      <Badge variant="secondary" className="h-5 px-1.5">
+        <Sparkles className="h-3 w-3" />
+      </Badge>
+      <Badge variant="secondary" className="h-5 px-1.5">
+        <Brain className="h-3 w-3" />
+      </Badge>
     </div>
   );
 }
