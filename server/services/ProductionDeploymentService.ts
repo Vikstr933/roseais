@@ -117,10 +117,37 @@ export class ProductionDeploymentService {
       throw new Error('GitHub token not configured. Please set GITHUB_TOKEN environment variable.');
     }
 
+    // Check if repository name already exists, append timestamp if needed
+    let repoName = config.repoName;
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    while (attempts < maxAttempts) {
+      try {
+        // Check if repo exists
+        await this.octokit.repos.get({
+          owner: (await this.octokit.users.getAuthenticated()).data.login,
+          repo: repoName,
+        });
+        
+        // Repo exists, append timestamp
+        repoName = `${config.repoName}-${Date.now()}`;
+        attempts++;
+        this.logger.info('ProductionDeploymentService', `Repository name exists, trying: ${repoName}`);
+      } catch (error: any) {
+        // Repo doesn't exist (404), we can use this name
+        if (error.status === 404) {
+          break;
+        }
+        // Other error, throw it
+        throw error;
+      }
+    }
+
     // Create repository (use createForAuthenticatedUser for authenticated user repos)
     // Set auto_init to false to avoid initial README.md that requires SHA
     const { data: repo } = await this.octokit.repos.createForAuthenticatedUser({
-      name: config.repoName,
+      name: repoName,
       description: config.description || `Generated with AI - ${config.projectName}`,
       private: config.isPrivate || false,
       auto_init: false, // Don't create initial README to avoid SHA requirement
@@ -320,6 +347,16 @@ MIT License - feel free to use this project as you wish!
       throw new Error('Vercel token not configured. Please set VERCEL_TOKEN environment variable.');
     }
 
+    // Convert envVars object to Vercel's array format
+    // Vercel expects: [{key: 'KEY', value: 'value', target: ['production']}]
+    const environmentVariables = config.envVars 
+      ? Object.entries(config.envVars).map(([key, value]) => ({
+          key,
+          value,
+          target: ['production', 'preview', 'development'] as ('production' | 'preview' | 'development')[],
+        }))
+      : [];
+
     // Create Vercel project
     const projectResponse = await fetch('https://api.vercel.com/v9/projects', {
       method: 'POST',
@@ -328,7 +365,7 @@ MIT License - feel free to use this project as you wish!
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: config.repoName,
+        name: repo.name, // Use actual repo name (may have timestamp appended)
         gitRepository: {
           type: 'github',
           repo: repo.fullName,
@@ -336,7 +373,7 @@ MIT License - feel free to use this project as you wish!
         framework: config.framework === 'nextjs' ? 'nextjs' : 'vite',
         buildCommand: this.getBuildCommand(config.framework),
         outputDirectory: this.getOutputDirectory(config.framework),
-        environmentVariables: config.envVars || {},
+        ...(environmentVariables.length > 0 && { environmentVariables }), // Only include if not empty
       }),
     });
 
@@ -355,7 +392,7 @@ MIT License - feel free to use this project as you wish!
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: config.repoName,
+        name: repo.name, // Use actual repo name (may have timestamp appended)
         gitSource: {
           type: 'github',
           repo: repo.fullName,
