@@ -784,7 +784,7 @@ function MessageBubble({
         )}
 
         {message.conversationId && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-white/70">
             <Database className="h-3 w-3 inline mr-1" />
             Saved to memory
           </p>
