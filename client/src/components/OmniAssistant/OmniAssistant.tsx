@@ -40,6 +40,7 @@ export function OmniAssistant() {
   const [viewState, setViewState] = useState<ViewState>('closed');
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
   const { currentSession, updateGeneratedFiles } = useWorkspace();
 
   const {
@@ -235,31 +236,51 @@ export function OmniAssistant() {
     return `${existingContent.trim()}\n\n${newCode.trim()}`;
   };
 
-  // Handle applying file changes from assistant
-  const handleApplyChanges = (files: Array<{ path: string; content: string }>) => {
+  // Handle applying file changes - Instead of directly applying, send to playground AI
+  const handleApplyChanges = async (files: Array<{ path: string; content: string }>) => {
     if (!currentSession) return;
     
-    // Merge with existing files - intelligently insert code
-    const existingFiles = currentSession.generatedFiles || [];
-    const fileMap = new Map(existingFiles.map(f => [f.path, f]));
+    // Check if we're on a playground page
+    const isPlaygroundPage = window.location.pathname.startsWith('/playground');
     
-    // Update or add files from assistant with intelligent insertion
-    files.forEach(file => {
-      const existingFile = fileMap.get(file.path);
-      const existingContent = existingFile?.content || '';
+    if (!isPlaygroundPage) {
+      // If not on playground, fall back to direct application
+      const existingFiles = currentSession.generatedFiles || [];
+      const fileMap = new Map(existingFiles.map(f => [f.path, f]));
       
-      // Use intelligent insertion instead of simple replacement
-      const mergedContent = insertCodeIntelligently(existingContent, file.content, file.path);
-      
-      fileMap.set(file.path, {
-        path: file.path,
-        content: mergedContent,
-        language: file.path.split('.').pop() || 'text'
+      files.forEach(file => {
+        const existingFile = fileMap.get(file.path);
+        const existingContent = existingFile?.content || '';
+        const mergedContent = insertCodeIntelligently(existingContent, file.content, file.path);
+        
+        fileMap.set(file.path, {
+          path: file.path,
+          content: mergedContent,
+          language: file.path.split('.').pop() || 'text'
+        });
       });
-    });
+      
+      const updatedFiles = Array.from(fileMap.values());
+      updateGeneratedFiles(updatedFiles);
+      return;
+    }
     
-    const updatedFiles = Array.from(fileMap.values());
-    updateGeneratedFiles(updatedFiles);
+    // On playground page - send suggestion to playground AI instead
+    // Build a prompt that asks the playground AI to apply these changes
+    const fileDescriptions = files.map(f => {
+      const lines = f.content.split('\n').length;
+      return `- ${f.path} (${lines} lines)`;
+    }).join('\n');
+    
+    const prompt = `Please apply the following code changes to match the current app's design system and patterns:\n\n${fileDescriptions}\n\nCode to apply:\n\n${files.map(f => `**${f.path}**\n\`\`\`typescript\n${f.content}\n\`\`\``).join('\n\n')}\n\nMake sure the changes match the existing design patterns, component structure, and styling approach used in the current project.`;
+    
+    // Send this as a message to trigger playground generation
+    const playgroundContext = buildPlaygroundContext();
+    await sendMessage(prompt, {
+      currentPage: window.location.pathname,
+      workspaceId: currentSession?.id as number | undefined,
+      playgroundContext,
+    });
   };
 
   return (
@@ -536,11 +557,13 @@ function EmptyState() {
 function MessageBubble({ 
   message, 
   onSuggestionClick,
-  onApplyChanges
+  onApplyChanges,
+  displayedMessagesRef
 }: { 
   message: OmniAssistantMessage;
   onSuggestionClick?: (suggestion: string) => void;
   onApplyChanges?: (files: Array<{ path: string; content: string }>) => void;
+  displayedMessagesRef?: React.MutableRefObject<Set<string>>;
 }) {
   const isUser = message.role === 'user';
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -551,7 +574,11 @@ function MessageBubble({
   const lastUpdateRef = useRef(Date.now());
   const speedRef = useRef(100); // characters per second for typewriter effect (increased from 30)
 
-  // Typewriter effect for assistant messages
+  // Create unique message ID based on content and timestamp
+  const messageId = `${message.role}-${message.timestamp?.getTime()}-${message.content.substring(0, 50)}`;
+  const hasBeenDisplayed = displayedMessagesRef?.current.has(messageId) || false;
+
+  // Typewriter effect for assistant messages - only on first display
   useEffect(() => {
     if (isUser) {
       // User messages show immediately
@@ -559,8 +586,15 @@ function MessageBubble({
       return;
     }
 
-    // Reset when message content changes
-    if (message.content && message.content !== displayedContent) {
+    // If message has already been displayed, show instantly
+    if (hasBeenDisplayed) {
+      setDisplayedContent(message.content);
+      setIsTyping(false);
+      return;
+    }
+
+    // Reset when message content changes and hasn't been displayed yet
+    if (message.content && message.content !== displayedContent && !hasBeenDisplayed) {
       setIsTyping(true);
       currentIndexRef.current = 0;
       lastUpdateRef.current = Date.now();
@@ -583,6 +617,10 @@ function MessageBubble({
 
           if (newIndex >= message.content.length) {
             setIsTyping(false);
+            // Mark message as displayed
+            if (displayedMessagesRef) {
+              displayedMessagesRef.current.add(messageId);
+            }
             return;
           }
         }
@@ -598,7 +636,7 @@ function MessageBubble({
         }
       };
     }
-  }, [message.content, isUser]);
+  }, [message.content, isUser, hasBeenDisplayed, messageId, displayedMessagesRef]);
 
   // Extract code blocks with file paths from message
   const extractCodeBlocks = (content: string): Array<{ path: string; content: string; language?: string }> => {
