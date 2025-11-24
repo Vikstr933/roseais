@@ -24,6 +24,8 @@ const Pricing = lazy(() => import('./pages/Pricing'));
 const Integrations = lazy(() => import('./pages/Integrations'));
 const Settings = lazy(() => import('./pages/Settings'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const Assistant = lazy(() => import('./pages/Assistant'));
+const PluginGenerator = lazy(() => import('./pages/PluginGenerator'));
 
 // Lazy load heavy components
 const AssistantWidget = lazy(() => import('./components/AssistantWidget'));
@@ -140,6 +142,16 @@ function AppContent() {
         <Route path="/admin">
           <ProtectedRoute>
             <AdminDashboard />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/assistant">
+          <ProtectedRoute>
+            <Assistant />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/plugin-generator">
+          <ProtectedRoute>
+            <PluginGenerator />
           </ProtectedRoute>
         </Route>
         </Switch>
