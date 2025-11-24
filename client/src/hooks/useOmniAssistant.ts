@@ -68,6 +68,19 @@ export function useOmniAssistant() {
         currentPage?: string;
         workspaceId?: number;
         customFeatures?: OmniAssistantFeatures;
+        playgroundContext?: {
+          currentProject?: string;
+          projectId?: string;
+          filesCount?: number;
+          filePaths?: string[];
+          files?: Array<{ path: string; content: string; language?: string; summary?: boolean; fullContent?: boolean }>;
+          hasLivePreview?: boolean;
+          currentComponent?: string;
+          recentErrors?: string[];
+          isGenerating?: boolean;
+          orchestrationSteps?: number;
+          currentStep?: string;
+        };
       }
     ) => {
       setIsLoading(true);
@@ -90,6 +103,7 @@ export function useOmniAssistant() {
             sessionId: options?.sessionId,
             currentPage: options?.currentPage || window.location.pathname,
             workspaceId: options?.workspaceId,
+            playgroundContext: options?.playgroundContext,
             features: options?.customFeatures || features,
           }),
         });

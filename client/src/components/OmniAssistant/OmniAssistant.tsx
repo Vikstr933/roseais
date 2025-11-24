@@ -55,15 +55,76 @@ export function OmniAssistant() {
     }
   }, [messages, viewState]);
 
+  // Build playground context if we're on a playground page
+  const buildPlaygroundContext = () => {
+    const currentPage = window.location.pathname;
+    const isPlaygroundPage = currentPage.startsWith('/playground');
+    
+    if (!isPlaygroundPage || !currentSession?.generatedFiles?.length) {
+      return undefined;
+    }
+
+    // Extract project ID from URL if available
+    const projectIdMatch = currentPage.match(/\/playground\/(\d+)/);
+    const projectId = projectIdMatch ? projectIdMatch[1] : 'default';
+
+    // Optimize files: prioritize code files, limit content
+    const optimizeFileContents = (fileList: typeof currentSession.generatedFiles) => {
+      if (!fileList || fileList.length === 0) return [];
+      
+      const priorityOrder = ['.tsx', '.ts', '.jsx', '.js', '.css', '.json', '.md', '.html'];
+      const sortedFiles = [...fileList].sort((a, b) => {
+        const aExt = '.' + a.path.split('.').pop()?.toLowerCase();
+        const bExt = '.' + b.path.split('.').pop()?.toLowerCase();
+        const aPriority = priorityOrder.indexOf(aExt);
+        const bPriority = priorityOrder.indexOf(bExt);
+        return (aPriority === -1 ? 999 : aPriority) - (bPriority === -1 ? 999 : bPriority);
+      });
+      
+      const importantFiles = sortedFiles.slice(0, 5).map(f => ({
+        path: f.path,
+        content: f.content.substring(0, 2000),
+        language: f.path.split('.').pop() || 'text',
+        fullContent: f.content.length <= 2000
+      }));
+      
+      const otherFiles = sortedFiles.slice(5, 10).map(f => ({
+        path: f.path,
+        content: `// File structure: ${f.content.split('\n').length} lines\n// Preview (first 200 chars):\n${f.content.substring(0, 200)}...`,
+        language: f.path.split('.').pop() || 'text',
+        summary: true
+      }));
+      
+      return [...importantFiles, ...otherFiles];
+    };
+
+    return {
+      currentProject: currentSession.name || 'Untitled Project',
+      projectId,
+      filesCount: currentSession.generatedFiles.length,
+      filePaths: currentSession.generatedFiles.map(f => f.path),
+      files: optimizeFileContents(currentSession.generatedFiles),
+      hasLivePreview: false,
+      currentComponent: 'None',
+      recentErrors: [],
+      isGenerating: false,
+      orchestrationSteps: 0,
+      currentStep: 'None'
+    };
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
     const message = inputMessage;
     setInputMessage('');
 
+    const playgroundContext = buildPlaygroundContext();
+
     await sendMessage(message, {
       currentPage: window.location.pathname,
       workspaceId: currentSession?.id as number | undefined,
+      playgroundContext,
     });
   };
 
@@ -77,10 +138,13 @@ export function OmniAssistant() {
   const handleSuggestionClick = async (suggestion: string) => {
     if (isLoading) return;
     
+    const playgroundContext = buildPlaygroundContext();
+    
     // Send the suggestion as a message
     await sendMessage(suggestion, {
       currentPage: window.location.pathname,
       workspaceId: currentSession?.id as number | undefined,
+      playgroundContext,
     });
   };
 
