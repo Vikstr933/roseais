@@ -94,7 +94,7 @@ export function OmniAssistant() {
     enabled: !!sessionToken,
   });
 
-  // Fetch project files when a project is selected
+  // Fetch project files when a project is selected (with full content)
   useEffect(() => {
     if (!selectedProjectId || !sessionToken) {
       setProjectFiles([]);
@@ -103,15 +103,28 @@ export function OmniAssistant() {
 
     const fetchProjectFiles = async () => {
       try {
+        console.log('📂 OmniAssistant: Fetching full project files for project', selectedProjectId);
         const response = await apiFetch(`/api/workspaces/${selectedProjectId}/files`, {
           headers: getAuthHeaders(sessionToken),
         });
         if (response.ok) {
           const files = await response.json();
+          console.log(`✅ OmniAssistant: Loaded ${files.length} files`, {
+            filesWithContent: files.filter((f: any) => f.content && f.content.trim().length > 0).length,
+            totalSize: files.reduce((sum: number, f: any) => sum + (f.content?.length || 0), 0),
+          });
+          
+          // Verify we have content
+          if (files.length > 0 && files.every((f: any) => !f.content || f.content.trim().length === 0)) {
+            console.warn('⚠️ OmniAssistant: Project files loaded but all content fields are empty. Files may not be saved to database yet.');
+          }
+          
           setProjectFiles(files);
+        } else {
+          console.error('❌ OmniAssistant: Failed to fetch project files', response.status);
         }
       } catch (error) {
-        console.error('Failed to fetch project files:', error);
+        console.error('❌ OmniAssistant: Error fetching project files:', error);
       }
     };
 
@@ -194,12 +207,46 @@ export function OmniAssistant() {
     if (selectedProjectId && projectFiles.length > 0) {
       const selectedProject = userProjects.find(p => p.id === selectedProjectId);
       
+      // Check if files have content
+      const filesWithContent = projectFiles.filter(f => f.content && f.content.trim().length > 0);
+      
+      if (filesWithContent.length === 0) {
+        console.warn('⚠️ OmniAssistant: Building context for project with no file content', {
+          projectId: selectedProjectId,
+          projectName: selectedProject?.name,
+          fileCount: projectFiles.length,
+          filePaths: projectFiles.map(f => f.filePath),
+        });
+        
+        // Return context with file structure but note that content isn't available
+        return {
+          currentProject: selectedProject?.name || 'Selected Project',
+          projectId: selectedProjectId.toString(),
+          filesCount: projectFiles.length,
+          filePaths: projectFiles.map(f => f.filePath),
+          files: [], // No content available
+          hasLivePreview: false,
+          currentComponent: 'None',
+          recentErrors: [],
+          isGenerating: false,
+          orchestrationSteps: 0,
+          currentStep: 'None'
+        };
+      }
+      
+      console.log('✅ OmniAssistant: Building context for selected project', {
+        projectId: selectedProjectId,
+        projectName: selectedProject?.name,
+        filesWithContent: filesWithContent.length,
+        totalFiles: projectFiles.length,
+      });
+      
       return {
         currentProject: selectedProject?.name || 'Selected Project',
         projectId: selectedProjectId.toString(),
         filesCount: projectFiles.length,
         filePaths: projectFiles.map(f => f.filePath),
-        files: optimizeFileContents(projectFiles.map(f => ({ path: f.filePath, content: f.content }))),
+        files: optimizeFileContents(projectFiles.map(f => ({ path: f.filePath, content: f.content || '' }))),
         hasLivePreview: false,
         currentComponent: 'None',
         recentErrors: [],
@@ -210,6 +257,14 @@ export function OmniAssistant() {
     }
     
     // No context available
+    console.log('ℹ️ OmniAssistant: No playground context available', {
+      isPlaygroundPage,
+      hasCurrentSession: !!currentSession,
+      hasGeneratedFiles: !!currentSession?.generatedFiles?.length,
+      hasSelectedProject: !!selectedProjectId,
+      hasProjectFiles: projectFiles.length > 0,
+    });
+    
     return undefined;
   };
 

@@ -313,7 +313,13 @@ ${playgroundContext ? `
     [your code here]
     \`\`\`
   - **Recommendation format**: Instead of saying "I'll apply this change", say "I recommend asking the playground AI to apply this change to ensure it matches your app's design system. Here's what should be changed:"
-  - **Design matching**: Ensure all UI suggestions use the same design tokens, spacing, colors, and component patterns as the existing codebase` : ''}
+  - **Design matching**: Ensure all UI suggestions use the same design tokens, spacing, colors, and component patterns as the existing codebase
+  - **IMPORTANT: If you can see file paths but no file contents**:
+    * This means the project structure exists but files haven't been fully loaded or saved yet
+    * Say: "I can see your project has [X] files ([list paths]), but the file contents aren't available yet. This usually means the project is still being generated or hasn't been saved to the database. Open the playground with this project to see the full code and get detailed feedback."
+    * DO NOT say files are "empty" - that's misleading
+    * DO NOT make assumptions about what's in the files
+    * Focus on what you CAN help with: architecture suggestions, naming conventions, feature recommendations` : ''}
 
 For location and map queries:
 - When the user asks about locations, places, or needs directions, include the specific location or search query in your response
