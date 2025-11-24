@@ -188,13 +188,11 @@ export function OmniAssistant() {
             >
               <Bot className="h-8 w-8" />
             </Button>
-            {features.persistConversation && (
-              <div className="absolute -top-1 -right-1">
-                <Badge variant="default" className="h-5 w-5 rounded-full p-0 flex items-center justify-center">
-                  <Database className="h-3 w-3" />
-                </Badge>
-              </div>
-            )}
+            <div className="absolute -top-1 -right-1">
+              <Badge variant="default" className="h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                <Database className="h-3 w-3" />
+              </Badge>
+            </div>
           </motion.div>
         )}
 
