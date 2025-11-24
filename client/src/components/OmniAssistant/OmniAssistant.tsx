@@ -468,17 +468,26 @@ function MessageBubble({
   // Extract code blocks with file paths from message
   const extractCodeBlocks = (content: string): Array<{ path: string; content: string; language?: string }> => {
     const codeBlocks: Array<{ path: string; content: string; language?: string }> = [];
-    // Match code blocks with optional file path in comments
-    const codeBlockRegex = /```(\w+)?\s*(?:\/\/\s*file:\s*([^\n]+))?\n([\s\S]*?)```/g;
+    // Match code blocks - look for file path in comment at start of code block
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let match;
     
     while ((match = codeBlockRegex.exec(content)) !== null) {
       const language = match[1];
-      const filePath = match[2]?.trim();
-      const codeContent = match[3].trim();
+      const codeContent = match[2].trim();
+      
+      // Look for file path in various formats:
+      // // file: path/to/file.tsx
+      // // file:path/to/file.tsx
+      // file: path/to/file.tsx
+      // File: path/to/file.tsx
+      const filePathMatch = codeContent.match(/^(?:\/\/\s*)?(?:file|File):\s*([^\n]+)/i);
+      const filePath = filePathMatch ? filePathMatch[1].trim() : null;
       
       if (filePath) {
-        codeBlocks.push({ path: filePath, content: codeContent, language });
+        // Remove the file path comment from the code content
+        const actualCode = codeContent.replace(/^(?:\/\/\s*)?(?:file|File):\s*[^\n]+\n?/i, '').trim();
+        codeBlocks.push({ path: filePath, content: actualCode, language });
       }
     }
     
