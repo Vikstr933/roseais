@@ -375,6 +375,45 @@ MIT License - feel free to use this project as you wish!
   }
 
   /**
+   * Sanitize project name for Vercel
+   * Vercel requirements:
+   * - Up to 100 characters
+   * - Lowercase only
+   * - Letters, digits, '.', '_', '-' only
+   * - Cannot contain '---'
+   */
+  private sanitizeVercelProjectName(name: string): string {
+    // Convert to lowercase
+    let sanitized = name.toLowerCase();
+    
+    // Replace invalid characters with '-'
+    sanitized = sanitized.replace(/[^a-z0-9._-]/g, '-');
+    
+    // Replace multiple consecutive dashes with single dash
+    sanitized = sanitized.replace(/-+/g, '-');
+    
+    // Remove '---' sequences (replace with '--')
+    sanitized = sanitized.replace(/---/g, '--');
+    
+    // Remove leading/trailing dashes
+    sanitized = sanitized.replace(/^-+|-+$/g, '');
+    
+    // Limit to 100 characters
+    if (sanitized.length > 100) {
+      sanitized = sanitized.substring(0, 100);
+      // Remove trailing dash if truncated
+      sanitized = sanitized.replace(/-+$/, '');
+    }
+    
+    // Ensure it's not empty
+    if (!sanitized) {
+      sanitized = 'project';
+    }
+    
+    return sanitized;
+  }
+
+  /**
    * Deploy repository to Vercel
    */
   private async deployToVercel(
@@ -395,6 +434,9 @@ MIT License - feel free to use this project as you wish!
         }))
       : [];
 
+    // Sanitize project name for Vercel requirements
+    const vercelProjectName = this.sanitizeVercelProjectName(repo.name);
+
     // Create Vercel project
     const projectResponse = await fetch('https://api.vercel.com/v9/projects', {
       method: 'POST',
@@ -403,7 +445,7 @@ MIT License - feel free to use this project as you wish!
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: repo.name, // Use actual repo name (may have timestamp appended)
+        name: vercelProjectName, // Use sanitized name for Vercel
         gitRepository: {
           type: 'github',
           repo: repo.fullName,
@@ -430,7 +472,7 @@ MIT License - feel free to use this project as you wish!
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        name: repo.name, // Use actual repo name (may have timestamp appended)
+        name: vercelProjectName, // Use sanitized name for Vercel
         gitSource: {
           type: 'github',
           repo: repo.fullName,
