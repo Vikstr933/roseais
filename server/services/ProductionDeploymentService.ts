@@ -117,8 +117,8 @@ export class ProductionDeploymentService {
       throw new Error('GitHub token not configured. Please set GITHUB_TOKEN environment variable.');
     }
 
-    // Create repository
-    const { data: repo } = await this.octokit.repos.create({
+    // Create repository (use createForAuthenticatedUser for authenticated user repos)
+    const { data: repo } = await this.octokit.repos.createForAuthenticatedUser({
       name: config.repoName,
       description: config.description || `Generated with AI - ${config.projectName}`,
       private: config.isPrivate || false,
