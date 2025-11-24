@@ -16,8 +16,10 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiFetch } from '@/lib/api';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bot,
   Send,
@@ -29,6 +31,8 @@ import {
   Database,
   Brain,
   MapPin,
+  FolderOpen,
+  ArrowRight,
 } from 'lucide-react';
 import { useOmniAssistant, type OmniAssistantMessage } from '@/hooks/useOmniAssistant';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -39,9 +43,26 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 type ViewState = 'closed' | 'minimized' | 'full' | 'settings';
 
+interface Project {
+  id: number;
+  name: string;
+  description?: string;
+  workspaceType?: 'personal' | 'team';
+}
+
+interface ProjectFile {
+  id: number;
+  projectId: number;
+  filePath: string;
+  content: string;
+  language: string;
+}
+
 export function OmniAssistant() {
   const [viewState, setViewState] = useState<ViewState>('closed');
   const [inputMessage, setInputMessage] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
   const { currentSession, updateGeneratedFiles } = useWorkspace();
@@ -55,6 +76,44 @@ export function OmniAssistant() {
     sendMessage,
     clearSession,
   } = useOmniAssistant();
+
+  // Fetch user projects
+  const { data: userProjects = [] } = useQuery<Project[]>({
+    queryKey: ['/api/workspaces'],
+    queryFn: async () => {
+      if (!sessionToken) return [];
+      const response = await apiFetch('/api/workspaces', {
+        headers: getAuthHeaders(sessionToken),
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!sessionToken,
+  });
+
+  // Fetch project files when a project is selected
+  useEffect(() => {
+    if (!selectedProjectId || !sessionToken) {
+      setProjectFiles([]);
+      return;
+    }
+
+    const fetchProjectFiles = async () => {
+      try {
+        const response = await apiFetch(`/api/workspaces/${selectedProjectId}/files`, {
+          headers: getAuthHeaders(sessionToken),
+        });
+        if (response.ok) {
+          const files = await response.json();
+          setProjectFiles(files);
+        }
+      } catch (error) {
+        console.error('Failed to fetch project files:', error);
+      }
+    };
+
+    fetchProjectFiles();
+  }, [selectedProjectId, sessionToken]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -70,21 +129,13 @@ export function OmniAssistant() {
     }
   }, [messages.length]);
 
-  // Build playground context if we're on a playground page
+  // Build playground context - works both on playground page and with selected project
   const buildPlaygroundContext = () => {
     const currentPage = window.location.pathname;
     const isPlaygroundPage = currentPage.startsWith('/playground');
     
-    if (!isPlaygroundPage || !currentSession?.generatedFiles?.length) {
-      return undefined;
-    }
-
-    // Extract project ID from URL if available
-    const projectIdMatch = currentPage.match(/\/playground\/(\d+)/);
-    const projectId = projectIdMatch ? projectIdMatch[1] : 'default';
-
-    // Optimize files: prioritize code files, limit content
-    const optimizeFileContents = (fileList: typeof currentSession.generatedFiles) => {
+    // Optimize files helper
+    const optimizeFileContents = (fileList: any[]) => {
       if (!fileList || fileList.length === 0) return [];
       
       const priorityOrder = ['.tsx', '.ts', '.jsx', '.js', '.css', '.json', '.md', '.html'];
@@ -96,36 +147,67 @@ export function OmniAssistant() {
         return (aPriority === -1 ? 999 : aPriority) - (bPriority === -1 ? 999 : bPriority);
       });
       
-      const importantFiles = sortedFiles.slice(0, 5).map(f => ({
-        path: f.path,
-        content: f.content.substring(0, 2000),
-        language: f.path.split('.').pop() || 'text',
-        fullContent: f.content.length <= 2000
+      const importantFiles = sortedFiles.slice(0, 5).map((f: any) => ({
+        path: f.path || f.filePath,
+        content: (f.content || '').substring(0, 2000),
+        language: (f.path || f.filePath).split('.').pop() || 'text',
+        fullContent: (f.content || '').length <= 2000
       }));
       
-      const otherFiles = sortedFiles.slice(5, 10).map(f => ({
-        path: f.path,
-        content: `// File structure: ${f.content.split('\n').length} lines\n// Preview (first 200 chars):\n${f.content.substring(0, 200)}...`,
-        language: f.path.split('.').pop() || 'text',
-        summary: true
-      }));
+      const otherFiles = sortedFiles.slice(5, 10).map((f: any) => {
+        const content = f.content || '';
+        return {
+          path: f.path || f.filePath,
+          content: `// File structure: ${content.split('\n').length} lines\n// Preview (first 200 chars):\n${content.substring(0, 200)}...`,
+          language: (f.path || f.filePath).split('.').pop() || 'text',
+          summary: true
+        };
+      });
       
       return [...importantFiles, ...otherFiles];
     };
+    
+    // Priority 1: If on playground page with session files
+    if (isPlaygroundPage && currentSession?.generatedFiles?.length) {
+      const projectIdMatch = currentPage.match(/\/playground\/(\d+)/);
+      const projectId = projectIdMatch ? projectIdMatch[1] : 'default';
 
-    return {
-      currentProject: currentSession.name || 'Untitled Project',
-      projectId,
-      filesCount: currentSession.generatedFiles.length,
-      filePaths: currentSession.generatedFiles.map(f => f.path),
-      files: optimizeFileContents(currentSession.generatedFiles),
-      hasLivePreview: false,
-      currentComponent: 'None',
-      recentErrors: [],
-      isGenerating: false,
-      orchestrationSteps: 0,
-      currentStep: 'None'
-    };
+      return {
+        currentProject: currentSession.name || 'Untitled Project',
+        projectId,
+        filesCount: currentSession.generatedFiles.length,
+        filePaths: currentSession.generatedFiles.map(f => f.path),
+        files: optimizeFileContents(currentSession.generatedFiles),
+        hasLivePreview: false,
+        currentComponent: 'None',
+        recentErrors: [],
+        isGenerating: false,
+        orchestrationSteps: 0,
+        currentStep: 'None'
+      };
+    }
+    
+    // Priority 2: If user has selected a project (even when not on playground)
+    if (selectedProjectId && projectFiles.length > 0) {
+      const selectedProject = userProjects.find(p => p.id === selectedProjectId);
+      
+      return {
+        currentProject: selectedProject?.name || 'Selected Project',
+        projectId: selectedProjectId.toString(),
+        filesCount: projectFiles.length,
+        filePaths: projectFiles.map(f => f.filePath),
+        files: optimizeFileContents(projectFiles.map(f => ({ path: f.filePath, content: f.content }))),
+        hasLivePreview: false,
+        currentComponent: 'None',
+        recentErrors: [],
+        isGenerating: false,
+        orchestrationSteps: 0,
+        currentStep: 'None'
+      };
+    }
+    
+    // No context available
+    return undefined;
   };
 
   const handleSendMessage = async () => {
@@ -153,14 +235,41 @@ export function OmniAssistant() {
   const handleSuggestionClick = async (suggestion: string) => {
     if (isLoading) return;
     
-    const playgroundContext = buildPlaygroundContext();
-    
-    // Send the suggestion as a message
-    await sendMessage(suggestion, {
-      currentPage: window.location.pathname,
-      workspaceId: currentSession?.id as number | undefined,
-      playgroundContext,
-    });
+    // Forward suggestion to playground AI
+    try {
+      const promptKey = 'omniassistant_pending_prompt';
+      const promptData = {
+        prompt: suggestion,
+        timestamp: Date.now(),
+        source: 'omniassistant',
+      };
+      localStorage.setItem(promptKey, JSON.stringify(promptData));
+      
+      // Navigate to playground
+      const currentPath = window.location.pathname;
+      if (!currentPath.startsWith('/playground')) {
+        const projectId = selectedProjectId || currentSession?.id;
+        const playgroundPath = projectId ? `/playground/${projectId}` : '/playground';
+        setLocation(playgroundPath);
+        
+        // Wait for navigation, then dispatch event
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
+        }, 500);
+      } else {
+        // Already on playground - dispatch event immediately
+        window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
+      }
+
+      // Acknowledge to user
+      await sendMessage(`✅ Suggestion sent to Playground AI: "${suggestion.substring(0, 100)}${suggestion.length > 100 ? '...' : ''}"`, {
+        currentPage: window.location.pathname,
+        workspaceId: (selectedProjectId || currentSession?.id) as number | undefined,
+        playgroundContext: buildPlaygroundContext(),
+      });
+    } catch (error) {
+      console.error('Failed to send suggestion to playground:', error);
+    }
   };
 
   // Intelligent code insertion - inserts code at the right location instead of replacing entire file
@@ -457,7 +566,35 @@ export function OmniAssistant() {
                 )}
               </ScrollArea>
 
-              <div className="p-4 border-t">
+              <div className="p-4 border-t space-y-3">
+                {/* Project Selector - only show when not on playground */}
+                {!window.location.pathname.startsWith('/playground') && userProjects.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <Select
+                      value={selectedProjectId?.toString() || "none"}
+                      onValueChange={(value) => setSelectedProjectId(value === "none" ? null : parseInt(value))}
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="Select a project for context..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No project selected</SelectItem>
+                        {userProjects.map((project) => (
+                          <SelectItem key={project.id} value={project.id.toString()}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedProjectId && projectFiles.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {projectFiles.length} files
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <Input
                     placeholder="Ask me anything about your digital office..."
@@ -743,7 +880,7 @@ function MessageBubble({
             'inline-block rounded-lg px-4 py-2 max-w-[85%]',
             isUser
               ? 'bg-primary text-primary-foreground'
-              : 'bg-black text-white'
+              : 'bg-muted text-foreground border border-border'
           )}
         >
           {isUser ? (
@@ -819,17 +956,31 @@ function MessageBubble({
           )}
         </div>
 
-        {/* Suggest to Playground AI Button */}
-        {hasEditableCode && onApplyChanges && (
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() => onApplyChanges(codeBlocks)}
-              className="text-xs"
-            >
-              💡 Suggest to Playground AI ({codeBlocks.length} file{codeBlocks.length > 1 ? 's' : ''})
-            </Button>
+        {/* Action Buttons for Assistant Messages */}
+        {!isUser && (
+          <div className="flex gap-2 flex-wrap">
+            {hasEditableCode && onApplyChanges && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => onApplyChanges(codeBlocks)}
+                className="text-xs h-7 gap-1"
+              >
+                <ArrowRight className="h-3 w-3" />
+                Apply to Playground ({codeBlocks.length} file{codeBlocks.length > 1 ? 's' : ''})
+              </Button>
+            )}
+            {!hasEditableCode && onSuggestionClick && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onSuggestionClick(message.content)}
+                className="text-xs h-7 gap-1"
+              >
+                <ArrowRight className="h-3 w-3" />
+                Send to Playground
+              </Button>
+            )}
           </div>
         )}
 
