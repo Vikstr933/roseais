@@ -1294,11 +1294,18 @@ export default function PromptPlayground() {
 
           // Use OmniAssistant/PersonalAssistant for conversational responses
           // Include playground context: current files, project state, errors
+          // Include ACTUAL FILE CONTENTS so assistant can see the code
           const playgroundContext = {
             currentProject: currentProject?.name || 'Untitled Project',
             projectId: params?.projectId || 'default',
             filesCount: response?.files?.length || 0,
             filePaths: response?.files?.map(f => f.path) || [],
+            // Include actual file contents (limit to first 10 files to avoid token limits)
+            files: response?.files?.slice(0, 10).map(f => ({
+              path: f.path,
+              content: f.content.substring(0, 5000), // Limit each file to 5000 chars
+              language: f.path.split('.').pop() || 'text'
+            })) || [],
             hasLivePreview: !!livePreviewUrl,
             currentComponent: currentComponentName || 'None',
             recentErrors: error ? [error] : [],

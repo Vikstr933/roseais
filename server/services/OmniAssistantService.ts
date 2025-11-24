@@ -26,6 +26,7 @@ export interface OmniAssistantOptions {
     projectId?: string;
     filesCount?: number;
     filePaths?: string[];
+    files?: Array<{ path: string; content: string; language?: string }>; // Actual file contents
     hasLivePreview?: boolean;
     currentComponent?: string;
     recentErrors?: string[];

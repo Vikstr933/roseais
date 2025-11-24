@@ -246,6 +246,7 @@ export class PersonalAssistantAgent {
       projectId?: string;
       filesCount?: number;
       filePaths?: string[];
+      files?: Array<{ path: string; content: string; language?: string }>; // Actual file contents
       hasLivePreview?: boolean;
       currentComponent?: string;
       recentErrors?: string[];
@@ -275,7 +276,9 @@ Your capabilities:
 ${playgroundContext ? `
 - **IMPORTANT: You are currently in the AI Code Playground** - a tool for generating and editing React applications
 - When the user asks about the playground, code generation, or their project, respond with awareness of their current project state
-- You have access to information about their current project, files, and generation status` : ''}
+- You have access to information about their current project, files, and generation status
+- **You can see the ACTUAL CODE FILES** - the user's project files will be included in the message context below
+- When discussing code, reference specific functions, components, imports, and suggest improvements based on what you see` : ''}
 
 Communication style:
 - Use natural, flowing language - avoid robotic or clinical responses
@@ -288,7 +291,9 @@ Communication style:
 ${playgroundContext ? `
 - **When discussing the playground**: Reference their current project, files, and state naturally
 - If they ask "what's going on in the playground", describe their current project status, files, and any active generation
-- If they have errors, acknowledge them and offer helpful suggestions
+- **You can see their actual code** - reference specific files, functions, components, and code patterns when answering
+- If they ask "what do you think about my project", analyze the code files you can see and provide specific feedback
+- If they have errors, acknowledge them and offer helpful suggestions based on the actual code
 - If they're generating code, acknowledge the progress and current step` : ''}
 
 For location and map queries:
@@ -353,6 +358,7 @@ Remember: You're not just reporting data - you're helping a real person manage t
       projectId?: string;
       filesCount?: number;
       filePaths?: string[];
+      files?: Array<{ path: string; content: string; language?: string }>; // Actual file contents
       hasLivePreview?: boolean;
       currentComponent?: string;
       recentErrors?: string[];
@@ -373,6 +379,18 @@ Remember: You're not just reporting data - you're helping a real person manage t
         playgroundInfo += ` (${playgroundContext.filePaths.slice(0, 5).join(', ')}${playgroundContext.filePaths.length > 5 ? '...' : ''})`;
       }
       playgroundInfo += `\n`;
+      
+      // Include ACTUAL FILE CONTENTS so you can see and discuss the code
+      if (playgroundContext.files && playgroundContext.files.length > 0) {
+        playgroundInfo += `\n=== ACTUAL CODE FILES (You can see and discuss these) ===\n`;
+        playgroundContext.files.forEach((file, idx) => {
+          playgroundInfo += `\nFile ${idx + 1}: ${file.path} (${file.language || 'text'})\n`;
+          playgroundInfo += `\`\`\`${file.language || 'text'}\n${file.content}\n\`\`\`\n`;
+        });
+        playgroundInfo += `\n=== End of Code Files ===\n`;
+        playgroundInfo += `\nIMPORTANT: You can now see the actual code! When the user asks about their project, code, or files, reference the actual content above. You can discuss specific functions, components, styles, and suggest improvements based on what you see.\n`;
+      }
+      
       if (playgroundContext.currentComponent && playgroundContext.currentComponent !== 'None') {
         playgroundInfo += `- Current Component: ${playgroundContext.currentComponent}\n`;
       }
@@ -388,8 +406,11 @@ Remember: You're not just reporting data - you're helping a real person manage t
       }
       if (playgroundContext.recentErrors && playgroundContext.recentErrors.length > 0) {
         playgroundInfo += `- Recent Errors: ${playgroundContext.recentErrors.length} error(s) detected\n`;
+        playgroundContext.recentErrors.forEach((err, idx) => {
+          playgroundInfo += `  Error ${idx + 1}: ${err}\n`;
+        });
       }
-      playgroundInfo += `\nWhen the user asks about the playground, their project, or code generation, use this context to provide relevant, specific information.]`;
+      playgroundInfo += `\nWhen the user asks about the playground, their project, or code generation, use this context to provide relevant, specific information. You can see their actual code files above, so reference specific code when answering questions.]`;
       enhancedMessage += playgroundInfo;
     }
 

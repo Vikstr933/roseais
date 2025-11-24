@@ -453,10 +453,24 @@ export class ProjectService {
         .leftJoin(users as any, eq((projectMembers as any).userId, (users as any).id))
         .where(eq((projectMembers as any).projectId, projectId));
 
-      return result;
-    } catch (error) {
-      // If project_members table doesn't exist, return empty array
-      console.warn('getProjectMembers: project_members table may not exist', error);
+      // Validate result - ensure it's an array and filter out null/undefined entries
+      if (!result || !Array.isArray(result)) {
+        return [];
+      }
+
+      // Filter out any null/undefined entries and ensure user object exists
+      return result
+        .filter((member: any) => member != null)
+        .map((member: any) => ({
+          ...member,
+          user: member.user || null
+        }));
+    } catch (error: any) {
+      // If project_members table doesn't exist or query fails, return empty array
+      console.warn('getProjectMembers: project_members table may not exist or query failed', {
+        error: error?.message || String(error),
+        projectId
+      });
       return [];
     }
   }
