@@ -217,6 +217,8 @@ export default function PromptPlayground() {
     addChatMessage,
     clearChat,
     updateGeneratedFiles,
+    getPendingPrompt,
+    clearPendingPrompt,
     isSaving,
     lastSaved
   } = useWorkspace();
@@ -2118,7 +2120,6 @@ export default function PromptPlayground() {
     }
 
     // Check for pending prompt from OmniAssistant using WorkspaceContext
-    const { getPendingPrompt, clearPendingPrompt } = useWorkspace();
     const pendingPrompt = getPendingPrompt();
     
     if (pendingPrompt && user) {
@@ -2139,7 +2140,7 @@ export default function PromptPlayground() {
         generateMutation.mutate(formData);
       }, 500);
     }
-  }, [user, form, generateMutation]);
+  }, [user, form, generateMutation, getPendingPrompt, clearPendingPrompt]);
 
   return (
     <div className="fixed inset-0 w-full h-screen bg-background flex flex-col overflow-hidden">
