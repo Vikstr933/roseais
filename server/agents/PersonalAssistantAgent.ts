@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { pluginRegistry } from '../services/PluginRegistry';
 import { Tool, KnowledgeItem } from '../plugins/BaseProductivityPlugin';
+import axios from 'axios';
 
 const logger = new SimpleLogger('PersonalAssistantAgent');
 
@@ -19,11 +20,127 @@ export class PersonalAssistantAgent {
   private anthropic: Anthropic;
   private conversationHistory: Map<string, Anthropic.MessageParam[]> = new Map();
   private additionalTools: Map<string, Tool[]> = new Map(); // Store additional tools by userId
+  private webSearchTool: Tool;
 
   constructor() {
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY || ''
     });
+
+    // Initialize built-in web search tool
+    this.webSearchTool = {
+      name: 'web_search',
+      description: 'Search the web for real-time information about companies, addresses, contact details, current events, or any information not in your knowledge base. Use this when user asks for specific real-world details like addresses, phone numbers, business hours, or current information.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'The search query (e.g., "Colorama Lund address and contact information")'
+          },
+          num_results: {
+            type: 'string',
+            description: 'Number of results to return (1-5)',
+            enum: ['1', '2', '3', '4', '5']
+          }
+        },
+        required: ['query']
+      },
+      execute: this.performWebSearch.bind(this)
+    };
+  }
+
+  /**
+   * Perform web search using DuckDuckGo API
+   */
+  private async performWebSearch(params: { query: string; num_results?: string }): Promise<any> {
+    try {
+      const numResults = parseInt(params.num_results || '3', 10);
+      logger.info(`Performing web search: query="${params.query}", numResults=${numResults}`);
+
+      // Use DuckDuckGo Instant Answer API (free, no API key required)
+      const ddgResponse = await axios.get('https://api.duckduckgo.com/', {
+        params: {
+          q: params.query,
+          format: 'json',
+          no_html: 1,
+          skip_disambig: 1
+        },
+        timeout: 5000
+      });
+
+      const results = [];
+
+      // Add main abstract if available
+      if (ddgResponse.data.Abstract) {
+        results.push({
+          title: ddgResponse.data.Heading || params.query,
+          snippet: ddgResponse.data.Abstract,
+          url: ddgResponse.data.AbstractURL,
+          source: ddgResponse.data.AbstractSource || 'DuckDuckGo'
+        });
+      }
+
+      // Add related topics
+      if (ddgResponse.data.RelatedTopics && Array.isArray(ddgResponse.data.RelatedTopics)) {
+        for (const topic of ddgResponse.data.RelatedTopics.slice(0, numResults - results.length)) {
+          if (topic.Text && topic.FirstURL) {
+            results.push({
+              title: topic.Text.split(' - ')[0],
+              snippet: topic.Text,
+              url: topic.FirstURL,
+              source: 'DuckDuckGo'
+            });
+          }
+        }
+      }
+
+      // Fallback: Use alternative search if no results
+      if (results.length === 0) {
+        logger.info(`No DuckDuckGo results, trying alternative search for: ${params.query}`);
+        
+        // Try Wikipedia API as fallback
+        const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
+          params: {
+            action: 'opensearch',
+            search: params.query,
+            limit: numResults,
+            format: 'json'
+          },
+          timeout: 5000
+        });
+
+        if (wikiResponse.data && wikiResponse.data[1] && wikiResponse.data[1].length > 0) {
+          for (let i = 0; i < wikiResponse.data[1].length; i++) {
+            results.push({
+              title: wikiResponse.data[1][i],
+              snippet: wikiResponse.data[2][i] || '',
+              url: wikiResponse.data[3][i],
+              source: 'Wikipedia'
+            });
+          }
+        }
+      }
+
+      logger.info(`Web search completed: query="${params.query}", resultsFound=${results.length}`);
+
+      return {
+        query: params.query,
+        results: results.slice(0, numResults),
+        timestamp: new Date().toISOString(),
+        message: results.length > 0 
+          ? `Found ${results.length} result(s) for "${params.query}"` 
+          : `No specific results found for "${params.query}". Consider refining the search query.`
+      };
+    } catch (error) {
+      logger.error(`Web search failed: query="${params.query}"`, error as Error);
+      return {
+        query: params.query,
+        results: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+        message: 'Web search temporarily unavailable. Please try again or provide the information manually.'
+      };
+    }
   }
 
   /**
@@ -96,7 +213,9 @@ export class PersonalAssistantAgent {
 
       // Add any additional tools registered for this user (e.g., from orchestrator bridge)
       const additionalToolsForUser = this.additionalTools.get(userId) || [];
-      const tools = [...pluginTools, ...additionalToolsForUser];
+      
+      // Include built-in web search tool
+      const tools = [this.webSearchTool, ...pluginTools, ...additionalToolsForUser];
 
       // Build system prompt
       const systemPrompt = this.buildSystemPrompt(context, tools, options?.playgroundContext);
@@ -258,7 +377,7 @@ export class PersonalAssistantAgent {
       currentStep?: string;
     }
   ): string {
-    const basePrompt = `You are an enthusiastic and highly capable personal AI assistant with direct access to the user's productivity tools. Think of yourself as their trusted companion who genuinely cares about helping them stay organized and productive.
+    const basePrompt = `You are Elon, an enthusiastic and highly capable personal AI assistant with direct access to the user's productivity tools and the web. Think of yourself as their trusted companion who genuinely cares about helping them stay organized and productive.
 
 Your personality:
 - Warm, friendly, and conversational - like talking to a helpful colleague
@@ -268,6 +387,11 @@ Your personality:
 - Enthusiastic about helping - show genuine excitement when you can assist
 
 Your capabilities:
+- **Web Search**: Search the web for real-time information about companies, addresses, business hours, contact details, or any current information
+  * Use the web_search tool when users ask for specific real-world details like "Colorama Lund address" or "contact information for [business]"
+  * ALWAYS use web_search for company addresses, phone numbers, business hours, and contact information
+  * Use web_search for current events, recent information, or facts you're unsure about
+  * Example queries: "web_search for 'Colorama Lund address and contact information'" or "web_search for 'Tesla latest news'"
 - Access and analyze emails with detailed insights (sender, urgency, key points, action items)
 - Search through communications and provide comprehensive summaries
 - Execute actions on behalf of the user (send emails, manage tasks, etc.)

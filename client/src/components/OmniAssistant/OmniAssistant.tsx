@@ -1,6 +1,6 @@
 /**
- * OmniAssistant Component
- * Enhanced AI assistant with persistent memory, context awareness, and proactive insights
+ * Elon - AI Assistant Component
+ * Enhanced AI assistant with persistent memory, context awareness, proactive insights, and web search
  * Part of Digital Office Platform (Fas 1)
  *
  * This is the new enhanced assistant that coexists with the existing AssistantWidget
@@ -34,7 +34,7 @@ import {
   FolderOpen,
   ArrowRight,
 } from 'lucide-react';
-import { useOmniAssistant, type OmniAssistantMessage } from '@/hooks/useOmniAssistant';
+import { useOmniAssistant, type OmniAssistantMessage } from '@/hooks/useOmniAssistant'; // Hook keeps same name for backward compatibility
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -103,28 +103,28 @@ export function OmniAssistant() {
 
     const fetchProjectFiles = async () => {
       try {
-        console.log('📂 OmniAssistant: Fetching full project files for project', selectedProjectId);
+        console.log('📂 Elon: Fetching full project files for project', selectedProjectId);
         const response = await apiFetch(`/api/workspaces/${selectedProjectId}/files`, {
           headers: getAuthHeaders(sessionToken),
         });
         if (response.ok) {
           const files = await response.json();
-          console.log(`✅ OmniAssistant: Loaded ${files.length} files`, {
+          console.log(`✅ Elon: Loaded ${files.length} files`, {
             filesWithContent: files.filter((f: any) => f.content && f.content.trim().length > 0).length,
             totalSize: files.reduce((sum: number, f: any) => sum + (f.content?.length || 0), 0),
           });
           
           // Verify we have content
           if (files.length > 0 && files.every((f: any) => !f.content || f.content.trim().length === 0)) {
-            console.warn('⚠️ OmniAssistant: Project files loaded but all content fields are empty. Files may not be saved to database yet.');
+            console.warn('⚠️ Elon: Project files loaded but all content fields are empty. Files may not be saved to database yet.');
           }
           
           setProjectFiles(files);
         } else {
-          console.error('❌ OmniAssistant: Failed to fetch project files', response.status);
+          console.error('❌ Elon: Failed to fetch project files', response.status);
         }
       } catch (error) {
-        console.error('❌ OmniAssistant: Error fetching project files:', error);
+        console.error('❌ Elon: Error fetching project files:', error);
       }
     };
 
@@ -211,7 +211,7 @@ export function OmniAssistant() {
       const filesWithContent = projectFiles.filter(f => f.content && f.content.trim().length > 0);
       
       if (filesWithContent.length === 0) {
-        console.warn('⚠️ OmniAssistant: Building context for project with no file content', {
+        console.warn('⚠️ Elon: Building context for project with no file content', {
           projectId: selectedProjectId,
           projectName: selectedProject?.name,
           fileCount: projectFiles.length,
@@ -234,7 +234,7 @@ export function OmniAssistant() {
         };
       }
       
-      console.log('✅ OmniAssistant: Building context for selected project', {
+      console.log('✅ Elon: Building context for selected project', {
         projectId: selectedProjectId,
         projectName: selectedProject?.name,
         filesWithContent: filesWithContent.length,
@@ -257,7 +257,7 @@ export function OmniAssistant() {
     }
     
     // No context available
-    console.log('ℹ️ OmniAssistant: No playground context available', {
+    console.log('ℹ️ Elon: No playground context available', {
       isPlaygroundPage,
       hasCurrentSession: !!currentSession,
       hasGeneratedFiles: !!currentSession?.generatedFiles?.length,
@@ -511,7 +511,7 @@ export function OmniAssistant() {
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-2">
                   <Bot className="h-5 w-5 text-primary" />
-                  <CardTitle className="text-sm">OmniAssistant</CardTitle>
+                  <CardTitle className="text-sm">Elon</CardTitle>
                   <Database className="h-4 w-4 text-green-500" title="Persistent memory enabled" />
                 </div>
                 <div className="flex gap-1">
@@ -555,7 +555,7 @@ export function OmniAssistant() {
               <CardHeader className="flex flex-row items-center justify-between py-2 px-3 border-b">
                 <div className="flex items-center gap-1.5">
                   <Bot className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-sm">OmniAssistant</CardTitle>
+                  <CardTitle className="text-sm">Elon</CardTitle>
                   <FeatureIndicators features={features} />
                 </div>
                 <div className="flex gap-0.5">

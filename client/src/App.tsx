@@ -174,7 +174,7 @@ function AppContent() {
             }}
           /> */}
 
-          {/* New OmniAssistant - Digital Office Platform */}
+          {/* Elon - AI Assistant with Web Search */}
           <OmniAssistant />
           <InsightsPanel />
 
