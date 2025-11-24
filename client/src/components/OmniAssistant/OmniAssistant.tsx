@@ -150,19 +150,110 @@ export function OmniAssistant() {
     });
   };
 
+  // Intelligent code insertion - inserts code at the right location instead of replacing entire file
+  const insertCodeIntelligently = (
+    existingContent: string,
+    newCode: string,
+    filePath: string
+  ): string => {
+    // Try to find insertion markers in the new code
+    // Look for function/class/component definitions
+    const functionMatch = newCode.match(/(?:export\s+)?(?:async\s+)?function\s+(\w+)/);
+    const classMatch = newCode.match(/(?:export\s+)?class\s+(\w+)/);
+    const componentMatch = newCode.match(/(?:export\s+)?(?:const|function)\s+(\w+)\s*[:=]\s*(?:\(|\(.*?\)\s*=>)/);
+    const constMatch = newCode.match(/(?:export\s+)?const\s+(\w+)\s*[:=]/);
+    
+    const targetName = functionMatch?.[1] || classMatch?.[1] || componentMatch?.[1] || constMatch?.[1];
+    
+    if (targetName && existingContent) {
+      // Try to find the existing function/class/component in the file
+      // Look for the same pattern
+      const existingFunctionRegex = new RegExp(
+        `(?:export\\s+)?(?:async\\s+)?function\\s+${targetName}\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n\\}`,
+        'm'
+      );
+      const existingClassRegex = new RegExp(
+        `(?:export\\s+)?class\\s+${targetName}\\s*(?:extends\\s+\\w+)?\\s*\\{[\\s\\S]*?\\n\\}`,
+        'm'
+      );
+      const existingComponentRegex = new RegExp(
+        `(?:export\\s+)?(?:const|function)\\s+${targetName}\\s*[:=]\\s*(?:\\(|.*?=>)[\\s\\S]*?\\n\\}`,
+        'm'
+      );
+      const existingConstRegex = new RegExp(
+        `(?:export\\s+)?const\\s+${targetName}\\s*[:=][\\s\\S]*?(?=\\n(?:export|const|function|class|\\}|$))`,
+        'm'
+      );
+      
+      // Try to find and replace the specific function/class/component
+      if (functionMatch && existingFunctionRegex.test(existingContent)) {
+        return existingContent.replace(existingFunctionRegex, newCode.trim());
+      }
+      if (classMatch && existingClassRegex.test(existingContent)) {
+        return existingContent.replace(existingClassRegex, newCode.trim());
+      }
+      if (componentMatch && existingComponentRegex.test(existingContent)) {
+        return existingContent.replace(existingComponentRegex, newCode.trim());
+      }
+      if (constMatch && existingConstRegex.test(existingContent)) {
+        return existingContent.replace(existingConstRegex, newCode.trim());
+      }
+      
+      // If found but couldn't replace, try to insert after the existing definition
+      const insertAfterRegex = new RegExp(
+        `((?:export\\s+)?(?:async\\s+)?function\\s+${targetName}[\\s\\S]*?\\n\\})`,
+        'm'
+      );
+      if (insertAfterRegex.test(existingContent)) {
+        return existingContent.replace(insertAfterRegex, `$1\n\n${newCode.trim()}`);
+      }
+    }
+    
+    // If new code is very short (likely a snippet), try to find insertion point
+    if (newCode.split('\n').length < 20 && existingContent) {
+      // Look for common insertion markers like "// Add here" or similar
+      const insertionMarker = existingContent.match(/\/\/\s*(?:add|insert|TODO|FIXME).*?here/i);
+      if (insertionMarker) {
+        const markerIndex = existingContent.indexOf(insertionMarker[0]);
+        const beforeMarker = existingContent.substring(0, markerIndex);
+        const afterMarker = existingContent.substring(markerIndex + insertionMarker[0].length);
+        return `${beforeMarker}${newCode.trim()}\n${afterMarker}`;
+      }
+    }
+    
+    // Fallback: If new code looks like a complete file (has imports, exports, etc.), replace
+    // Otherwise, append to the end
+    const hasImports = newCode.includes('import ') || newCode.includes('from ');
+    const hasExports = newCode.includes('export ');
+    const isCompleteFile = hasImports && hasExports && newCode.split('\n').length > 30;
+    
+    if (isCompleteFile || !existingContent) {
+      return newCode.trim();
+    }
+    
+    // Append to end of file
+    return `${existingContent.trim()}\n\n${newCode.trim()}`;
+  };
+
   // Handle applying file changes from assistant
   const handleApplyChanges = (files: Array<{ path: string; content: string }>) => {
     if (!currentSession) return;
     
-    // Merge with existing files - update existing, add new
+    // Merge with existing files - intelligently insert code
     const existingFiles = currentSession.generatedFiles || [];
     const fileMap = new Map(existingFiles.map(f => [f.path, f]));
     
-    // Update or add files from assistant
+    // Update or add files from assistant with intelligent insertion
     files.forEach(file => {
+      const existingFile = fileMap.get(file.path);
+      const existingContent = existingFile?.content || '';
+      
+      // Use intelligent insertion instead of simple replacement
+      const mergedContent = insertCodeIntelligently(existingContent, file.content, file.path);
+      
       fileMap.set(file.path, {
         path: file.path,
-        content: file.content,
+        content: mergedContent,
         language: file.path.split('.').pop() || 'text'
       });
     });
@@ -458,7 +549,7 @@ function MessageBubble({
   const animationRef = useRef<number | null>(null);
   const currentIndexRef = useRef(0);
   const lastUpdateRef = useRef(Date.now());
-  const speedRef = useRef(30); // characters per second for typewriter effect
+  const speedRef = useRef(100); // characters per second for typewriter effect (increased from 30)
 
   // Typewriter effect for assistant messages
   useEffect(() => {
@@ -574,13 +665,13 @@ function MessageBubble({
             'inline-block rounded-lg px-4 py-2 max-w-[85%]',
             isUser
               ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-foreground'
+              : 'bg-black text-white'
           )}
         >
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap text-primary-foreground">{message.content}</p>
           ) : (
-            <div className="text-sm prose prose-sm dark:prose-invert max-w-none text-foreground">
+            <div className="text-sm prose prose-sm dark:prose-invert max-w-none text-white">
               {isTyping && (
                 <span className="inline-block w-2 h-4 bg-foreground animate-pulse ml-1" />
               )}
