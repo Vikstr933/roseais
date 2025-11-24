@@ -118,23 +118,51 @@ export class ProductionDeploymentService {
     }
 
     // Create repository (use createForAuthenticatedUser for authenticated user repos)
+    // Set auto_init to false to avoid initial README.md that requires SHA
     const { data: repo } = await this.octokit.repos.createForAuthenticatedUser({
       name: config.repoName,
       description: config.description || `Generated with AI - ${config.projectName}`,
       private: config.isPrivate || false,
-      auto_init: true,
+      auto_init: false, // Don't create initial README to avoid SHA requirement
     });
 
     // Create all files in the repository
     for (const file of files) {
       const content = Buffer.from(file.content).toString('base64');
 
+      // Check if file exists to get SHA for updates
+      let fileSha: string | undefined;
+      try {
+        const { data: existingFile } = await this.octokit.repos.getContent({
+          owner: repo.owner.login,
+          repo: repo.name,
+          path: file.path,
+          ref: repo.default_branch,
+        });
+        
+        if (Array.isArray(existingFile)) {
+          // It's a directory, skip SHA
+          fileSha = undefined;
+        } else if (existingFile.type === 'file') {
+          // File exists, get its SHA
+          fileSha = existingFile.sha;
+        }
+      } catch (error: any) {
+        // File doesn't exist (404), that's fine - we'll create it
+        if (error.status !== 404) {
+          this.logger.warn('ProductionDeploymentService', `Error checking file ${file.path}`, { error: error.message });
+        }
+        fileSha = undefined;
+      }
+
+      // Create or update file with SHA if it exists
       await this.octokit.repos.createOrUpdateFileContents({
         owner: repo.owner.login,
         repo: repo.name,
         path: file.path,
-        message: `Add ${file.path}`,
+        message: fileSha ? `Update ${file.path}` : `Add ${file.path}`,
         content,
+        sha: fileSha, // Include SHA if file exists, undefined for new files
       });
     }
 
@@ -191,12 +219,35 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*`;
 
+    // Helper function to get file SHA if it exists
+    const getFileSha = async (path: string): Promise<string | undefined> => {
+      try {
+        const { data: file } = await this.octokit!.repos.getContent({
+          owner,
+          repo,
+          path,
+          ref: 'main',
+        });
+        if (!Array.isArray(file) && file.type === 'file') {
+          return file.sha;
+        }
+      } catch (error: any) {
+        if (error.status !== 404) {
+          this.logger.warn('ProductionDeploymentService', `Error checking file ${path}`, { error: error.message });
+        }
+      }
+      return undefined;
+    };
+
+    // Create .gitignore
+    const gitignoreSha = await getFileSha('.gitignore');
     await this.octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: '.gitignore',
-      message: 'Add .gitignore',
+      message: gitignoreSha ? 'Update .gitignore' : 'Add .gitignore',
       content: Buffer.from(gitignoreContent).toString('base64'),
+      sha: gitignoreSha,
     });
 
     // README.md
