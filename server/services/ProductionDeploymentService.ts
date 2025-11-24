@@ -33,6 +33,7 @@ export interface GitHubRepo {
   htmlUrl: string;
   cloneUrl: string;
   defaultBranch: string;
+  id: number; // GitHub repository ID (required for Vercel)
 }
 
 export class ProductionDeploymentService {
@@ -240,6 +241,7 @@ export class ProductionDeploymentService {
       htmlUrl: repo.html_url,
       cloneUrl: repo.clone_url,
       defaultBranch: repo.default_branch,
+      id: repo.id, // Include repository ID for Vercel
     };
   }
 
@@ -465,6 +467,7 @@ MIT License - feel free to use this project as you wish!
     const project = await projectResponse.json();
 
     // Trigger deployment
+    // Vercel API requires repoId instead of repo name in gitSource
     const deploymentResponse = await fetch('https://api.vercel.com/v13/deployments', {
       method: 'POST',
       headers: {
@@ -475,7 +478,7 @@ MIT License - feel free to use this project as you wish!
         name: vercelProjectName, // Use sanitized name for Vercel
         gitSource: {
           type: 'github',
-          repo: repo.fullName,
+          repoId: repo.id, // Use repository ID (required by Vercel)
           ref: repo.defaultBranch,
         },
         projectSettings: {
