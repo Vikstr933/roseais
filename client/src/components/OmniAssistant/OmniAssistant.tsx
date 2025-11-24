@@ -58,6 +58,13 @@ export function OmniAssistant() {
     }
   }, [messages, viewState]);
 
+  // Clear displayed messages tracking when session is cleared
+  useEffect(() => {
+    if (messages.length === 0) {
+      displayedMessagesRef.current.clear();
+    }
+  }, [messages.length]);
+
   // Build playground context if we're on a playground page
   const buildPlaygroundContext = () => {
     const currentPage = window.location.pathname;
