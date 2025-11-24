@@ -4,7 +4,7 @@
  * Part of Digital Office Platform (Fas 1)
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { apiFetch } from '@/lib/api';
 import { useToast } from './use-toast';
 
