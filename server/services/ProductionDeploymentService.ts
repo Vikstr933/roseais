@@ -297,12 +297,15 @@ MIT License - feel free to use this project as you wish!
 
 **Generated with ❤️ by AI Development Platform**`;
 
+    // Create README.md (check for SHA if it exists)
+    const readmeSha = await getFileSha('README.md');
     await this.octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: 'README.md',
-      message: 'Add README',
+      message: readmeSha ? 'Update README.md' : 'Add README.md',
       content: Buffer.from(readmeContent).toString('base64'),
+      sha: readmeSha,
     });
   }
 
