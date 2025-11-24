@@ -2840,7 +2840,7 @@ export default function PromptPlayground() {
 
         {/* Main Editor Area - Reduced to 50% and positioned top-left */}
         <div className="flex-1 min-h-0 relative">
-          <div className="absolute top-0 left-0 w-1/2 h-1/2 overflow-hidden border-r border-b border-border bg-background">
+          <div className="absolute top-0 left-0 w-1/2 h-1/2 overflow-hidden bg-background">
             {/* IDE-like Frame with Header Bar */}
             <div className="h-full flex flex-col bg-card border border-border rounded-lg shadow-lg overflow-hidden" style={{ margin: '15%' }}>
               {/* Header Bar - IDE Style */}
