@@ -1295,12 +1295,12 @@ export default function PromptPlayground() {
           // Use OmniAssistant/PersonalAssistant for conversational responses
           // Include playground context: current files, project state, errors
           // OPTIMIZED: Only send essential files with compressed content to save tokens/bandwidth
-          const optimizeFiles = (files: typeof response?.files) => {
-            if (!files || files.length === 0) return [];
+          const optimizeFileContents = (fileList: GeneratedFile[] | undefined) => {
+            if (!fileList || fileList.length === 0) return [];
             
             // Prioritize files by importance (code files first, then configs, then others)
             const priorityOrder = ['.tsx', '.ts', '.jsx', '.js', '.css', '.json', '.md', '.html'];
-            const sortedFiles = [...files].sort((a, b) => {
+            const sortedFiles = [...fileList].sort((a, b) => {
               const aExt = '.' + a.path.split('.').pop()?.toLowerCase();
               const bExt = '.' + b.path.split('.').pop()?.toLowerCase();
               const aPriority = priorityOrder.indexOf(aExt);
@@ -1333,7 +1333,7 @@ export default function PromptPlayground() {
             filesCount: response?.files?.length || 0,
             filePaths: response?.files?.map(f => f.path) || [],
             // Optimized: Only essential files with compressed content
-            files: optimizeFiles(response?.files),
+            files: optimizeFileContents(response?.files),
             hasLivePreview: !!livePreviewUrl,
             currentComponent: currentComponentName || 'None',
             recentErrors: error ? [error] : [],
@@ -2840,18 +2840,57 @@ export default function PromptPlayground() {
 
         {/* Main Editor Area - Reduced to 50% and positioned top-left */}
         <div className="flex-1 min-h-0 relative">
-          <div className="absolute top-0 left-0 w-1/2 h-1/2 overflow-hidden border-r border-b border-border">
-              {/* Show Editor - Always visible, updates in real-time as files are generated */}
+          <div className="absolute top-0 left-0 w-1/2 h-1/2 overflow-hidden border-r border-b border-border bg-background">
+            {/* IDE-like Frame with Header Bar */}
+            <div className="h-full flex flex-col bg-card border border-border rounded-lg shadow-lg overflow-hidden" style={{ margin: '15%' }}>
+              {/* Header Bar - IDE Style */}
               {typeof response === 'object' &&
                response?.type === 'component' &&
-                      response.files &&
-                      response.files[selectedFileIndex] ? (
-                        <Editor
-                          height="100%"
-                          defaultLanguage={editorLanguage}
-                          language={editorLanguage}
-                          value={response.files[selectedFileIndex].content}
-                          theme={editorTheme}
+               response.files &&
+               response.files[selectedFileIndex] ? (
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <FileCode className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">
+                      {response.files[selectedFileIndex].path}
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      {editorLanguage}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* IDE-style dots (macOS window controls) */}
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-500/60"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-500/60"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500/60"></div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <Code className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      No file selected
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Editor Container */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {/* Show Editor - Always visible, updates in real-time as files are generated */}
+                {typeof response === 'object' &&
+                 response?.type === 'component' &&
+                        response.files &&
+                        response.files[selectedFileIndex] ? (
+                          <Editor
+                            height="100%"
+                            defaultLanguage={editorLanguage}
+                            language={editorLanguage}
+                            value={response.files[selectedFileIndex].content}
+                            theme={editorTheme}
                           onChange={(value) => {
                             // Update the file content in local state
                             if (value !== undefined && response?.files) {
@@ -2885,15 +2924,17 @@ export default function PromptPlayground() {
                       enabled: true
                     }
                           }}
-                        />
-                      ) : !isLoading && (
-                        <EmptyState
-                          icon={FileCode}
-                          title="No File Selected"
-                          description="Select a file from the explorer to view and edit its code. Generate a component to get started."
-                          className="h-full"
-                        />
-                      )}
+                          />
+                        ) : !isLoading && (
+                          <EmptyState
+                            icon={FileCode}
+                            title="No File Selected"
+                            description="Select a file from the explorer to view and edit its code. Generate a component to get started."
+                            className="h-full"
+                          />
+                        )}
+              </div>
+            </div>
           </div>
         </div>
               </div>
