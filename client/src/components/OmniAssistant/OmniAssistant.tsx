@@ -74,6 +74,16 @@ export function OmniAssistant() {
     }
   };
 
+  const handleSuggestionClick = async (suggestion: string) => {
+    if (isLoading) return;
+    
+    // Send the suggestion as a message
+    await sendMessage(suggestion, {
+      currentPage: window.location.pathname,
+      workspaceId: currentSession?.id as number | undefined,
+    });
+  };
+
   return (
     <>
       <AnimatePresence>
@@ -195,7 +205,11 @@ export function OmniAssistant() {
                 ) : (
                   <div className="space-y-4">
                     {messages.map((msg, idx) => (
-                      <MessageBubble key={idx} message={msg} />
+                      <MessageBubble 
+                        key={idx} 
+                        message={msg} 
+                        onSuggestionClick={handleSuggestionClick}
+                      />
                     ))}
                     <div ref={messagesEndRef} />
                   </div>
@@ -350,7 +364,13 @@ function EmptyState() {
   );
 }
 
-function MessageBubble({ message }: { message: OmniAssistantMessage }) {
+function MessageBubble({ 
+  message, 
+  onSuggestionClick 
+}: { 
+  message: OmniAssistantMessage;
+  onSuggestionClick?: (suggestion: string) => void;
+}) {
   const isUser = message.role === 'user';
 
   return (
@@ -395,7 +415,12 @@ function MessageBubble({ message }: { message: OmniAssistantMessage }) {
             <p className="text-xs text-muted-foreground">Suggestions:</p>
             <div className="flex flex-wrap gap-1">
               {message.suggestions.map((suggestion, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs cursor-pointer hover:bg-secondary/80">
+                <Badge 
+                  key={idx} 
+                  variant="secondary" 
+                  className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                  onClick={() => onSuggestionClick?.(suggestion)}
+                >
                   {suggestion}
                 </Badge>
               ))}
