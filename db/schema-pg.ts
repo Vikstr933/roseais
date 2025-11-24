@@ -74,6 +74,12 @@ export const workspaces = pgTable('workspaces', {
   inviteCode: text('invite_code').unique(),
   settings: jsonb('settings').default({}),
   lastActivity: timestamp('last_activity').defaultNow(),
+  // Deployment tracking fields
+  githubUrl: text('github_url'),
+  vercelUrl: text('vercel_url'),
+  deploymentId: text('deployment_id'),
+  githubRepoId: integer('github_repo_id'), // GitHub repository ID for Vercel integration
+  deploymentStatus: text('deployment_status').default('not_deployed'), // not_deployed, building, ready, error
 });
 
 export const sessions = pgTable('sessions', {

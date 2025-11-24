@@ -14,6 +14,7 @@ const deploymentConfigSchema = z.object({
   customDomain: z.string().optional(),
   envVars: z.record(z.string()).optional(),
   framework: z.enum(['vite', 'nextjs', 'react']),
+  workspaceId: z.number().optional(), // Optional workspace ID for tracking deployments
   files: z.array(z.object({
     path: z.string(),
     content: z.string(),
@@ -51,6 +52,7 @@ router.post('/deploy', authenticateUser, async (req, res) => {
       customDomain: validatedData.customDomain,
       envVars: validatedData.envVars,
       framework: validatedData.framework,
+      workspaceId: validatedData.workspaceId, // Include workspaceId if provided
     };
 
     // Start deployment

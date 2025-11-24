@@ -252,7 +252,7 @@ export function OmniAssistant() {
             exit={{ y: 100, opacity: 0 }}
             className="fixed bottom-6 right-6 z-[48]"
           >
-            <Card className="w-[90vw] max-w-[420px] h-[70vh] max-h-[600px] md:max-w-[480px] shadow-2xl flex flex-col">
+            <Card className="w-[95vw] max-w-[800px] h-[85vh] max-h-[900px] md:max-w-[900px] shadow-2xl flex flex-col">
               <CardHeader className="flex flex-row items-center justify-between py-2 px-3 border-b">
                 <div className="flex items-center gap-1.5">
                   <Bot className="h-4 w-4 text-primary" />

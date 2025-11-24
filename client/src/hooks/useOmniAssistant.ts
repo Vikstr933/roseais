@@ -45,17 +45,65 @@ export interface OmniAssistantFeatures {
   useContextEngine?: boolean;
 }
 
+const STORAGE_KEY = 'omniassistant_messages';
+const STORAGE_KEY_FEATURES = 'omniassistant_features';
+
 export function useOmniAssistant() {
   const { toast } = useToast();
-  const [messages, setMessages] = useState<OmniAssistantMessage[]>([]);
+  const [messages, setMessages] = useState<OmniAssistantMessage[]>(() => {
+    // Restore messages from localStorage on mount
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Convert timestamp strings back to Date objects
+        return parsed.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to restore messages from localStorage:', error);
+    }
+    return [];
+  });
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [preferences, setPreferences] = useState<UserPreference[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [features, setFeatures] = useState<OmniAssistantFeatures>({
-    persistConversation: false,
-    generateInsights: false,
-    useContextEngine: false,
+  const [features, setFeatures] = useState<OmniAssistantFeatures>(() => {
+    // Restore features from localStorage
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_FEATURES);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (error) {
+      console.error('Failed to restore features from localStorage:', error);
+    }
+    return {
+      persistConversation: false,
+      generateInsights: false,
+      useContextEngine: false,
+    };
   });
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch (error) {
+      console.error('Failed to persist messages to localStorage:', error);
+    }
+  }, [messages]);
+
+  // Persist features to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_FEATURES, JSON.stringify(features));
+    } catch (error) {
+      console.error('Failed to persist features to localStorage:', error);
+    }
+  }, [features]);
 
   /**
    * Send a message to OmniAssistant

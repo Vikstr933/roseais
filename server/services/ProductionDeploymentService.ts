@@ -14,6 +14,7 @@ export interface DeploymentConfig {
   customDomain?: string;
   envVars?: Record<string, string>;
   framework: 'vite' | 'nextjs' | 'react';
+  workspaceId?: number; // Optional workspace ID to track deployment
 }
 
 export interface DeploymentResult {
@@ -57,30 +58,70 @@ export class ProductionDeploymentService {
 
   /**
    * Complete deployment pipeline: GitHub repo + Vercel deployment
+   * Checks for existing deployment and updates instead of creating new one
    */
   async deployToProduction(
     files: GeneratedFile[],
     config: DeploymentConfig,
     userId: string
   ): Promise<DeploymentResult> {
-    const deploymentId = `${config.projectName}-${Date.now()}`;
+    let deploymentId = `${config.projectName}-${Date.now()}`;
+    let existingDeployment: any = null;
 
     try {
+      // Check if workspace already has a deployment
+      if (config.workspaceId) {
+        const workspace = await db.select().from(workspaces).where(eq(workspaces.id, config.workspaceId)).limit(1);
+        if (workspace.length > 0 && workspace[0].githubUrl && workspace[0].vercelUrl) {
+          existingDeployment = workspace[0];
+          deploymentId = workspace[0].deploymentId || deploymentId;
+          this.logger.info('ProductionDeploymentService', 'Found existing deployment, will update', {
+            workspaceId: config.workspaceId,
+            githubUrl: workspace[0].githubUrl,
+            vercelUrl: workspace[0].vercelUrl,
+          });
+        }
+      }
+
       this.logger.info('ProductionDeploymentService', 'Starting production deployment', {
         deploymentId,
         projectName: config.projectName,
         fileCount: files.length,
         framework: config.framework,
+        isUpdate: !!existingDeployment,
       });
 
-      // Step 1: Create GitHub repository
-      const repo = await this.createGitHubRepo(config, files);
+      let repo: GitHubRepo;
+      let vercelDeployment: { url: string; deploymentId: string };
 
-      // Step 2: Deploy to Vercel
-      const vercelDeployment = await this.deployToVercel(repo, config);
+      if (existingDeployment) {
+        // Update existing deployment
+        // Extract repo name from GitHub URL
+        const githubUrlMatch = existingDeployment.githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+        if (githubUrlMatch) {
+          const repoOwner = githubUrlMatch[1];
+          const repoName = githubUrlMatch[2];
+          
+          // Update files in existing GitHub repo
+          repo = await this.updateGitHubRepo(repoOwner, repoName, files);
+          
+          // Trigger new Vercel deployment
+          vercelDeployment = await this.triggerVercelRedeploy(
+            existingDeployment.githubRepoId || repo.id,
+            repo.defaultBranch,
+            config
+          );
+        } else {
+          throw new Error('Invalid GitHub URL in existing deployment');
+        }
+      } else {
+        // Create new deployment
+        repo = await this.createGitHubRepo(config, files);
+        vercelDeployment = await this.deployToVercel(repo, config);
+      }
 
-      // Step 3: Store deployment info in database
-      await this.saveDeploymentRecord(deploymentId, repo, vercelDeployment, userId);
+      // Step 3: Store/update deployment info in database
+      await this.saveDeploymentRecord(deploymentId, repo, vercelDeployment, userId, config.workspaceId);
 
       const result: DeploymentResult = {
         success: true,
@@ -536,27 +577,155 @@ MIT License - feel free to use this project as you wish!
   }
 
   /**
+   * Update existing GitHub repository with new files
+   */
+  private async updateGitHubRepo(
+    owner: string,
+    repoName: string,
+    files: GeneratedFile[]
+  ): Promise<GitHubRepo> {
+    if (!this.octokit) {
+      throw new Error('GitHub token not configured');
+    }
+
+    const { data: repo } = await this.octokit.repos.get({
+      owner,
+      repo: repoName,
+    });
+
+    const defaultBranch = repo.default_branch || 'main';
+
+    // Update all files
+    for (const file of files) {
+      const content = Buffer.from(file.content).toString('base64');
+      
+      // Get existing file SHA if it exists
+      let fileSha: string | undefined;
+      try {
+        const { data: existingFile } = await this.octokit.repos.getContent({
+          owner,
+          repo: repoName,
+          path: file.path,
+          ref: defaultBranch,
+        });
+        
+        if (!Array.isArray(existingFile) && existingFile.type === 'file') {
+          fileSha = existingFile.sha;
+        }
+      } catch (error: any) {
+        if (error.status !== 404) {
+          this.logger.warn('ProductionDeploymentService', `Error checking file ${file.path}`, { error: error.message });
+        }
+      }
+
+      await this.octokit.repos.createOrUpdateFileContents({
+        owner,
+        repo: repoName,
+        path: file.path,
+        message: fileSha ? `Update ${file.path}` : `Add ${file.path}`,
+        content,
+        sha: fileSha,
+        branch: defaultBranch,
+      });
+    }
+
+    return {
+      name: repo.name,
+      fullName: repo.full_name,
+      htmlUrl: repo.html_url,
+      cloneUrl: repo.clone_url,
+      defaultBranch: repo.default_branch || 'main',
+      id: repo.id,
+    };
+  }
+
+  /**
+   * Trigger Vercel redeployment for existing project
+   */
+  private async triggerVercelRedeploy(
+    repoId: number,
+    branch: string,
+    config: DeploymentConfig
+  ): Promise<{ url: string; deploymentId: string }> {
+    if (!this.vercelToken) {
+      throw new Error('Vercel token not configured');
+    }
+
+    const projectName = this.sanitizeVercelProjectName(config.repoName);
+
+    const deploymentResponse = await fetch('https://api.vercel.com/v13/deployments', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.vercelToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: projectName,
+        gitSource: {
+          type: 'github',
+          repoId: repoId,
+          ref: branch,
+        },
+        projectSettings: {
+          framework: config.framework === 'nextjs' ? 'nextjs' : 'vite',
+          buildCommand: this.getBuildCommand(config.framework),
+          outputDirectory: this.getOutputDirectory(config.framework),
+        },
+      }),
+    });
+
+    if (!deploymentResponse.ok) {
+      const error = await deploymentResponse.text();
+      throw new Error(`Failed to trigger Vercel redeployment: ${error}`);
+    }
+
+    const deployment = await deploymentResponse.json();
+
+    return {
+      url: `https://${deployment.url}`,
+      deploymentId: deployment.uid,
+    };
+  }
+
+  /**
    * Save deployment record to database
    */
   private async saveDeploymentRecord(
     deploymentId: string,
     repo: GitHubRepo,
     vercelDeployment: { url: string; deploymentId: string },
-    userId: string
+    userId: string,
+    workspaceId?: number
   ): Promise<void> {
     try {
-      // Store deployment info in a new table or extend existing workspace
-      const deploymentData = {
-        deploymentId,
-        githubUrl: repo.htmlUrl,
-        vercelUrl: vercelDeployment.url,
-        status: 'ready' as const,
-        createdAt: new Date(),
-        userId,
-      };
+      if (workspaceId) {
+        // Update workspace record with deployment info
+        await db.update(workspaces)
+          .set({
+            githubUrl: repo.htmlUrl,
+            vercelUrl: vercelDeployment.url,
+            deploymentId: deploymentId,
+            githubRepoId: repo.id,
+            deploymentStatus: 'ready',
+            updatedAt: new Date(),
+          })
+          .where(eq(workspaces.id, workspaceId));
 
-      // For now, log the deployment data
-      this.logger.info('ProductionDeploymentService', 'Deployment record saved', deploymentData);
+        this.logger.info('ProductionDeploymentService', 'Deployment record updated in workspace', {
+          workspaceId,
+          deploymentId,
+          githubUrl: repo.htmlUrl,
+          vercelUrl: vercelDeployment.url,
+        });
+      } else {
+        // Log deployment data (no workspace to update)
+        this.logger.info('ProductionDeploymentService', 'Deployment record saved', {
+          deploymentId,
+          githubUrl: repo.htmlUrl,
+          vercelUrl: vercelDeployment.url,
+          userId,
+        });
+      }
     } catch (error) {
       this.logger.error('ProductionDeploymentService', 'Failed to save deployment record', error as Error);
     }
