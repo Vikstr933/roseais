@@ -464,6 +464,61 @@ function MessageBubble({
 }) {
   const isUser = message.role === 'user';
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const animationRef = useRef<number | null>(null);
+  const currentIndexRef = useRef(0);
+  const lastUpdateRef = useRef(Date.now());
+  const speedRef = useRef(30); // characters per second for typewriter effect
+
+  // Typewriter effect for assistant messages
+  useEffect(() => {
+    if (isUser) {
+      // User messages show immediately
+      setDisplayedContent(message.content);
+      return;
+    }
+
+    // Reset when message content changes
+    if (message.content && message.content !== displayedContent) {
+      setIsTyping(true);
+      currentIndexRef.current = 0;
+      lastUpdateRef.current = Date.now();
+      setDisplayedContent('');
+
+      const animate = () => {
+        const now = Date.now();
+        const elapsed = now - lastUpdateRef.current;
+        const charsToAdd = Math.floor((elapsed / 1000) * speedRef.current);
+
+        if (charsToAdd > 0) {
+          const newIndex = Math.min(
+            currentIndexRef.current + charsToAdd,
+            message.content.length
+          );
+
+          setDisplayedContent(message.content.substring(0, newIndex));
+          currentIndexRef.current = newIndex;
+          lastUpdateRef.current = now;
+
+          if (newIndex >= message.content.length) {
+            setIsTyping(false);
+            return;
+          }
+        }
+
+        animationRef.current = requestAnimationFrame(animate);
+      };
+
+      animationRef.current = requestAnimationFrame(animate);
+
+      return () => {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+        }
+      };
+    }
+  }, [message.content, isUser]);
 
   // Extract code blocks with file paths from message
   const extractCodeBlocks = (content: string): Array<{ path: string; content: string; language?: string }> => {
@@ -534,9 +589,12 @@ function MessageBubble({
           )}
         >
           {isUser ? (
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap text-primary-foreground">{message.content}</p>
           ) : (
-            <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+            <div className="text-sm prose prose-sm dark:prose-invert max-w-none text-foreground">
+              {isTyping && (
+                <span className="inline-block w-2 h-4 bg-foreground animate-pulse ml-1" />
+              )}
               <ReactMarkdown
                 components={{
                   code({ node, inline, className, children, ...props }) {
@@ -597,7 +655,7 @@ function MessageBubble({
                   ),
                 }}
               >
-                {message.content}
+                {displayedContent || (isUser ? message.content : '')}
               </ReactMarkdown>
             </div>
           )}
