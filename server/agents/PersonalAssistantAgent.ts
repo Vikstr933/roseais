@@ -51,74 +51,120 @@ export class PersonalAssistantAgent {
   }
 
   /**
-   * Perform web search using DuckDuckGo API
+   * Perform web search using Google Custom Search API (primary) with DuckDuckGo fallback
    */
   private async performWebSearch(params: { query: string; num_results?: string }): Promise<any> {
     try {
       const numResults = parseInt(params.num_results || '3', 10);
       logger.info(`Performing web search: query="${params.query}", numResults=${numResults}`);
 
-      // Use DuckDuckGo Instant Answer API (free, no API key required)
-      // Simplify query for better results - remove extra keywords that might confuse the API
-      const simplifiedQuery = params.query
-        .replace(/\s+(adress|address|telefonnummer|phone|kontakt|contact|öppettider|hours)/gi, '')
-        .trim();
-      
-      const ddgResponse = await axios.get('https://api.duckduckgo.com/', {
-        params: {
-          q: simplifiedQuery || params.query, // Use simplified if available, otherwise original
-          format: 'json',
-          no_html: 1,
-          skip_disambig: 1
-        },
-        headers: {
-          'User-Agent': 'Elon-AI-Assistant/1.0 (https://ai-library.com; contact@ai-library.com)',
-          'Accept': 'application/json'
-        },
-        timeout: 5000
-      });
-
       const results = [];
+      let searchSource = 'Unknown';
 
-      // Add main abstract if available
-      if (ddgResponse.data.Abstract) {
-        results.push({
-          title: ddgResponse.data.Heading || params.query,
-          snippet: ddgResponse.data.Abstract,
-          url: ddgResponse.data.AbstractURL,
-          source: ddgResponse.data.AbstractSource || 'DuckDuckGo'
-        });
+      // Try Google Custom Search API first (if configured)
+      const googleApiKey = process.env.GOOGLE_CUSTOM_SEARCH_API_KEY;
+      const googleEngineId = process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID;
+
+      if (googleApiKey && googleEngineId) {
+        try {
+          logger.info(`Using Google Custom Search API for query: "${params.query}"`);
+          
+          const googleResponse = await axios.get('https://www.googleapis.com/customsearch/v1', {
+            params: {
+              key: googleApiKey,
+              cx: googleEngineId,
+              q: params.query,
+              num: Math.min(numResults, 10) // Google allows max 10 results per request
+            },
+            timeout: 5000
+          });
+
+          if (googleResponse.data && googleResponse.data.items && Array.isArray(googleResponse.data.items)) {
+            for (const item of googleResponse.data.items.slice(0, numResults)) {
+              results.push({
+                title: item.title || '',
+                snippet: item.snippet || '',
+                url: item.link || '',
+                source: 'Google'
+              });
+            }
+            searchSource = 'Google';
+            logger.info(`Google Custom Search completed: found ${results.length} results`);
+          }
+        } catch (googleError) {
+          const errorMsg = googleError instanceof Error ? googleError.message : String(googleError);
+          logger.warn(`Google Custom Search failed: ${errorMsg}, falling back to DuckDuckGo`);
+        }
+      } else {
+        logger.info(`Google Custom Search API not configured, using DuckDuckGo fallback`);
       }
 
-      // Add related topics
-      if (ddgResponse.data.RelatedTopics && Array.isArray(ddgResponse.data.RelatedTopics)) {
-        for (const topic of ddgResponse.data.RelatedTopics.slice(0, numResults - results.length)) {
-          if (topic.Text && topic.FirstURL) {
+      // Fallback to DuckDuckGo if Google didn't return results
+      if (results.length === 0) {
+        try {
+          logger.info(`Using DuckDuckGo Instant Answer API for query: "${params.query}"`);
+          
+          // Simplify query for better results - remove extra keywords that might confuse the API
+          const simplifiedQuery = params.query
+            .replace(/\s+(adress|address|telefonnummer|phone|kontakt|contact|öppettider|hours)/gi, '')
+            .trim();
+          
+          const ddgResponse = await axios.get('https://api.duckduckgo.com/', {
+            params: {
+              q: simplifiedQuery || params.query,
+              format: 'json',
+              no_html: 1,
+              skip_disambig: 1
+            },
+            headers: {
+              'User-Agent': 'Elon-AI-Assistant/1.0 (https://ai-library.com; contact@ai-library.com)',
+              'Accept': 'application/json'
+            },
+            timeout: 5000
+          });
+
+          // Add main abstract if available
+          if (ddgResponse.data.Abstract) {
             results.push({
-              title: topic.Text.split(' - ')[0],
-              snippet: topic.Text,
-              url: topic.FirstURL,
+              title: ddgResponse.data.Heading || params.query,
+              snippet: ddgResponse.data.Abstract,
+              url: ddgResponse.data.AbstractURL,
               source: 'DuckDuckGo'
             });
           }
+
+          // Add related topics
+          if (ddgResponse.data.RelatedTopics && Array.isArray(ddgResponse.data.RelatedTopics)) {
+            for (const topic of ddgResponse.data.RelatedTopics.slice(0, numResults - results.length)) {
+              if (topic.Text && topic.FirstURL) {
+                results.push({
+                  title: topic.Text.split(' - ')[0],
+                  snippet: topic.Text,
+                  url: topic.FirstURL,
+                  source: 'DuckDuckGo'
+                });
+              }
+            }
+          }
+          
+          searchSource = 'DuckDuckGo';
+          logger.info(`DuckDuckGo search completed: found ${results.length} results`);
+        } catch (ddgError) {
+          const errorMsg = ddgError instanceof Error ? ddgError.message : String(ddgError);
+          logger.warn(`DuckDuckGo fallback also failed: ${errorMsg}`);
         }
       }
-      
-      logger.info(`DuckDuckGo search completed: found ${results.length} results for query "${params.query}"`);
 
-      // Note: Wikipedia API is disabled as fallback due to strict User-Agent requirements
-      // DuckDuckGo Instant Answer API is the primary search method
-      // If no results found, we'll return empty results with appropriate message
-
-      logger.info(`Web search completed: query="${params.query}", resultsFound=${results.length}`);
+      logger.info(`Web search completed: query="${params.query}", resultsFound=${results.length}, source=${searchSource}`);
 
       return {
         query: params.query,
         results: results.slice(0, numResults),
         timestamp: new Date().toISOString(),
         success: true,
+        source: searchSource,
         message: results.length > 0 
-          ? `Found ${results.length} result(s) for "${params.query}"` 
+          ? `Found ${results.length} result(s) for "${params.query}" using ${searchSource}` 
           : `No specific results found for "${params.query}". Consider refining the search query.`
       };
     } catch (error) {
