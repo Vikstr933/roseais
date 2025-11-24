@@ -8,6 +8,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +46,7 @@ export function OmniAssistant() {
   const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
   const { currentSession, updateGeneratedFiles } = useWorkspace();
   const { sessionToken } = useAuth();
+  const [, setLocation] = useLocation();
 
   const {
     messages,
@@ -285,32 +287,29 @@ export function OmniAssistant() {
       
       const prompt = `Please apply the following code changes to match the current app's design system and patterns. Analyze the existing codebase first to understand the design patterns, component structure, styling approach, and state management patterns, then apply these changes accordingly:\n\nFiles to update:\n${fileDescriptions}\n\nCode to apply:\n\n${files.map(f => `**${f.path}**\n\`\`\`typescript\n${f.content}\n\`\`\``).join('\n\n')}\n\nIMPORTANT: Make sure the changes match the existing design patterns, component structure, styling approach (Tailwind classes, CSS modules, etc.), state management patterns, import patterns, and UI component library being used in the current project.`;
       
-      // Get existing files for context
-      const existingFiles = currentSession.generatedFiles || [];
+      // Store the prompt in localStorage so playground can pick it up
+      const promptKey = 'omniassistant_pending_prompt';
+      const promptData = {
+        prompt,
+        timestamp: Date.now(),
+        source: 'omniassistant',
+      };
+      localStorage.setItem(promptKey, JSON.stringify(promptData));
       
-      // Call playground generation API directly
-      const response = await apiFetch('/api/prompts/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(sessionToken && { 'Authorization': `Bearer ${sessionToken}` }),
-        },
-        body: JSON.stringify({
-          userPrompt: prompt,
-          model: 'claude-sonnet-4-5-20250929',
-          temperature: 0.7,
-          orchestration: true,
-          incrementalGeneration: true,
-          existingProjectFiles: existingFiles.map(f => ({
-            path: f.path,
-            content: f.content,
-          })),
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to trigger playground generation');
+      // Navigate to playground if not already there
+      const currentPath = window.location.pathname;
+      if (!currentPath.startsWith('/playground')) {
+        const projectId = currentSession?.id;
+        const playgroundPath = projectId ? `/playground/${projectId}` : '/playground';
+        setLocation(playgroundPath);
+        
+        // Wait a bit for navigation, then dispatch event
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
+        }, 500);
+      } else {
+        // Already on playground - dispatch event immediately
+        window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
       }
 
       // Show success message
@@ -319,9 +318,6 @@ export function OmniAssistant() {
         workspaceId: currentSession?.id as number | undefined,
         playgroundContext: buildPlaygroundContext(),
       });
-
-      // Note: The playground will handle the SSE stream and update files automatically
-      // The user will see the generation happening in the playground UI
     } catch (error) {
       console.error('Failed to trigger playground generation:', error);
       await sendMessage(`❌ Failed to send code changes to playground: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or apply changes manually.`, {
