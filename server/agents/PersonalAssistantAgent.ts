@@ -59,15 +59,21 @@ export class PersonalAssistantAgent {
       logger.info(`Performing web search: query="${params.query}", numResults=${numResults}`);
 
       // Use DuckDuckGo Instant Answer API (free, no API key required)
+      // Simplify query for better results - remove extra keywords that might confuse the API
+      const simplifiedQuery = params.query
+        .replace(/\s+(adress|address|telefonnummer|phone|kontakt|contact|öppettider|hours)/gi, '')
+        .trim();
+      
       const ddgResponse = await axios.get('https://api.duckduckgo.com/', {
         params: {
-          q: params.query,
+          q: simplifiedQuery || params.query, // Use simplified if available, otherwise original
           format: 'json',
           no_html: 1,
           skip_disambig: 1
         },
         headers: {
-          'User-Agent': 'Elon-AI-Assistant/1.0 (https://ai-library.com; contact@ai-library.com)'
+          'User-Agent': 'Elon-AI-Assistant/1.0 (https://ai-library.com; contact@ai-library.com)',
+          'Accept': 'application/json'
         },
         timeout: 5000
       });
@@ -97,40 +103,12 @@ export class PersonalAssistantAgent {
           }
         }
       }
+      
+      logger.info(`DuckDuckGo search completed: found ${results.length} results for query "${params.query}"`);
 
-      // Fallback: Use alternative search if no results
-      if (results.length === 0) {
-        logger.info(`No DuckDuckGo results, trying alternative search for: ${params.query}`);
-        
-        // Try Wikipedia API as fallback with proper User-Agent
-        try {
-          const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
-            params: {
-              action: 'opensearch',
-              search: params.query,
-              limit: numResults,
-              format: 'json'
-            },
-            headers: {
-              'User-Agent': 'Elon-AI-Assistant/1.0 (https://ai-library.com; contact@ai-library.com)'
-            },
-            timeout: 5000
-          });
-
-          if (wikiResponse.data && wikiResponse.data[1] && wikiResponse.data[1].length > 0) {
-            for (let i = 0; i < wikiResponse.data[1].length; i++) {
-              results.push({
-                title: wikiResponse.data[1][i],
-                snippet: wikiResponse.data[2][i] || '',
-                url: wikiResponse.data[3][i],
-                source: 'Wikipedia'
-              });
-            }
-          }
-        } catch (wikiError) {
-          logger.warn(`Wikipedia fallback also failed: ${wikiError instanceof Error ? wikiError.message : String(wikiError)}`);
-        }
-      }
+      // Note: Wikipedia API is disabled as fallback due to strict User-Agent requirements
+      // DuckDuckGo Instant Answer API is the primary search method
+      // If no results found, we'll return empty results with appropriate message
 
       logger.info(`Web search completed: query="${params.query}", resultsFound=${results.length}`);
 
