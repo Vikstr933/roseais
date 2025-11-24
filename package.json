@@ -27,6 +27,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
     "@aws-sdk/client-s3": "^3.901.0",
+    "axios": "^1.7.7",
     "@aws-sdk/s3-request-presigner": "^3.901.0",
     "@babel/parser": "^7.28.5",
     "@babel/standalone": "^7.26.4",
