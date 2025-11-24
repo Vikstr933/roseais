@@ -158,36 +158,57 @@ export class ProductionDeploymentService {
       auto_init: false, // Don't create initial README to avoid SHA requirement
     });
 
+    // Determine default branch (usually 'main' for new repos)
+    const defaultBranch = repo.default_branch || 'main';
+
+    // Check if repo has any commits (empty repos don't have branches yet)
+    let repoHasCommits = false;
+    try {
+      await this.octokit.repos.getBranch({
+        owner: repo.owner.login,
+        repo: repo.name,
+        branch: defaultBranch,
+      });
+      repoHasCommits = true;
+    } catch (error: any) {
+      // Branch doesn't exist (empty repo), that's fine
+      repoHasCommits = false;
+    }
+
     // Create all files in the repository
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const content = Buffer.from(file.content).toString('base64');
 
-      // Check if file exists to get SHA for updates
+      // Only check for existing files if repo has commits (branch exists)
       let fileSha: string | undefined;
-      try {
-        const { data: existingFile } = await this.octokit.repos.getContent({
-          owner: repo.owner.login,
-          repo: repo.name,
-          path: file.path,
-          ref: repo.default_branch,
-        });
-        
-        if (Array.isArray(existingFile)) {
-          // It's a directory, skip SHA
+      if (repoHasCommits) {
+        try {
+          const { data: existingFile } = await this.octokit.repos.getContent({
+            owner: repo.owner.login,
+            repo: repo.name,
+            path: file.path,
+            ref: defaultBranch,
+          });
+          
+          if (Array.isArray(existingFile)) {
+            // It's a directory, skip SHA
+            fileSha = undefined;
+          } else if (existingFile.type === 'file') {
+            // File exists, get its SHA
+            fileSha = existingFile.sha;
+          }
+        } catch (error: any) {
+          // File doesn't exist (404), that's fine - we'll create it
+          if (error.status !== 404) {
+            this.logger.warn('ProductionDeploymentService', `Error checking file ${file.path}`, { error: error.message });
+          }
           fileSha = undefined;
-        } else if (existingFile.type === 'file') {
-          // File exists, get its SHA
-          fileSha = existingFile.sha;
         }
-      } catch (error: any) {
-        // File doesn't exist (404), that's fine - we'll create it
-        if (error.status !== 404) {
-          this.logger.warn('ProductionDeploymentService', `Error checking file ${file.path}`, { error: error.message });
-        }
-        fileSha = undefined;
       }
 
-      // Create or update file with SHA if it exists
+      // Create or update file
+      // For empty repos, first file will create the branch automatically
       try {
         await this.octokit.repos.createOrUpdateFileContents({
           owner: repo.owner.login,
@@ -196,9 +217,14 @@ export class ProductionDeploymentService {
           message: fileSha ? `Update ${file.path}` : `Add ${file.path}`,
           content,
           sha: fileSha, // Include SHA if file exists, undefined for new files
-          branch: repo.default_branch || 'main', // Explicitly specify branch
+          branch: defaultBranch, // Explicitly specify branch
         });
         this.logger.info('ProductionDeploymentService', `File created: ${file.path}`);
+        
+        // After first file, repo now has commits
+        if (!repoHasCommits && i === 0) {
+          repoHasCommits = true;
+        }
       } catch (error: any) {
         this.logger.error('ProductionDeploymentService', `Failed to create file ${file.path}`, error as Error);
         throw new Error(`Failed to create file ${file.path}: ${error.message}`);
