@@ -15,6 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Bot,
   Send,
@@ -42,6 +44,7 @@ export function OmniAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
   const { currentSession, updateGeneratedFiles } = useWorkspace();
+  const { sessionToken } = useAuth();
 
   const {
     messages,
@@ -243,7 +246,7 @@ export function OmniAssistant() {
     return `${existingContent.trim()}\n\n${newCode.trim()}`;
   };
 
-  // Handle applying file changes - Instead of directly applying, send to playground AI
+  // Handle applying file changes - Trigger playground AI code generation directly
   const handleApplyChanges = async (files: Array<{ path: string; content: string }>) => {
     if (!currentSession) return;
     
@@ -272,22 +275,61 @@ export function OmniAssistant() {
       return;
     }
     
-    // On playground page - send suggestion to playground AI instead
-    // Build a prompt that asks the playground AI to apply these changes
-    const fileDescriptions = files.map(f => {
-      const lines = f.content.split('\n').length;
-      return `- ${f.path} (${lines} lines)`;
-    }).join('\n');
-    
-    const prompt = `Please apply the following code changes to match the current app's design system and patterns:\n\n${fileDescriptions}\n\nCode to apply:\n\n${files.map(f => `**${f.path}**\n\`\`\`typescript\n${f.content}\n\`\`\``).join('\n\n')}\n\nMake sure the changes match the existing design patterns, component structure, and styling approach used in the current project.`;
-    
-    // Send this as a message to trigger playground generation
-    const playgroundContext = buildPlaygroundContext();
-    await sendMessage(prompt, {
-      currentPage: window.location.pathname,
-      workspaceId: currentSession?.id as number | undefined,
-      playgroundContext,
-    });
+    // On playground page - trigger playground AI code generation directly
+    try {
+      // Build a prompt that asks the playground AI to apply these changes
+      const fileDescriptions = files.map(f => {
+        const lines = f.content.split('\n').length;
+        return `- ${f.path} (${lines} lines)`;
+      }).join('\n');
+      
+      const prompt = `Please apply the following code changes to match the current app's design system and patterns. Analyze the existing codebase first to understand the design patterns, component structure, styling approach, and state management patterns, then apply these changes accordingly:\n\nFiles to update:\n${fileDescriptions}\n\nCode to apply:\n\n${files.map(f => `**${f.path}**\n\`\`\`typescript\n${f.content}\n\`\`\``).join('\n\n')}\n\nIMPORTANT: Make sure the changes match the existing design patterns, component structure, styling approach (Tailwind classes, CSS modules, etc.), state management patterns, import patterns, and UI component library being used in the current project.`;
+      
+      // Get existing files for context
+      const existingFiles = currentSession.generatedFiles || [];
+      
+      // Call playground generation API directly
+      const response = await apiFetch('/api/prompts/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken && { 'Authorization': `Bearer ${sessionToken}` }),
+        },
+        body: JSON.stringify({
+          userPrompt: prompt,
+          model: 'claude-sonnet-4-5-20250929',
+          temperature: 0.7,
+          orchestration: true,
+          incrementalGeneration: true,
+          existingProjectFiles: existingFiles.map(f => ({
+            path: f.path,
+            content: f.content,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to trigger playground generation');
+      }
+
+      // Show success message
+      await sendMessage('✅ Code changes have been sent to the playground AI. The playground will now apply these changes matching your app\'s design system.', {
+        currentPage: window.location.pathname,
+        workspaceId: currentSession?.id as number | undefined,
+        playgroundContext: buildPlaygroundContext(),
+      });
+
+      // Note: The playground will handle the SSE stream and update files automatically
+      // The user will see the generation happening in the playground UI
+    } catch (error) {
+      console.error('Failed to trigger playground generation:', error);
+      await sendMessage(`❌ Failed to send code changes to playground: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or apply changes manually.`, {
+        currentPage: window.location.pathname,
+        workspaceId: currentSession?.id as number | undefined,
+        playgroundContext: buildPlaygroundContext(),
+      });
+    }
   };
 
   return (
