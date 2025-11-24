@@ -395,13 +395,6 @@ export function useOmniAssistant() {
     [toast]
   );
 
-  /**
-   * Toggle feature flags
-   */
-  const toggleFeature = useCallback((feature: keyof OmniAssistantFeatures, enabled: boolean) => {
-    setFeatures(prev => ({ ...prev, [feature]: enabled }));
-  }, []);
-
   return {
     // State
     messages,
@@ -419,6 +412,5 @@ export function useOmniAssistant() {
     fetchPreferences,
     getDailySummary,
     clearSession,
-    toggleFeature,
   };
 }
