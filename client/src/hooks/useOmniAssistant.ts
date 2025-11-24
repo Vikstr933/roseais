@@ -70,21 +70,11 @@ export function useOmniAssistant() {
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [preferences, setPreferences] = useState<UserPreference[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [features, setFeatures] = useState<OmniAssistantFeatures>(() => {
-    // Restore features from localStorage
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_FEATURES);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error('Failed to restore features from localStorage:', error);
-    }
-    return {
-      persistConversation: false,
-      generateInsights: false,
-      useContextEngine: false,
-    };
+  // Features are always enabled - no user control
+  const [features] = useState<OmniAssistantFeatures>({
+    persistConversation: true, // Always enabled
+    generateInsights: true, // Always enabled
+    useContextEngine: true, // Always enabled
   });
 
   // Persist messages to localStorage whenever they change

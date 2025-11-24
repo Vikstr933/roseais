@@ -48,7 +48,6 @@ export function OmniAssistant() {
     features,
     sendMessage,
     clearSession,
-    toggleFeature,
   } = useOmniAssistant();
 
   // Auto-scroll to bottom when new messages arrive
@@ -211,9 +210,7 @@ export function OmniAssistant() {
                 <div className="flex items-center gap-2">
                   <Bot className="h-5 w-5 text-primary" />
                   <CardTitle className="text-sm">OmniAssistant</CardTitle>
-                  {features.persistConversation && (
-                    <Database className="h-4 w-4 text-green-500" title="Persistent memory enabled" />
-                  )}
+                  <Database className="h-4 w-4 text-green-500" title="Persistent memory enabled" />
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -363,10 +360,10 @@ export function OmniAssistant() {
                         Save conversations to database for future reference
                       </p>
                     </div>
-                    <Switch
-                      checked={features.persistConversation || false}
-                      onCheckedChange={checked => toggleFeature('persistConversation', checked)}
-                    />
+                    <Badge variant="default" className="bg-green-500">
+                      <Database className="h-3 w-3 mr-1" />
+                      Enabled
+                    </Badge>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -376,10 +373,10 @@ export function OmniAssistant() {
                         Get proactive suggestions and insights
                       </p>
                     </div>
-                    <Switch
-                      checked={features.generateInsights || false}
-                      onCheckedChange={checked => toggleFeature('generateInsights', checked)}
-                    />
+                    <Badge variant="default" className="bg-green-500">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Enabled
+                    </Badge>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -389,10 +386,10 @@ export function OmniAssistant() {
                         Enhanced context awareness based on your activity
                       </p>
                     </div>
-                    <Switch
-                      checked={features.useContextEngine || false}
-                      onCheckedChange={checked => toggleFeature('useContextEngine', checked)}
-                    />
+                    <Badge variant="default" className="bg-green-500">
+                      <Brain className="h-3 w-3 mr-1" />
+                      Enabled
+                    </Badge>
                   </div>
                 </div>
 
