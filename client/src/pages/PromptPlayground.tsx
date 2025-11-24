@@ -442,12 +442,31 @@ export default function PromptPlayground() {
     }
   }, [currentSession?.generatedFiles]); // Only depend on generatedFiles to avoid re-runs
 
-  // Auto-scroll to bottom when chat history changes
+  // Auto-scroll to bottom when chat history changes - smooth scroll to generated content
   useEffect(() => {
     if (chatMessagesRef.current) {
-      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+      // Smooth scroll to bottom to show latest generated content
+      chatMessagesRef.current.scrollTo({
+        top: chatMessagesRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
-  }, [chatHistory]);
+  }, [chatHistory, isLoading]);
+  
+  // Also scroll when new content is being generated
+  useEffect(() => {
+    if (isLoading && chatMessagesRef.current) {
+      // Scroll to show generation status
+      setTimeout(() => {
+        if (chatMessagesRef.current) {
+          chatMessagesRef.current.scrollTo({
+            top: chatMessagesRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+    }
+  }, [isLoading]);
 
   // Handle prompt from URL (from homepage)
   useEffect(() => {
@@ -2784,16 +2803,16 @@ export default function PromptPlayground() {
                         </div>
                 </div>
 
-        {/* Main Editor Area */}
-        <div className="flex-1 min-h-0">
-          <div className="h-full min-h-0 overflow-hidden">
+        {/* Main Editor Area - Reduced to 50% and positioned top-left */}
+        <div className="flex-1 min-h-0 relative">
+          <div className="absolute top-0 left-0 w-1/2 h-1/2 overflow-hidden border-r border-b border-border">
               {/* Show Editor - Always visible, updates in real-time as files are generated */}
               {typeof response === 'object' &&
                response?.type === 'component' &&
                       response.files &&
                       response.files[selectedFileIndex] ? (
                         <Editor
-                          height="calc(100% - 0px)"
+                          height="100%"
                           defaultLanguage={editorLanguage}
                           language={editorLanguage}
                           value={response.files[selectedFileIndex].content}
@@ -2840,7 +2859,7 @@ export default function PromptPlayground() {
                           className="h-full"
                         />
                       )}
-                    </div>
+          </div>
         </div>
               </div>
             )}
