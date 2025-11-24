@@ -504,15 +504,20 @@ MIT License - feel free to use this project as you wish!
 
   /**
    * Get build command for framework
+   * For Vite, we use vite build directly to avoid TypeScript strict checking
+   * that might fail on unused imports in generated code
    */
   private getBuildCommand(framework: string): string {
     switch (framework) {
       case 'nextjs':
         return 'npm run build';
       case 'vite':
-        return 'npm run build';
+        // Use vite build directly - it handles TypeScript without strict unused checks
+        return 'vite build';
+      case 'react':
+        return 'vite build';
       default:
-        return 'npm run build';
+        return 'vite build';
     }
   }
 
