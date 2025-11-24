@@ -234,6 +234,9 @@ export default function PromptPlayground() {
   const [overallProgress, setOverallProgress] = useState<number>(0);
   const [error, setError] = useState<{ message: string; suggestion: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Track processed prompts to prevent duplicate processing
+  const processedPromptRef = useRef<string | null>(null);
 
   // Removed animation-related code - editor/preview are always visible during generation
 
@@ -2120,27 +2123,36 @@ export default function PromptPlayground() {
     }
 
     // Check for pending prompt from OmniAssistant using WorkspaceContext
+    // Only process if we have user, currentSession, and haven't processed this prompt yet
+    if (!user || !currentSession) return;
+    
     const pendingPrompt = getPendingPrompt();
     
-    if (pendingPrompt && user) {
-      console.log('📨 Playground: Received pending prompt from OmniAssistant', {
+    // Check if we have a new prompt that we haven't processed yet
+    if (pendingPrompt && pendingPrompt.prompt && pendingPrompt.prompt !== processedPromptRef.current) {
+      console.log('📨 Playground: Processing pending prompt from OmniAssistant', {
         source: pendingPrompt.source,
         promptLength: pendingPrompt.prompt.length,
+        timestamp: pendingPrompt.timestamp,
       });
+      
+      // Mark as processed IMMEDIATELY to prevent re-processing
+      processedPromptRef.current = pendingPrompt.prompt;
       
       // Set the prompt in the form
       form.setValue('userPrompt', pendingPrompt.prompt);
       
-      // Clear the pending prompt
+      // Clear the pending prompt from WorkspaceContext
       clearPendingPrompt();
       
-      // Auto-trigger generation
+      // Auto-trigger generation after a short delay
       setTimeout(() => {
         const formData = form.getValues();
+        console.log('🚀 Playground: Auto-triggering generation with prompt:', formData.userPrompt.substring(0, 100) + '...');
         generateMutation.mutate(formData);
-      }, 500);
+      }, 800);
     }
-  }, [user, form, generateMutation, getPendingPrompt, clearPendingPrompt]);
+  }, [user, currentSession]); // Simplified dependencies - only re-run when user or session changes
 
   return (
     <div className="fixed inset-0 w-full h-screen bg-background flex flex-col overflow-hidden">
