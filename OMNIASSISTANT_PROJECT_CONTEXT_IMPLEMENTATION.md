@@ -54,16 +54,25 @@ This document describes the implementation of project context awareness for Omni
 - **Location**: `client/src/components/OmniAssistant/OmniAssistant.tsx` lines ~932-951
 
 ### 7. ✅ Prompt Forwarding to Playground
-- **Mechanism**: Uses localStorage + Custom Events
+- **Mechanism**: Uses WorkspaceContext (refactored from localStorage + Custom Events)
 - **Flow**:
   1. User clicks "Send to Playground" or "Apply to Playground"
-  2. Prompt/code saved to `localStorage` with key `omniassistant_pending_prompt`
-  3. If not on playground, navigate to `/playground/:projectId`
-  4. Dispatch custom event `omniassistant-prompt-ready`
-  5. Playground receives event and auto-fills + triggers generation
+  2. Prompt/code saved to `WorkspaceContext.metadata.pendingPrompt`
+  3. Auto-saves to localStorage (instant) and database (5 seconds)
+  4. If not on playground, navigate to `/playground/:projectId`
+  5. Playground reads from `getPendingPrompt()` and auto-fills + triggers generation
+  6. Playground clears prompt with `clearPendingPrompt()`
+- **Benefits over localStorage**:
+  - ✅ Type-safe with TypeScript
+  - ✅ Database persistence (survives browser close)
+  - ✅ Multi-device sync
+  - ✅ Cross-tab sync (automatic)
+  - ✅ Cleaner code (-42 lines)
+  - ✅ Aligned with app architecture
 - **Locations**:
-  - OmniAssistant sender: `client/src/components/OmniAssistant/OmniAssistant.tsx` lines ~235-267
-  - Playground receiver: `client/src/pages/PromptPlayground.tsx` lines ~2121-2158
+  - WorkspaceContext methods: `client/src/contexts/WorkspaceContext.tsx`
+  - OmniAssistant sender: `client/src/components/OmniAssistant/OmniAssistant.tsx`
+  - Playground receiver: `client/src/pages/PromptPlayground.tsx`
 
 ### 8. ✅ Backend Support for Project Context
 - **Feature**: Backend already fully supports project context

@@ -80,6 +80,14 @@ interface WorkspaceContextType {
   updateGeneratedFiles: (files: GeneratedFile[]) => void;
   addGeneratedFile: (file: GeneratedFile) => void;
 
+  // Metadata management
+  updateMetadata: (metadata: Record<string, any>) => void;
+
+  // Prompt forwarding (OmniAssistant → Playground)
+  setPendingPrompt: (prompt: string, source: string, metadata?: Record<string, any>) => void;
+  getPendingPrompt: () => { prompt: string; timestamp: number; source: string; metadata?: Record<string, any> } | null;
+  clearPendingPrompt: () => void;
+
   // Auto-save status
   isSaving: boolean;
   lastSaved: Date | null;
@@ -376,6 +384,81 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     await saveToServer(currentSession);
   };
 
+  // Update session metadata
+  const updateMetadata = useCallback((metadata: Record<string, any>) => {
+    if (!currentSession) return;
+
+    const updated = {
+      ...currentSession,
+      metadata: {
+        ...currentSession.metadata,
+        ...metadata
+      },
+      updatedAt: Date.now()
+    };
+
+    setCurrentSession(updated);
+    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+  }, [currentSession]);
+
+  // Set a pending prompt for forwarding to playground
+  const setPendingPrompt = useCallback((prompt: string, source: string, metadata?: Record<string, any>) => {
+    if (!currentSession) return;
+
+    const updated = {
+      ...currentSession,
+      metadata: {
+        ...currentSession.metadata,
+        pendingPrompt: {
+          prompt,
+          timestamp: Date.now(),
+          source,
+          ...metadata
+        }
+      },
+      updatedAt: Date.now()
+    };
+
+    setCurrentSession(updated);
+    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+  }, [currentSession]);
+
+  // Get pending prompt if it exists and is recent (within 10 seconds)
+  const getPendingPrompt = useCallback(() => {
+    if (!currentSession?.metadata?.pendingPrompt) return null;
+
+    const pendingPrompt = currentSession.metadata.pendingPrompt as {
+      prompt: string;
+      timestamp: number;
+      source: string;
+      metadata?: Record<string, any>;
+    };
+
+    // Only return if recent (within 10 seconds)
+    if (Date.now() - pendingPrompt.timestamp < 10000) {
+      return pendingPrompt;
+    }
+
+    return null;
+  }, [currentSession]);
+
+  // Clear pending prompt
+  const clearPendingPrompt = useCallback(() => {
+    if (!currentSession) return;
+
+    const updated = {
+      ...currentSession,
+      metadata: {
+        ...currentSession.metadata,
+        pendingPrompt: undefined
+      },
+      updatedAt: Date.now()
+    };
+
+    setCurrentSession(updated);
+    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+  }, [currentSession]);
+
   return (
     <WorkspaceContext.Provider
       value={{
@@ -389,6 +472,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         clearChat,
         updateGeneratedFiles,
         addGeneratedFile,
+        updateMetadata,
+        setPendingPrompt,
+        getPendingPrompt,
+        clearPendingPrompt,
         isSaving,
         lastSaved,
         syncWithServer

@@ -2117,45 +2117,28 @@ export default function PromptPlayground() {
       }, 500);
     }
 
-    // Listen for prompts from OmniAssistant
-    const handleOmniAssistantPrompt = (event: CustomEvent) => {
-      const promptData = event.detail;
-      if (promptData?.prompt && user) {
-        form.setValue('userPrompt', promptData.prompt);
-        // Auto-trigger generation
-        setTimeout(() => {
-          const formData = form.getValues();
-          generateMutation.mutate(formData);
-        }, 300);
-        // Clear the stored prompt
-        localStorage.removeItem('omniassistant_pending_prompt');
-      }
-    };
-
-    // Check for stored OmniAssistant prompt on mount
-    const storedPrompt = localStorage.getItem('omniassistant_pending_prompt');
-    if (storedPrompt && user) {
-      try {
-        const promptData = JSON.parse(storedPrompt);
-        // Only use if it's recent (within 10 seconds) to avoid stale prompts
-        if (Date.now() - promptData.timestamp < 10000) {
-          form.setValue('userPrompt', promptData.prompt);
-          setTimeout(() => {
-            const formData = form.getValues();
-            generateMutation.mutate(formData);
-          }, 500);
-          localStorage.removeItem('omniassistant_pending_prompt');
-        }
-      } catch (e) {
-        console.error('Failed to parse stored OmniAssistant prompt:', e);
-      }
-    }
-
-    window.addEventListener('omniassistant-prompt-ready', handleOmniAssistantPrompt as EventListener);
+    // Check for pending prompt from OmniAssistant using WorkspaceContext
+    const { getPendingPrompt, clearPendingPrompt } = useWorkspace();
+    const pendingPrompt = getPendingPrompt();
     
-    return () => {
-      window.removeEventListener('omniassistant-prompt-ready', handleOmniAssistantPrompt as EventListener);
-    };
+    if (pendingPrompt && user) {
+      console.log('📨 Playground: Received pending prompt from OmniAssistant', {
+        source: pendingPrompt.source,
+        promptLength: pendingPrompt.prompt.length,
+      });
+      
+      // Set the prompt in the form
+      form.setValue('userPrompt', pendingPrompt.prompt);
+      
+      // Clear the pending prompt
+      clearPendingPrompt();
+      
+      // Auto-trigger generation
+      setTimeout(() => {
+        const formData = form.getValues();
+        generateMutation.mutate(formData);
+      }, 500);
+    }
   }, [user, form, generateMutation]);
 
   return (

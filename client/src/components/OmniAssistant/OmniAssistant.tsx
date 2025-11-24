@@ -77,6 +77,9 @@ export function OmniAssistant() {
     clearSession,
   } = useOmniAssistant();
 
+  // Get WorkspaceContext methods for prompt forwarding
+  const { setPendingPrompt } = useWorkspace();
+
   // Fetch user projects
   const { data: userProjects = [] } = useQuery<Project[]>({
     queryKey: ['/api/workspaces'],
@@ -235,15 +238,13 @@ export function OmniAssistant() {
   const handleSuggestionClick = async (suggestion: string) => {
     if (isLoading) return;
     
-    // Forward suggestion to playground AI
+    // Forward suggestion to playground AI using WorkspaceContext
     try {
-      const promptKey = 'omniassistant_pending_prompt';
-      const promptData = {
-        prompt: suggestion,
-        timestamp: Date.now(),
-        source: 'omniassistant',
-      };
-      localStorage.setItem(promptKey, JSON.stringify(promptData));
+      // Set pending prompt in workspace context (auto-saves to localStorage and database)
+      setPendingPrompt(suggestion, 'omniassistant', {
+        selectedProjectId,
+        fromPage: window.location.pathname,
+      });
       
       // Navigate to playground
       const currentPath = window.location.pathname;
@@ -251,14 +252,6 @@ export function OmniAssistant() {
         const projectId = selectedProjectId || currentSession?.id;
         const playgroundPath = projectId ? `/playground/${projectId}` : '/playground';
         setLocation(playgroundPath);
-        
-        // Wait for navigation, then dispatch event
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
-        }, 500);
-      } else {
-        // Already on playground - dispatch event immediately
-        window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
       }
 
       // Acknowledge to user
@@ -396,14 +389,12 @@ export function OmniAssistant() {
       
       const prompt = `Please apply the following code changes to match the current app's design system and patterns. Analyze the existing codebase first to understand the design patterns, component structure, styling approach, and state management patterns, then apply these changes accordingly:\n\nFiles to update:\n${fileDescriptions}\n\nCode to apply:\n\n${files.map(f => `**${f.path}**\n\`\`\`typescript\n${f.content}\n\`\`\``).join('\n\n')}\n\nIMPORTANT: Make sure the changes match the existing design patterns, component structure, styling approach (Tailwind classes, CSS modules, etc.), state management patterns, import patterns, and UI component library being used in the current project.`;
       
-      // Store the prompt in localStorage so playground can pick it up
-      const promptKey = 'omniassistant_pending_prompt';
-      const promptData = {
-        prompt,
-        timestamp: Date.now(),
-        source: 'omniassistant',
-      };
-      localStorage.setItem(promptKey, JSON.stringify(promptData));
+      // Set pending prompt using WorkspaceContext (auto-saves to localStorage and database)
+      setPendingPrompt(prompt, 'omniassistant-code', {
+        files,
+        fileCount: files.length,
+        fromPage: window.location.pathname,
+      });
       
       // Navigate to playground if not already there
       const currentPath = window.location.pathname;
@@ -411,14 +402,6 @@ export function OmniAssistant() {
         const projectId = currentSession?.id;
         const playgroundPath = projectId ? `/playground/${projectId}` : '/playground';
         setLocation(playgroundPath);
-        
-        // Wait a bit for navigation, then dispatch event
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
-        }, 500);
-      } else {
-        // Already on playground - dispatch event immediately
-        window.dispatchEvent(new CustomEvent('omniassistant-prompt-ready', { detail: promptData }));
       }
 
       // Show success message
