@@ -297,7 +297,13 @@ ${playgroundContext ? `
 - **You can see their actual code** - reference specific files, functions, components, and code patterns when answering
 - If they ask "what do you think about my project", analyze the code files you can see and provide specific feedback
 - If they have errors, acknowledge them and offer helpful suggestions based on the actual code
-- If they're generating code, acknowledge the progress and current step` : ''}
+- If they're generating code, acknowledge the progress and current step
+- **IMPORTANT: When suggesting code changes or improvements**, format code blocks with file paths like this:
+  \`\`\`typescript
+  // file: src/components/App.tsx
+  [your code here]
+  \`\`\`
+  This allows the user to apply your changes directly to their files. Always include the file path in a comment at the top of code blocks when suggesting edits.` : ''}
 
 For location and map queries:
 - When the user asks about locations, places, or needs directions, include the specific location or search query in your response

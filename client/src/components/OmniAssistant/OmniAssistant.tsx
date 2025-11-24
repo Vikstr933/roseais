@@ -30,6 +30,9 @@ import {
 import { useOmniAssistant, type OmniAssistantMessage } from '@/hooks/useOmniAssistant';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { cn } from '@/lib/utils';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 type ViewState = 'closed' | 'minimized' | 'full' | 'settings';
 
@@ -37,7 +40,7 @@ export function OmniAssistant() {
   const [viewState, setViewState] = useState<ViewState>('closed');
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { currentSession } = useWorkspace();
+  const { currentSession, updateGeneratedFiles } = useWorkspace();
 
   const {
     messages,
@@ -146,6 +149,27 @@ export function OmniAssistant() {
       workspaceId: currentSession?.id as number | undefined,
       playgroundContext,
     });
+  };
+
+  // Handle applying file changes from assistant
+  const handleApplyChanges = (files: Array<{ path: string; content: string }>) => {
+    if (!currentSession) return;
+    
+    // Merge with existing files - update existing, add new
+    const existingFiles = currentSession.generatedFiles || [];
+    const fileMap = new Map(existingFiles.map(f => [f.path, f]));
+    
+    // Update or add files from assistant
+    files.forEach(file => {
+      fileMap.set(file.path, {
+        path: file.path,
+        content: file.content,
+        language: file.path.split('.').pop() || 'text'
+      });
+    });
+    
+    const updatedFiles = Array.from(fileMap.values());
+    updateGeneratedFiles(updatedFiles);
   };
 
   return (
@@ -273,6 +297,7 @@ export function OmniAssistant() {
                         key={idx} 
                         message={msg} 
                         onSuggestionClick={handleSuggestionClick}
+                        onApplyChanges={handleApplyChanges}
                       />
                     ))}
                     <div ref={messagesEndRef} />
@@ -430,12 +455,50 @@ function EmptyState() {
 
 function MessageBubble({ 
   message, 
-  onSuggestionClick 
+  onSuggestionClick,
+  onApplyChanges
 }: { 
   message: OmniAssistantMessage;
   onSuggestionClick?: (suggestion: string) => void;
+  onApplyChanges?: (files: Array<{ path: string; content: string }>) => void;
 }) {
   const isUser = message.role === 'user';
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Extract code blocks with file paths from message
+  const extractCodeBlocks = (content: string): Array<{ path: string; content: string; language?: string }> => {
+    const codeBlocks: Array<{ path: string; content: string; language?: string }> = [];
+    // Match code blocks with optional file path in comments
+    const codeBlockRegex = /```(\w+)?\s*(?:\/\/\s*file:\s*([^\n]+))?\n([\s\S]*?)```/g;
+    let match;
+    
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+      const language = match[1];
+      const filePath = match[2]?.trim();
+      const codeContent = match[3].trim();
+      
+      if (filePath) {
+        codeBlocks.push({ path: filePath, content: codeContent, language });
+      }
+    }
+    
+    return codeBlocks;
+  };
+
+  const codeBlocks = !isUser ? extractCodeBlocks(message.content) : [];
+  const hasEditableCode = codeBlocks.length > 0;
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleApplyChanges = () => {
+    if (onApplyChanges && codeBlocks.length > 0) {
+      onApplyChanges(codeBlocks);
+    }
+  };
 
   return (
     <div className={cn('flex gap-3', isUser && 'flex-row-reverse')}>
@@ -461,8 +524,89 @@ function MessageBubble({
               : 'bg-muted'
           )}
         >
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          {isUser ? (
+            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          ) : (
+            <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown
+                components={{
+                  code({ node, inline, className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const codeString = String(children).replace(/\n$/, '');
+                    const filePathMatch = codeString.match(/\/\/\s*file:\s*([^\n]+)/);
+                    const filePath = filePathMatch ? filePathMatch[1].trim() : null;
+                    const actualCode = filePathMatch ? codeString.replace(/\/\/\s*file:\s*[^\n]+\n/, '').trim() : codeString;
+
+                    return !inline && match ? (
+                      <div className="relative my-2">
+                        {filePath && (
+                          <div className="text-xs text-muted-foreground mb-1 px-2">
+                            📄 {filePath}
+                          </div>
+                        )}
+                        <div className="relative group">
+                          <SyntaxHighlighter
+                            style={vscDarkPlus}
+                            language={match[1]}
+                            PreTag="div"
+                            className="rounded-md"
+                            {...props}
+                          >
+                            {actualCode}
+                          </SyntaxHighlighter>
+                          <button
+                            onClick={() => handleCopyCode(actualCode)}
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 bg-background/80 rounded hover:bg-background"
+                            title="Copy code"
+                          >
+                            {copiedCode === actualCode ? '✓' : '📋'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1 ml-4">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1 ml-4">{children}</ol>,
+                  li: ({ children }) => <li className="text-sm mb-1">{children}</li>,
+                  h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
+                  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                  em: ({ children }) => <em className="italic">{children}</em>,
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-4 border-primary pl-4 italic my-2">{children}</blockquote>
+                  ),
+                  a: ({ children, href }) => (
+                    <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
+
+        {/* Apply Changes Button */}
+        {hasEditableCode && onApplyChanges && (
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleApplyChanges}
+              className="text-xs"
+            >
+              ✏️ Apply Changes ({codeBlocks.length} file{codeBlocks.length > 1 ? 's' : ''})
+            </Button>
+          </div>
+        )}
 
         {message.toolsUsed && message.toolsUsed.length > 0 && (
           <div className="flex gap-1 flex-wrap">
