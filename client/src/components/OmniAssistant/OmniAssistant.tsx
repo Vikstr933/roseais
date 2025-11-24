@@ -676,11 +676,6 @@ function MessageBubble({
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const handleApplyChanges = () => {
-    if (onApplyChanges && codeBlocks.length > 0) {
-      onApplyChanges(codeBlocks);
-    }
-  };
 
   return (
     <div className={cn('flex gap-3', isUser && 'flex-row-reverse')}>
@@ -779,16 +774,16 @@ function MessageBubble({
           )}
         </div>
 
-        {/* Apply Changes Button */}
+        {/* Suggest to Playground AI Button */}
         {hasEditableCode && onApplyChanges && (
           <div className="flex gap-2">
             <Button
               size="sm"
               variant="default"
-              onClick={handleApplyChanges}
+              onClick={() => onApplyChanges(codeBlocks)}
               className="text-xs"
             >
-              ✏️ Apply Changes ({codeBlocks.length} file{codeBlocks.length > 1 ? 's' : ''})
+              💡 Suggest to Playground AI ({codeBlocks.length} file{codeBlocks.length > 1 ? 's' : ''})
             </Button>
           </div>
         )}
