@@ -687,7 +687,7 @@ function MessageBubble({
                     return !inline && match ? (
                       <div className="relative my-2">
                         {filePath && (
-                          <div className="text-xs text-muted-foreground mb-1 px-2">
+                          <div className="text-xs text-white/70 mb-1 px-2">
                             📄 {filePath}
                           </div>
                         )}
@@ -767,7 +767,7 @@ function MessageBubble({
 
         {message.suggestions && message.suggestions.length > 0 && (
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Suggestions:</p>
+            <p className="text-xs text-white/70">Suggestions:</p>
             <div className="flex flex-wrap gap-1">
               {message.suggestions.map((suggestion, idx) => (
                 <Badge 
