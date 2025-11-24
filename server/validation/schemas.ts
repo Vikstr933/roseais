@@ -18,12 +18,24 @@ export const userPromptSchema = z.object({
     .min(3, 'Prompt must be at least 3 characters')
     .max(5000, 'Prompt must be less than 5000 characters')
     .refine(
-      (val) => !/<script/i.test(val),
-      'Prompt cannot contain script tags'
+      (val) => !/<script[^>]*>/i.test(val) || val.includes('```'),
+      'Prompt cannot contain script tags (unless in code blocks)'
     )
     .refine(
-      (val) => !/(eval|Function|setTimeout|setInterval)\s*\(/i.test(val),
-      'Prompt cannot contain dangerous JavaScript functions'
+      (val) => {
+        // Allow these functions if they appear in code blocks (markdown) or are teaching/example code
+        const hasCodeBlocks = val.includes('```') || val.includes('// file:');
+        const isCodeExample = val.includes('Code to apply:') || val.includes('```typescript') || val.includes('```javascript');
+        
+        // If it's a code example or has code blocks, allow dangerous functions
+        if (hasCodeBlocks || isCodeExample) {
+          return true;
+        }
+        
+        // Otherwise, block direct use of dangerous functions in plain text prompts
+        return !/(eval|new\s+Function|setTimeout|setInterval)\s*\(/i.test(val);
+      },
+      'Prompt cannot contain dangerous JavaScript functions outside of code examples'
     ),
   systemPrompt: z.string().optional(),
   model: z.enum([
