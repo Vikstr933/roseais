@@ -1294,18 +1294,46 @@ export default function PromptPlayground() {
 
           // Use OmniAssistant/PersonalAssistant for conversational responses
           // Include playground context: current files, project state, errors
-          // Include ACTUAL FILE CONTENTS so assistant can see the code
+          // OPTIMIZED: Only send essential files with compressed content to save tokens/bandwidth
+          const optimizeFiles = (files: typeof response?.files) => {
+            if (!files || files.length === 0) return [];
+            
+            // Prioritize files by importance (code files first, then configs, then others)
+            const priorityOrder = ['.tsx', '.ts', '.jsx', '.js', '.css', '.json', '.md', '.html'];
+            const sortedFiles = [...files].sort((a, b) => {
+              const aExt = '.' + a.path.split('.').pop()?.toLowerCase();
+              const bExt = '.' + b.path.split('.').pop()?.toLowerCase();
+              const aPriority = priorityOrder.indexOf(aExt);
+              const bPriority = priorityOrder.indexOf(bExt);
+              return (aPriority === -1 ? 999 : aPriority) - (bPriority === -1 ? 999 : bPriority);
+            });
+            
+            // Only send top 5 most important files with full content (reduced from 10)
+            const importantFiles = sortedFiles.slice(0, 5).map(f => ({
+              path: f.path,
+              content: f.content.substring(0, 2000), // Reduced from 5000 to 2000 chars
+              language: f.path.split('.').pop() || 'text',
+              fullContent: f.content.length <= 2000 // Flag if content is truncated
+            }));
+            
+            // For remaining files, send just structure/metadata (path + line count + first 200 chars)
+            const otherFiles = sortedFiles.slice(5, 10).map(f => ({
+              path: f.path,
+              content: `// File structure: ${f.content.split('\n').length} lines\n// Preview (first 200 chars):\n${f.content.substring(0, 200)}...`,
+              language: f.path.split('.').pop() || 'text',
+              summary: true // Flag that this is a summary, not full content
+            }));
+            
+            return [...importantFiles, ...otherFiles];
+          };
+          
           const playgroundContext = {
             currentProject: currentProject?.name || 'Untitled Project',
             projectId: params?.projectId || 'default',
             filesCount: response?.files?.length || 0,
             filePaths: response?.files?.map(f => f.path) || [],
-            // Include actual file contents (limit to first 10 files to avoid token limits)
-            files: response?.files?.slice(0, 10).map(f => ({
-              path: f.path,
-              content: f.content.substring(0, 5000), // Limit each file to 5000 chars
-              language: f.path.split('.').pop() || 'text'
-            })) || [],
+            // Optimized: Only essential files with compressed content
+            files: optimizeFiles(response?.files),
             hasLivePreview: !!livePreviewUrl,
             currentComponent: currentComponentName || 'None',
             recentErrors: error ? [error] : [],

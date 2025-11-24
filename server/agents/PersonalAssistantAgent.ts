@@ -196,6 +196,9 @@ export class PersonalAssistantAgent {
       }
       this.conversationHistory.set(sessionId, history);
 
+      // Ensure response ends with Key Points section (add if missing)
+      finalResponse = this.ensureKeyPointsSection(finalResponse, userMessage, context, options?.playgroundContext);
+
       // Generate proactive suggestions
       const suggestions = await this.generateSuggestions(userId, context, finalResponse);
 
@@ -246,7 +249,7 @@ export class PersonalAssistantAgent {
       projectId?: string;
       filesCount?: number;
       filePaths?: string[];
-      files?: Array<{ path: string; content: string; language?: string }>; // Actual file contents
+      files?: Array<{ path: string; content: string; language?: string; summary?: boolean; fullContent?: boolean }>; // Actual file contents (optimized)
       hasLivePreview?: boolean;
       currentComponent?: string;
       recentErrors?: string[];
@@ -303,7 +306,15 @@ For location and map queries:
 - The map will automatically appear when you mention specific locations in this format
 - After suggesting a location, you can say things like "I've displayed it on the map above" or "You can see it on the interactive map"
 
-Remember: You're not just reporting data - you're helping a real person manage their day. Make every response feel personal, helpful, and thorough.`;
+Remember: You're not just reporting data - you're helping a real person manage their day. Make every response feel personal, helpful, and thorough.
+
+CRITICAL: Response Format Requirement
+Every response MUST end with a structured section titled "Key Points, Learnings & Wisdom" that includes:
+1. **Key Points** - 2-3 bullet points summarizing the most important takeaways from your response
+2. **Learnings** - What the user learned or should remember from this interaction
+3. **Wisdom Going Forward** - Actionable advice, best practices, or forward-thinking insights related to the topic
+
+Format this section clearly with headers and bullet points. This section helps users retain information and apply it effectively.`;
 
     let contextSection = '';
     if (context.length > 0) {
@@ -358,7 +369,7 @@ Remember: You're not just reporting data - you're helping a real person manage t
       projectId?: string;
       filesCount?: number;
       filePaths?: string[];
-      files?: Array<{ path: string; content: string; language?: string }>; // Actual file contents
+      files?: Array<{ path: string; content: string; language?: string; summary?: boolean; fullContent?: boolean }>; // Actual file contents (optimized)
       hasLivePreview?: boolean;
       currentComponent?: string;
       recentErrors?: string[];
@@ -381,14 +392,34 @@ Remember: You're not just reporting data - you're helping a real person manage t
       playgroundInfo += `\n`;
       
       // Include ACTUAL FILE CONTENTS so you can see and discuss the code
+      // OPTIMIZED: Only essential files sent (top 5 with full content, rest as summaries)
       if (playgroundContext.files && playgroundContext.files.length > 0) {
-        playgroundInfo += `\n=== ACTUAL CODE FILES (You can see and discuss these) ===\n`;
-        playgroundContext.files.forEach((file, idx) => {
-          playgroundInfo += `\nFile ${idx + 1}: ${file.path} (${file.language || 'text'})\n`;
-          playgroundInfo += `\`\`\`${file.language || 'text'}\n${file.content}\n\`\`\`\n`;
-        });
+        const fullFiles = playgroundContext.files.filter((f: any) => !f.summary);
+        const summaryFiles = playgroundContext.files.filter((f: any) => f.summary);
+        
+        playgroundInfo += `\n=== CODE FILES (Optimized for efficiency) ===\n`;
+        
+        if (fullFiles.length > 0) {
+          playgroundInfo += `\n--- Full Content Files (${fullFiles.length}) ---\n`;
+          fullFiles.forEach((file: any, idx: number) => {
+            playgroundInfo += `\nFile ${idx + 1}: ${file.path} (${file.language || 'text'})`;
+            if (file.fullContent === false) {
+              playgroundInfo += ` [Content truncated - showing first 2000 chars]`;
+            }
+            playgroundInfo += `\n\`\`\`${file.language || 'text'}\n${file.content}\n\`\`\`\n`;
+          });
+        }
+        
+        if (summaryFiles.length > 0) {
+          playgroundInfo += `\n--- File Summaries (${summaryFiles.length}) ---\n`;
+          playgroundInfo += `These files are summarized to save tokens. Full content available on request.\n`;
+          summaryFiles.forEach((file: any, idx: number) => {
+            playgroundInfo += `${idx + 1}. ${file.path} - ${file.content.substring(0, 100)}...\n`;
+          });
+        }
+        
         playgroundInfo += `\n=== End of Code Files ===\n`;
-        playgroundInfo += `\nIMPORTANT: You can now see the actual code! When the user asks about their project, code, or files, reference the actual content above. You can discuss specific functions, components, styles, and suggest improvements based on what you see.\n`;
+        playgroundInfo += `\nIMPORTANT: You can see the actual code! When the user asks about their project, code, or files, reference the actual content above. You can discuss specific functions, components, styles, and suggest improvements based on what you see.\n`;
       }
       
       if (playgroundContext.currentComponent && playgroundContext.currentComponent !== 'None') {
