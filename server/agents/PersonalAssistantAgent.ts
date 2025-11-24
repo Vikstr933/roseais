@@ -66,6 +66,9 @@ export class PersonalAssistantAgent {
           no_html: 1,
           skip_disambig: 1
         },
+        headers: {
+          'User-Agent': 'Elon-AI-Assistant/1.0 (https://ai-library.com; contact@ai-library.com)'
+        },
         timeout: 5000
       });
 
@@ -99,26 +102,33 @@ export class PersonalAssistantAgent {
       if (results.length === 0) {
         logger.info(`No DuckDuckGo results, trying alternative search for: ${params.query}`);
         
-        // Try Wikipedia API as fallback
-        const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
-          params: {
-            action: 'opensearch',
-            search: params.query,
-            limit: numResults,
-            format: 'json'
-          },
-          timeout: 5000
-        });
+        // Try Wikipedia API as fallback with proper User-Agent
+        try {
+          const wikiResponse = await axios.get('https://en.wikipedia.org/w/api.php', {
+            params: {
+              action: 'opensearch',
+              search: params.query,
+              limit: numResults,
+              format: 'json'
+            },
+            headers: {
+              'User-Agent': 'Elon-AI-Assistant/1.0 (https://ai-library.com; contact@ai-library.com)'
+            },
+            timeout: 5000
+          });
 
-        if (wikiResponse.data && wikiResponse.data[1] && wikiResponse.data[1].length > 0) {
-          for (let i = 0; i < wikiResponse.data[1].length; i++) {
-            results.push({
-              title: wikiResponse.data[1][i],
-              snippet: wikiResponse.data[2][i] || '',
-              url: wikiResponse.data[3][i],
-              source: 'Wikipedia'
-            });
+          if (wikiResponse.data && wikiResponse.data[1] && wikiResponse.data[1].length > 0) {
+            for (let i = 0; i < wikiResponse.data[1].length; i++) {
+              results.push({
+                title: wikiResponse.data[1][i],
+                snippet: wikiResponse.data[2][i] || '',
+                url: wikiResponse.data[3][i],
+                source: 'Wikipedia'
+              });
+            }
           }
+        } catch (wikiError) {
+          logger.warn(`Wikipedia fallback also failed: ${wikiError instanceof Error ? wikiError.message : String(wikiError)}`);
         }
       }
 
@@ -128,17 +138,31 @@ export class PersonalAssistantAgent {
         query: params.query,
         results: results.slice(0, numResults),
         timestamp: new Date().toISOString(),
+        success: true,
         message: results.length > 0 
           ? `Found ${results.length} result(s) for "${params.query}"` 
           : `No specific results found for "${params.query}". Consider refining the search query.`
       };
     } catch (error) {
-      logger.error(`Web search failed: query="${params.query}"`, error as Error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'UNKNOWN';
+      const errorStatus = error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response ? String(error.response.status) : 'N/A';
+      
+      logger.error(`Web search failed: query="${params.query}", error="${errorMessage}", code="${errorCode}", status="${errorStatus}"`, error as Error);
+      
+      // Return structured error that Elon can use to inform the user
       return {
         query: params.query,
         results: [],
-        error: error instanceof Error ? error.message : 'Unknown error',
-        message: 'Web search temporarily unavailable. Please try again or provide the information manually.'
+        success: false,
+        error: {
+          message: errorMessage,
+          code: errorCode,
+          status: errorStatus,
+          timestamp: new Date().toISOString()
+        },
+        errorLog: `[ERROR] Web search tool failed\nQuery: "${params.query}"\nError: ${errorMessage}\nCode: ${errorCode}\nStatus: ${errorStatus}\nTimestamp: ${new Date().toISOString()}\n\nPlease send this error log to the administrator for troubleshooting.`,
+        message: 'I was unable to search the web for this information. The web search tool encountered an error.'
       };
     }
   }
@@ -392,6 +416,12 @@ Your capabilities:
   * ALWAYS use web_search for company addresses, phone numbers, business hours, and contact information
   * Use web_search for current events, recent information, or facts you're unsure about
   * Example queries: "web_search for 'Colorama Lund address and contact information'" or "web_search for 'Tesla latest news'"
+  * **CRITICAL: If web_search tool fails or returns success=false**:
+    - DO NOT guess or make up information
+    - DO NOT provide potentially incorrect details
+    - Clearly state: "I'm unable to search the web for this information right now because the web search tool encountered an error."
+    - Include the errorLog field from the tool response in your message so the user can send it to the administrator
+    - Example: "I'm sorry, but I cannot search the web for this information at the moment. Here's the error log you can send to the administrator:\n\n[errorLog content]"
 - Access and analyze emails with detailed insights (sender, urgency, key points, action items)
 - Search through communications and provide comprehensive summaries
 - Execute actions on behalf of the user (send emails, manage tasks, etc.)
@@ -415,6 +445,12 @@ Communication style:
 - Use emojis sparingly but appropriately to add warmth (e.g., 📧 for emails, ✅ for completed tasks, 📍 for locations, 💻 for code/playground)
 - If you use tools, explain what you're doing: "Let me check your inbox for you..." or "I'll search through your recent emails..."
 - When you find something important, highlight it with enthusiasm: "Oh! I found something that needs attention..."
+- **CRITICAL: When ANY tool fails (returns success=false or has an error)**:
+  - NEVER guess, make up, or provide potentially incorrect information
+  - Clearly state that you cannot complete the task because the tool failed
+  - If the tool response includes an errorLog field, include it in your message so the user can send it to the administrator
+  - Be honest and transparent: "I'm unable to [action] because [tool name] encountered an error. Here's the error log you can send to the administrator: [errorLog]"
+  - Do not apologize excessively - just be clear and helpful
 ${playgroundContext ? `
 - **When discussing the playground**: Reference their current project, files, and state naturally
 - If they ask "what's going on in the playground", describe their current project status, files, and any active generation
