@@ -559,6 +559,28 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
   }
 
   /**
+   * Ensure response ends with Key Points section
+   */
+  private ensureKeyPointsSection(
+    response: string,
+    userMessage: string,
+    context: KnowledgeItem[],
+    playgroundContext?: any
+  ): string {
+    // Check if response already has key points section
+    const hasKeyPoints = /key points|learnings|wisdom going forward/i.test(response);
+    
+    if (hasKeyPoints) {
+      return response; // Already has the section
+    }
+    
+    // Add key points section if missing
+    const keyPointsSection = `\n\n---\n\n## Key Points, Learnings & Wisdom\n\n**Key Points:**\n- Review the main takeaways from our conversation above\n- Consider the actionable insights provided\n\n**Learnings:**\n- Reflect on what was discussed and how it applies to your situation\n- Remember the specific details and context shared\n\n**Wisdom Going Forward:**\n- Apply the insights from this conversation to future decisions\n- Consider the patterns and best practices mentioned\n- Use this knowledge to improve your workflow and productivity`;
+    
+    return response + keyPointsSection;
+  }
+
+  /**
    * Clear conversation history for a session
    */
   public clearHistory(sessionId: string): void {
