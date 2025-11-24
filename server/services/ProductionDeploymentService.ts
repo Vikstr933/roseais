@@ -121,12 +121,13 @@ export class ProductionDeploymentService {
     let repoName = config.repoName;
     let attempts = 0;
     const maxAttempts = 5;
+    const currentUser = (await this.octokit.users.getAuthenticated()).data.login;
 
     while (attempts < maxAttempts) {
       try {
         // Check if repo exists
         await this.octokit.repos.get({
-          owner: (await this.octokit.users.getAuthenticated()).data.login,
+          owner: currentUser,
           repo: repoName,
         });
         
@@ -142,6 +143,10 @@ export class ProductionDeploymentService {
         // Other error, throw it
         throw error;
       }
+    }
+
+    if (attempts >= maxAttempts) {
+      throw new Error(`Could not find available repository name after ${maxAttempts} attempts`);
     }
 
     // Create repository (use createForAuthenticatedUser for authenticated user repos)
@@ -183,14 +188,21 @@ export class ProductionDeploymentService {
       }
 
       // Create or update file with SHA if it exists
-      await this.octokit.repos.createOrUpdateFileContents({
-        owner: repo.owner.login,
-        repo: repo.name,
-        path: file.path,
-        message: fileSha ? `Update ${file.path}` : `Add ${file.path}`,
-        content,
-        sha: fileSha, // Include SHA if file exists, undefined for new files
-      });
+      try {
+        await this.octokit.repos.createOrUpdateFileContents({
+          owner: repo.owner.login,
+          repo: repo.name,
+          path: file.path,
+          message: fileSha ? `Update ${file.path}` : `Add ${file.path}`,
+          content,
+          sha: fileSha, // Include SHA if file exists, undefined for new files
+          branch: repo.default_branch || 'main', // Explicitly specify branch
+        });
+        this.logger.info('ProductionDeploymentService', `File created: ${file.path}`);
+      } catch (error: any) {
+        this.logger.error('ProductionDeploymentService', `Failed to create file ${file.path}`, error as Error);
+        throw new Error(`Failed to create file ${file.path}: ${error.message}`);
+      }
     }
 
     // Create additional necessary files
