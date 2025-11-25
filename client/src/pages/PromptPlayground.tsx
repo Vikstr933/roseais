@@ -1338,106 +1338,13 @@ export default function PromptPlayground() {
 
       // If intent is conversational, use conversational AI instead of code generation
       if (intent === 'conversational') {
-        try {
-          setIsLoading(true);
-          addChatMessage({
-            role: 'assistant',
-            content: '💭 Thinking...',
-            timestamp: Date.now()
-          });
-
-          // Use OmniAssistant/PersonalAssistant for conversational responses
-          // Include playground context: current files, project state, errors
-          // OPTIMIZED: Only send essential files with compressed content to save tokens/bandwidth
-          const optimizeFileContents = (fileList: GeneratedFile[] | undefined) => {
-            if (!fileList || fileList.length === 0) return [];
-            
-            // Prioritize files by importance (code files first, then configs, then others)
-            const priorityOrder = ['.tsx', '.ts', '.jsx', '.js', '.css', '.json', '.md', '.html'];
-            const sortedFiles = [...fileList].sort((a, b) => {
-              const aExt = '.' + a.path.split('.').pop()?.toLowerCase();
-              const bExt = '.' + b.path.split('.').pop()?.toLowerCase();
-              const aPriority = priorityOrder.indexOf(aExt);
-              const bPriority = priorityOrder.indexOf(bExt);
-              return (aPriority === -1 ? 999 : aPriority) - (bPriority === -1 ? 999 : bPriority);
-            });
-            
-            // Only send top 5 most important files with full content (reduced from 10)
-            const importantFiles = sortedFiles.slice(0, 5).map(f => ({
-              path: f.path,
-              content: f.content.substring(0, 2000), // Reduced from 5000 to 2000 chars
-              language: f.path.split('.').pop() || 'text',
-              fullContent: f.content.length <= 2000 // Flag if content is truncated
-            }));
-            
-            // For remaining files, send just structure/metadata (path + line count + first 200 chars)
-            const otherFiles = sortedFiles.slice(5, 10).map(f => ({
-              path: f.path,
-              content: `// File structure: ${f.content.split('\n').length} lines\n// Preview (first 200 chars):\n${f.content.substring(0, 200)}...`,
-              language: f.path.split('.').pop() || 'text',
-              summary: true // Flag that this is a summary, not full content
-            }));
-            
-            return [...importantFiles, ...otherFiles];
-          };
-          
-          const playgroundContext = {
-            currentProject: currentProject?.name || 'Untitled Project',
-            projectId: params?.projectId || 'default',
-            filesCount: response?.files?.length || 0,
-            filePaths: response?.files?.map(f => f.path) || [],
-            // Optimized: Only essential files with compressed content
-            files: optimizeFileContents(response?.files),
-            hasLivePreview: !!livePreviewUrl,
-            currentComponent: currentComponentName || 'None',
-            recentErrors: error ? [error] : [],
-            isGenerating: isLoading,
-            orchestrationSteps: orchestrationSteps.length,
-            currentStep: currentStep || 'None'
-          };
-
-          const chatResponse = await apiFetch('/api/omniassistant/chat', {
-            method: 'POST',
-            headers: {
-              ...getAuthHeaders(sessionToken),
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              message: data.userPrompt,
-              sessionId: currentSession?.id?.toString() || 'playground',
-              currentPage: '/playground',
-              workspaceId: params?.projectId ? parseInt(params.projectId) : undefined,
-              playgroundContext, // Add playground-specific context
-              features: {
-                persistConversation: false,
-                generateInsights: false,
-                useContextEngine: true // Enable context engine for playground awareness
-              }
-            }),
-          });
-
-          const chatData = await chatResponse.json();
-          
-          if (chatData.success && chatData.response) {
-            // Remove the "thinking" message and add the actual response
-            addChatMessage({
-              role: 'assistant',
-              content: chatData.response,
-              timestamp: Date.now()
-            });
-          } else {
-            throw new Error(chatData.error || 'Failed to get conversational response');
-          }
-        } catch (error: any) {
-          console.error('Failed to get conversational response:', error);
-          addChatMessage({
-            role: 'assistant',
-            content: `I'm here to help! ${error.message || 'Could you rephrase that?'}`,
-            timestamp: Date.now()
-          });
-        } finally {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
+        addChatMessage({
+          role: 'assistant',
+          content:
+            "Chap-ZPT focuses on building and updating your app. Describe what you’d like to build or change, and I’ll prepare the code for you. For general questions, switch to Elon in the main assistant panel.",
+          timestamp: Date.now(),
+        });
         return;
       }
 
@@ -2240,8 +2147,6 @@ export default function PromptPlayground() {
   return (
     <div className="fixed inset-0 w-full h-screen bg-background flex flex-col overflow-hidden">
       {/* Extended header background to cover navigation area */}
-      <div className="absolute top-0 left-0 right-0 h-24 bg-muted/30 z-0"></div>
-      
       <ErrorBoundary
         onError={(error, errorInfo) => {
           console.error('Playground error:', error, errorInfo);
@@ -2252,9 +2157,6 @@ export default function PromptPlayground() {
           });
         }}
       >
-      {/* Spacer for floating navigation */}
-      <div className="h-16 flex-shrink-0"></div>
-      
       {/* Top Bar - Fixed height */}
       <div className="h-14 border-b flex items-center justify-between px-6 bg-gradient-to-r from-background via-muted/30 to-background flex-shrink-0 relative z-10 shadow-sm">
         <div className="flex items-center space-x-4">
@@ -2670,9 +2572,6 @@ export default function PromptPlayground() {
                 </Button>
               )}
             </div>
-            <p className="text-body-sm text-white/80 mt-2 leading-tight">
-              Describe what you want to build—Chap-ZPT handles the coding, vibing, and debugging.
-            </p>
                   </div>
 
                       {/* Chat Messages - Scrollable area that takes remaining space */}
@@ -2682,18 +2581,10 @@ export default function PromptPlayground() {
           >
             <div className="item-gap">
               {chatHistory.length === 0 && (
-                <EmptyState
-                  icon={Brain}
-                  title="What would you like to build today?"
-                  description="Describe your app idea and Chap-ZPT with its AI agents will generate a complete, production-ready application for you. Start with something simple like 'a todo app' or 'a weather dashboard'."
-                  action={{
-                    label: "Get Started",
-                    onClick: () => {
-                      const chatInput = document.querySelector('textarea[placeholder*="Describe"]') as HTMLTextAreaElement;
-                      if (chatInput) chatInput.focus();
-                    }
-                  }}
-                />
+                <div className="rounded-lg border border-slate-700/50 bg-slate-900/70 p-4 text-white/80">
+                  Start by describing what you want to build. Chap-ZPT will stage the files and keep
+                  the conversation inside this chat.
+                </div>
               )}
 
                           {chatHistory.map((message, index) => (

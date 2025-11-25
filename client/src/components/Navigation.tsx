@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import {
   Brain,
   Code,
@@ -33,9 +32,7 @@ export function Navigation() {
     { href: '/agent-manager', icon: Settings, text: 'Agent Manager', requireAuth: false },
     { href: '/integrations', icon: Plug, text: 'Integrations', requireAuth: false },
     { href: '/sessions', icon: History, text: 'Sessions', requireAuth: false },
-    // Admin only
     { href: '/admin', icon: Shield, text: 'Admin', requireAuth: true, adminOnly: true },
-    // Superadmin only
     { href: '/', icon: Brain, text: 'Models', requireAuth: true, superadminOnly: true },
     { href: '/companies', icon: Building2, text: 'Companies', requireAuth: true, superadminOnly: true },
     { href: '/frameworks', icon: Code, text: 'Frameworks', requireAuth: true, superadminOnly: true },
@@ -48,109 +45,126 @@ export function Navigation() {
     return true;
   });
 
+  const linkClasses = (active: boolean) =>
+    `flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-colors ${
+      active
+        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+        : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+    }`;
+
   return (
     <>
-      {/* Spacer to prevent content from being covered by fixed nav */}
-      <div className="h-24 w-full bg-background"></div>
-      
-      {/* Floating Horizontal Navigation Bar - Centered Container */}
-      <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4">
-        <motion.nav
-          initial={{ y: -100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="relative"
-        >
-          {/* Glow Effect */}
-          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-full blur-xl opacity-30"></div>
-          
-          {/* Main Navigation Bar - Responsive for 14" screens */}
-          <div className="relative flex items-center justify-center gap-2 lg:gap-3 px-3 lg:px-6 py-2 lg:py-3 bg-slate-900/95 backdrop-blur-xl border border-blue-500/30 rounded-full shadow-2xl">
-            {/* Navigation Links - Hide text on smaller screens */}
-            <div className="flex items-center gap-1 lg:gap-2">
-              {visibleLinks.map((link) => {
-                const isActive = location === link.href || 
-                                (link.href !== '/' && location.startsWith(link.href));
-                
+      <header className="fixed top-0 inset-x-0 z-50 border-b border-slate-900 bg-slate-950/95 backdrop-blur supports-[backdrop-filter]:bg-slate-950/80 shadow-sm">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <a className="flex items-center gap-2 text-white font-semibold tracking-tight">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow">
+                  <Brain className="h-5 w-5" />
+                </div>
+                <div className="hidden sm:block">
+                  <p className="leading-none">OmniAssistant</p>
+                  <p className="text-xs text-slate-400">AI workspace OS</p>
+                </div>
+              </a>
+            </Link>
+            <nav className="hidden xl:flex items-center gap-1">
+              {visibleLinks.map(link => {
+                const isActive =
+                  location === link.href ||
+                  (link.href !== '/' && location.startsWith(link.href));
                 return (
                   <Link key={link.href} href={link.href}>
-                    <motion.button
-                      className={`flex items-center gap-1 lg:gap-2 px-2 lg:px-3 py-1.5 lg:py-2 rounded-full text-xs lg:text-sm font-medium transition-all ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50'
-                          : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
-                      }`}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <link.icon className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                      {/* Show text only on larger screens or active links */}
-                      <span className={`${isActive ? '' : 'hidden xl:inline'} whitespace-nowrap`}>
-                        {link.text}
-                      </span>
+                    <a className={linkClasses(isActive)}>
+                      <link.icon className="h-4 w-4" />
+                      <span>{link.text}</span>
                       {link.superadminOnly && (
-                        <span className="px-1 py-0.5 text-[10px] lg:text-xs bg-purple-500/30 text-purple-200 rounded hidden lg:inline">
+                        <span className="rounded bg-purple-500/30 px-1.5 py-0.5 text-[10px] text-purple-100">
                           SA
                         </span>
                       )}
                       {link.adminOnly && !link.superadminOnly && (
-                        <span className="px-1 py-0.5 text-[10px] lg:text-xs bg-orange-500/30 text-orange-200 rounded hidden lg:inline">
+                        <span className="rounded bg-orange-500/30 px-1.5 py-0.5 text-[10px] text-orange-100">
                           A
                         </span>
                       )}
-                    </motion.button>
+                    </a>
                   </Link>
                 );
               })}
-            </div>
+            </nav>
+          </div>
 
-            {/* Divider */}
-            <div className="h-6 lg:h-8 w-px bg-slate-700"></div>
-
-            {/* User Section - Compact on small screens */}
-            <div className="flex items-center gap-1 lg:gap-2">
-              {user ? (
-                <>
-                  {isSuperAdmin && (
-                    <span className="px-1.5 lg:px-2 py-0.5 lg:py-1 text-[10px] lg:text-xs font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full whitespace-nowrap">
-                      👑 <span className="hidden lg:inline">Admin</span>
-                    </span>
-                  )}
-                  <Link href="/settings">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-full text-xs lg:text-sm px-2 lg:px-3 ${
-                        location === '/settings' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50' : ''
-                      }`}
-                    >
-                      <UserCog className="h-3.5 w-3.5 lg:h-4 lg:w-4 lg:mr-2" />
-                      <span className="hidden lg:inline">Settings</span>
-                    </Button>
-                  </Link>
+          <div className="flex items-center gap-2">
+            {user ? (
+              <>
+                {isSuperAdmin && (
+                  <span className="hidden lg:inline-flex items-center gap-1 rounded-full bg-purple-600/20 px-3 py-1 text-xs font-semibold text-purple-100">
+                    👑 Super Admin
+                  </span>
+                )}
+                <Link href="/settings">
                   <Button
-                    onClick={logout}
                     variant="ghost"
                     size="sm"
-                    className="text-slate-300 hover:text-white hover:bg-slate-800/50 rounded-full text-xs lg:text-sm px-2 lg:px-3"
+                    className={`rounded-full px-3 ${
+                      location === '/settings'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                        : 'text-slate-200 hover:text-white hover:bg-slate-800/70'
+                    }`}
                   >
-                    <LogOut className="h-3.5 w-3.5 lg:h-4 lg:w-4 lg:mr-2" />
-                    <span className="hidden lg:inline">Logout</span>
+                    <UserCog className="mr-2 h-4 w-4" />
+                    Settings
                   </Button>
-                </>
-              ) : (
+                </Link>
                 <Button
-                  onClick={() => setShowAuthDialog(true)}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full text-xs lg:text-sm px-3 lg:px-4"
+                  onClick={logout}
+                  variant="ghost"
                   size="sm"
+                  className="rounded-full px-3 text-slate-200 hover:text-white hover:bg-slate-800/70"
                 >
-                  <User className="h-3.5 w-3.5 lg:h-4 lg:w-4 lg:mr-2" />
-                  <span className="hidden sm:inline">Sign In</span>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
                 </Button>
-              )}
-            </div>
+              </>
+            ) : (
+              <Button
+                onClick={() => setShowAuthDialog(true)}
+                className="rounded-full bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-white shadow-lg shadow-blue-500/30 hover:from-blue-500 hover:to-purple-500"
+                size="sm"
+              >
+                <User className="mr-2 h-4 w-4" />
+                Sign In
+              </Button>
+            )}
           </div>
-        </motion.nav>
-      </div>
+        </div>
+
+        {/* Secondary row for smaller screens */}
+        <div className="border-t border-slate-200/5 px-4 py-2 xl:hidden bg-slate-950/95">
+          <div className="mx-auto flex max-w-7xl flex-wrap gap-2">
+            {visibleLinks.map(link => {
+              const isActive =
+                location === link.href ||
+                (link.href !== '/' && location.startsWith(link.href));
+              return (
+                <Link key={link.href} href={link.href}>
+                  <a
+                    className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-900 text-slate-200 hover:text-white'
+                    }`}
+                  >
+                    <link.icon className="h-4 w-4" />
+                    <span>{link.text}</span>
+                  </a>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </header>
 
       <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
     </>

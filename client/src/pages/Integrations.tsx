@@ -838,16 +838,16 @@ export default function Integrations() {
                   Create custom integrations with Discord, Slack, Trello, and more using natural language.
                   Just describe what you want and let AI build it for you!
                 </CardDescription>
-                <div className="space-y-2">
-                  <div className="flex items-center text-sm text-muted-foreground">
+                <div className="space-y-2 text-slate-700 dark:text-slate-200">
+                  <div className="flex items-center text-sm">
                     <CheckCircle2 className="w-4 h-4 mr-2 text-purple-500" />
                     Secure code generation
                   </div>
-                  <div className="flex items-center text-sm text-muted-foreground">
+                  <div className="flex items-center text-sm">
                     <CheckCircle2 className="w-4 h-4 mr-2 text-purple-500" />
                     Multi-layer security analysis
                   </div>
-                  <div className="flex items-center text-sm text-muted-foreground">
+                  <div className="flex items-center text-sm">
                     <CheckCircle2 className="w-4 h-4 mr-2 text-purple-500" />
                     Sandboxed execution
                   </div>

@@ -55,7 +55,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground pt-20">
       <Navigation />
       <Suspense fallback={<LoadingFallback />}>
         <Switch>
