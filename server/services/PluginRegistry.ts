@@ -11,7 +11,7 @@ import {
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { CredentialVault } from './CredentialVault';
 import { db } from '../../db';
-import { pluginConfigs, pluginKnowledge } from '../../db/schema-pg';
+import { pluginConfigs, pluginKnowledge, pluginInstallations, userGeneratedPlugins } from '../../db/schema-pg';
 import { eq, and } from 'drizzle-orm';
 
 const logger = new SimpleLogger('PluginRegistry');
@@ -290,15 +290,23 @@ export class PluginRegistry extends EventEmitter {
    * Used by AI agents to discover available capabilities
    */
   public async getAvailableTools(userId: string): Promise<Tool[]> {
+    logger.info('getAvailableTools called', { userId });
     const tools: Tool[] = [];
 
     // Load user plugins from database if not already loaded
     if (!this.userPlugins.has(userId) || this.userPlugins.get(userId)!.size === 0) {
+      logger.info('Loading user plugins (not cached)', { userId });
       await this.loadUserPlugins(userId);
+    } else {
+      logger.info('Using cached user plugins', { 
+        userId, 
+        pluginCount: this.userPlugins.get(userId)?.size || 0 
+      });
     }
 
     const enabledPlugins = this.userPlugins.get(userId) || new Set();
 
+    // Load tools from registered plugins
     for (const pluginId of enabledPlugins) {
       const plugin = this.plugins.get(pluginId);
       if (plugin) {
@@ -334,6 +342,121 @@ export class PluginRegistry extends EventEmitter {
         }
       }
     }
+
+    // Load tools from user-generated plugins
+    try {
+      logger.info('Loading user-generated plugins for tools', { userId });
+      
+      const installations = await db.query.pluginInstallations.findMany({
+        where: and(
+          eq(pluginInstallations.userId, userId),
+          eq(pluginInstallations.status, 'active')
+        )
+      });
+
+      logger.info('Found user-generated plugin installations', {
+        userId,
+        count: installations.length,
+        pluginIds: installations.map(i => i.pluginId)
+      });
+
+      for (const installation of installations) {
+        // Load plugin separately to ensure we get the data
+        const plugin = await db.query.userGeneratedPlugins.findFirst({
+          where: eq(userGeneratedPlugins.pluginId, installation.pluginId)
+        });
+
+        if (!plugin) {
+          logger.warn('Plugin not found for installation', {
+            userId,
+            installationId: installation.id,
+            pluginId: installation.pluginId
+          });
+          continue;
+        }
+        
+        logger.info('Processing user-generated plugin', {
+          userId,
+          pluginId: plugin.pluginId,
+          pluginName: plugin.name,
+          pluginStatus: plugin.status
+        });
+        
+        // Skip if plugin is not approved/active
+        if (plugin.status !== 'approved' && plugin.status !== 'active') {
+          logger.warn('Skipping plugin with invalid status', {
+            userId,
+            pluginId: plugin.pluginId,
+            status: plugin.status
+          });
+          continue;
+        }
+
+        // Create tools from plugin capabilities
+        const capabilities = (plugin.capabilities as string[]) || [];
+        
+        // Create a generic tool for the plugin that uses executeAction
+        // Use a more descriptive name based on service name
+        const serviceName = (plugin.serviceName || plugin.name || 'plugin').toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const pluginTool: Tool = {
+          name: `use_${serviceName}`,
+          description: `${plugin.description || `Interact with ${plugin.name}`}. This plugin allows you to ${capabilities.length > 0 ? capabilities.join(', ') : 'send messages and read data'} from ${plugin.serviceName}.`,
+          parameters: {
+            type: 'object',
+            properties: {
+              action: {
+                type: 'string',
+                description: `Action to perform. Available actions: ${capabilities.length > 0 ? capabilities.join(', ') : 'send_message, read_messages'}. For Discord: use 'send_message' to send a message or 'read_messages' to read unread messages.`,
+              },
+              ...(capabilities.length > 0 ? {} : {
+                message: {
+                  type: 'string',
+                  description: 'Message content to send (required for send_message action)',
+                },
+                channel: {
+                  type: 'string',
+                  description: 'Channel ID or name (optional, defaults to webhook channel)',
+                }
+              })
+            },
+            required: ['action']
+          },
+          execute: async (params: Record<string, any>) => {
+            logger.info('Executing user-generated plugin action', {
+              userId,
+              pluginId: plugin.pluginId,
+              action: params.action,
+              params
+            });
+            
+            // Use the executeAction method which handles user-generated plugins
+            return this.executeAction(userId, plugin.pluginId, params.action || 'default', params);
+          }
+        };
+
+        tools.push(pluginTool);
+        logger.info('Created tool for user-generated plugin', {
+          userId,
+          pluginId: plugin.pluginId,
+          toolName: pluginTool.name,
+          serviceName
+        });
+      }
+      
+      logger.info('User-generated plugin tools loaded', {
+        userId,
+        toolCount: tools.length,
+        toolNames: tools.map(t => t.name)
+      });
+    } catch (error) {
+      logger.error('Failed to load user-generated plugin tools', error as Error, { userId });
+    }
+
+    logger.info('Total tools available for user', {
+      userId,
+      totalTools: tools.length,
+      toolNames: tools.map(t => t.name)
+    });
 
     return tools;
   }
@@ -406,6 +529,15 @@ export class PluginRegistry extends EventEmitter {
     action: string,
     params: Record<string, any>
   ): Promise<any> {
+    // Check if this is a user-generated plugin
+    const isUserGenerated = pluginId.startsWith('plugin_');
+    
+    if (isUserGenerated) {
+      // Handle user-generated plugins
+      return this.executeUserGeneratedPlugin(userId, pluginId, action, params);
+    }
+
+    // Handle regular plugins
     const plugin = this.plugins.get(pluginId);
     if (!plugin) {
       throw new Error(`Plugin not found: ${pluginId}`);
@@ -442,12 +574,83 @@ export class PluginRegistry extends EventEmitter {
   }
 
   /**
+   * Execute a user-generated plugin action
+   */
+  private async executeUserGeneratedPlugin(
+    userId: string,
+    pluginId: string,
+    action: string,
+    params: Record<string, any>
+  ): Promise<any> {
+    try {
+      // Check if plugin is installed for this user
+      const installation = await db.query.pluginInstallations.findFirst({
+        where: and(
+          eq(pluginInstallations.pluginId, pluginId),
+          eq(pluginInstallations.userId, userId),
+          eq(pluginInstallations.status, 'active')
+        ),
+        with: {
+          plugin: true
+        }
+      });
+
+      if (!installation || !installation.plugin) {
+        throw new Error(`Plugin ${pluginId} is not installed or not found`);
+      }
+
+      const plugin = installation.plugin;
+
+      // Get credentials from installation
+      const credentials = installation.credentials || {};
+
+      // Import PluginSandbox for safe execution
+      const { PluginSandbox } = await import('./PluginSandbox');
+      const sandbox = new PluginSandbox();
+
+      // Execute plugin code in sandbox
+      const result = await sandbox.execute(
+        plugin.generatedCode,
+        action,
+        [userId, params, credentials],
+        plugin.sandboxConfig as any
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Plugin execution failed');
+      }
+
+      logger.info('User-generated plugin action executed', {
+        userId,
+        pluginId,
+        action,
+        executionTime: result.metrics.executionTimeMs
+      });
+
+      return result.result;
+    } catch (error) {
+      logger.error('User-generated plugin action failed', error as Error, {
+        userId,
+        pluginId,
+        action
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Load user's plugin configurations from database
    */
   public async loadUserPlugins(userId: string): Promise<void> {
     try {
       logger.info('Loading plugins for user from database', { userId });
 
+      // Initialize user plugins set
+      if (!this.userPlugins.has(userId)) {
+        this.userPlugins.set(userId, new Set());
+      }
+
+      // Load regular plugin configurations
       const configs = await db.query.pluginConfigs.findMany({
         where: (configs, { eq }) => eq(configs.userId, userId)
       });
@@ -497,9 +700,6 @@ export class PluginRegistry extends EventEmitter {
           }
 
           // Track enabled plugin
-          if (!this.userPlugins.has(userId)) {
-            this.userPlugins.set(userId, new Set());
-          }
           this.userPlugins.get(userId)!.add(config.pluginId);
 
           logger.info('Plugin loaded successfully', { userId, pluginId: config.pluginId });
@@ -510,6 +710,50 @@ export class PluginRegistry extends EventEmitter {
             errorMessage: error instanceof Error ? error.message : String(error)
           });
         }
+      }
+
+      // Load user-generated plugins from installations
+      const installations = await db.query.pluginInstallations.findMany({
+        where: and(
+          eq(pluginInstallations.userId, userId),
+          eq(pluginInstallations.status, 'active')
+        )
+      });
+
+      logger.info('Found user-generated plugin installations for loading', {
+        userId,
+        count: installations.length,
+        pluginIds: installations.map(i => i.pluginId)
+      });
+
+      for (const installation of installations) {
+        // Load plugin separately to ensure we get the data
+        const plugin = await db.query.userGeneratedPlugins.findFirst({
+          where: eq(userGeneratedPlugins.pluginId, installation.pluginId)
+        });
+
+        if (!plugin) {
+          logger.warn('Plugin not found for installation during load', {
+            userId,
+            installationId: installation.id,
+            pluginId: installation.pluginId
+          });
+          continue;
+        }
+        
+        // Skip if plugin is not approved/active
+        if (plugin.status !== 'approved' && plugin.status !== 'active') {
+          continue;
+        }
+
+        // Track user-generated plugin as enabled
+        this.userPlugins.get(userId)!.add(plugin.pluginId);
+
+        logger.info('User-generated plugin loaded', {
+          userId,
+          pluginId: plugin.pluginId,
+          pluginName: plugin.name
+        });
       }
     } catch (error) {
       logger.error('Failed to load user plugins', error as Error, { userId });

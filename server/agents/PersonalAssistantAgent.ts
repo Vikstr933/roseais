@@ -267,6 +267,13 @@ export class PersonalAssistantAgent {
       // Include built-in web search tool
       const tools = [this.webSearchTool, ...pluginTools, ...additionalToolsForUser];
 
+      logger.info('Tools available for PersonalAssistantAgent', {
+        userId,
+        totalTools: tools.length,
+        pluginToolsCount: pluginTools.length,
+        toolNames: tools.map(t => t.name)
+      });
+
       // Build system prompt
       const systemPrompt = this.buildSystemPrompt(context, tools, options?.playgroundContext);
 
