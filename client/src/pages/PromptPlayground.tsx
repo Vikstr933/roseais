@@ -212,6 +212,7 @@ export default function PromptPlayground() {
   const {
     currentSession,
     sessions,
+    sessionsInitialized,
     createSession,
     switchSession,
     addChatMessage: workspaceAddChatMessage,
@@ -453,7 +454,7 @@ export default function PromptPlayground() {
 
   // Initialize or switch workspace session based on projectId
   useEffect(() => {
-    if (!user) return;
+    if (!user || !sessionsInitialized) return;
 
     const projectId = params?.projectId || 'default';
 
@@ -474,7 +475,7 @@ export default function PromptPlayground() {
       console.log(`✨ Creating new session for project: ${projectId}`);
       createSession('playground', projectName, { projectId });
     }
-  }, [user, params?.projectId, currentProject?.name, sessions, currentSession, createSession, switchSession]);
+  }, [user, sessionsInitialized, params?.projectId, currentProject?.name, sessions, currentSession, createSession, switchSession]);
 
   // Restore generated files from workspace session
   useEffect(() => {

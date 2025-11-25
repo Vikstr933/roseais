@@ -65,6 +65,7 @@ interface WorkspaceContextType {
 
   // All user sessions
   sessions: WorkspaceSession[];
+  sessionsInitialized: boolean;
 
   // Session management
   createSession: (type: 'playground' | 'assistant', name?: string, metadata?: Record<string, any>) => WorkspaceSession;
@@ -105,33 +106,54 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { user, sessionToken } = useAuth();
   const [currentSession, setCurrentSession] = useState<WorkspaceSession | null>(null);
   const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
+  const [sessionsInitialized, setSessionsInitialized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
   // Load sessions from localStorage on mount
   useEffect(() => {
-    if (!user) return;
+    let isMounted = true;
 
-    const savedData = localStorage.getItem(`${STORAGE_KEY}-${user.id}`);
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData);
-        setSessions(parsed.sessions || []);
-
-        // Restore last active session
-        if (parsed.lastSessionId) {
-          const lastSession = parsed.sessions.find((s: WorkspaceSession) => s.id === parsed.lastSessionId);
-          if (lastSession) {
-            setCurrentSession(lastSession);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load workspace from localStorage:', error);
-      }
+    if (!user) {
+      setSessions([]);
+      setCurrentSession(null);
+      setSessionsInitialized(false);
+      return;
     }
 
-    // Load from server
-    loadSessionsFromServer();
+    const initializeSessions = async () => {
+      try {
+        const savedData = localStorage.getItem(`${STORAGE_KEY}-${user.id}`);
+        if (savedData) {
+          try {
+            const parsed = JSON.parse(savedData);
+            if (!isMounted) return;
+            setSessions(parsed.sessions || []);
+
+            if (parsed.lastSessionId) {
+              const lastSession = parsed.sessions.find((s: WorkspaceSession) => s.id === parsed.lastSessionId);
+              if (lastSession) {
+                setCurrentSession(lastSession);
+              }
+            }
+          } catch (error) {
+            console.error('Failed to load workspace from localStorage:', error);
+          }
+        }
+
+        await loadSessionsFromServer();
+      } finally {
+        if (isMounted) {
+          setSessionsInitialized(true);
+        }
+      }
+    };
+
+    initializeSessions();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   // Auto-save to localStorage
@@ -464,6 +486,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentSession,
         sessions,
+        sessionsInitialized,
         createSession,
         loadSession,
         deleteSession,
