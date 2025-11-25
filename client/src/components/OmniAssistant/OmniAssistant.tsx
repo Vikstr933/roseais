@@ -296,7 +296,7 @@ export function OmniAssistant() {
     if (isLoading) return;
     
     // Suggestions are for continuing conversation with Elon, not for playground
-    // Send the suggestion as a message to Elon
+    // Send the suggestion as a message to Elon (no hardcoded acknowledgment needed)
     const playgroundContext = buildPlaygroundContext();
     
     await sendMessage(suggestion, {
@@ -304,16 +304,6 @@ export function OmniAssistant() {
       workspaceId: currentSession?.id as number | undefined,
       playgroundContext,
     });
-
-    // Acknowledge to user
-      await sendMessage(`✅ Suggestion sent to Playground AI: "${suggestion.substring(0, 100)}${suggestion.length > 100 ? '...' : ''}"`, {
-        currentPage: window.location.pathname,
-        workspaceId: (selectedProjectId || currentSession?.id) as number | undefined,
-        playgroundContext: buildPlaygroundContext(),
-      });
-    } catch (error) {
-      console.error('Failed to send suggestion to playground:', error);
-    }
   };
 
   // Intelligent code insertion - inserts code at the right location instead of replacing entire file
@@ -455,19 +445,12 @@ export function OmniAssistant() {
         setLocation(playgroundPath);
       }
 
-      // Show success message
-      await sendMessage('✅ Code changes have been sent to the playground AI. The playground will now apply these changes matching your app\'s design system.', {
-        currentPage: window.location.pathname,
-        workspaceId: currentSession?.id as number | undefined,
-        playgroundContext: buildPlaygroundContext(),
-      });
+      // Code changes sent successfully - let the playground handle user feedback naturally
+      // No hardcoded success message needed
     } catch (error) {
       console.error('Failed to trigger playground generation:', error);
-      await sendMessage(`❌ Failed to send code changes to playground: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or apply changes manually.`, {
-        currentPage: window.location.pathname,
-        workspaceId: currentSession?.id as number | undefined,
-        playgroundContext: buildPlaygroundContext(),
-      });
+      // Let the error propagate naturally - don't add hardcoded error messages
+      // The playground will handle error feedback appropriately
     }
   };
 

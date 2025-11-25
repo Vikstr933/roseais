@@ -53,10 +53,12 @@ export class PersonalAssistantAgent {
   /**
    * Perform web search using Google Custom Search API (primary) with DuckDuckGo fallback
    */
-  private async performWebSearch(params: { query: string; num_results?: string }): Promise<any> {
+  private async performWebSearch(params: Record<string, any>): Promise<any> {
+    const query = params.query as string;
+    const num_results = params.num_results as string | undefined;
     try {
-      const numResults = parseInt(params.num_results || '3', 10);
-      logger.info(`Performing web search: query="${params.query}", numResults=${numResults}`);
+      const numResults = parseInt(num_results || '3', 10);
+      logger.info(`Performing web search: query="${query}", numResults=${numResults}`);
 
       const results = [];
       let searchSource = 'Unknown';
@@ -67,13 +69,13 @@ export class PersonalAssistantAgent {
 
       if (googleApiKey && googleEngineId) {
         try {
-          logger.info(`Using Google Custom Search API for query: "${params.query}"`);
+          logger.info(`Using Google Custom Search API for query: "${query}"`);
           
           const googleResponse = await axios.get('https://www.googleapis.com/customsearch/v1', {
             params: {
               key: googleApiKey,
               cx: googleEngineId,
-              q: params.query,
+              q: query,
               num: Math.min(numResults, 10) // Google allows max 10 results per request
             },
             timeout: 5000
@@ -102,16 +104,16 @@ export class PersonalAssistantAgent {
       // Fallback to DuckDuckGo if Google didn't return results
       if (results.length === 0) {
         try {
-          logger.info(`Using DuckDuckGo Instant Answer API for query: "${params.query}"`);
+          logger.info(`Using DuckDuckGo Instant Answer API for query: "${query}"`);
           
           // Simplify query for better results - remove extra keywords that might confuse the API
-          const simplifiedQuery = params.query
+          const simplifiedQuery = query
             .replace(/\s+(adress|address|telefonnummer|phone|kontakt|contact|öppettider|hours)/gi, '')
             .trim();
           
           const ddgResponse = await axios.get('https://api.duckduckgo.com/', {
             params: {
-              q: simplifiedQuery || params.query,
+              q: simplifiedQuery || query,
               format: 'json',
               no_html: 1,
               skip_disambig: 1
@@ -126,7 +128,7 @@ export class PersonalAssistantAgent {
           // Add main abstract if available
           if (ddgResponse.data.Abstract) {
             results.push({
-              title: ddgResponse.data.Heading || params.query,
+              title: ddgResponse.data.Heading || query,
               snippet: ddgResponse.data.Abstract,
               url: ddgResponse.data.AbstractURL,
               source: 'DuckDuckGo'
@@ -155,28 +157,28 @@ export class PersonalAssistantAgent {
         }
       }
 
-      logger.info(`Web search completed: query="${params.query}", resultsFound=${results.length}, source=${searchSource}`);
+      logger.info(`Web search completed: query="${query}", resultsFound=${results.length}, source=${searchSource}`);
 
       return {
-        query: params.query,
+        query: query,
         results: results.slice(0, numResults),
         timestamp: new Date().toISOString(),
         success: true,
         source: searchSource,
         message: results.length > 0 
-          ? `Found ${results.length} result(s) for "${params.query}" using ${searchSource}` 
-          : `No specific results found for "${params.query}". Consider refining the search query.`
+          ? `Found ${results.length} result(s) for "${query}" using ${searchSource}` 
+          : `No specific results found for "${query}". Consider refining the search query.`
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'UNKNOWN';
       const errorStatus = error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response ? String(error.response.status) : 'N/A';
       
-      logger.error(`Web search failed: query="${params.query}", error="${errorMessage}", code="${errorCode}", status="${errorStatus}"`, error as Error);
+      logger.error(`Web search failed: query="${query}", error="${errorMessage}", code="${errorCode}", status="${errorStatus}"`, error as Error);
       
       // Return structured error that Elon can use to inform the user
       return {
-        query: params.query,
+        query: query,
         results: [],
         success: false,
         error: {
@@ -185,8 +187,8 @@ export class PersonalAssistantAgent {
           status: errorStatus,
           timestamp: new Date().toISOString()
         },
-        errorLog: `[ERROR] Web search tool failed\nQuery: "${params.query}"\nError: ${errorMessage}\nCode: ${errorCode}\nStatus: ${errorStatus}\nTimestamp: ${new Date().toISOString()}\n\nPlease send this error log to the administrator for troubleshooting.`,
-        message: 'I was unable to search the web for this information. The web search tool encountered an error.'
+        errorLog: `[ERROR] Web search tool failed\nQuery: "${query}"\nError: ${errorMessage}\nCode: ${errorCode}\nStatus: ${errorStatus}\nTimestamp: ${new Date().toISOString()}\n\nPlease send this error log to the administrator for troubleshooting.`
+        // No hardcoded message - let the AI generate a natural response based on the errorLog
       };
     }
   }
@@ -340,7 +342,8 @@ export class PersonalAssistantAgent {
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             logger.error(`Tool execution failed: userId=${userId}, toolName=${content.name}, errorMessage=${errorMessage}, toolInput=${JSON.stringify(content.input)}`, error as Error);
-            finalResponse += `\n\nNote: I tried to use ${content.name} but encountered an error: ${errorMessage}`;
+            // Don't add hardcoded error messages - let the AI handle tool failures naturally
+            // The system prompt already instructs the AI on how to handle tool failures
           }
         }
       }
@@ -843,7 +846,19 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
       });
 
       if (knowledge.length === 0) {
-        return "Good morning! 🌅 I don't have any data from your connected services yet. Once you connect services like Gmail, I'll be able to provide you with a comprehensive daily summary including important emails, upcoming events, and action items.";
+        // Generate a natural response instead of hardcoded template
+        const emptySummaryPrompt = `Generate a warm, friendly message for the user explaining that you don't have any data from their connected services yet. Keep it conversational and encouraging, suggesting they can connect services like Gmail to get daily summaries. Make it feel personal, not like a template.`;
+        
+        const emptyResponse = await this.anthropic.messages.create({
+          model: 'claude-sonnet-4-5-20250929',
+          max_tokens: 256,
+          messages: [{
+            role: 'user',
+            content: emptySummaryPrompt
+          }]
+        });
+        
+        return emptyResponse.content[0].type === 'text' ? emptyResponse.content[0].text : '';
       }
 
       // Build detailed context for summary
