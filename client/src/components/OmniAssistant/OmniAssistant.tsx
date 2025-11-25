@@ -33,6 +33,7 @@ import {
   MapPin,
   FolderOpen,
   ArrowRight,
+  Download,
 } from 'lucide-react';
 import { useOmniAssistant, type OmniAssistantMessage } from '@/hooks/useOmniAssistant'; // Hook keeps same name for backward compatibility
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -66,7 +67,7 @@ export function OmniAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
   const { currentSession, updateGeneratedFiles } = useWorkspace();
-  const { sessionToken } = useAuth();
+  const { sessionToken, user } = useAuth();
   const [, setLocation] = useLocation();
 
   const {
@@ -79,6 +80,7 @@ export function OmniAssistant() {
 
   // Get WorkspaceContext methods for prompt forwarding
   const { setPendingPrompt } = useWorkspace();
+  const userDisplayName = user?.fullName || user?.name || user?.email || 'You';
 
   // Fetch user projects
   const { data: userProjects = [] } = useQuery<Project[]>({
@@ -551,34 +553,66 @@ export function OmniAssistant() {
             exit={{ y: 100, opacity: 0 }}
             className="fixed bottom-6 right-6 z-[48]"
           >
-            <Card className="w-[95vw] max-w-[800px] h-[85vh] max-h-[900px] md:max-w-[900px] shadow-2xl flex flex-col">
-              <CardHeader className="flex flex-row items-center justify-between py-2 px-3 border-b">
-                <div className="flex items-center gap-1.5">
-                  <Bot className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-sm">Elon</CardTitle>
-                  <FeatureIndicators features={features} />
+            <Card className="w-[95vw] max-w-[820px] h-[85vh] max-h-[900px] md:max-w-[920px] shadow-2xl flex flex-col border border-border/60 rounded-3xl">
+              <CardHeader className="flex flex-row items-center justify-between py-4 px-5 border-b bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-t-3xl">
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 rounded-2xl bg-white/10 flex items-center justify-center text-lg font-semibold">
+                    <Bot className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base text-white">Elon</CardTitle>
+                    <p className="text-xs text-white/70">Your AI partner in building stellar experiences</p>
+                  </div>
                 </div>
-                <div className="flex gap-0.5">
+                <div className="flex items-center gap-2">
+                  <FeatureIndicators features={features} />
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-8 w-8 text-white hover:bg-white/10"
+                    title="Export conversation"
+                    onClick={() => {
+                      const transcript = messages
+                        .map(msg => {
+                          const sender = msg.role === 'user' ? userDisplayName : 'Elon';
+                          const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+                          return `[${time}] ${sender}:\n${msg.content}\n`;
+                        })
+                        .join('\n');
+                      const blob = new Blob([transcript], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      const date = new Date().toISOString().split('T')[0];
+                      link.href = url;
+                      link.download = `elon-conversation-${date}.txt`;
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-white hover:bg-white/10"
                     onClick={() => setViewState('settings')}
                   >
-                    <Settings className="h-3.5 w-3.5" />
+                    <Settings className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-8 w-8 text-white hover:bg-white/10"
                     onClick={() => setViewState('minimized')}
                   >
-                    <Minimize2 className="h-3.5 w-3.5" />
+                    <Minimize2 className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-9 w-9 text-white hover:bg-white/10"
                     onClick={() => setViewState('closed')}
                   >
                     <X className="h-4 w-4" />
@@ -592,11 +626,13 @@ export function OmniAssistant() {
                 ) : (
                   <div className="space-y-4">
                     {messages.map((msg, idx) => (
-                      <MessageBubble 
-                        key={idx} 
-                        message={msg} 
+                      <MessageBubble
+                        key={idx}
+                        message={msg}
+                        userName={userDisplayName}
                         onSuggestionClick={handleSuggestionClick}
                         onApplyChanges={handleApplyChanges}
+                        displayedMessagesRef={displayedMessagesRef}
                       />
                     ))}
                     <div ref={messagesEndRef} />
@@ -764,26 +800,28 @@ function FeatureIndicators({ features }: { features: any }) {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <Bot className="h-16 w-16 text-muted-foreground/50 mb-4" />
-      <h3 className="font-semibold text-lg mb-2">Welcome to OmniAssistant</h3>
+      <Bot className="h-16 w-16 text-primary/60 mb-4" />
+      <h3 className="font-semibold text-xl mb-2">Welcome to Elon 🤝</h3>
       <p className="text-sm text-muted-foreground max-w-sm">
-        Your AI-powered digital office assistant. I can help with coding, marketing, CRM, analytics,
-        database design, and business guidance.
+        I’m here to help you craft beautiful experiences—whether that's building UI components,
+        planning your next release, or polishing your copy. Ask me anything and let’s create together.
       </p>
     </div>
   );
 }
 
-function MessageBubble({ 
-  message, 
+function MessageBubble({
+  message,
   onSuggestionClick,
   onApplyChanges,
-  displayedMessagesRef
-}: { 
+  displayedMessagesRef,
+  userName,
+}: {
   message: OmniAssistantMessage;
   onSuggestionClick?: (suggestion: string) => void;
   onApplyChanges?: (files: Array<{ path: string; content: string }>) => void;
   displayedMessagesRef?: React.MutableRefObject<Set<string>>;
+  userName: string;
 }) {
   const isUser = message.role === 'user';
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -898,36 +936,44 @@ function MessageBubble({
 
 
   return (
-    <div className={cn('flex gap-3', isUser && 'flex-row-reverse')}>
+    <div className={cn('flex gap-3', isUser ? 'flex-row-reverse text-right' : 'text-left')}>
       <div
         className={cn(
-          'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center',
-          isUser ? 'bg-primary' : 'bg-muted'
+          'flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center text-sm font-semibold shadow-sm',
+          isUser ? 'bg-primary text-primary-foreground' : 'bg-zinc-800 text-white'
         )}
+        aria-label={isUser ? userName : 'Elon'}
       >
-        {isUser ? (
-          <span className="text-xs font-semibold text-primary-foreground">You</span>
-        ) : (
-          <Bot className="h-5 w-5" />
-        )}
+        {isUser ? userName.charAt(0).toUpperCase() : 'E'}
       </div>
 
-      <div className={cn('flex-1 space-y-2', isUser && 'flex flex-col items-end')}>
+      <div className={cn('flex-1 space-y-1', isUser ? 'items-end' : 'items-start')}>
         <div
           className={cn(
-            'inline-block rounded-lg px-4 py-2 max-w-[85%]',
+            'text-xs text-muted-foreground flex items-center gap-2',
+            isUser ? 'justify-end' : 'justify-start'
+          )}
+        >
+          <span className="font-semibold">{isUser ? userName : 'Elon'}</span>
+          {message.timestamp && (
+            <span className="text-[11px] opacity-70">
+              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+        <div
+          className={cn(
+            'inline-block rounded-2xl px-4 py-3 max-w-[85%] shadow border transition-all',
             isUser
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-foreground border border-border'
+              ? 'bg-gradient-to-r from-primary/90 via-primary to-primary/80 text-primary-foreground'
+              : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-foreground'
           )}
         >
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap text-primary-foreground">{message.content}</p>
           ) : (
-            <div className="text-sm prose prose-sm dark:prose-invert max-w-none text-white">
-              {isTyping && (
-                <span className="inline-block w-2 h-4 bg-foreground animate-pulse ml-1" />
-              )}
+            <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+              {isTyping && <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse ml-1" />}
               <ReactMarkdown
                 components={{
                   code({ node, inline, className, children, ...props }) {
