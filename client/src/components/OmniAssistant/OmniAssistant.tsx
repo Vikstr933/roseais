@@ -80,7 +80,7 @@ export function OmniAssistant() {
 
   // Get WorkspaceContext methods for prompt forwarding
   const { setPendingPrompt } = useWorkspace();
-  const userDisplayName = user?.fullName || user?.name || user?.email || 'You';
+  const userDisplayName = user?.displayName || user?.email || 'You';
 
   // Fetch user projects
   const { data: userProjects = [] } = useQuery<Project[]>({
@@ -306,6 +306,119 @@ export function OmniAssistant() {
     });
   };
 
+  const handleSendToPlayground = async (messageContent: string) => {
+    if (isLoading || !currentSession) return;
+    
+    // Transform Elon's message content into a proper prompt for the playground AI
+    const playgroundContext = buildPlaygroundContext();
+    
+    // Extract structured information from Elon's response
+    // Look for patterns like "📍 Adress:", "📞 Telefon:", "🕐 Öppettider:", etc.
+    const addressPatterns = [
+      /(?:📍|Adress|Address)[:\s]+([^\n]+)/i,
+      /(?:adress|address)[:\s]+([^\n]+)/i,
+      /Bondevägen\s+\d+[^\n]*/i,
+    ];
+    const phonePatterns = [
+      /(?:📞|Telefon|Phone)[:\s]+([^\n]+)/i,
+      /(?:telefon|phone)[:\s]+([^\n]+)/i,
+      /046[-\s]?\d+[-\s]?\d+[-\s]?\d+/i,
+    ];
+    const hoursPatterns = [
+      /(?:🕐|Öppettider|Hours|Opening)[:\s]+([^\n]+)/i,
+      /(?:öppettider|hours|opening)[:\s]+([^\n]+)/i,
+      /(?:Vardagar|Weekdays|Måndag|Monday)[^\n]*(?:09:00|10:00)[^\n]*18:00/i,
+    ];
+    
+    let address = '';
+    let phone = '';
+    let hours = '';
+    
+    for (const pattern of addressPatterns) {
+      const match = messageContent.match(pattern);
+      if (match) {
+        address = match[1]?.trim() || match[0].trim();
+        break;
+      }
+    }
+    
+    for (const pattern of phonePatterns) {
+      const match = messageContent.match(pattern);
+      if (match) {
+        phone = match[1]?.trim() || match[0].trim();
+        break;
+      }
+    }
+    
+    for (const pattern of hoursPatterns) {
+      const match = messageContent.match(pattern);
+      if (match) {
+        hours = match[1]?.trim() || match[0].trim();
+        break;
+      }
+    }
+    
+    // Extract file names mentioned
+    const fileMatches = messageContent.match(/(?:file|fil)[:\s]+([^\n`]+)/gi) || [];
+    const files = fileMatches.map(m => m.replace(/(?:file|fil)[:\s]+/i, '').trim());
+    
+    // Build a clear, actionable prompt for the playground AI
+    let prompt = '';
+    
+    if (address || phone || hours) {
+      // Structured update prompt
+      prompt = 'Uppdatera följande information i projektet:\n\n';
+      if (address) prompt += `📍 Adress: ${address}\n`;
+      if (phone) prompt += `📞 Telefon: ${phone}\n`;
+      if (hours) {
+        // Extract hours details
+        const hoursText = hours.replace(/🕐|Öppettider|Hours|Opening[:\s]*/gi, '').trim();
+        prompt += `🕐 Öppettider:\n${hoursText}\n`;
+      }
+      
+      prompt += '\nAnalysera den befintliga koden först för att förstå projektstrukturen, designmönstren, och var denna information lagras. Uppdatera sedan alla relevanta filer med den nya informationen. Se till att matcha den befintliga kodstilen och formateringen.';
+      
+      if (files.length > 0) {
+        prompt += `\n\nFiler som troligen behöver uppdateras: ${files.join(', ')}`;
+      }
+    } else {
+      // Generic prompt - clean up markdown and make it actionable
+      prompt = messageContent
+        .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+        .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+        .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+        .replace(/📍|📞|🕐|💡|⚠️|✅|❌/g, '') // Remove emojis
+        .replace(/\n{3,}/g, '\n\n') // Normalize line breaks
+        .trim();
+      
+      // Add instruction prefix if not already present
+      if (!prompt.match(/^(?:uppdatera|update|ändra|change|fix|implementera|implement)/i)) {
+        prompt = `Uppdatera projektet enligt följande:\n\n${prompt}`;
+      }
+      
+      prompt += '\n\nAnalysera den befintliga koden först för att förstå projektstrukturen och designmönstren, sedan implementera ändringarna.';
+    }
+    
+    // Add project context if available
+    if (playgroundContext?.currentProject) {
+      prompt = `[Projekt: ${playgroundContext.currentProject}]\n\n${prompt}`;
+    }
+    
+    // Set pending prompt using WorkspaceContext
+    setPendingPrompt(prompt, 'elon-suggestion', {
+      fromPage: window.location.pathname,
+      originalMessage: messageContent.substring(0, 200),
+    });
+    
+    // Navigate to playground if not already there
+    const currentPath = window.location.pathname;
+    if (!currentPath.startsWith('/playground')) {
+      const projectId = currentSession?.id;
+      const playgroundPath = projectId ? `/playground/${projectId}` : '/playground';
+      setLocation(playgroundPath);
+    }
+  };
+
   // Intelligent code insertion - inserts code at the right location instead of replacing entire file
   const insertCodeIntelligently = (
     existingContent: string,
@@ -491,7 +604,9 @@ export function OmniAssistant() {
                 <div className="flex items-center gap-2">
                   <Bot className="h-5 w-5 text-primary" />
                   <CardTitle className="text-sm">Elon</CardTitle>
-                  <Database className="h-4 w-4 text-green-500" title="Persistent memory enabled" />
+                  <div title="Persistent memory enabled">
+                    <Database className="h-4 w-4 text-green-500" />
+                  </div>
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -608,6 +723,7 @@ export function OmniAssistant() {
                         message={msg}
                         userName={userDisplayName}
                         onSuggestionClick={handleSuggestionClick}
+                        onSendToPlayground={handleSendToPlayground}
                         onApplyChanges={handleApplyChanges}
                         displayedMessagesRef={displayedMessagesRef}
                       />
@@ -790,12 +906,14 @@ function EmptyState() {
 function MessageBubble({
   message,
   onSuggestionClick,
+  onSendToPlayground,
   onApplyChanges,
   displayedMessagesRef,
   userName,
 }: {
   message: OmniAssistantMessage;
   onSuggestionClick?: (suggestion: string) => void;
+  onSendToPlayground?: (content: string) => void;
   onApplyChanges?: (files: Array<{ path: string; content: string }>) => void;
   displayedMessagesRef?: React.MutableRefObject<Set<string>>;
   userName: string;
@@ -953,14 +1071,15 @@ function MessageBubble({
               {isTyping && <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse ml-1" />}
               <ReactMarkdown
                 components={{
-                  code({ node, inline, className, children, ...props }) {
+                  code({ node, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');
                     const codeString = String(children).replace(/\n$/, '');
                     const filePathMatch = codeString.match(/\/\/\s*file:\s*([^\n]+)/);
                     const filePath = filePathMatch ? filePathMatch[1].trim() : null;
                     const actualCode = filePathMatch ? codeString.replace(/\/\/\s*file:\s*[^\n]+\n/, '').trim() : codeString;
+                    const isInline = !match || className?.includes('inline');
 
-                    return !inline && match ? (
+                    return !isInline && match ? (
                       <div className="relative my-2">
                         {filePath && (
                           <div className="text-xs text-white/70 mb-1 px-2">
@@ -969,11 +1088,11 @@ function MessageBubble({
                         )}
                         <div className="relative group">
                           <SyntaxHighlighter
-                            style={vscDarkPlus}
+                            style={vscDarkPlus as any}
                             language={match[1]}
                             PreTag="div"
                             className="rounded-md"
-                            {...props}
+                            {...(props as any)}
                           >
                             {actualCode}
                           </SyntaxHighlighter>
@@ -1031,11 +1150,11 @@ function MessageBubble({
                 Apply to Playground ({codeBlocks.length} file{codeBlocks.length > 1 ? 's' : ''})
               </Button>
             )}
-            {!hasEditableCode && onSuggestionClick && (
+            {!hasEditableCode && onSendToPlayground && (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => onSuggestionClick(message.content)}
+                onClick={() => onSendToPlayground(message.content)}
                 className="text-xs h-7 gap-1"
               >
                 <ArrowRight className="h-3 w-3" />

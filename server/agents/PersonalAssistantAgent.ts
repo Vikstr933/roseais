@@ -288,64 +288,92 @@ export class PersonalAssistantAgent {
         tools: this.convertToolsToAnthropicFormat(tools)
       });
 
-      // Process tool calls if any
+      // Process tool calls recursively - handle multiple sequential tool calls
       const toolsUsed: string[] = [];
       let finalResponse = '';
+      let currentResponse = response;
+      let conversationMessages: Anthropic.MessageParam[] = [
+        ...history,
+        {
+          role: 'user',
+          content: enhancedMessage
+        }
+      ];
+      const maxToolIterations = 5; // Prevent infinite loops
+      let toolIteration = 0;
 
-      for (const content of response.content) {
-        if (content.type === 'text') {
-          finalResponse += content.text;
-        } else if (content.type === 'tool_use') {
+      // Loop until no more tool calls are needed
+      while (toolIteration < maxToolIterations) {
+        const toolCalls: Anthropic.ToolUseBlock[] = [];
+        let textContent = '';
+
+        // Collect all tool calls and text from current response
+        for (const content of currentResponse.content) {
+          if (content.type === 'text') {
+            textContent += content.text;
+          } else if (content.type === 'tool_use') {
+            toolCalls.push(content);
+          }
+        }
+
+        // Add assistant response to conversation
+        conversationMessages.push({
+          role: 'assistant',
+          content: currentResponse.content
+        });
+
+        // If no tool calls, we're done
+        if (toolCalls.length === 0) {
+          finalResponse += textContent;
+          break;
+        }
+
+        // Process all tool calls in parallel
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+        for (const toolCall of toolCalls) {
           try {
-            logger.info(`Executing tool: userId=${userId}, toolName=${content.name}, toolId=${content.id}`);
+            logger.info(`Executing tool: userId=${userId}, toolName=${toolCall.name}, toolId=${toolCall.id}, iteration=${toolIteration + 1}`);
 
-            const tool = tools.find(t => t.name === content.name);
+            const tool = tools.find(t => t.name === toolCall.name);
             if (tool) {
-              const result = await tool.execute(content.input as Record<string, any>);
-              toolsUsed.push(content.name);
+              const result = await tool.execute(toolCall.input as Record<string, any>);
+              toolsUsed.push(toolCall.name);
 
-              // Continue conversation with tool result (increased token limit)
-              const followUpResponse = await this.anthropic.messages.create({
-                model: 'claude-sonnet-4-5-20250929',
-                max_tokens: 8192,
-                system: systemPrompt,
-                messages: [
-                  ...history,
-                  {
-                    role: 'user',
-                    content: enhancedMessage
-                  },
-                  {
-                    role: 'assistant',
-                    content: response.content
-                  },
-                  {
-                    role: 'user',
-                    content: [
-                      {
-                        type: 'tool_result',
-                        tool_use_id: content.id,
-                        content: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-                      }
-                    ]
-                  }
-                ]
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
               });
-
-              // Extract text from follow-up response
-              for (const c of followUpResponse.content) {
-                if (c.type === 'text') {
-                  finalResponse += c.text;
-                }
-              }
             }
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            logger.error(`Tool execution failed: userId=${userId}, toolName=${content.name}, errorMessage=${errorMessage}, toolInput=${JSON.stringify(content.input)}`, error as Error);
+            logger.error(`Tool execution failed: userId=${userId}, toolName=${toolCall.name}, errorMessage=${errorMessage}, toolInput=${JSON.stringify(toolCall.input)}`, error as Error);
             // Don't add hardcoded error messages - let the AI handle tool failures naturally
-            // The system prompt already instructs the AI on how to handle tool failures
           }
         }
+
+        // Add tool results to conversation
+        if (toolResults.length > 0) {
+          conversationMessages.push({
+            role: 'user',
+            content: toolResults
+          });
+        }
+
+        // Get follow-up response (may contain more tool calls)
+        currentResponse = await this.anthropic.messages.create({
+          model: 'claude-sonnet-4-5-20250929',
+          max_tokens: 8192,
+          system: systemPrompt,
+          messages: conversationMessages,
+          tools: this.convertToolsToAnthropicFormat(tools)
+        });
+
+        toolIteration++;
+      }
+
+      if (toolIteration >= maxToolIterations) {
+        logger.warn(`Reached max tool iterations (${maxToolIterations}) for userId=${userId}`);
       }
 
       // Update conversation history

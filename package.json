@@ -27,7 +27,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
     "@aws-sdk/client-s3": "^3.901.0",
-    "axios": "^1.7.7",
     "@aws-sdk/s3-request-presigner": "^3.901.0",
     "@babel/parser": "^7.28.5",
     "@babel/standalone": "^7.26.4",
@@ -81,6 +80,7 @@
     "@upstash/redis": "^1.35.4",
     "@webcontainer/api": "^1.6.1",
     "archiver": "^7.0.1",
+    "axios": "^1.7.7",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
     "class-variance-authority": "^0.7.0",
@@ -132,6 +132,7 @@
   "devDependencies": {
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
     "@tailwindcss/typography": "^0.5.15",
+    "@types/axios": "^0.9.36",
     "@types/babel__standalone": "^7.1.9",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
