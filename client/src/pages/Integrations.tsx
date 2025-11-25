@@ -209,32 +209,65 @@ export default function Integrations() {
         return;
       }
 
-      // Save each credential separately
+      // Validate URL fields (webhooks, etc.)
       for (const [key, value] of Object.entries(credentialValues)) {
-        if (!value) continue; // Skip empty fields
-
-        const response = await apiFetch('/api/credentials', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            serviceName: credentialPluginId,
-            key: key,
-            value: value
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Failed to save ${credentialsRequired[key]?.label || key}`);
+        const config = credentialsRequired[key];
+        if (config?.type === 'url' && value) {
+          try {
+            new URL(value);
+          } catch {
+            setError(`Invalid URL for ${config.label || key}. Please enter a valid URL (e.g., https://...)`);
+            return;
+          }
         }
       }
 
       const plugin = getPluginById(credentialPluginId);
       if (!plugin) {
         throw new Error('Plugin not found');
+      }
+
+      // Determine credentialType based on plugin requirements
+      // If webhookUrl is required, use 'custom' (webhooks don't fit standard auth types)
+      const hasWebhook = Object.keys(credentialsRequired).some(
+        key => key.toLowerCase().includes('webhook')
+      );
+      
+      let credentialType: 'api_key' | 'oauth2' | 'personal_access_token' | 'custom' = 'custom';
+      if (!hasWebhook && plugin.authType) {
+        // Map plugin authType to valid enum values
+        if (plugin.authType === 'oauth' || plugin.authType === 'oauth2') {
+          credentialType = 'oauth2';
+        } else if (plugin.authType === 'api_key' || plugin.authType === 'apikey') {
+          credentialType = 'api_key';
+        } else if (plugin.authType === 'personal_access_token' || plugin.authType === 'token') {
+          credentialType = 'personal_access_token';
+        }
+      }
+
+      const credentialPayload = {
+        serviceName: credentialPluginId,
+        credentialType,
+        displayName: `${plugin.name} Credentials`,
+        description: plugin.description || `Credentials for ${plugin.name}`,
+        credentials: credentialValues,
+      };
+
+      const saveResponse = await apiFetch('/api/credentials', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(credentialPayload),
+      });
+
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        const errorMessage = errorData.details 
+          ? `${errorData.error || 'Validation failed'}: ${Array.isArray(errorData.details) ? errorData.details.join(', ') : JSON.stringify(errorData.details)}`
+          : errorData.error || 'Failed to save credentials';
+        throw new Error(errorMessage);
       }
 
       await installCustomPlugin(plugin, credentialValues);
