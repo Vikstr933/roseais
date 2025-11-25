@@ -323,7 +323,7 @@ export class PersonalAssistantAgent {
                       {
                         type: 'tool_result',
                         tool_use_id: content.id,
-                        content: JSON.stringify(result)
+                        content: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
                       }
                     ]
                   }
@@ -363,8 +363,8 @@ export class PersonalAssistantAgent {
       }
       this.conversationHistory.set(sessionId, history);
 
-      // Ensure response ends with Key Points section (add if missing)
-      finalResponse = this.ensureKeyPointsSection(finalResponse, userMessage, context, options?.playgroundContext);
+      // Response is complete - no need to add hardcoded templates
+      // The AI will naturally conclude conversations based on the system prompt guidance
 
       // Generate proactive suggestions
       const suggestions = await this.generateSuggestions(userId, context, finalResponse);
@@ -443,13 +443,20 @@ Your capabilities:
   * **CRITICAL: When web_search returns results (success=true and results array has items)**:
     - The tool result is a JSON object with a "results" array - parse it and extract the information
     - ALWAYS include the actual search results in your response - DO NOT just say "I searched" or "let me search"
-    - Extract and display the information from each result in the results array:
-      * Each result has: title, snippet (contains the actual information), url, source
+    - The tool result format is: { success: true, results: [{ title, snippet, url, source }], ... }
+    - The tool_result content will be a JSON string - parse it to access the results array
+    - STEP 1: Parse the JSON string from tool_result.content to get the result object
+    - STEP 2: Access the "results" array from the parsed object
+    - STEP 3: Extract and display the information from each result in the results array:
+      * Each result has: title, snippet (contains the actual information like address, phone, hours), url, source
     - For business information queries: extract addresses, phone numbers, hours, contact details from the snippets
     - Format the information clearly and make it actionable - show the user the actual data found
-    - Example format: "I found the following information for Colorama Lund:\n\n📍 Address: [extracted from snippet]\n📞 Phone: [extracted from snippet]\n🕐 Hours: [extracted from snippet]\n\nSource: [url from results]"
+    - Example format (Swedish): "Här är informationen jag hittade om Colorama Lund:\n\n📍 Adress: [extrakt från snippet]\n📞 Telefon: [extrakt från snippet]\n🕐 Öppettider: [extrakt från snippet]\n\nKälla: [url från results]"
+    - Example format (English): "Here's the information I found for Colorama Lund:\n\n📍 Address: [extracted from snippet]\n📞 Phone: [extracted from snippet]\n🕐 Hours: [extracted from snippet]\n\nSource: [url from results]"
     - If multiple results are returned, review all of them and extract the most relevant information
     - DO NOT just acknowledge the search - you MUST display the actual information found in the results
+    - DO NOT say "let me search more" if you already have results - use what you found
+    - Match the user's language - if they ask in Swedish, respond in Swedish with the data
   * **CRITICAL: If web_search tool fails or returns success=false**:
     - DO NOT guess or make up information
     - DO NOT provide potentially incorrect details
@@ -524,12 +531,12 @@ For location and map queries:
 
 Remember: You're not just reporting data - you're helping a real person manage their day. Make every response feel personal and conversational.
 
-Close every conversation with a natural-feeling wrap-up that covers:
-- the most important takeaways,
-- what the user can learn from the discussion,
-- and a forward-looking piece of guidance or encouragement.
-
-This final paragraph can be labeled something like "Key takeaways" or "What to keep in mind", but keep it warm and human—no rigid templates or robotic bullet lists.`;
+**CRITICAL: Response Format Rules:**
+- NEVER use hardcoded templates like "Key Points, Learnings & Wisdom" with bullet points
+- NEVER add boilerplate sections that repeat generic advice
+- If the conversation naturally calls for a summary, write it in your own words, matching the user's language (Swedish if they're speaking Swedish, English if English)
+- Keep conclusions natural and conversational - no rigid structures or templates
+- When you find web search results, ALWAYS include the actual data (address, phone, hours) directly in your response - don't just say "I searched"`;
 
     let contextSection = '';
     if (context.length > 0) {
@@ -773,27 +780,6 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
     }
   }
 
-  /**
-   * Ensure response ends with Key Points section
-   */
-  private ensureKeyPointsSection(
-    response: string,
-    userMessage: string,
-    context: KnowledgeItem[],
-    playgroundContext?: any
-  ): string {
-    // Check if response already has key points section
-    const hasKeyPoints = /key points|learnings|wisdom going forward/i.test(response);
-    
-    if (hasKeyPoints) {
-      return response; // Already has the section
-    }
-    
-    // Add key points section if missing
-    const keyPointsSection = `\n\n---\n\n## Key Points, Learnings & Wisdom\n\n**Key Points:**\n- Review the main takeaways from our conversation above\n- Consider the actionable insights provided\n\n**Learnings:**\n- Reflect on what was discussed and how it applies to your situation\n- Remember the specific details and context shared\n\n**Wisdom Going Forward:**\n- Apply the insights from this conversation to future decisions\n- Consider the patterns and best practices mentioned\n- Use this knowledge to improve your workflow and productivity`;
-    
-    return response + keyPointsSection;
-  }
 
   /**
    * Clear conversation history for a session

@@ -295,23 +295,17 @@ export function OmniAssistant() {
   const handleSuggestionClick = async (suggestion: string) => {
     if (isLoading) return;
     
-    // Forward suggestion to playground AI using WorkspaceContext
-    try {
-      // Set pending prompt in workspace context (auto-saves to localStorage and database)
-      setPendingPrompt(suggestion, 'omniassistant', {
-        selectedProjectId,
-        fromPage: window.location.pathname,
-      });
-      
-      // Navigate to playground
-      const currentPath = window.location.pathname;
-      if (!currentPath.startsWith('/playground')) {
-        const projectId = selectedProjectId || currentSession?.id;
-        const playgroundPath = projectId ? `/playground/${projectId}` : '/playground';
-        setLocation(playgroundPath);
-      }
+    // Suggestions are for continuing conversation with Elon, not for playground
+    // Send the suggestion as a message to Elon
+    const playgroundContext = buildPlaygroundContext();
+    
+    await sendMessage(suggestion, {
+      currentPage: window.location.pathname,
+      workspaceId: currentSession?.id as number | undefined,
+      playgroundContext,
+    });
 
-      // Acknowledge to user
+    // Acknowledge to user
       await sendMessage(`✅ Suggestion sent to Playground AI: "${suggestion.substring(0, 100)}${suggestion.length > 100 ? '...' : ''}"`, {
         currentPage: window.location.pathname,
         workspaceId: (selectedProjectId || currentSession?.id) as number | undefined,
