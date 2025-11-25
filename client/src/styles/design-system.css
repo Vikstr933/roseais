@@ -226,7 +226,7 @@
 }
 
 .chat-message-assistant {
-  @apply bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700;
+  @apply bg-slate-900 text-white border border-white/10 dark:border-slate-700;
 }
 
 /* Button Enhancements */

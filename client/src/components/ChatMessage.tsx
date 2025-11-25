@@ -86,6 +86,8 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [errorsExpanded, setErrorsExpanded] = useState(true);
   const [warningsExpanded, setWarningsExpanded] = useState(false);
+  const isAssistant = role === 'assistant';
+  const displayName = isAssistant ? 'Chap-ZPT' : 'You';
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -134,9 +136,9 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      className={`flex gap-4 transition-smooth ${role === 'user' ? 'justify-end' : 'justify-start'}`}
+      className={`flex gap-4 transition-smooth ${isAssistant ? 'justify-start' : 'justify-end'}`}
     >
-      {role === 'assistant' && (
+      {isAssistant && (
         <div className="w-10 h-10 rounded-full bg-brand-gradient flex items-center justify-center flex-shrink-0 shadow-lg hover-lift">
           <Brain className="icon-sm text-white" />
         </div>
@@ -144,13 +146,16 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
 
       <div
         className={`rounded-xl px-4 py-3 max-w-[85%] transition-smooth ${
-          role === 'user'
+          !isAssistant
             ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl'
-            : 'chat-message-assistant border border-border hover:shadow-md'
+            : 'chat-message-assistant hover:shadow-md'
         }`}
       >
-        {role === 'assistant' ? (
-          <div className={`prose prose-sm dark:prose-invert max-w-none chat-message-assistant rounded-lg p-4 transition-smooth hover:shadow-sm`}>
+        {isAssistant ? (
+          <div className="prose prose-sm prose-invert max-w-none chat-message-assistant rounded-lg p-4 transition-smooth hover:shadow-sm text-white">
+            <div className="text-xs font-semibold uppercase tracking-wide text-white/70 mb-2">
+              {displayName}
+            </div>
             <ReactMarkdown
               components={{
                 code({ node, inline, className, children, ...props }) {
@@ -214,7 +219,12 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
             </ReactMarkdown>
           </div>
         ) : (
-          <p className="text-sm whitespace-pre-wrap">{cleanedContent}</p>
+          <div className="space-y-2 text-white">
+            <div className="text-xs font-semibold uppercase tracking-wide text-white/80">
+              {displayName}
+            </div>
+            <p className="text-sm whitespace-pre-wrap">{cleanedContent}</p>
+          </div>
         )}
 
         {/* Error Display */}
@@ -328,7 +338,7 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
         )}
 
         {timestamp && (
-          <div className="mt-1 text-xs opacity-60">
+          <div className={`mt-1 text-xs ${isAssistant ? 'text-white/60' : 'opacity-80'}`}>
             {new Date(timestamp).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
@@ -337,7 +347,7 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
         )}
       </div>
 
-      {role === 'user' && (
+      {!isAssistant && (
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center flex-shrink-0 shadow-lg">
           <MessageSquare className="h-4 w-4 text-slate-600 dark:text-slate-300" />
         </div>

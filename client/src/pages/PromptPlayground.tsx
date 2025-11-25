@@ -1,5 +1,5 @@
 ﻿import { motion } from "framer-motion";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { apiFetch, getApiUrl } from '../lib/api';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -66,7 +66,7 @@ import { ProductionDeployment } from "../components/ProductionDeployment";
 import { AdvancedPreview } from "../components/AdvancedPreview";
 import { useAuth, getAuthHeaders } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
-import type { GeneratedFile } from "../contexts/WorkspaceContext";
+import type { GeneratedFile, ChatMessage as WorkspaceChatMessage } from "../contexts/WorkspaceContext";
 import { useRoute } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -214,8 +214,8 @@ export default function PromptPlayground() {
     sessions,
     createSession,
     switchSession,
-    addChatMessage,
-    clearChat,
+    addChatMessage: workspaceAddChatMessage,
+    clearChat: workspaceClearChat,
     updateGeneratedFiles,
     getPendingPrompt,
     clearPendingPrompt,
@@ -241,7 +241,10 @@ export default function PromptPlayground() {
   // Removed animation-related code - editor/preview are always visible during generation
 
   // Use workspace context for chat history (persists across navigation)
-  const chatHistory = currentSession?.chatHistory || [];
+  const [chatHistory, setChatHistory] = useState<WorkspaceChatMessage[]>(() => currentSession?.chatHistory || []);
+  const chatHistoryRef = useRef<WorkspaceChatMessage[]>(currentSession?.chatHistory || []);
+  const lastSessionIdRef = useRef<string | null>(currentSession?.id || null);
+  const chatHistoryManuallyClearedRef = useRef(false);
   const currentSessionId = currentSession?.id || null;
   const [relevanceScore, setRelevanceScore] = useState<number>(0);
   const [relevanceData, setRelevanceData] = useState<any[]>([]);
@@ -286,6 +289,53 @@ export default function PromptPlayground() {
       ));
     },
   });
+
+  useEffect(() => {
+    if (!currentSession) {
+      lastSessionIdRef.current = null;
+      chatHistoryRef.current = [];
+      setChatHistory([]);
+      return;
+    }
+
+    const newHistory = currentSession.chatHistory || [];
+    const isNewSession = lastSessionIdRef.current !== currentSession.id;
+
+    if (isNewSession) {
+      lastSessionIdRef.current = currentSession.id;
+      chatHistoryRef.current = newHistory;
+      chatHistoryManuallyClearedRef.current = false;
+      setChatHistory(newHistory);
+      return;
+    }
+
+    if (
+      !chatHistoryManuallyClearedRef.current &&
+      newHistory.length < chatHistoryRef.current.length
+    ) {
+      return;
+    }
+
+    chatHistoryManuallyClearedRef.current = false;
+    chatHistoryRef.current = newHistory;
+    setChatHistory(newHistory);
+  }, [currentSession?.chatHistory, currentSession?.id]);
+
+  const addChatMessage = useCallback((message: WorkspaceChatMessage) => {
+    workspaceAddChatMessage(message);
+    setChatHistory(prev => {
+      const next = [...prev, message];
+      chatHistoryRef.current = next;
+      return next;
+    });
+  }, [workspaceAddChatMessage]);
+
+  const clearChat = useCallback(() => {
+    chatHistoryManuallyClearedRef.current = true;
+    workspaceClearChat();
+    chatHistoryRef.current = [];
+    setChatHistory([]);
+  }, [workspaceClearChat]);
 
   // Refs
   const chatMessagesRef = useRef<HTMLDivElement>(null);
@@ -2573,7 +2623,7 @@ export default function PromptPlayground() {
             <div className="flex items-center justify-between">
               <h2 className="text-h4 flex items-center gap-2">
                 <Brain className="icon-md text-purple-600 dark:text-purple-400" />
-                <span className="brand-gradient-text font-bold">AI Assistant</span>
+                <span className="brand-gradient-text font-bold">Chap-ZPT Chat</span>
               </h2>
               {chatHistory.length > 0 && (
                 <Button
@@ -2588,7 +2638,7 @@ export default function PromptPlayground() {
               )}
             </div>
             <p className="text-body-sm text-muted-foreground mt-2">
-              Describe what you want to build
+              Describe what you want to build and Chap-ZPT will craft it.
             </p>
                   </div>
 
@@ -2602,7 +2652,7 @@ export default function PromptPlayground() {
                 <EmptyState
                   icon={Brain}
                   title="What would you like to build today?"
-                  description="Describe your app idea and our AI agents will generate a complete, production-ready application for you. Start with something simple like 'a todo app' or 'a weather dashboard'."
+                  description="Describe your app idea and Chap-ZPT with its AI agents will generate a complete, production-ready application for you. Start with something simple like 'a todo app' or 'a weather dashboard'."
                   action={{
                     label: "Get Started",
                     onClick: () => {
