@@ -93,6 +93,34 @@ export default function Integrations() {
   const [credentialPluginName, setCredentialPluginName] = useState('');
   const [credentialsRequired, setCredentialsRequired] = useState<Record<string, any>>({});
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
+  const [deleting, setDeleting] = useState<Set<string>>(new Set());
+  const getPluginById = (pluginId: string) => availablePlugins.find(p => p.id === pluginId);
+  const isCustomPlugin = (plugin?: Plugin) =>
+    !!plugin && (plugin.isUserGenerated || plugin.category === 'custom' || plugin.id.startsWith('plugin_'));
+  const openCredentialDialogForPlugin = (plugin: Plugin) => {
+    const hasDefinedFields = plugin.credentialsRequired && Object.keys(plugin.credentialsRequired).length > 0;
+    const fields = hasDefinedFields
+      ? plugin.credentialsRequired!
+      : {
+          apiKey: {
+            label: 'API Key',
+            type: 'password',
+            required: true,
+            description: 'Enter the API key or access token for this plugin',
+          },
+        };
+
+    const initialValues: Record<string, string> = {};
+    Object.keys(fields).forEach((key) => {
+      initialValues[key] = '';
+    });
+
+    setCredentialPluginId(plugin.id);
+    setCredentialPluginName(plugin.name);
+    setCredentialsRequired(fields);
+    setCredentialValues(initialValues);
+    setCredentialDialogOpen(true);
+  };
 
   // Fetch plugin generation stats
   const { data: stats } = useQuery<GenerationStats>({
@@ -204,28 +232,15 @@ export default function Integrations() {
         }
       }
 
-      // Install the plugin after credentials are saved
-      const installResponse = await apiFetch(`/api/user-plugins/${credentialPluginId}/install`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          credentials: credentialValues
-        })
-      });
-
-      if (!installResponse.ok) {
-        const errorData = await installResponse.json();
-        throw new Error(errorData.error || 'Failed to install plugin');
+      const plugin = getPluginById(credentialPluginId);
+      if (!plugin) {
+        throw new Error('Plugin not found');
       }
 
-      setSuccess(`${credentialPluginName} connected successfully!`);
+      await installCustomPlugin(plugin, credentialValues);
+
       setCredentialDialogOpen(false);
       setCredentialValues({});
-      await loadPlugins();
-      await loadUserStatus();
     } catch (err) {
       console.error('Failed to save credentials:', err);
       setError(err instanceof Error ? err.message : 'Failed to save credentials');
@@ -319,6 +334,33 @@ export default function Integrations() {
     }
   };
 
+  const installCustomPlugin = async (
+    plugin: Plugin,
+    credentials: Record<string, string> = {},
+    customConfig?: Record<string, any>
+  ) => {
+    const response = await apiFetch(`/api/user-plugins/${plugin.id}/install`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        credentials,
+        customConfig: customConfig || undefined,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to install plugin');
+    }
+
+    setSuccess(`${plugin.name} connected successfully!`);
+    await loadPlugins();
+    await loadUserStatus();
+  };
+
   const loadUserStatus = async () => {
     try {
       setLoading(true);
@@ -347,9 +389,24 @@ export default function Integrations() {
       console.log(`Connecting ${pluginId}...`);
 
       // Find the plugin
-      const plugin = availablePlugins.find(p => p.id === pluginId);
+      const plugin = getPluginById(pluginId);
       if (!plugin) {
         throw new Error(`Plugin ${pluginId} not found`);
+      }
+
+      if (isCustomPlugin(plugin)) {
+        if (plugin.requiresAuth) {
+          openCredentialDialogForPlugin(plugin);
+        } else {
+          await installCustomPlugin(plugin);
+        }
+
+        setConnecting(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(pluginId);
+          return newSet;
+        });
+        return;
       }
 
       // Check if this is a user-generated plugin OR requires auth
@@ -535,7 +592,14 @@ export default function Integrations() {
       setError(null);
       setSuccess(null);
 
-      const response = await apiFetch(`/api/plugins/${pluginId}/disable`, {
+      const plugin = getPluginById(pluginId);
+      const isCustom = isCustomPlugin(plugin);
+
+      const endpoint = isCustom
+        ? `/api/user-plugins/${pluginId}/uninstall`
+        : `/api/plugins/${pluginId}/disable`;
+
+      const response = await apiFetch(endpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
@@ -545,7 +609,8 @@ export default function Integrations() {
 
       const data = await response.json();
       if (data.success) {
-        setSuccess(`${pluginId} disconnected successfully`);
+        setSuccess(`${plugin?.name || pluginId} disconnected successfully`);
+        await loadPlugins();
         await loadUserStatus();
       } else {
         setError(data.error || 'Failed to disconnect plugin');
@@ -556,9 +621,70 @@ export default function Integrations() {
     }
   };
 
+  const handleDeletePlugin = async (pluginId: string) => {
+    const plugin = getPluginById(pluginId);
+    if (!plugin || !isCustomPlugin(plugin)) {
+      setError('Only custom plugins can be deleted.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${plugin.name}? This removes the plugin definition and any stored credentials.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setError(null);
+      setSuccess(null);
+      setDeleting(prev => new Set(prev).add(pluginId));
+
+      // Ensure plugin is uninstalled first
+      await apiFetch(`/api/user-plugins/${pluginId}/uninstall`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
+          'Content-Type': 'application/json'
+        }
+      }).catch(() => {
+        // Ignore if uninstall fails (maybe not installed)
+      });
+
+      const response = await apiFetch(`/api/user-plugins/${pluginId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete plugin');
+      }
+
+      setSuccess(`${plugin.name} deleted successfully`);
+      await loadPlugins();
+      await loadUserStatus();
+    } catch (err) {
+      console.error('Failed to delete plugin:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete plugin');
+    } finally {
+      setDeleting(prev => {
+        const next = new Set(prev);
+        next.delete(pluginId);
+        return next;
+      });
+    }
+  };
+
   const handleSyncPlugin = async (pluginId: string) => {
     try {
       setError(null);
+      const plugin = getPluginById(pluginId);
+      if (isCustomPlugin(plugin)) {
+        setError('Custom plugins sync automatically when executed.');
+        return;
+      }
       setSyncing(prev => new Set(prev).add(pluginId));
 
       const response = await apiFetch(`/api/plugins/${pluginId}/sync`, {
@@ -708,7 +834,7 @@ export default function Integrations() {
                 </div>
               </CardHeader>
               <CardContent>
-                <CardDescription className="mb-4 text-foreground/80">
+            <CardDescription className="mb-4 text-slate-700 dark:text-slate-200">
                   Create custom integrations with Discord, Slack, Trello, and more using natural language.
                   Just describe what you want and let AI build it for you!
                 </CardDescription>
@@ -736,6 +862,7 @@ export default function Integrations() {
             {availablePlugins.map((plugin) => {
               const status = getPluginStatus(plugin.id);
               const enabled = isPluginEnabled(plugin.id);
+              const customPlugin = isCustomPlugin(plugin);
 
               return (
                 <Card key={plugin.id} className={enabled ? 'border-primary' : ''}>
@@ -794,24 +921,35 @@ export default function Integrations() {
                     <div className="flex items-center justify-between pt-2">
                       {enabled ? (
                         <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSyncPlugin(plugin.id)}
-                            disabled={syncing.has(plugin.id) || status?.status.syncInProgress}
-                          >
-                            {syncing.has(plugin.id) || status?.status.syncInProgress ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Syncing...
-                              </>
-                            ) : (
-                              <>
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Sync
-                              </>
-                            )}
-                          </Button>
+                          {customPlugin ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openCredentialDialogForPlugin(plugin)}
+                            >
+                              <Key className="w-4 h-4 mr-2" />
+                              Manage Credentials
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSyncPlugin(plugin.id)}
+                              disabled={syncing.has(plugin.id) || status?.status.syncInProgress}
+                            >
+                              {syncing.has(plugin.id) || status?.status.syncInProgress ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Syncing...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="w-4 h-4 mr-2" />
+                                  Sync
+                                </>
+                              )}
+                            </Button>
+                          )}
                           <Button
                             variant="destructive"
                             size="sm"
@@ -819,22 +957,58 @@ export default function Integrations() {
                           >
                             Disconnect
                           </Button>
+                          {customPlugin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeletePlugin(plugin.id)}
+                              disabled={deleting.has(plugin.id)}
+                            >
+                              {deleting.has(plugin.id) ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Deleting...
+                                </>
+                              ) : (
+                                'Delete Plugin'
+                              )}
+                            </Button>
+                          )}
                         </>
                       ) : (
-                        <Button
-                          className="w-full"
-                          onClick={() => handleConnectPlugin(plugin.id)}
-                          disabled={connecting.has(plugin.id)}
-                        >
-                          {connecting.has(plugin.id) ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Connecting...
-                            </>
-                          ) : (
-                            `Connect ${plugin.name}`
+                        <div className="flex flex-col gap-2 w-full">
+                          <Button
+                            className="w-full"
+                            onClick={() => handleConnectPlugin(plugin.id)}
+                            disabled={connecting.has(plugin.id)}
+                          >
+                            {connecting.has(plugin.id) ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Connecting...
+                              </>
+                            ) : (
+                              `Connect ${plugin.name}`
+                            )}
+                          </Button>
+                          {customPlugin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeletePlugin(plugin.id)}
+                              disabled={deleting.has(plugin.id)}
+                            >
+                              {deleting.has(plugin.id) ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Deleting...
+                                </>
+                              ) : (
+                                'Delete Plugin'
+                              )}
+                            </Button>
                           )}
-                        </Button>
+                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -1217,26 +1391,14 @@ export default function Integrations() {
                   {result.metadata.requiresAuth && (
                     <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
                       <Key className="h-4 w-4 text-blue-600" />
-                      <AlertDescription className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                            Credentials Required
-                          </p>
-                          <p className="text-sm text-blue-700 dark:text-blue-300">
-                            This plugin needs {serviceName || 'service'} credentials (API keys, OAuth tokens, etc.) to function properly.
-                          </p>
-                        </div>
-                        <Button
-                          onClick={() => {
-                            setCredentialServiceName(serviceName || '');
-                            setCredentialDialogOpen(true);
-                          }}
-                          className="ml-4 bg-blue-600 hover:bg-blue-700"
-                          size="sm"
-                        >
-                          <Key className="w-4 h-4 mr-2" />
-                          Add Credentials
-                        </Button>
+                      <AlertDescription>
+                        <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                          Credentials Required
+                        </p>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          This plugin needs credentials (API keys, OAuth tokens, etc.). After closing this dialog,
+                          select the plugin in the Integrations list and click "Connect" to enter the required values.
+                        </p>
                       </AlertDescription>
                     </Alert>
                   )}
