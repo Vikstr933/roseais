@@ -610,40 +610,46 @@ export class PluginRegistry extends EventEmitter {
 
       // The generated plugin code is a class, so we need to wrap it to make it executable
       // Wrap the plugin code in a function that instantiates the class and calls executeAction
+      // Escape any backticks in the generated code to prevent template literal issues
+      const escapedCode = plugin.generatedCode.replace(/`/g, '\\`').replace(/\${/g, '\\${');
+      
       const wrappedCode = `
-${plugin.generatedCode}
+${escapedCode}
 
 // Export a wrapper function that can be called by the sandbox
 function execute(userId, params, credentials) {
   try {
-    // Find the plugin class (it should be exported or in the global scope after code execution)
-    // Look for a class that extends BaseProductivityPlugin or has executeAction method
+    // Find the plugin class in the global scope
+    // The class should be available after the code above executes
     let PluginClass = null;
     
-    // Check if there's an exported class
-    if (typeof module !== 'undefined' && module.exports) {
-      PluginClass = module.exports;
+    // Look for a class in the global scope that has executeAction method
+    const globalObj = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : this);
+    const globalKeys = Object.getOwnPropertyNames(globalObj);
+    
+    for (const key of globalKeys) {
+      try {
+        const obj = globalObj[key];
+        if (obj && typeof obj === 'function' && obj.prototype && typeof obj.prototype.executeAction === 'function') {
+          PluginClass = obj;
+          break;
+        }
+      } catch (e) {
+        // Skip if we can't access the property
+        continue;
+      }
     }
     
-    // If not found, look in global scope for classes
-    if (!PluginClass) {
-      const classes = Object.getOwnPropertyNames(this).filter(name => {
-        try {
-          const obj = this[name];
-          return obj && typeof obj === 'function' && 
-                 (obj.prototype && typeof obj.prototype.executeAction === 'function');
-        } catch {
-          return false;
-        }
-      });
-      
-      if (classes.length > 0) {
-        PluginClass = this[classes[0]];
+    // Also check module.exports if available
+    if (!PluginClass && typeof module !== 'undefined' && module.exports) {
+      const exported = module.exports;
+      if (exported && typeof exported === 'function' && exported.prototype && typeof exported.prototype.executeAction === 'function') {
+        PluginClass = exported;
       }
     }
     
     if (!PluginClass) {
-      throw new Error('Could not find plugin class in generated code. The code must export a class with an executeAction method.');
+      throw new Error('Could not find plugin class in generated code. The code must define a class with an executeAction method.');
     }
     
     // Instantiate the plugin
@@ -662,22 +668,37 @@ function execute(userId, params, credentials) {
     
     return result;
   } catch (error) {
-    throw new Error('Plugin execution error: ' + (error.message || String(error)));
+    const errorMsg = error && error.message ? error.message : String(error);
+    throw new Error('Plugin execution error: ' + errorMsg);
   }
 }
 `;
 
       // Execute plugin code in sandbox with the wrapper function
-      const result = await sandbox.execute(
-        wrappedCode,
-        'execute',
-        [userId, { ...params, action }, credentials],
-        plugin.sandboxConfig as any
-      );
-
-      if (!result.success) {
-        throw new Error(result.error || 'Plugin execution failed');
+      let sandboxResult;
+      try {
+        sandboxResult = await sandbox.execute(
+          wrappedCode,
+          'execute',
+          [userId, { ...params, action }, credentials],
+          plugin.sandboxConfig as any
+        );
+      } catch (sandboxError) {
+        logger.error('Sandbox execution threw an error', sandboxError as Error, {
+          userId,
+          pluginId,
+          action
+        });
+        throw sandboxError;
       }
+
+      if (!sandboxResult || !sandboxResult.success) {
+        const errorMsg = sandboxResult?.error || 'Plugin execution failed';
+        logger.error('Sandbox execution failed', { userId, pluginId, action, error: errorMsg });
+        throw new Error(errorMsg);
+      }
+
+      const result = sandboxResult;
 
       logger.info('User-generated plugin action executed', {
         userId,
@@ -685,7 +706,9 @@ function execute(userId, params, credentials) {
         action,
         executionTime: result.metrics.executionTimeMs,
         resultType: typeof result.result,
-        hasResult: result.result !== undefined && result.result !== null
+        hasResult: result.result !== undefined && result.result !== null,
+        resultKeys: result.result && typeof result.result === 'object' ? Object.keys(result.result) : 'N/A',
+        resultString: typeof result.result === 'string' ? result.result.substring(0, 200) : 'N/A'
       });
 
       // Ensure result is serializable
@@ -718,15 +741,32 @@ function execute(userId, params, credentials) {
 
       // Ensure result is serializable before returning
       try {
-        JSON.stringify(result.result);
+        // Try to stringify to check if it's serializable
+        const serialized = JSON.stringify(result.result);
+        logger.info('Result is serializable', { 
+          userId, 
+          pluginId, 
+          action,
+          serializedLength: serialized.length 
+        });
+        
+        // Return the result
         return result.result;
       } catch (serializeError) {
         logger.error('Failed to serialize result', serializeError as Error, {
           userId,
           pluginId,
           action,
-          resultType: typeof result.result
+          resultType: typeof result.result,
+          resultConstructor: result.result?.constructor?.name,
+          errorMessage: serializeError instanceof Error ? serializeError.message : String(serializeError)
         });
+        
+        // Try to return a safe representation
+        if (typeof result.result === 'string') {
+          return { message: result.result };
+        }
+        
         return {
           error: 'Plugin returned non-serializable result',
           message: 'The plugin executed successfully but returned data that cannot be serialized',
