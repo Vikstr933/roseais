@@ -2146,8 +2146,7 @@ export default function PromptPlayground() {
   }, [user, currentSession]); // Simplified dependencies - only re-run when user or session changes
 
   return (
-    <div className="fixed inset-0 w-full h-screen bg-background flex flex-col overflow-hidden">
-      {/* Extended header background to cover navigation area */}
+    <div className="min-h-[calc(100vh-5rem)] bg-background flex flex-col overflow-hidden rounded-none">
       <ErrorBoundary
         onError={(error, errorInfo) => {
           console.error('Playground error:', error, errorInfo);
