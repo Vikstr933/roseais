@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Build: v2025.11.03 -->
     <!-- Google Maps JavaScript API -->
+    <!-- Note: API key errors may occur in preview environments. Maps will work in production with proper API key configuration. -->
     <script async defer
-      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA3WNWE-9o43b8mjB5R_-_OHxK_WSyXhSE&libraries=places,marker&loading=async">
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA3WNWE-9o43b8mjB5R_-_OHxK_WSyXhSE&libraries=places,marker&loading=async"
+      onerror="console.warn('Google Maps API failed to load. This is normal in preview environments without proper API key configuration.')">
     </script>
   </head>
   <body>

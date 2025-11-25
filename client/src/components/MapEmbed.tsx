@@ -29,17 +29,27 @@ export function MapEmbed({
   const [loading, setLoading] = useState(true);
   const [placeInfo, setPlaceInfo] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const markersRef = useRef<any[]>([]); // Track markers for cleanup
 
   useEffect(() => {
-    // Wait for Google Maps to load
+    // Wait for Google Maps to load (including marker library)
     const checkGoogleMaps = setInterval(() => {
-      if (window.google && window.google.maps) {
+      if (window.google && window.google.maps && window.google.maps.marker) {
         clearInterval(checkGoogleMaps);
         initializeMap();
       }
     }, 100);
 
-    return () => clearInterval(checkGoogleMaps);
+    return () => {
+      clearInterval(checkGoogleMaps);
+      // Cleanup markers
+      markersRef.current.forEach(marker => {
+        if (marker && typeof marker.map === 'object') {
+          marker.map = null;
+        }
+      });
+      markersRef.current = [];
+    };
   }, [query]);
 
   const parseQuery = (rawQuery: string): string => {
@@ -104,13 +114,31 @@ export function MapEmbed({
             mapInstance.setCenter(location);
             mapInstance.setZoom(zoom);
 
-            // Add marker
-            new window.google.maps.Marker({
-              map: mapInstance,
-              position: location,
-              title: place.name,
-              animation: window.google.maps.Animation.DROP,
-            });
+            // Add marker using AdvancedMarkerElement (new API)
+            try {
+              // Check if AdvancedMarkerElement is available
+              if (window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement) {
+                const marker = new window.google.maps.marker.AdvancedMarkerElement({
+                  map: mapInstance,
+                  position: location,
+                  title: place.name,
+                });
+                markersRef.current.push(marker);
+              } else {
+                // Fallback to classic Marker if AdvancedMarkerElement not available
+                console.warn('AdvancedMarkerElement not available, using classic Marker');
+                const marker = new window.google.maps.Marker({
+                  map: mapInstance,
+                  position: location,
+                  title: place.name,
+                  animation: window.google.maps.Animation.DROP,
+                });
+                markersRef.current.push(marker);
+              }
+            } catch (markerError) {
+              console.error('Error creating marker:', markerError);
+              // Continue without marker if there's an error
+            }
 
             // Get detailed place information
             service.getDetails({ placeId: place.place_id }, (placeDetails: any, detailsStatus: any) => {
@@ -127,18 +155,40 @@ export function MapEmbed({
         });
       } else if (center) {
         // Just show the center point
-        new window.google.maps.Marker({
-          map: mapInstance,
-          position: center,
-          animation: window.google.maps.Animation.DROP,
-        });
+        try {
+          // Use AdvancedMarkerElement if available
+          if (window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement) {
+            const marker = new window.google.maps.marker.AdvancedMarkerElement({
+              map: mapInstance,
+              position: center,
+            });
+            markersRef.current.push(marker);
+          } else {
+            // Fallback to classic Marker
+            const marker = new window.google.maps.Marker({
+              map: mapInstance,
+              position: center,
+              animation: window.google.maps.Animation.DROP,
+            });
+            markersRef.current.push(marker);
+          }
+        } catch (markerError) {
+          console.error('Error creating center marker:', markerError);
+        }
         setLoading(false);
       } else {
         setLoading(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error initializing map:', err);
-      setError('Failed to load map');
+      
+      // Handle specific Google Maps API errors
+      if (err?.message?.includes('ApiProjectMapError') || err?.message?.includes('NoApiKeys')) {
+        setError('Google Maps API configuration error. Please check API key settings.');
+      } else {
+        setError('Failed to load map. Please try again later.');
+      }
+      
       setLoading(false);
     }
   };

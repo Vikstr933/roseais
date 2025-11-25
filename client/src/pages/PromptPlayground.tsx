@@ -341,7 +341,10 @@ export default function PromptPlayground() {
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   
   // Typewriter streaming state - tracks displayed content per file path
-  const streamingContentRef = useRef<Map<string, { fullContent: string; displayedContent: string; intervalId?: NodeJS.Timeout }>>(new Map());
+  const streamingContentRef = useRef<Map<string, { fullContent: string; displayedContent: string; intervalId?: NodeJS.Timeout; isComplete?: boolean }>>(new Map());
+  
+  // Track if we're waiting for typewriter to complete before deploying
+  const [waitingForTypewriter, setWaitingForTypewriter] = useState(false);
   
   /**
    * Streams file content character-by-character with typewriter effect
@@ -360,11 +363,15 @@ export default function PromptPlayground() {
     streamingContentRef.current.set(filePath, {
       fullContent,
       displayedContent: '',
-      intervalId: undefined
+      intervalId: undefined,
+      isComplete: false
     });
     
     let currentIndex = 0;
-    const charsPerTick = 3; // Characters to reveal per animation frame (adjust for speed)
+    // Speed up typewriter if generation is complete (for follow-up prompts)
+    const isGenerationComplete = !isLoading;
+    const charsPerTick = isGenerationComplete ? 50 : 3; // Much faster if generation already done
+    const tickInterval = isGenerationComplete ? 8 : 16; // Faster interval too
     
     const streamInterval = setInterval(() => {
       const streamState = streamingContentRef.current.get(filePath);
@@ -404,11 +411,19 @@ export default function PromptPlayground() {
       if (nextIndex >= fullContent.length) {
         clearInterval(streamInterval);
         streamState.intervalId = undefined;
+        streamState.isComplete = true;
         streamingContentRef.current.set(filePath, streamState);
+        
+        // Check if all streams are complete and we're waiting to deploy
+        const allComplete = Array.from(streamingContentRef.current.values()).every(s => s.isComplete);
+        if (allComplete && waitingForTypewriter) {
+          console.log('✅ All typewriter effects complete, ready to deploy');
+          setWaitingForTypewriter(false);
+        }
       }
       
       currentIndex = nextIndex;
-    }, 16); // ~60fps (16ms per frame)
+    }, tickInterval); // Faster if generation complete
     
     // Store interval ID
     const streamState = streamingContentRef.current.get(filePath);
@@ -1830,6 +1845,24 @@ export default function PromptPlayground() {
                           // Update workspace with full content when streaming completes
                           if (streamedContent === fullContent) {
                             updateGeneratedFiles(updatedFiles);
+                            
+                            // Mark stream as complete
+                            const streamState = streamingContentRef.current.get(filePath);
+                            if (streamState) {
+                              streamState.isComplete = true;
+                              streamingContentRef.current.set(filePath, streamState);
+                              
+                              // Check if all streams are complete and we're waiting to deploy
+                              const allComplete = Array.from(streamingContentRef.current.values()).every(s => s.isComplete);
+                              if (allComplete && waitingForTypewriter) {
+                                console.log('✅ All typewriter effects complete (SSE), ready to deploy');
+                                setWaitingForTypewriter(false);
+                                // Get current files for deployment
+                                const currentFiles = current?.files || [];
+                                const componentName = currentComponentName || 'App';
+                                deployToRuntime(currentFiles.map(f => ({ path: f.path, content: f.content })), componentName);
+                              }
+                            }
                           }
                           return { ...current, files: updatedFiles };
                         });
