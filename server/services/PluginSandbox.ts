@@ -82,7 +82,7 @@ export class PluginSandbox {
     logger.info('Starting sandbox execution', { functionName });
 
     try {
-      // Transform ES module syntax to CommonJS before validation
+      // Transform ES module syntax to CommonJS (which also strips TypeScript)
       const transformedCode = this.transformESMToCommonJS(code);
 
       // Validate code before execution
@@ -420,16 +420,65 @@ try {
   }
 
   /**
+   * Strip TypeScript type annotations from code
+   */
+  private stripTypeScript(code: string): string {
+    let stripped = code;
+
+    // Remove interface declarations (multiline)
+    stripped = stripped.replace(/interface\s+\w+[^{]*\{[^}]*\}/gs, '');
+
+    // Remove type declarations
+    stripped = stripped.replace(/type\s+\w+\s*=\s*[^;]+;/g, '');
+
+    // Remove generic type parameters from function declarations: function name<T>() -> function name()
+    stripped = stripped.replace(/(function\s+\w+|<[^>]+>)/g, (match) => {
+      if (match.startsWith('<')) return '';
+      return match.replace(/<[^>]+>/, '');
+    });
+
+    // Remove type annotations from function parameters: (param: Type) -> (param)
+    // Handle nested parentheses and complex types
+    stripped = stripped.replace(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g, (match, params) => {
+      // Remove : Type from each parameter
+      const cleaned = params.replace(/:\s*[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*/g, '');
+      return `(${cleaned})`;
+    });
+
+    // Remove return type annotations from arrow functions: (): ReturnType => -> () =>
+    stripped = stripped.replace(/\)\s*:\s*[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*\s*=>/g, ') =>');
+
+    // Remove return type annotations from function declarations: function name(): ReturnType { -> function name() {
+    stripped = stripped.replace(/\)\s*:\s*[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*\s*{/g, ') {');
+
+    // Remove type annotations from variable declarations: const x: Type = -> const x =
+    stripped = stripped.replace(/(const|let|var)\s+(\w+)\s*:\s*[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*\s*=/g, '$1 $2 =');
+
+    // Remove type annotations from object properties: { prop: Type } -> { prop }
+    // This is tricky, so we'll handle simple cases
+    stripped = stripped.replace(/(\w+)\s*:\s*[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*\s*([,}])/g, '$1$2');
+
+    // Remove 'as Type' type assertions
+    stripped = stripped.replace(/\s+as\s+[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*/g, '');
+
+    // Remove generic type parameters: <Type> -> (empty)
+    stripped = stripped.replace(/<[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*>/g, '');
+
+    return stripped;
+  }
+
+  /**
    * Transform ES module syntax to CommonJS
    */
   private transformESMToCommonJS(code: string): string {
-    // Check if code uses ES module syntax
-    const hasESM = /^import\s+/.test(code.trim()) || /^export\s+/.test(code.trim());
-    if (!hasESM) {
-      return code; // Already CommonJS, no transformation needed
-    }
+    // First strip TypeScript syntax
+    let transformed = this.stripTypeScript(code);
 
-    let transformed = code;
+    // Check if code uses ES module syntax
+    const hasESM = /^import\s+/.test(transformed.trim()) || /^export\s+/.test(transformed.trim());
+    if (!hasESM) {
+      return transformed; // Already CommonJS, no transformation needed
+    }
 
     // Transform import statements to require()
     // Default import: import X from 'module' -> const X = require('module').default || require('module')
