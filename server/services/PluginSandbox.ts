@@ -60,9 +60,10 @@ export class PluginSandbox {
 
   constructor() {
     // Create worker script path - use import.meta.url for ESM compatibility
+    // Use .cjs extension so it's treated as CommonJS (since it uses require())
     const currentFile = fileURLToPath(import.meta.url);
     const currentDir = path.dirname(currentFile);
-    this.workerPath = path.join(currentDir, 'sandbox-worker.js');
+    this.workerPath = path.join(currentDir, 'sandbox-worker.cjs');
     this.ensureWorkerScript();
   }
 
@@ -261,12 +262,23 @@ const { code, functionName, args, config } = workerData;
 let networkCallCount = 0;
 
 // Create safe context
+const allowedModules = ['https', 'http', 'url', 'crypto', 'buffer', 'util'];
+const safeRequire = (moduleName) => {
+  if (!allowedModules.includes(moduleName)) {
+    throw new Error(\`Module '\${moduleName}' is not allowed. Allowed modules: \${allowedModules.join(', ')}\`);
+  }
+  return require(moduleName);
+};
+
 const context = {
   console: {
     log: (...args) => console.log('[Plugin]', ...args),
     error: (...args) => console.error('[Plugin]', ...args),
     warn: (...args) => console.warn('[Plugin]', ...args),
   },
+
+  // Provide limited require function for plugin code
+  require: safeRequire,
 
   // Proxy fetch to track network calls
   fetch: new Proxy(fetch, {
@@ -352,15 +364,36 @@ try {
     throw new Error(\`Function "\${functionName}" not found in code\`);
   }
 
-  const result = fn(...args);
-
-  parentPort.postMessage({
-    type: 'result',
-    result,
-    memoryUsed
-  });
-
-  process.exit(0);
+  // Handle both sync and async functions
+  try {
+    const resultPromise = Promise.resolve(fn(...args));
+    
+    resultPromise
+      .then((result) => {
+        parentPort.postMessage({
+          type: 'result',
+          result,
+          memoryUsed
+        });
+        process.exit(0);
+      })
+      .catch((error) => {
+        parentPort.postMessage({
+          type: 'error',
+          error: error.message || String(error),
+          blocked: false
+        });
+        process.exit(1);
+      });
+  } catch (syncError) {
+    // Handle synchronous errors
+    parentPort.postMessage({
+      type: 'error',
+      error: syncError.message || String(syncError),
+      blocked: false
+    });
+    process.exit(1);
+  }
 } catch (error) {
   parentPort.postMessage({
     type: 'error',
