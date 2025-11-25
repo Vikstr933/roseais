@@ -608,11 +608,70 @@ export class PluginRegistry extends EventEmitter {
       const { PluginSandbox } = await import('./PluginSandbox');
       const sandbox = new PluginSandbox();
 
-      // Execute plugin code in sandbox
+      // The generated plugin code is a class, so we need to wrap it to make it executable
+      // Wrap the plugin code in a function that instantiates the class and calls executeAction
+      const wrappedCode = `
+${plugin.generatedCode}
+
+// Export a wrapper function that can be called by the sandbox
+function execute(userId, params, credentials) {
+  try {
+    // Find the plugin class (it should be exported or in the global scope after code execution)
+    // Look for a class that extends BaseProductivityPlugin or has executeAction method
+    let PluginClass = null;
+    
+    // Check if there's an exported class
+    if (typeof module !== 'undefined' && module.exports) {
+      PluginClass = module.exports;
+    }
+    
+    // If not found, look in global scope for classes
+    if (!PluginClass) {
+      const classes = Object.getOwnPropertyNames(this).filter(name => {
+        try {
+          const obj = this[name];
+          return obj && typeof obj === 'function' && 
+                 (obj.prototype && typeof obj.prototype.executeAction === 'function');
+        } catch {
+          return false;
+        }
+      });
+      
+      if (classes.length > 0) {
+        PluginClass = this[classes[0]];
+      }
+    }
+    
+    if (!PluginClass) {
+      throw new Error('Could not find plugin class in generated code. The code must export a class with an executeAction method.');
+    }
+    
+    // Instantiate the plugin
+    const pluginInstance = new PluginClass();
+    
+    // Get the action from params
+    const actionName = params.action || 'default';
+    
+    // Call executeAction
+    const result = pluginInstance.executeAction(userId, actionName, params);
+    
+    // Handle both sync and async results
+    if (result && typeof result.then === 'function') {
+      return result;
+    }
+    
+    return result;
+  } catch (error) {
+    throw new Error('Plugin execution error: ' + (error.message || String(error)));
+  }
+}
+`;
+
+      // Execute plugin code in sandbox with the wrapper function
       const result = await sandbox.execute(
-        plugin.generatedCode,
-        action,
-        [userId, params, credentials],
+        wrappedCode,
+        'execute',
+        [userId, { ...params, action }, credentials],
         plugin.sandboxConfig as any
       );
 
@@ -624,10 +683,56 @@ export class PluginRegistry extends EventEmitter {
         userId,
         pluginId,
         action,
-        executionTime: result.metrics.executionTimeMs
+        executionTime: result.metrics.executionTimeMs,
+        resultType: typeof result.result,
+        hasResult: result.result !== undefined && result.result !== null
       });
 
-      return result.result;
+      // Ensure result is serializable
+      if (result.result === undefined || result.result === null) {
+        logger.warn('Plugin returned undefined/null result', { userId, pluginId, action });
+        return { message: 'Plugin executed successfully but returned no result' };
+      }
+
+      // If result is a Promise, await it
+      if (result.result && typeof result.result.then === 'function') {
+        logger.info('Plugin returned a Promise, awaiting it', { userId, pluginId, action });
+        const awaitedResult = await result.result;
+        
+        // Ensure the awaited result is serializable
+        try {
+          JSON.stringify(awaitedResult);
+          return awaitedResult;
+        } catch (serializeError) {
+          logger.error('Failed to serialize awaited result', serializeError as Error, {
+            userId,
+            pluginId,
+            action
+          });
+          return { 
+            error: 'Plugin returned non-serializable result',
+            message: 'The plugin executed successfully but returned data that cannot be serialized'
+          };
+        }
+      }
+
+      // Ensure result is serializable before returning
+      try {
+        JSON.stringify(result.result);
+        return result.result;
+      } catch (serializeError) {
+        logger.error('Failed to serialize result', serializeError as Error, {
+          userId,
+          pluginId,
+          action,
+          resultType: typeof result.result
+        });
+        return {
+          error: 'Plugin returned non-serializable result',
+          message: 'The plugin executed successfully but returned data that cannot be serialized',
+          resultType: typeof result.result
+        };
+      }
     } catch (error) {
       logger.error('User-generated plugin action failed', error as Error, {
         userId,
