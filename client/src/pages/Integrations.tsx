@@ -156,12 +156,15 @@ export default function Integrations() {
 
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setResult(data);
       if (data.status === 'blocked' || data.status === 'rejected') {
         setStep('review');
       } else {
         setStep('success');
+        // Refresh plugin list to show the new plugin
+        await loadPlugins();
+        await loadUserStatus();
       }
     },
     onError: (error) => {
@@ -245,11 +248,12 @@ export default function Integrations() {
         }
       }
 
+      const pluginName = plugin?.name || 'Plugin';
       const credentialPayload = {
         serviceName: credentialPluginId,
         credentialType,
-        displayName: `${plugin.name} Credentials`,
-        description: plugin.description || `Credentials for ${plugin.name}`,
+        displayName: `${pluginName} Credentials`,
+        description: plugin?.description || `Credentials for ${pluginName}`,
         credentials: credentialValues,
       };
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { userCredentials, oauthStates } from '../../db/schema-pg';
 import { eq, and, desc } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { getCredentialVault } from '../services/CredentialVault';
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { authenticateUser } from '../middleware/auth';
@@ -91,20 +92,58 @@ router.post('/', authenticateUser, async (req, res) => {
     // Encrypt credentials
     const encryptedData = vault.encrypt(body.credentials);
 
-    // Store in database
-    const [credential] = await db
-      .insert(userCredentials)
-      .values({
+    // Check if credential already exists
+    const existing = await db.query.userCredentials.findFirst({
+      where: and(
+        eq(userCredentials.userId, userId),
+        eq(userCredentials.serviceName, body.serviceName),
+        eq(userCredentials.displayName, body.displayName)
+      )
+    });
+
+    let credential;
+    if (existing) {
+      // Update existing credential
+      [credential] = await db
+        .update(userCredentials)
+        .set({
+          credentialType: body.credentialType,
+          description: body.description,
+          encryptedData,
+          lastModifiedIp: req.ip || req.socket.remoteAddress,
+          validationStatus: 'pending',
+          updatedAt: new Date(),
+        })
+        .where(eq(userCredentials.id, existing.id))
+        .returning();
+      
+      logger.info('Credential updated successfully', {
         userId,
+        credentialId: credential.id,
         serviceName: body.serviceName,
-        credentialType: body.credentialType,
-        displayName: body.displayName,
-        description: body.description,
-        encryptedData,
-        createdFromIp: req.ip || req.socket.remoteAddress,
-        validationStatus: 'pending',
-      })
-      .returning();
+      });
+    } else {
+      // Insert new credential
+      [credential] = await db
+        .insert(userCredentials)
+        .values({
+          userId,
+          serviceName: body.serviceName,
+          credentialType: body.credentialType,
+          displayName: body.displayName,
+          description: body.description,
+          encryptedData,
+          createdFromIp: req.ip || req.socket.remoteAddress,
+          validationStatus: 'pending',
+        })
+        .returning();
+      
+      logger.info('Credential added successfully', {
+        userId,
+        credentialId: credential.id,
+        serviceName: body.serviceName,
+      });
+    }
 
     logger.info('Credential added successfully', {
       userId,
