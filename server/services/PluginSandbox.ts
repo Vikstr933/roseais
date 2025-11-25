@@ -3,6 +3,7 @@ import { SimpleLogger } from '../utils/SimpleLogger';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { fileURLToPath } from 'url';
 
 const logger = new SimpleLogger('PluginSandbox');
 
@@ -58,8 +59,10 @@ export class PluginSandbox {
   private workerPath: string;
 
   constructor() {
-    // Create worker script path
-    this.workerPath = path.join(__dirname, 'sandbox-worker.js');
+    // Create worker script path - use import.meta.url for ESM compatibility
+    const currentFile = fileURLToPath(import.meta.url);
+    const currentDir = path.dirname(currentFile);
+    this.workerPath = path.join(currentDir, 'sandbox-worker.js');
     this.ensureWorkerScript();
   }
 

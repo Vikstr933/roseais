@@ -342,20 +342,40 @@ export class PersonalAssistantAgent {
             logger.info(`Executing tool: userId=${userId}, toolName=${toolCall.name}, toolId=${toolCall.id}, iteration=${toolIteration + 1}`);
 
             const tool = tools.find(t => t.name === toolCall.name);
-            if (tool) {
-              const result = await tool.execute(toolCall.input as Record<string, any>);
-              toolsUsed.push(toolCall.name);
-
+            if (!tool) {
+              // Tool not found - return error result
               toolResults.push({
                 type: 'tool_result',
                 tool_use_id: toolCall.id,
-                content: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+                content: JSON.stringify({
+                  error: `Tool '${toolCall.name}' not found`,
+                  errorLog: `The requested tool '${toolCall.name}' is not available. Available tools: ${tools.map(t => t.name).join(', ')}`
+                }, null, 2)
               });
+              continue;
             }
+
+            const result = await tool.execute(toolCall.input as Record<string, any>);
+            toolsUsed.push(toolCall.name);
+
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolCall.id,
+              content: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+            });
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             logger.error(`Tool execution failed: userId=${userId}, toolName=${toolCall.name}, errorMessage=${errorMessage}, toolInput=${JSON.stringify(toolCall.input)}`, error as Error);
-            // Don't add hardcoded error messages - let the AI handle tool failures naturally
+            
+            // Always return a tool_result, even on error, so the AI can handle it
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolCall.id,
+              content: JSON.stringify({
+                error: errorMessage,
+                errorLog: `Failed to execute tool '${toolCall.name}': ${errorMessage}. The tool encountered an error during execution.`
+              }, null, 2)
+            });
           }
         }
 
