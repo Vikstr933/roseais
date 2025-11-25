@@ -711,13 +711,21 @@ function execute(userId, params, credentials) {
           pluginId, 
           action, 
           error: errorMsg,
-          details: errorDetails
+          details: errorDetails,
+          sandboxResult: JSON.stringify(sandboxResult, null, 2).substring(0, 1000)
         });
         
         // Include error details in the thrown error for better debugging
-        const fullError = errorDetails 
-          ? `${errorMsg}\nDetails: ${JSON.stringify(errorDetails, null, 2)}`
-          : errorMsg;
+        let fullError = errorMsg;
+        if (errorDetails) {
+          fullError += `\n\nError Details:\n${JSON.stringify(errorDetails, null, 2)}`;
+          if (errorDetails.codeSample) {
+            fullError += `\n\nCode Sample (around error):\n${errorDetails.codeSample}`;
+          }
+          if (errorDetails.lineNumber) {
+            fullError += `\n\nError at line: ${errorDetails.lineNumber}`;
+          }
+        }
         throw new Error(fullError);
       }
 
