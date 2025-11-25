@@ -82,8 +82,11 @@ export class PluginSandbox {
     logger.info('Starting sandbox execution', { functionName });
 
     try {
+      // Transform ES module syntax to CommonJS before validation
+      const transformedCode = this.transformESMToCommonJS(code);
+
       // Validate code before execution
-      const validation = await this.validateCode(code);
+      const validation = await this.validateCode(transformedCode);
       if (!validation.valid) {
         return {
           success: false,
@@ -98,8 +101,8 @@ export class PluginSandbox {
         };
       }
 
-      // Execute in Worker thread
-      const result = await this.executeInWorker(code, functionName, args, sandboxConfig);
+      // Execute in Worker thread with transformed code
+      const result = await this.executeInWorker(transformedCode, functionName, args, sandboxConfig);
 
       logger.info('Sandbox execution completed successfully', {
         functionName,
@@ -414,6 +417,66 @@ try {
       logger.error('Failed to create worker script', error);
       throw error;
     }
+  }
+
+  /**
+   * Transform ES module syntax to CommonJS
+   */
+  private transformESMToCommonJS(code: string): string {
+    // Check if code uses ES module syntax
+    const hasESM = /^import\s+/.test(code.trim()) || /^export\s+/.test(code.trim());
+    if (!hasESM) {
+      return code; // Already CommonJS, no transformation needed
+    }
+
+    let transformed = code;
+
+    // Transform import statements to require()
+    // Default import: import X from 'module' -> const X = require('module').default || require('module')
+    transformed = transformed.replace(
+      /import\s+(\w+)\s+from\s+['"]([^'"]+)['"]/g,
+      (match, name, module) => {
+        // For most cases, just require the module
+        // If it's a default export, we might need .default
+        return `const ${name} = require('${module}')`;
+      }
+    );
+
+    // Named imports: import { a, b } from 'module' -> const { a, b } = require('module')
+    transformed = transformed.replace(
+      /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g,
+      "const { $1 } = require('$2')"
+    );
+
+    // Default + named: import X, { a, b } from 'module'
+    transformed = transformed.replace(
+      /import\s+(\w+)\s*,\s*\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g,
+      "const $1 = require('$3'); const { $2 } = require('$3')"
+    );
+
+    // Import all: import * as X from 'module' -> const X = require('module')
+    transformed = transformed.replace(
+      /import\s+\*\s+as\s+(\w+)\s+from\s+['"]([^'"]+)['"]/g,
+      "const $1 = require('$2')"
+    );
+
+    // Side-effect imports: import 'module' -> require('module')
+    transformed = transformed.replace(
+      /import\s+['"]([^'"]+)['"]/g,
+      "require('$1')"
+    );
+
+    // Remove export statements (not needed in CommonJS context)
+    // export default X -> (just X, no export)
+    transformed = transformed.replace(/export\s+default\s+/g, '');
+    
+    // export { a, b } -> (just remove export)
+    transformed = transformed.replace(/export\s+\{([^}]+)\}/g, '');
+    
+    // export const/let/var/function/class -> const/let/var/function/class
+    transformed = transformed.replace(/export\s+(const|let|var|function|class|async\s+function)\s+/g, '$1 ');
+
+    return transformed;
   }
 
   /**
