@@ -2616,36 +2616,36 @@ export default function PromptPlayground() {
 
       {/* Main Content - Bolt.new Style Layout - No scroll container */}
       <div className="flex-1 overflow-hidden flex relative z-10">
-          {/* Chat Panel - Left Side - Responsive sizing */}
-          <div className="w-[25%] min-w-[280px] max-w-[400px] lg:w-[28%] xl:w-[30%] border-r border-border flex flex-col bg-card relative">
+          {/* Chap-ZPT Chat Panel */}
+          <div className="w-[32%] min-w-[320px] max-w-[480px] border-r border-white/5 flex flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white relative shadow-2xl">
           {/* Chat Header */}
-          <div className="panel-padding border-b border-border flex-shrink-0 bg-card relative z-10">
+          <div className="panel-padding border-b border-white/10 flex-shrink-0 bg-transparent relative z-10">
             <div className="flex items-center justify-between">
-              <h2 className="text-h4 flex items-center gap-2">
-                <Brain className="icon-md text-purple-600 dark:text-purple-400" />
-                <span className="brand-gradient-text font-bold">Chap-ZPT Chat</span>
+              <h2 className="text-h4 flex items-center gap-2 text-white">
+                <Brain className="icon-md text-purple-400" />
+                <span className="font-bold tracking-tight">Chap-ZPT Chat</span>
               </h2>
               {chatHistory.length > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={clearChat}
-                  className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  className="h-8 px-2 text-xs text-white/60 hover:text-white"
                   title="Clear chat history"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
             </div>
-            <p className="text-body-sm text-muted-foreground mt-2">
-              Describe what you want to build and Chap-ZPT will craft it.
+            <p className="text-body-sm text-white/80 mt-2 leading-tight">
+              Describe what you want to build—Chap-ZPT handles the coding, vibing, and debugging.
             </p>
                   </div>
 
                       {/* Chat Messages - Scrollable area that takes remaining space */}
           <div
             ref={chatMessagesRef}
-            className="flex-1 overflow-y-auto panel-padding min-h-0 relative"
+            className="flex-1 overflow-y-auto panel-padding min-h-0 relative bg-slate-950/60"
           >
             <div className="item-gap">
               {chatHistory.length === 0 && (
