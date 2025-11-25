@@ -363,14 +363,31 @@ try {
     const errorMsg = vmError.message || String(vmError);
     const errorStack = vmError.stack || '';
     
+    // Find the line number from the error if available
+    const lineMatch = errorMsg.match(/line (\d+)/i) || errorStack.match(/at.*:(\d+):/);
+    const lineNumber = lineMatch ? parseInt(lineMatch[1]) : null;
+    
+    // Get code around the error line for context
+    const codeLines = code.split('\\n');
+    let codeContext = '';
+    if (lineNumber && lineNumber > 0 && lineNumber <= codeLines.length) {
+      const start = Math.max(0, lineNumber - 3);
+      const end = Math.min(codeLines.length, lineNumber + 3);
+      codeContext = codeLines.slice(start, end).join('\\n');
+    } else {
+      codeContext = code.substring(0, 500);
+    }
+    
     parentPort.postMessage({
       type: 'error',
       error: 'Syntax error in plugin code: ' + errorMsg,
       blocked: false,
       details: {
         message: errorMsg,
-        stack: errorStack.substring(0, 500),
-        codeSample: code.substring(0, 200)
+        stack: errorStack.substring(0, 1000),
+        codeSample: codeContext,
+        lineNumber: lineNumber,
+        codeLength: code.length
       }
     });
     process.exit(1);
@@ -503,14 +520,16 @@ try {
   private transformToVMCompatible(code: string): string {
     let transformed = code;
 
-    // Note: Optional chaining (?.) and nullish coalescing (??) are supported in Node.js 14+
-    // But if there are issues, we can transform them here
-    // For now, we'll just return the code as-is since modern Node should support it
+    // Transform optional chaining: obj?.prop -> (obj && obj.prop)
+    // More comprehensive pattern matching
+    transformed = transformed.replace(/(\w+(?:\.\w+)*)\?\.(\w+)/g, '($1 && $1.$2)');
+    transformed = transformed.replace(/(\w+)\?\.(\w+)\s*\(/g, '($1 && $1.$2(');
     
-    // However, if there are syntax errors, they might be from:
-    // 1. Incomplete transformations
-    // 2. Template literal issues in the wrapper
-    // 3. Other syntax issues
+    // Transform nullish coalescing: a ?? b -> (a != null ? a : b)
+    transformed = transformed.replace(/([^?])\?\?([^=])/g, '$1 != null ? $1 : $2');
+    
+    // Transform optional chaining with brackets: obj?.[key] -> (obj && obj[key])
+    transformed = transformed.replace(/(\w+)\?\.\[([^\]]+)\]/g, '($1 && $1[$2])');
     
     return transformed;
   }

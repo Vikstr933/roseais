@@ -677,6 +677,14 @@ function execute(userId, params, credentials) {
       // Execute plugin code in sandbox with the wrapper function
       let sandboxResult;
       try {
+        logger.info('Executing plugin in sandbox', {
+          userId,
+          pluginId,
+          action,
+          codeLength: wrappedCode.length,
+          codePreview: wrappedCode.substring(0, 300)
+        });
+        
         sandboxResult = await sandbox.execute(
           wrappedCode,
           'execute',
@@ -687,15 +695,30 @@ function execute(userId, params, credentials) {
         logger.error('Sandbox execution threw an error', sandboxError as Error, {
           userId,
           pluginId,
-          action
+          action,
+          errorMessage: sandboxError instanceof Error ? sandboxError.message : String(sandboxError),
+          errorStack: sandboxError instanceof Error ? sandboxError.stack : undefined
         });
         throw sandboxError;
       }
 
       if (!sandboxResult || !sandboxResult.success) {
         const errorMsg = sandboxResult?.error || 'Plugin execution failed';
-        logger.error('Sandbox execution failed', { userId, pluginId, action, error: errorMsg });
-        throw new Error(errorMsg);
+        const errorDetails = (sandboxResult as any)?.details;
+        
+        logger.error('Sandbox execution failed', { 
+          userId, 
+          pluginId, 
+          action, 
+          error: errorMsg,
+          details: errorDetails
+        });
+        
+        // Include error details in the thrown error for better debugging
+        const fullError = errorDetails 
+          ? `${errorMsg}\nDetails: ${JSON.stringify(errorDetails, null, 2)}`
+          : errorMsg;
+        throw new Error(fullError);
       }
 
       const result = sandboxResult;
