@@ -84,9 +84,20 @@ export class PluginSandbox {
     try {
       // Transform ES module syntax to CommonJS (which also strips TypeScript)
       const transformedCode = this.transformESMToCommonJS(code);
+      
+      // Transform modern JavaScript syntax that might not be supported in VM
+      const vmCompatibleCode = this.transformToVMCompatible(transformedCode);
+
+      // Log a sample of the transformed code for debugging
+      logger.info('Code transformation complete', {
+        functionName,
+        originalLength: code.length,
+        finalLength: vmCompatibleCode.length,
+        sample: vmCompatibleCode.substring(0, 500)
+      });
 
       // Validate code before execution
-      const validation = await this.validateCode(transformedCode);
+      const validation = await this.validateCode(vmCompatibleCode);
       if (!validation.valid) {
         return {
           success: false,
@@ -102,7 +113,7 @@ export class PluginSandbox {
       }
 
       // Execute in Worker thread with transformed code
-      const result = await this.executeInWorker(transformedCode, functionName, args, sandboxConfig);
+      const result = await this.executeInWorker(vmCompatibleCode, functionName, args, sandboxConfig);
 
       logger.info('Sandbox execution completed successfully', {
         functionName,
@@ -341,11 +352,29 @@ function isDomainAllowed(domain, allowedDomains) {
 try {
   const startMemory = process.memoryUsage().heapUsed / 1024 / 1024;
 
-  // Execute code in VM context
-  vm.runInContext(code, context, {
-    timeout: config.timeout,
-    displayErrors: true,
-  });
+  // Execute code in VM context with better error handling
+  try {
+    vm.runInContext(code, context, {
+      timeout: config.timeout,
+      displayErrors: true,
+    });
+  } catch (vmError) {
+    // Log the actual syntax error for debugging
+    const errorMsg = vmError.message || String(vmError);
+    const errorStack = vmError.stack || '';
+    
+    parentPort.postMessage({
+      type: 'error',
+      error: 'Syntax error in plugin code: ' + errorMsg,
+      blocked: false,
+      details: {
+        message: errorMsg,
+        stack: errorStack.substring(0, 500),
+        codeSample: code.substring(0, 200)
+      }
+    });
+    process.exit(1);
+  }
 
   const endMemory = process.memoryUsage().heapUsed / 1024 / 1024;
   const memoryUsed = endMemory - startMemory;
@@ -465,6 +494,25 @@ try {
     stripped = stripped.replace(/<[A-Za-z][A-Za-z0-9_<>\[\]|&\s,{}]*>/g, '');
 
     return stripped;
+  }
+
+  /**
+   * Transform modern JavaScript syntax to VM-compatible syntax
+   * Node.js VM should support most modern syntax, but we'll handle edge cases
+   */
+  private transformToVMCompatible(code: string): string {
+    let transformed = code;
+
+    // Note: Optional chaining (?.) and nullish coalescing (??) are supported in Node.js 14+
+    // But if there are issues, we can transform them here
+    // For now, we'll just return the code as-is since modern Node should support it
+    
+    // However, if there are syntax errors, they might be from:
+    // 1. Incomplete transformations
+    // 2. Template literal issues in the wrapper
+    // 3. Other syntax issues
+    
+    return transformed;
   }
 
   /**
