@@ -544,6 +544,26 @@ try {
   }
 
   /**
+   * Heuristically detect if code still contains TypeScript syntax
+   */
+  private containsTypeScriptSyntax(code: string): boolean {
+    const tsIndicators = [
+      /interface\s+\w+/,
+      /type\s+\w+\s*=/,
+      /enum\s+\w+/,
+      /\bimplements\s+\w+/,
+      /\breadonly\s+\w+/,
+      /\bpublic\s+\w+/,
+      /\bprivate\s+\w+/,
+      /\bprotected\s+\w+/,
+      /<\w+\s*[,\w\s]*>/, // generic parameters
+      /:\s*(string|number|boolean|any|unknown|never|void|null|undefined|Record<|Array<|Promise<|Map<|Set<|Readonly<|Partial<|Pick<|Omit<|[A-Z][A-Za-z0-9_]*)/,
+    ];
+
+    return tsIndicators.some((regex) => regex.test(code));
+  }
+
+  /**
    * Transform modern JavaScript syntax to VM-compatible syntax
    * Node.js VM should support most modern syntax, but we'll handle edge cases
    */
@@ -650,8 +670,11 @@ try {
    * Transform ES module syntax to CommonJS
    */
   private transformESMToCommonJS(code: string): string {
-    // First strip TypeScript syntax
-    let transformed = this.stripTypeScript(code);
+    let transformed = code;
+
+    if (this.containsTypeScriptSyntax(transformed)) {
+      transformed = this.stripTypeScript(transformed);
+    }
 
     // Check if code uses ES module syntax
     const hasESM = /^import\s+/.test(transformed.trim()) || /^export\s+/.test(transformed.trim());
