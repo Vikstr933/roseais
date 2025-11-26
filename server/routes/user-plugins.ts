@@ -187,6 +187,43 @@ router.post('/generate', authenticateUser, async (req, res) => {
       });
     }
 
+    // Validate generated code is complete before saving
+    const code = result.generatedCode;
+    if (!code || code.length < 100) {
+      logger.error('Generated code is too short', { codeLength: code?.length || 0 });
+      return res.status(500).json({
+        success: false,
+        error: 'Generated plugin code is incomplete. Please try again.',
+      });
+    }
+
+    // Check if code appears complete (ends with closing brace, has balanced braces/quotes)
+    const endsWithCompleteStatement = /[;}\]]\s*$/.test(code.trim());
+    const openBraces = (code.match(/{/g) || []).length;
+    const closeBraces = (code.match(/}/g) || []).length;
+    const openQuotes = (code.match(/'/g) || []).length;
+    const closeQuotes = (code.match(/"/g) || []).length;
+    
+    if (!endsWithCompleteStatement || openBraces !== closeBraces || openQuotes % 2 !== 0 || closeQuotes % 2 !== 0) {
+      logger.error('Generated code appears incomplete/truncated', {
+        codeLength: code.length,
+        endsWithCompleteStatement,
+        braces: { open: openBraces, close: closeBraces },
+        quotes: { single: openQuotes, double: closeQuotes },
+        lastChars: code.substring(Math.max(0, code.length - 200))
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Generated plugin code appears to be incomplete. The AI response may have been truncated. Please try generating again.',
+      });
+    }
+
+    logger.info('Validated generated code before saving', {
+      pluginId: result.pluginId,
+      codeLength: code.length,
+      balancedBraces: openBraces === closeBraces
+    });
+
     // Create plugin record
     await db.insert(userGeneratedPlugins).values({
       pluginId: result.pluginId,
@@ -194,7 +231,7 @@ router.post('/generate', authenticateUser, async (req, res) => {
       name: result.metadata.pluginName,
       description: result.metadata.description,
       serviceName: body.serviceName || 'custom',
-      generatedCode: result.generatedCode,
+      generatedCode: code,
       pluginTemplate: 'base',
       capabilities: result.metadata.capabilities,
       securityScore: result.securityScore,
