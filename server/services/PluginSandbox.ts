@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { fileURLToPath } from 'url';
+import * as ts from 'typescript';
 
 const logger = new SimpleLogger('PluginSandbox');
 
@@ -89,8 +90,25 @@ export class PluginSandbox {
     logger.info('Starting sandbox execution', { functionName });
 
     try {
+      // First, transpile any TypeScript syntax to JavaScript
+      let transpiledCode = code;
+      try {
+        const tsResult = ts.transpileModule(code, {
+          compilerOptions: {
+            target: ts.ScriptTarget.ES2020,
+            module: ts.ModuleKind.ESNext,
+            useDefineForClassFields: false,
+            experimentalDecorators: false,
+          },
+          reportDiagnostics: false,
+        });
+        transpiledCode = tsResult.outputText || code;
+      } catch (transpileError) {
+        logger.warn('TypeScript transpilation failed, falling back to raw code', transpileError as Error);
+      }
+
       // Transform ES module syntax to CommonJS (which also strips TypeScript)
-      const transformedCode = this.transformESMToCommonJS(code);
+      const transformedCode = this.transformESMToCommonJS(transpiledCode);
       
       // Fix common Zod schema shorthand that causes invalid JavaScript
       const zodFixedCode = this.fixZodPropertyShortcuts(transformedCode);
