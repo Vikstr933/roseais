@@ -1244,17 +1244,69 @@ export default function Integrations() {
                     <p className="text-sm text-muted-foreground">
                       Min 10 tecken, max 2000 tecken
                     </p>
-                    <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                      <p className="text-sm font-medium text-foreground">Exempel på prompts:</p>
-                      <div className="text-xs text-muted-foreground space-y-1.5">
-                        <p className="font-medium">Discord:</p>
-                        <p className="pl-2">"Skapa en Discord-plugin som kan läsa meddelanden från kanaler, skicka meddelanden och lista tillgängliga kanaler. Använd Discord.js och bot token."</p>
-                        <p className="font-medium mt-2">Slack:</p>
-                        <p className="pl-2">"Skapa en Slack-plugin som kan skicka meddelanden till kanaler, läsa meddelanden och lista workspaces. Använd Slack Web API."</p>
-                        <p className="font-medium mt-2">Notion:</p>
-                        <p className="pl-2">"Skapa en Notion-plugin som kan söka efter sidor, skapa nya sidor och uppdatera befintliga sidor. Använd Notion API med API-nyckel."</p>
-                        <p className="font-medium mt-2">Trello:</p>
-                        <p className="pl-2">"Skapa en Trello-plugin som kan skapa kort, lista kort från boards och uppdatera kortstatus. Använd Trello API."</p>
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-3 max-h-[400px] overflow-y-auto">
+                      <p className="text-sm font-medium text-foreground">15 Exempel på användbara plugins:</p>
+                      <div className="text-xs text-muted-foreground space-y-2.5">
+                        <div>
+                          <p className="font-medium text-foreground">1. Slack</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Slack-plugin som kan skicka meddelanden till kanaler, läsa meddelanden, lista workspaces och skicka DM. Använd Slack Web API med OAuth2."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">2. Trello</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Trello-plugin som kan skapa kort, lista kort från boards, uppdatera kortstatus och lägga till kommentarer. Använd Trello API med API-nyckel."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">3. Asana</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Asana-plugin som kan skapa tasks, uppdatera task-status, lista projects och lägga till kommentarer. Använd Asana API med personal access token."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">4. Jira</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Jira-plugin som kan skapa issues, uppdatera issue-status, söka efter issues och lägga till kommentarer. Använd Jira REST API med API-token."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">5. Linear</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Linear-plugin som kan skapa issues, uppdatera issue-status, lista teams och söka efter issues. Använd Linear API med API-nyckel."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">6. Figma</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Figma-plugin som kan lista files, hämta komponenter, söka efter designs och kommentera på frames. Använd Figma REST API med personal access token."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">7. Airtable</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Airtable-plugin som kan läsa records från tables, skapa nya records, uppdatera records och lista bases. Använd Airtable API med API-nyckel."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">8. Monday.com</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Monday.com-plugin som kan skapa items, uppdatera item-status, lista boards och lägga till updates. Använd Monday.com API med API-token."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">9. Spotify</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Spotify-plugin som kan söka efter låtar, skapa playlists, lägga till låtar i playlists och hämta artistinformation. Använd Spotify Web API med OAuth2."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">10. Twitter/X</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Twitter-plugin som kan skicka tweets, läsa timeline, söka efter tweets och hämta användarinformation. Använd Twitter API v2 med Bearer token."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">11. Stripe</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Stripe-plugin som kan skapa customers, lista charges, hämta payment intents och skapa subscriptions. Använd Stripe API med secret key."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">12. Shopify</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Shopify-plugin som kan lista products, skapa orders, uppdatera inventory och hämta customer information. Använd Shopify Admin API med access token."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">13. YouTube</p>
+                          <p className="pl-2 mt-0.5">"Skapa en YouTube-plugin som kan söka efter videos, hämta video information, lista playlists och hämta channel statistics. Använd YouTube Data API v3 med API-nyckel."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">14. LinkedIn</p>
+                          <p className="pl-2 mt-0.5">"Skapa en LinkedIn-plugin som kan skapa posts, hämta profile information, söka efter connections och läsa feed. Använd LinkedIn API med OAuth2."</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">15. Reddit</p>
+                          <p className="pl-2 mt-0.5">"Skapa en Reddit-plugin som kan läsa posts från subreddits, skapa posts, kommentera och hämta trending topics. Använd Reddit API med OAuth2."</p>
+                        </div>
                       </div>
                     </div>
                   </div>
