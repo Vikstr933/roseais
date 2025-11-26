@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import * as ts from 'typescript';
 import { BaseAgent } from './BaseAgent';
 import { PluginSecurityAnalyzer, SecurityAnalysisResult } from '../services/PluginSecurityAnalyzer';
 import { SimpleLogger } from '../utils/SimpleLogger';
@@ -45,6 +46,13 @@ export interface IntentAnalysis {
   complexity: 'simple' | 'medium' | 'complex';
 }
 
+interface PromptConfig {
+  model: string;
+  maxTokens: number;
+  temperature: number;
+  systemPrompt: string;
+}
+
 /**
  * PluginGeneratorAgent
  *
@@ -52,6 +60,7 @@ export interface IntentAnalysis {
  * Implements multi-stage security validation and code analysis.
  */
 export class PluginGeneratorAgent extends BaseAgent {
+  private static readonly MAX_GENERATION_ATTEMPTS = 3;
   private anthropic: Anthropic;
   private securityAnalyzer: PluginSecurityAnalyzer;
   private model: string;
@@ -104,6 +113,117 @@ export class PluginGeneratorAgent extends BaseAgent {
     });
 
     this.securityAnalyzer = new PluginSecurityAnalyzer();
+  }
+
+  private buildGenerationUserPrompt(
+    params: { prompt: string; capabilities: string[]; serviceName: string; complexity: 'simple' | 'medium' | 'complex' },
+    template: string,
+    validationHint?: string
+  ): string {
+    let prompt = `Generate a plugin for: ${params.prompt}
+
+Use this template as a guide:
+
+${template}
+
+Requirements:
+- Plugin should be production-ready
+- Include proper OAuth setup if needed
+- Implement tools for the requested capabilities
+- Add comprehensive error handling
+- Use Zod for parameter validation
+- Include rate limiting configuration
+- Output modern JavaScript (ES2020) only. Do not use TypeScript-specific syntax or type annotations.`;
+
+    if (validationHint) {
+      prompt += `\n\nThe previous attempt failed with the following issue:\n${validationHint}\nPlease correct it and ensure the code parses without syntax errors.`;
+    }
+
+    return prompt;
+  }
+
+  private async generateCodeAttempt(
+    params: {
+      prompt: string;
+      serviceName: string;
+      capabilities: string[];
+      complexity: 'simple' | 'medium' | 'complex';
+    },
+    template: string,
+    promptConfig: PromptConfig,
+    validationHint?: string
+  ): Promise<{
+    code: string;
+    pluginName: string;
+    description: string;
+    capabilities: string[];
+    requiresAuth: boolean;
+    authType?: string;
+    credentialsRequired: Record<string, any>;
+    tokensUsed: number;
+  }> {
+    const userPrompt = this.buildGenerationUserPrompt(params, template, validationHint);
+
+    const response = await this.anthropic.messages.create({
+      model: promptConfig.model,
+      max_tokens: promptConfig.maxTokens,
+      temperature: promptConfig.temperature,
+      system: promptConfig.systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type');
+    }
+
+    let code = content.text;
+    code = code
+      .replace(/```(?:typescript|ts|javascript|js)?\n?/gi, '')
+      .replace(/```\n?/g, '')
+      .trim();
+
+    const sanitizedCode = this.sanitizeGeneratedCode(code);
+
+    const pluginName = this.extractPluginName(sanitizedCode, params.serviceName);
+    const description = this.extractDescription(sanitizedCode, params.prompt);
+    const requiresAuth = sanitizedCode.includes('requiresAuth: true') ||
+      sanitizedCode.includes('requiresAuth:true') ||
+      sanitizedCode.match(/requiresAuth\s*:\s*true/i) !== null;
+    const authType = sanitizedCode.includes('oauth') || sanitizedCode.includes('OAuth') ? 'oauth2' :
+      sanitizedCode.includes('apiKey') || sanitizedCode.includes('api_key') ? 'api_key' : undefined;
+
+    let credentialsRequired = this.detectCredentialRequirements(sanitizedCode, params.serviceName);
+    if (requiresAuth && Object.keys(credentialsRequired).length === 0) {
+      logger.warn('Plugin requires auth but no credentials detected, adding default field', {
+        serviceName: params.serviceName
+      });
+      credentialsRequired = {
+        apiKey: {
+          label: `${params.serviceName.charAt(0).toUpperCase() + params.serviceName.slice(1)} API Key`,
+          type: 'password',
+          required: true,
+          description: `API key or access token for ${params.serviceName}. Check your ${params.serviceName} account settings or documentation.`,
+          placeholder: 'Enter your API key or token'
+        }
+      };
+    }
+
+    return {
+      code: sanitizedCode,
+      pluginName,
+      description,
+      capabilities: params.capabilities,
+      requiresAuth,
+      authType,
+      credentialsRequired,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+    };
   }
 
   /**
@@ -454,122 +574,69 @@ Respond in JSON format (no markdown code blocks):
     const startTime = Date.now();
     const template = this.getPluginTemplate(params.serviceName);
 
-    try {
-      // Load prompt from database with coding guidelines
-      const promptConfig = await promptManager.buildSystemPrompt(
-        'plugin_generator.code_generation',
-        {
-          capabilities: params.capabilities.join(', '),
-          serviceName: params.serviceName,
-          complexity: params.complexity,
-          codingGuidelines: '{{codingGuidelines}}', // Will be replaced with actual guidelines
-        },
-        { includeGuidelines: true } // Include coding best practices
-      );
+    const promptConfig = await promptManager.buildSystemPrompt(
+      'plugin_generator.code_generation',
+      {
+        capabilities: params.capabilities.join(', '),
+        serviceName: params.serviceName,
+        complexity: params.complexity,
+        codingGuidelines: '{{codingGuidelines}}',
+      },
+      { includeGuidelines: true }
+    );
 
-      if (!promptConfig) {
-        // Fallback to hardcoded prompt
-        logger.warn('Database prompt not found for code generation, using fallback');
-        return this.generateSecureCodeFallback(params, template);
-      }
-
-      const userPrompt = `Generate a plugin for: ${params.prompt}
-
-Use this template as a guide:
-
-${template}
-
-Requirements:
-- Plugin should be production-ready
-- Include proper OAuth setup if needed
-- Implement tools for the requested capabilities
-- Add comprehensive error handling
-- Use Zod for parameter validation
-- Include rate limiting configuration`;
-
-      const response = await this.anthropic.messages.create({
-        model: promptConfig.model,
-        max_tokens: promptConfig.maxTokens,
-        temperature: promptConfig.temperature,
-        system: promptConfig.systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
-      });
-
-    const content = response.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type');
-    }
-
-    let code = content.text;
-
-    // Clean up markdown code blocks if present
-    code = code.replace(/```typescript\n?/g, '').replace(/```\n?/g, '').trim();
-
-    // Extract metadata from generated code
-    const pluginName = this.extractPluginName(code, params.serviceName);
-    const description = this.extractDescription(code, params.prompt);
-    const requiresAuth = code.includes('requiresAuth: true') || 
-                        code.includes('requiresAuth:true') ||
-                        code.match(/requiresAuth\s*:\s*true/i) !== null;
-    const authType = code.includes('oauth') || code.includes('OAuth') ? 'oauth2' :
-                     code.includes('apiKey') || code.includes('api_key') ? 'api_key' : undefined;
-
-      // Detect credential requirements from generated code
-      let credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
-      
-      // If requiresAuth is true but no credentials were detected, provide a default
-      if (requiresAuth && Object.keys(credentialsRequired).length === 0) {
-        logger.warn('Plugin requires auth but no credentials detected, adding default field', {
-          serviceName: params.serviceName
-        });
-        credentialsRequired = {
-          apiKey: {
-            label: `${params.serviceName.charAt(0).toUpperCase() + params.serviceName.slice(1)} API Key`,
-            type: 'password',
-            required: true,
-            description: `API key or access token for ${params.serviceName}. Check your ${params.serviceName} account settings or documentation.`,
-            placeholder: 'Enter your API key or token'
-          }
-        };
-      }
-
-      // Log usage metrics
-      const responseTime = Date.now() - startTime;
-      await promptManager.logUsage(
-        'plugin_generator.code_generation',
-        'system',
-        {
-          responseTimeMs: responseTime,
-          tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-          success: true,
-          requestContext: {
-            agentType: 'plugin_generator',
-            action: 'code_generation',
-            serviceName: params.serviceName,
-            complexity: params.complexity
-          }
-        }
-      ).catch(() => {}); // Don't fail on logging errors
-
-      return {
-        code,
-        pluginName,
-        description,
-        capabilities: params.capabilities,
-        requiresAuth,
-        authType,
-        credentialsRequired,
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-      };
-    } catch (error) {
-      logger.error('Code generation failed, using fallback', error as Error);
+    if (!promptConfig) {
+      logger.warn('Database prompt not found for code generation, using fallback');
       return this.generateSecureCodeFallback(params, template);
     }
+
+    let validationHint: string | undefined;
+
+    for (let attempt = 1; attempt <= PluginGeneratorAgent.MAX_GENERATION_ATTEMPTS; attempt++) {
+      try {
+        const result = await this.generateCodeAttempt(
+          params,
+          template,
+          promptConfig as PromptConfig,
+          validationHint
+        );
+
+        const responseTime = Date.now() - startTime;
+        await promptManager.logUsage(
+          'plugin_generator.code_generation',
+          'system',
+          {
+            responseTimeMs: responseTime,
+            tokensUsed: result.tokensUsed,
+            success: true,
+            requestContext: {
+              agentType: 'plugin_generator',
+              action: 'code_generation',
+              serviceName: params.serviceName,
+              complexity: params.complexity
+            }
+          }
+        ).catch(() => {});
+
+        return result;
+      } catch (error) {
+        if (error instanceof PluginValidationError) {
+          validationHint = error.message;
+          logger.warn('Generated code failed validation', {
+            attempt,
+            serviceName: params.serviceName,
+            error: error.message
+          });
+          continue;
+        }
+
+        logger.error('Code generation failed, using fallback', error as Error);
+        break;
+      }
+    }
+
+    logger.warn('Falling back to hardcoded prompt after repeated validation failures');
+    return this.generateSecureCodeFallback(params, template, validationHint);
   }
 
   /**
@@ -582,7 +649,8 @@ Requirements:
       capabilities: string[];
       complexity: 'simple' | 'medium' | 'complex';
     },
-    template: string
+    template: string,
+    validationHint?: string
   ): Promise<{
     code: string;
     pluginName: string;
@@ -602,7 +670,7 @@ REQUIREMENTS:
 5. NO eval() or Function() constructors
 6. NO hardcoded credentials (use plugin credential system)
 7. Include proper error handling
-8. Add TypeScript types
+8. Use modern JavaScript (ES2020). Do not use TypeScript syntax or type annotations.
 9. Implement all required methods: initialize(), enable(), sync(), getTools(), executeAction()
 10. Follow the template structure
 
@@ -610,9 +678,9 @@ CAPABILITIES REQUESTED: ${params.capabilities.join(', ')}
 SERVICE: ${params.serviceName}
 COMPLEXITY: ${params.complexity}
 
-Return ONLY the TypeScript code, no markdown code blocks, no explanations.`;
+Return ONLY the JavaScript code, no markdown code blocks, no explanations.`;
 
-    const userPrompt = `Generate a plugin for: ${params.prompt}
+    let userPrompt = `Generate a plugin for: ${params.prompt}
 
 Use this template as a guide:
 
@@ -625,6 +693,10 @@ Requirements:
 - Add comprehensive error handling
 - Use Zod for parameter validation
 - Include rate limiting configuration`;
+
+    if (validationHint) {
+      userPrompt += `\n\nPrevious attempt failed with this syntax error:\n${validationHint}\nFix the issue and ensure the generated code is valid JavaScript.`;
+    }
 
     const response = await this.anthropic.messages.create({
       model: this.model,
@@ -647,19 +719,24 @@ Requirements:
     let code = content.text;
 
     // Clean up markdown code blocks if present
-    code = code.replace(/```typescript\n?/g, '').replace(/```\n?/g, '').trim();
+    code = code
+      .replace(/```(?:typescript|ts|javascript|js)?\n?/gi, '')
+      .replace(/```\n?/g, '')
+      .trim();
+
+    const sanitizedCode = this.sanitizeGeneratedCode(code);
 
     // Extract metadata from generated code
-    const pluginName = this.extractPluginName(code, params.serviceName);
-    const description = this.extractDescription(code, params.prompt);
-    const requiresAuth = code.includes('requiresAuth: true') || 
-                        code.includes('requiresAuth:true') ||
-                        code.match(/requiresAuth\s*:\s*true/i) !== null;
-    const authType = code.includes('oauth') || code.includes('OAuth') ? 'oauth2' :
-                     code.includes('apiKey') || code.includes('api_key') ? 'api_key' : undefined;
+    const pluginName = this.extractPluginName(sanitizedCode, params.serviceName);
+    const description = this.extractDescription(sanitizedCode, params.prompt);
+    const requiresAuth = sanitizedCode.includes('requiresAuth: true') || 
+                        sanitizedCode.includes('requiresAuth:true') ||
+                        sanitizedCode.match(/requiresAuth\s*:\s*true/i) !== null;
+    const authType = sanitizedCode.includes('oauth') || sanitizedCode.includes('OAuth') ? 'oauth2' :
+                     sanitizedCode.includes('apiKey') || sanitizedCode.includes('api_key') ? 'api_key' : undefined;
 
     // Detect credential requirements from generated code
-    let credentialsRequired = this.detectCredentialRequirements(code, params.serviceName);
+    let credentialsRequired = this.detectCredentialRequirements(sanitizedCode, params.serviceName);
     
     // If requiresAuth is true but no credentials were detected, provide a default
     if (requiresAuth && Object.keys(credentialsRequired).length === 0) {
@@ -678,7 +755,7 @@ Requirements:
     }
 
     return {
-      code,
+      code: sanitizedCode,
       pluginName,
       description,
       capabilities: params.capabilities,
@@ -687,6 +764,33 @@ Requirements:
       credentialsRequired,
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
     };
+  }
+
+  private sanitizeGeneratedCode(code: string): string {
+    let transpiled = code;
+
+    try {
+      const transpileResult = ts.transpileModule(code, {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2020,
+          esModuleInterop: true,
+          strict: false,
+        },
+      });
+      transpiled = transpileResult.outputText;
+    } catch (error) {
+      throw new PluginValidationError(`TypeScript transpilation failed: ${(error as Error).message}`);
+    }
+
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(transpiled);
+    } catch (error) {
+      throw new PluginValidationError(`JavaScript syntax error: ${(error as Error).message}`);
+    }
+
+    return transpiled;
   }
 
   /**
@@ -987,5 +1091,12 @@ export class {{PLUGIN_NAME}}Plugin extends BaseProductivityPlugin {
    */
   calculateSecurityScore(analysisResults: SecurityAnalysisResult): number {
     return analysisResults.securityScore;
+  }
+}
+
+class PluginValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PluginValidationError';
   }
 }
