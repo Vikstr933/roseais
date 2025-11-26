@@ -92,22 +92,22 @@ export class PluginSandbox {
       // Transform ES module syntax to CommonJS (which also strips TypeScript)
       const transformedCode = this.transformESMToCommonJS(code);
       
-      // Transform modern JavaScript syntax that might not be supported in VM
-      const vmCompatibleCode = this.transformToVMCompatible(transformedCode);
-      
       // Fix common Zod schema shorthand that causes invalid JavaScript
-      const zodFixedCode = this.fixZodPropertyShortcuts(vmCompatibleCode);
+      const zodFixedCode = this.fixZodPropertyShortcuts(transformedCode);
+      
+      // Transform modern JavaScript syntax that might not be supported in VM
+      const vmCompatibleCode = this.transformToVMCompatible(zodFixedCode);
 
       // Log a sample of the transformed code for debugging
       logger.info('Code transformation complete', {
         functionName,
         originalLength: code.length,
-        finalLength: zodFixedCode.length,
-        sample: zodFixedCode.substring(0, 500)
+        finalLength: vmCompatibleCode.length,
+        sample: vmCompatibleCode.substring(0, 500)
       });
 
       // Validate code before execution
-      const validation = await this.validateCode(zodFixedCode);
+      const validation = await this.validateCode(vmCompatibleCode);
       if (!validation.valid) {
         return {
           success: false,
@@ -123,7 +123,7 @@ export class PluginSandbox {
       }
 
       // Execute in Worker thread with transformed code
-      const result = await this.executeInWorker(zodFixedCode, functionName, args, sandboxConfig);
+      const result = await this.executeInWorker(vmCompatibleCode, functionName, args, sandboxConfig);
 
       logger.info('Sandbox execution completed successfully', {
         functionName,
@@ -572,6 +572,9 @@ try {
     transformed = transformed.replace(propertyRegex, (_match, prefix, prop, zType) => {
       return `${prefix}${prop}: z.${zType}(`;
     });
+
+    // Fix accidental "= z: z." sequences if they appear
+    transformed = transformed.replace(/=\s*z:\s*z\./g, '= z.');
 
     return transformed;
   }
