@@ -565,10 +565,13 @@ try {
     }
 
     // Replace property shortcuts like channelId.string(... with channelId: z.string(...
-    transformed = transformed.replace(
-      /(\b[A-Za-z_][A-Za-z0-9_]*\b)\s*\.(string|number|boolean|array|date|bigint|symbol|function|any|unknown|object|enum)\s*\(/g,
-      (_match, prop, zType) => `${prop}: z.${zType}(`
-    );
+    const zTypes = ['string','number','boolean','array','date','bigint','symbol','function','any','unknown','object','enum'];
+    const zTypePattern = zTypes.join('|');
+    const propertyRegex = new RegExp(`([\\{,\\n\\r\\t\\s])([A-Za-z_][A-Za-z0-9_]*)\\s*\\.(${zTypePattern})\\s*\\(`, 'g');
+
+    transformed = transformed.replace(propertyRegex, (_match, prefix, prop, zType) => {
+      return `${prefix}${prop}: z.${zType}(`;
+    });
 
     return transformed;
   }
