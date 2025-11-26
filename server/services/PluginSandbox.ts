@@ -654,10 +654,11 @@ try {
     // Replace property shortcuts like channelId.string(... with channelId: z.string(...
     const zTypes = ['string','number','boolean','array','date','bigint','symbol','function','any','unknown','object','enum'];
     const zTypePattern = zTypes.join('|');
-    const propertyRegex = new RegExp(`([\\{,]\\s*)([A-Za-z_][A-Za-z0-9_]*)\\s*\\.(${zTypePattern})\\s*\\(`, 'g');
+    const propertyRegex = new RegExp(`((?:[\\{,]\\s*|^\\s*))([A-Za-z_][A-Za-z0-9_]*)\\s*\\.(${zTypePattern})\\s*\\(`, 'gm');
 
     transformed = transformed.replace(propertyRegex, (_match, prefix, prop, zType) => {
-      return `${prefix}${prop}: z.${zType}(`;
+      const normalizedPrefix = prefix.endsWith('\n') ? prefix : prefix;
+      return `${normalizedPrefix}${prop}: z.${zType}(`;
     });
 
     // Fix accidental "= z: z." sequences if they appear
