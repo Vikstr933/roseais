@@ -377,12 +377,12 @@ try {
     const lineNumber = lineMatch ? parseInt(lineMatch[1]) : null;
     
     // Get code around the error line for context
-    const codeLines = code.split('\n');
+    const codeLines = code.split('\\n');
     let codeContext = '';
     if (lineNumber && lineNumber > 0 && lineNumber <= codeLines.length) {
       const start = Math.max(0, lineNumber - 3);
       const end = Math.min(codeLines.length, lineNumber + 3);
-      codeContext = codeLines.slice(start, end).join('\n');
+      codeContext = codeLines.slice(start, end).join('\\n');
     } else {
       codeContext = code.substring(0, 500);
     }
