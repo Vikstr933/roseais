@@ -1234,15 +1234,30 @@ export default function Integrations() {
                   <Label htmlFor="prompt">What should this plugin do?</Label>
                   <Textarea
                     id="prompt"
-                    placeholder="Example: Create a Discord plugin that monitors mentions of '@urgent' in my server and sends me notifications via the OmniAssistant. It should also be able to send messages when I'm away."
+                    placeholder="Exempel: Skapa en Discord-plugin som kan läsa meddelanden från kanaler, skicka meddelanden och lista tillgängliga kanaler. Använd Discord.js och bot token för autentisering."
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     rows={6}
                     className="mt-2"
                   />
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Min 10 characters, max 2000 characters
-                  </p>
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Min 10 tecken, max 2000 tecken
+                    </p>
+                    <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                      <p className="text-sm font-medium text-foreground">Exempel på prompts:</p>
+                      <div className="text-xs text-muted-foreground space-y-1.5">
+                        <p className="font-medium">Discord:</p>
+                        <p className="pl-2">"Skapa en Discord-plugin som kan läsa meddelanden från kanaler, skicka meddelanden och lista tillgängliga kanaler. Använd Discord.js och bot token."</p>
+                        <p className="font-medium mt-2">Slack:</p>
+                        <p className="pl-2">"Skapa en Slack-plugin som kan skicka meddelanden till kanaler, läsa meddelanden och lista workspaces. Använd Slack Web API."</p>
+                        <p className="font-medium mt-2">Notion:</p>
+                        <p className="pl-2">"Skapa en Notion-plugin som kan söka efter sidor, skapa nya sidor och uppdatera befintliga sidor. Använd Notion API med API-nyckel."</p>
+                        <p className="font-medium mt-2">Trello:</p>
+                        <p className="pl-2">"Skapa en Trello-plugin som kan skapa kort, lista kort från boards och uppdatera kortstatus. Använd Trello API."</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
