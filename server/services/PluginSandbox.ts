@@ -532,6 +532,12 @@ try {
   private transformToVMCompatible(code: string): string {
     let transformed = code;
 
+    // Remove TypeScript access modifiers & property types in class bodies
+    transformed = transformed.replace(
+      /(public|private|protected)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+=/g,
+      '$2 ='
+    );
+
     // Transform optional chaining: obj?.prop -> (obj && obj.prop)
     // More comprehensive pattern matching
     transformed = transformed.replace(/(\w+(?:\.\w+)*)\?\.(\w+)/g, '($1 && $1.$2)');
