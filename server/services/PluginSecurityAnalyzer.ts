@@ -346,11 +346,12 @@ export class PluginSecurityAnalyzer {
    */
   private validateImports(ast: Node): SecurityIssue[] {
     const issues: SecurityIssue[] = [];
+    const analyzer = this;
 
     traverse(ast, {
       ImportDeclaration(path: any) {
         const packageName = path.node.source.value;
-        if (!this.isAllowedPackage(packageName)) {
+        if (!analyzer.isAllowedPackage(packageName)) {
           issues.push({
             severity: 'high',
             type: 'unauthorized_package',
@@ -366,7 +367,7 @@ export class PluginSecurityAnalyzer {
         // Check require() calls
         if (path.node.callee.name === 'require' && path.node.arguments[0]?.type === 'StringLiteral') {
           const packageName = path.node.arguments[0].value;
-          if (!this.isAllowedPackage(packageName)) {
+          if (!analyzer.isAllowedPackage(packageName)) {
             issues.push({
               severity: 'high',
               type: 'unauthorized_package',
