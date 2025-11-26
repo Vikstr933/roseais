@@ -534,25 +534,34 @@ try {
 
     // Remove TypeScript access modifiers, readonly, and property types in class bodies
     transformed = transformed.replace(
-      /(public|private|protected)\s+(readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+(?==)/g,
+      /(public|private|protected)\s+(readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+(?==)/g,
       '$3'
     );
     transformed = transformed.replace(
-      /(public|private|protected)\s+(readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+(?=;)/g,
+      /(public|private|protected)\s+(readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+(?=;)/g,
       '$3'
     );
     transformed = transformed.replace(
-      /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+(?==)/g,
+      /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+(?==)/g,
       '$1'
     );
     transformed = transformed.replace(
-      /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+(?=;)/g,
+      /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+(?=;)/g,
       '$1'
     );
     // Remove leftover access modifiers like "private foo =" or "readonly foo ="
     transformed = transformed.replace(
       /\b(public|private|protected|readonly)\s+(?=[A-Za-z_])/g,
       ''
+    );
+    // Remove plain typed properties without modifiers
+    transformed = transformed.replace(
+      /(^|\s)([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+(?==)/gm,
+      '$1$2'
+    );
+    transformed = transformed.replace(
+      /(^|\s)([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+(?=;)/gm,
+      '$1$2'
     );
     transformed = transformed.replace(
       /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+=/g,
