@@ -182,11 +182,33 @@ export class PluginSandbox {
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
 
+    // For large code (>10KB), write to temp file to avoid workerData size limits
+    // workerData uses structured clone which can truncate large strings
+    let codeFilePath: string | null = null;
+    const CODE_SIZE_THRESHOLD = 10000; // 10KB
+    
+    if (code.length > CODE_SIZE_THRESHOLD) {
+      try {
+        const tempDir = os.tmpdir();
+        const tempFile = path.join(tempDir, `plugin-code-${Date.now()}-${Math.random().toString(36).substring(7)}.js`);
+        fs.writeFileSync(tempFile, code, 'utf8');
+        codeFilePath = tempFile;
+        logger.info('Code too large for workerData, using temp file', {
+          codeLength: code.length,
+          tempFile: codeFilePath
+        });
+      } catch (fileError) {
+        logger.warn('Failed to write code to temp file, falling back to workerData', fileError as Error);
+        codeFilePath = null;
+      }
+    }
+
     return new Promise((resolve, reject) => {
       // Create Worker with resource limits
       const worker = new Worker(this.workerPath, {
         workerData: {
-          code,
+          code: codeFilePath ? null : code, // Only pass code if small enough
+          codeFilePath: codeFilePath, // Pass file path for large code
           functionName,
           args,
           config,
@@ -288,6 +310,16 @@ export class PluginSandbox {
             reject(new Error(`Worker exited with code ${code}`));
           }
         }
+        
+        // Clean up temp file if it was created
+        if (codeFilePath && fs.existsSync(codeFilePath)) {
+          try {
+            fs.unlinkSync(codeFilePath);
+            logger.info('Cleaned up temp code file', { tempFile: codeFilePath });
+          } catch (cleanupError) {
+            logger.warn('Failed to cleanup temp code file', cleanupError as Error);
+          }
+        }
       });
     });
   }
@@ -299,8 +331,24 @@ export class PluginSandbox {
     const workerScript = `
 const { parentPort, workerData } = require('worker_threads');
 const vm = require('vm');
+const fs = require('fs');
 
-const { code, functionName, args, config } = workerData;
+const { code, codeFilePath, functionName, args, config } = workerData;
+
+// Load code from file if provided (for large code that exceeds workerData size limits)
+let actualCode = code;
+if (codeFilePath && !code) {
+  try {
+    actualCode = fs.readFileSync(codeFilePath, 'utf8');
+  } catch (fileError) {
+    parentPort.postMessage({
+      type: 'error',
+      error: 'Failed to read code file: ' + (fileError.message || String(fileError)),
+      blocked: false
+    });
+    process.exit(1);
+  }
+}
 
 // Track network calls
 let networkCallCount = 0;
@@ -384,7 +432,7 @@ try {
 
   // Execute code in VM context with better error handling
   try {
-    vm.runInContext(code, context, {
+    vm.runInContext(actualCode, context, {
       timeout: config.timeout,
       displayErrors: true,
     });
@@ -398,14 +446,14 @@ try {
     const lineNumber = lineMatch ? parseInt(lineMatch[1]) : null;
     
     // Get code around the error line for context
-    const codeLines = code.split('\\n');
+    const codeLines = actualCode.split('\\n');
     let codeContext = '';
     if (lineNumber && lineNumber > 0 && lineNumber <= codeLines.length) {
       const start = Math.max(0, lineNumber - 3);
       const end = Math.min(codeLines.length, lineNumber + 3);
       codeContext = codeLines.slice(start, end).join('\\n');
     } else {
-      codeContext = code.substring(0, 500);
+      codeContext = actualCode.substring(0, 500);
     }
     
     parentPort.postMessage({
@@ -417,7 +465,7 @@ try {
         stack: errorStack.substring(0, 1000),
         codeSample: codeContext,
         lineNumber: lineNumber,
-        codeLength: code.length
+        codeLength: actualCode.length
       }
     });
     process.exit(1);
