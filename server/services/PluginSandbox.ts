@@ -549,6 +549,11 @@ try {
       /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+(?=;)/g,
       '$1'
     );
+    // Remove leftover access modifiers like "private foo =" or "readonly foo ="
+    transformed = transformed.replace(
+      /\b(public|private|protected|readonly)\s+(?=[A-Za-z_])/g,
+      ''
+    );
     transformed = transformed.replace(
       /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+=/g,
       '$1 ='
