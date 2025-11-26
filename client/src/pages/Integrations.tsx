@@ -360,7 +360,9 @@ export default function Integrations() {
 
   const loadPlugins = async () => {
     try {
-      const response = await apiFetch('/api/plugins');
+      const response = await apiFetch('/api/plugins', {
+        cache: 'no-store', // Always fetch fresh plugin list
+      } as RequestInit);
       const data = await response.json();
       if (data.success) {
         setAvailablePlugins(data.plugins);
@@ -700,6 +702,9 @@ export default function Integrations() {
       }
 
       setSuccess(`${plugin.name} deleted successfully`);
+      // Optimistically remove the plugin from local state so the UI updates immediately
+      setAvailablePlugins(prev => prev.filter(p => p.id !== pluginId));
+      setUserPluginStatus(prev => prev.filter(p => p.pluginId !== pluginId));
       await loadPlugins();
       await loadUserStatus();
     } catch (err) {
