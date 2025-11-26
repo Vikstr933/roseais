@@ -53,20 +53,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           Authorization: `Bearer ${token}`,
         },
       })
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) {
+            // HTTP error (401, 403, etc.) - invalid token
+            if (res.status === 401 || res.status === 403) {
+              localStorage.removeItem('sessionToken');
+              setSessionToken(null);
+            }
+            return res.json();
+          }
+          return res.json();
+        })
         .then(data => {
-          if (data.user) {
+          if (data?.user) {
             setUser(data.user);
-          } else {
-            // Invalid token, remove it
+          } else if (data?.error) {
+            // Server returned an error - invalid token
             localStorage.removeItem('sessionToken');
             setSessionToken(null);
           }
         })
-        .catch(() => {
-          // Error verifying token, remove it
-          localStorage.removeItem('sessionToken');
-          setSessionToken(null);
+        .catch((error) => {
+          // Network/CORS errors - don't remove token, just keep it
+          // Only remove token if it's a clear auth error
+          if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+            // CORS or network error - keep token, user might just be offline
+            console.warn('Network error verifying session, keeping token:', error.message);
+          } else {
+            // Other errors - might be auth related, remove token
+            console.error('Error verifying session:', error);
+            localStorage.removeItem('sessionToken');
+            setSessionToken(null);
+          }
         })
         .finally(() => {
           setIsLoading(false);

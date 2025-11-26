@@ -177,6 +177,7 @@ const initializeApp = async () => {
       origin: (origin, callback) => {
         // Allow requests without origin (monitoring services, same-origin requests)
         if (!origin) {
+          console.log('[CORS] Allowing request without origin');
           return callback(null, true);
         }
 
@@ -191,6 +192,7 @@ const initializeApp = async () => {
         });
 
         if (isAllowed) {
+          console.log(`[CORS] Allowing origin: ${origin}`);
           callback(null, true);
         } else {
           console.warn(`[CORS] Blocked origin: ${origin}`);
