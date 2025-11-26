@@ -700,7 +700,7 @@ Requirements:
 
     const response = await this.anthropic.messages.create({
       model: this.model,
-      max_tokens: 4000,
+      max_tokens: 16000, // Increased from 4000 to handle larger plugins (Discord, etc.)
       temperature: 0.7,
       system: systemPrompt,
       messages: [
