@@ -673,14 +673,18 @@ try {
   private transformESMToCommonJS(code: string): string {
     let transformed = code;
 
-    if (this.containsTypeScriptSyntax(transformed)) {
-      transformed = this.stripTypeScript(transformed);
+    // Check if code uses ES module syntax FIRST
+    const hasESM = /^import\s+/.test(transformed.trim()) || /^export\s+/.test(transformed.trim());
+    const hasCommonJS = /require\s*\(/.test(transformed) || /exports\./.test(transformed) || /module\.exports/.test(transformed);
+    
+    // If it's already CommonJS, don't touch it (generator already validated it)
+    if (!hasESM && hasCommonJS) {
+      return transformed; // Already CommonJS, no transformation needed
     }
 
-    // Check if code uses ES module syntax
-    const hasESM = /^import\s+/.test(transformed.trim()) || /^export\s+/.test(transformed.trim());
-    if (!hasESM) {
-      return transformed; // Already CommonJS, no transformation needed
+    // Only strip TypeScript if we're actually transforming ESM to CJS
+    if (hasESM && this.containsTypeScriptSyntax(transformed)) {
+      transformed = this.stripTypeScript(transformed);
     }
 
     // Transform import statements to require()
