@@ -94,17 +94,20 @@ export class PluginSandbox {
       
       // Transform modern JavaScript syntax that might not be supported in VM
       const vmCompatibleCode = this.transformToVMCompatible(transformedCode);
+      
+      // Fix common Zod schema shorthand that causes invalid JavaScript
+      const zodFixedCode = this.fixZodPropertyShortcuts(vmCompatibleCode);
 
       // Log a sample of the transformed code for debugging
       logger.info('Code transformation complete', {
         functionName,
         originalLength: code.length,
-        finalLength: vmCompatibleCode.length,
-        sample: vmCompatibleCode.substring(0, 500)
+        finalLength: zodFixedCode.length,
+        sample: zodFixedCode.substring(0, 500)
       });
 
       // Validate code before execution
-      const validation = await this.validateCode(vmCompatibleCode);
+      const validation = await this.validateCode(zodFixedCode);
       if (!validation.valid) {
         return {
           success: false,
@@ -120,7 +123,7 @@ export class PluginSandbox {
       }
 
       // Execute in Worker thread with transformed code
-      const result = await this.executeInWorker(vmCompatibleCode, functionName, args, sandboxConfig);
+      const result = await this.executeInWorker(zodFixedCode, functionName, args, sandboxConfig);
 
       logger.info('Sandbox execution completed successfully', {
         functionName,
@@ -540,6 +543,33 @@ try {
     // Transform optional chaining with brackets: obj?.[key] -> (obj && obj[key])
     transformed = transformed.replace(/(\w+)\?\.\[([^\]]+)\]/g, '($1 && $1[$2])');
     
+    return transformed;
+  }
+
+  /**
+   * Fix common shorthand mistakes in generated Zod schemas
+   * e.g. channelId.string() -> channelId: z.string()
+   */
+  private fixZodPropertyShortcuts(code: string): string {
+    let transformed = code;
+
+    // Ensure z import exists before referencing z.
+    if (!/const\s+\{\s*z\s*\}/.test(transformed) && transformed.includes("require('zod'")) {
+      transformed = transformed.replace(
+        /const\s+\{\s*([^}]+)\s*\}\s*=\s*require\('zod'\);/,
+        (match, imports) => {
+          if (imports.includes('z')) return match;
+          return `const { ${imports.trim()}, z } = require('zod');`;
+        }
+      );
+    }
+
+    // Replace property shortcuts like channelId.string(... with channelId: z.string(...
+    transformed = transformed.replace(
+      /(\b[A-Za-z_][A-Za-z0-9_]*\b)\s*\.(string|number|boolean|array|date|bigint|symbol|function|any|unknown|object|enum)\s*\(/g,
+      (_match, prop, zType) => `${prop}: z.${zType}(`
+    );
+
     return transformed;
   }
 
