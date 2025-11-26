@@ -623,13 +623,32 @@ export class PluginRegistry extends EventEmitter {
         throw new Error(`Plugin code is empty or too short (${rawCode?.length || 0} chars). Code may have been truncated during storage.`);
       }
 
+      // Check if code appears truncated (ends mid-string or mid-statement)
+      const endsWithCompleteStatement = /[;}\]]\s*$/.test(rawCode.trim());
+      const hasUnclosedBraces = (rawCode.match(/{/g) || []).length !== (rawCode.match(/}/g) || []).length;
+      const hasUnclosedQuotes = (rawCode.match(/'/g) || []).length % 2 !== 0 || (rawCode.match(/"/g) || []).length % 2 !== 0;
+      
       logger.info('Loading plugin code', {
         userId,
         pluginId,
         codeLength: rawCode.length,
         codePreview: rawCode.substring(0, 200),
-        codeEnd: rawCode.substring(rawCode.length - 200)
+        codeEnd: rawCode.substring(Math.max(0, rawCode.length - 200)),
+        appearsTruncated: !endsWithCompleteStatement || hasUnclosedBraces || hasUnclosedQuotes,
+        endsWithCompleteStatement,
+        hasUnclosedBraces,
+        hasUnclosedQuotes
       });
+      
+      if (!endsWithCompleteStatement || hasUnclosedBraces || hasUnclosedQuotes) {
+        logger.error('Plugin code appears to be truncated or corrupted in database', {
+          userId,
+          pluginId,
+          codeLength: rawCode.length,
+          lastChars: rawCode.substring(Math.max(0, rawCode.length - 100))
+        });
+        throw new Error(`Plugin code appears to be truncated or corrupted. Code length: ${rawCode.length}. Please regenerate the plugin.`);
+      }
 
       // The generated plugin code is a class, so we need to wrap it to make it executable
       // Wrap the plugin code in a function that instantiates the class and calls executeAction
