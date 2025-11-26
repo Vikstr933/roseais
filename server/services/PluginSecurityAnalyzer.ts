@@ -1,7 +1,11 @@
 import * as parser from '@babel/parser';
-import traverse from '@babel/traverse';
+import traverseImport, { NodePath } from '@babel/traverse';
 import { Node } from '@babel/types';
 import { SimpleLogger } from '../utils/SimpleLogger';
+
+const traverse =
+  ((traverseImport as unknown as { default?: typeof traverseImport }).default ??
+    traverseImport) as typeof traverseImport;
 
 const logger = new SimpleLogger('PluginSecurityAnalyzer');
 
