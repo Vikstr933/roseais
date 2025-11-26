@@ -563,6 +563,15 @@ try {
       /(^|\s)([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+(?=;)/gm,
       '$1$2'
     );
+    // Handle assignments with modifiers and initializers in one go
+    transformed = transformed.replace(
+      /^(\s*)(?:public|private|protected)?\s*(?:readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+\s*(?==)/gm,
+      '$1$2'
+    );
+    transformed = transformed.replace(
+      /^(\s*)(?:public|private|protected)?\s*(?:readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&\.]+\s*(?=;)/gm,
+      '$1$2'
+    );
     transformed = transformed.replace(
       /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+=/g,
       '$1 ='
