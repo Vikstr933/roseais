@@ -532,10 +532,22 @@ try {
   private transformToVMCompatible(code: string): string {
     let transformed = code;
 
-    // Remove TypeScript access modifiers & property types in class bodies
+    // Remove TypeScript access modifiers, readonly, and property types in class bodies
     transformed = transformed.replace(
-      /(public|private|protected)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+=/g,
-      '$2 ='
+      /(public|private|protected)\s+(readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+=/g,
+      '$3 ='
+    );
+    transformed = transformed.replace(
+      /(public|private|protected)\s+(readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+;/g,
+      '$3;'
+    );
+    transformed = transformed.replace(
+      /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+=/g,
+      '$1 ='
+    );
+    transformed = transformed.replace(
+      /readonly\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[A-Za-z0-9_<>\[\]\s|&]+;/g,
+      '$1;'
     );
 
     // Transform optional chaining: obj?.prop -> (obj && obj.prop)
