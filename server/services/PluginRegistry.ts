@@ -608,10 +608,33 @@ export class PluginRegistry extends EventEmitter {
       const { PluginSandbox } = await import('./PluginSandbox');
       const sandbox = new PluginSandbox();
 
+      // Parse generatedCode if it's a JSON string (some databases store it as JSON)
+      let rawCode = plugin.generatedCode;
+      if (typeof rawCode === 'string' && rawCode.startsWith('"') && rawCode.endsWith('"')) {
+        try {
+          rawCode = JSON.parse(rawCode);
+        } catch (e) {
+          // Not JSON, use as-is
+        }
+      }
+
+      // Validate code is not empty or truncated
+      if (!rawCode || rawCode.length < 100) {
+        throw new Error(`Plugin code is empty or too short (${rawCode?.length || 0} chars). Code may have been truncated during storage.`);
+      }
+
+      logger.info('Loading plugin code', {
+        userId,
+        pluginId,
+        codeLength: rawCode.length,
+        codePreview: rawCode.substring(0, 200),
+        codeEnd: rawCode.substring(rawCode.length - 200)
+      });
+
       // The generated plugin code is a class, so we need to wrap it to make it executable
       // Wrap the plugin code in a function that instantiates the class and calls executeAction
       // Escape any backticks in the generated code to prevent template literal issues
-      const escapedCode = plugin.generatedCode.replace(/`/g, '\\`').replace(/\${/g, '\\${');
+      const escapedCode = rawCode.replace(/`/g, '\\`').replace(/\${/g, '\\${');
       
       const wrappedCode = `
 ${escapedCode}
@@ -619,41 +642,71 @@ ${escapedCode}
 // Export a wrapper function that can be called by the sandbox
 function execute(userId, params, credentials) {
   try {
-    // Find the plugin class in the global scope
-    // The class should be available after the code above executes
+    // The plugin code uses CommonJS exports, so check module.exports first
     let PluginClass = null;
     
-    // Look for a class in the global scope that has executeAction method
-    const globalObj = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : this);
-    const globalKeys = Object.getOwnPropertyNames(globalObj);
-    
-    for (const key of globalKeys) {
-      try {
-        const obj = globalObj[key];
-        if (obj && typeof obj === 'function' && obj.prototype && typeof obj.prototype.executeAction === 'function') {
-          PluginClass = obj;
-          break;
+    if (typeof module !== 'undefined' && module.exports) {
+      const exported = module.exports;
+      
+      // Check if it's the class directly
+      if (exported && typeof exported === 'function' && exported.prototype) {
+        // Check for executeAction or getTools method (plugins have these)
+        if (typeof exported.prototype.executeAction === 'function' || typeof exported.prototype.getTools === 'function') {
+          PluginClass = exported;
         }
-      } catch (e) {
-        // Skip if we can't access the property
-        continue;
+      }
+      
+      // Check for exports.DiscordPlugin or similar
+      if (!PluginClass && exported && typeof exported === 'object') {
+        for (const key in exported) {
+          const value = exported[key];
+          if (value && typeof value === 'function' && value.prototype) {
+            if (typeof value.prototype.executeAction === 'function' || typeof value.prototype.getTools === 'function') {
+              PluginClass = value;
+              break;
+            }
+          }
+        }
       }
     }
     
-    // Also check module.exports if available
-    if (!PluginClass && typeof module !== 'undefined' && module.exports) {
-      const exported = module.exports;
-      if (exported && typeof exported === 'function' && exported.prototype && typeof exported.prototype.executeAction === 'function') {
-        PluginClass = exported;
+    // Fallback: Look for class in global scope
+    if (!PluginClass) {
+      const globalObj = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : this);
+      const globalKeys = Object.getOwnPropertyNames(globalObj);
+      
+      for (const key of globalKeys) {
+        try {
+          const obj = globalObj[key];
+          if (obj && typeof obj === 'function' && obj.prototype) {
+            if (typeof obj.prototype.executeAction === 'function' || typeof obj.prototype.getTools === 'function') {
+              PluginClass = obj;
+              break;
+            }
+          }
+        } catch (e) {
+          // Skip if we can't access the property
+          continue;
+        }
       }
     }
     
     if (!PluginClass) {
-      throw new Error('Could not find plugin class in generated code. The code must define a class with an executeAction method.');
+      throw new Error('Could not find plugin class in generated code. Expected a class with executeAction or getTools method. Module exports: ' + (typeof module !== 'undefined' && module.exports ? JSON.stringify(Object.keys(module.exports || {})).substring(0, 200) : 'undefined'));
     }
     
     // Instantiate the plugin
     const pluginInstance = new PluginClass();
+    
+    // Initialize if method exists
+    if (typeof pluginInstance.initialize === 'function') {
+      await pluginInstance.initialize(userId);
+    }
+    
+    // Enable if method exists and credentials provided
+    if (typeof pluginInstance.enable === 'function' && credentials && Object.keys(credentials).length > 0) {
+      await pluginInstance.enable(userId, credentials);
+    }
     
     // Get the action from params
     const actionName = params.action || 'default';
@@ -677,12 +730,35 @@ function execute(userId, params, credentials) {
       // Execute plugin code in sandbox with the wrapper function
       let sandboxResult;
       try {
+        // Validate wrapped code is complete (check for balanced braces/brackets)
+        const openBraces = (wrappedCode.match(/{/g) || []).length;
+        const closeBraces = (wrappedCode.match(/}/g) || []).length;
+        const openBrackets = (wrappedCode.match(/\[/g) || []).length;
+        const closeBrackets = (wrappedCode.match(/\]/g) || []).length;
+        const openParens = (wrappedCode.match(/\(/g) || []).length;
+        const closeParens = (wrappedCode.match(/\)/g) || []).length;
+        
+        if (openBraces !== closeBraces || openBrackets !== closeBrackets || openParens !== closeParens) {
+          logger.error('Code appears to be truncated or malformed', {
+            userId,
+            pluginId,
+            action,
+            codeLength: wrappedCode.length,
+            braces: { open: openBraces, close: closeBraces },
+            brackets: { open: openBrackets, close: closeBrackets },
+            parens: { open: openParens, close: closeParens },
+            codeEnd: wrappedCode.substring(wrappedCode.length - 500)
+          });
+          throw new Error(`Plugin code appears to be truncated or malformed. Code length: ${wrappedCode.length}, braces: ${openBraces}/${closeBraces}, brackets: ${openBrackets}/${closeBrackets}`);
+        }
+
         logger.info('Executing plugin in sandbox', {
           userId,
           pluginId,
           action,
           codeLength: wrappedCode.length,
-          codePreview: wrappedCode.substring(0, 300)
+          codePreview: wrappedCode.substring(0, 300),
+          codeEnd: wrappedCode.substring(wrappedCode.length - 300)
         });
         
         sandboxResult = await sandbox.execute(
