@@ -17,7 +17,7 @@ import {
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
-import { Card, CardContent } from "../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import {
   Select,
   SelectContent,
@@ -27,7 +27,7 @@ import {
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X, Power, PowerOff, Edit2, Keyboard } from "lucide-react";
+import { AlertCircle, HelpCircle, Eye, Code, Send, FileCode, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X, Power, PowerOff, Edit2, Keyboard, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import {
   AlertDialog,
@@ -66,7 +66,7 @@ import { ProductionDeployment } from "../components/ProductionDeployment";
 import { AdvancedPreview } from "../components/AdvancedPreview";
 import { useAuth, getAuthHeaders } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
-import type { GeneratedFile, ChatMessage as WorkspaceChatMessage } from "../contexts/WorkspaceContext";
+import type { GeneratedFile, ChatMessage as WorkspaceChatMessage, PlaygroundAction } from "../contexts/WorkspaceContext";
 import { useRoute, useLocation } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -226,6 +226,8 @@ export default function PromptPlayground() {
   } = useWorkspace();
 
   const [match, params] = useRoute('/playground/:projectId');
+  const [, setLocation] = useLocation();
+  const hasProjectRoute = Boolean(match && params?.projectId);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'sessions' | 'settings'>('editor');
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
@@ -686,8 +688,7 @@ export default function PromptPlayground() {
               text: '',
               files: fileList
             });
-            updateGeneratedFiles(fileList);
-            console.log(`Loaded ${fileList.length} project files`);
+            console.log(`âœ… Loaded ${fileList.length} project files`);
             
             // Set the first file as selected
             if (fileList.length > 0) {
@@ -696,7 +697,6 @@ export default function PromptPlayground() {
             }
           } else {
             console.log('No files found in project');
-            updateGeneratedFiles([]);
           }
         })
         .catch(err => {
@@ -830,6 +830,23 @@ export default function PromptPlayground() {
       </>
     );
   }
+
+  // Ensure the project dropdown reflects the current route
+  useEffect(() => {
+    if (!projects.length || !params?.projectId) return;
+    const projectId = Number(params.projectId);
+    if (Number.isNaN(projectId)) return;
+
+    const matchingProject = projects.find(project => project.id === projectId);
+    if (matchingProject && currentProject?.id !== matchingProject.id) {
+      setCurrentProject(prev => ({
+        id: matchingProject.id,
+        name: matchingProject.name,
+        description: matchingProject.description,
+        workspaceType: matchingProject.workspaceType || prev?.workspaceType || 'personal',
+      }));
+    }
+  }, [projects, params?.projectId, currentProject?.id]);
 
   // Keyboard shortcuts
   useKeyboardShortcuts([
@@ -2260,7 +2277,7 @@ export default function PromptPlayground() {
   useEffect(() => {
     if (!registerPlaygroundActionListener) return;
 
-    const unsubscribe = registerPlaygroundActionListener(async (action) => {
+    const unsubscribe = registerPlaygroundActionListener(async (action: PlaygroundAction) => {
       if (action.type === 'runPrompt') {
         const prompt = action.prompt?.trim();
         if (!prompt) {
@@ -3279,13 +3296,7 @@ export default function PromptPlayground() {
       </div>
       </div>
 
-      {/* Create Project Dialog */}
-      <CreateProjectDialog
-        open={showCreateProjectDialog}
-        onOpenChange={setShowCreateProjectDialog}
-        onCreateProject={createProjectHook}
-        isLoading={isCreating}
-      />
+      {createProjectDialog}
 
       {/* Rename Project Dialog */}
       <Dialog open={showRenameProjectDialog} onOpenChange={setShowRenameProjectDialog}>
@@ -3408,5 +3419,3 @@ export default function PromptPlayground() {
     </div>
   );
 }
-
-

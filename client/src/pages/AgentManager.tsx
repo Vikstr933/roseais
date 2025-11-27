@@ -9,6 +9,7 @@ import { Card, CardHeader, CardContent } from '../components/ui/card';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -399,6 +400,9 @@ function AgentManagerContent() {
             <DialogContent className="max-w-2xl max-h-[90vh] w-[95vw] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Agent with AI</DialogTitle>
+                <DialogDescription>
+                  Describe what capabilities you need and we&rsquo;ll draft a complete agent configuration for you.
+                </DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
@@ -441,6 +445,9 @@ function AgentManagerContent() {
                 <DialogTitle>
                   {selectedAgent ? 'Edit Agent' : 'Create New Agent'}
                 </DialogTitle>
+              <DialogDescription>
+                Provide the core details, instructions, and capabilities for this agent. All fields can be adjusted later.
+              </DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
