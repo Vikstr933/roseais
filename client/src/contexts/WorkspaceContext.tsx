@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { apiFetch } from '../lib/api';
 
@@ -59,6 +59,13 @@ interface WorkspaceSession {
   metadata?: Record<string, any>;
 }
 
+type PlaygroundAction =
+  | { type: 'runPrompt'; prompt: string; metadata?: Record<string, any> }
+  | { type: 'applyCode'; files: Array<{ path: string; content: string }>; metadata?: Record<string, any> }
+  | { type: 'restartDevServer'; metadata?: Record<string, any> };
+
+type PlaygroundActionListener = (action: PlaygroundAction) => void;
+
 interface WorkspaceContextType {
   // Current active session
   currentSession: WorkspaceSession | null;
@@ -89,6 +96,10 @@ interface WorkspaceContextType {
   getPendingPrompt: () => { prompt: string; timestamp: number; source: string; metadata?: Record<string, any> } | null;
   clearPendingPrompt: () => void;
 
+  // Cross-component action bridge (OmniAssistant -> Playground)
+  registerPlaygroundActionListener: (listener: PlaygroundActionListener) => () => void;
+  dispatchPlaygroundAction: (action: PlaygroundAction) => void;
+
   // Auto-save status
   isSaving: boolean;
   lastSaved: Date | null;
@@ -100,6 +111,7 @@ interface WorkspaceContextType {
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'ai-library-workspace';
+const PENDING_PROMPT_TTL = 2 * 60 * 1000; // 2 minutes
 const AUTOSAVE_INTERVAL = 5000; // 5 seconds
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
@@ -109,6 +121,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [sessionsInitialized, setSessionsInitialized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+const actionListenersRef = useRef<Set<PlaygroundActionListener>>(new Set());
+const pendingActionsRef = useRef<PlaygroundAction[]>([]);
 
   // Load sessions from localStorage on mount
   useEffect(() => {
@@ -424,6 +438,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [currentSession]);
 
   // Set a pending prompt for forwarding to playground
+  const pendingPromptStorageKey = user ? `${STORAGE_KEY}-${user.id}-pending-prompt` : `${STORAGE_KEY}-pending-prompt`;
+
+  const persistPendingPrompt = useCallback((
+    value?: { prompt: string; timestamp: number; source: string; metadata?: Record<string, any> }
+  ) => {
+    if (!value) {
+      sessionStorage.removeItem(pendingPromptStorageKey);
+      return;
+    }
+    sessionStorage.setItem(pendingPromptStorageKey, JSON.stringify(value));
+  }, [pendingPromptStorageKey]);
+
   const setPendingPrompt = useCallback((prompt: string, source: string, metadata?: Record<string, any>) => {
     if (!currentSession) return;
 
@@ -441,28 +467,40 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       updatedAt: Date.now()
     };
 
+    persistPendingPrompt(updated.metadata?.pendingPrompt);
     setCurrentSession(updated);
     setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-  }, [currentSession]);
+  }, [currentSession, persistPendingPrompt]);
 
   // Get pending prompt if it exists and is recent (within 10 seconds)
   const getPendingPrompt = useCallback(() => {
-    if (!currentSession?.metadata?.pendingPrompt) return null;
-
-    const pendingPrompt = currentSession.metadata.pendingPrompt as {
+    const inMemoryPrompt = currentSession?.metadata?.pendingPrompt as {
       prompt: string;
       timestamp: number;
       source: string;
       metadata?: Record<string, any>;
-    };
+    } | undefined;
 
-    // Only return if recent (within 10 seconds)
-    if (Date.now() - pendingPrompt.timestamp < 10000) {
-      return pendingPrompt;
+    const fromStorage = (() => {
+      try {
+        const stored = sessionStorage.getItem(pendingPromptStorageKey);
+        return stored ? JSON.parse(stored) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const candidate = inMemoryPrompt || fromStorage;
+    if (!candidate) return null;
+
+    if (Date.now() - candidate.timestamp < PENDING_PROMPT_TTL) {
+      return candidate;
     }
 
+    // Expired prompt — clean up storage
+    persistPendingPrompt();
     return null;
-  }, [currentSession]);
+  }, [currentSession, pendingPromptStorageKey]);
 
   // Clear pending prompt
   const clearPendingPrompt = useCallback(() => {
@@ -477,9 +515,46 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       updatedAt: Date.now()
     };
 
+    persistPendingPrompt();
     setCurrentSession(updated);
     setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-  }, [currentSession]);
+  }, [currentSession, persistPendingPrompt]);
+
+  const registerPlaygroundActionListener = useCallback((listener: PlaygroundActionListener) => {
+    actionListenersRef.current.add(listener);
+
+    // Flush any pending actions queued before the listener mounted
+    if (pendingActionsRef.current.length > 0) {
+      const queuedActions = [...pendingActionsRef.current];
+      pendingActionsRef.current = [];
+      queuedActions.forEach(action => {
+        try {
+          listener(action);
+        } catch (error) {
+          console.error('WorkspaceContext pending action listener error:', error);
+        }
+      });
+    }
+
+    return () => {
+      actionListenersRef.current.delete(listener);
+    };
+  }, []);
+
+  const dispatchPlaygroundAction = useCallback((action: PlaygroundAction) => {
+    if (actionListenersRef.current.size === 0) {
+      pendingActionsRef.current.push(action);
+      return;
+    }
+
+    actionListenersRef.current.forEach(listener => {
+      try {
+        listener(action);
+      } catch (error) {
+        console.error('WorkspaceContext playground action listener error:', error);
+      }
+    });
+  }, []);
 
   return (
     <WorkspaceContext.Provider
@@ -499,6 +574,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setPendingPrompt,
         getPendingPrompt,
         clearPendingPrompt,
+      registerPlaygroundActionListener,
+      dispatchPlaygroundAction,
         isSaving,
         lastSaved,
         syncWithServer
@@ -517,4 +594,4 @@ export function useWorkspace() {
   return context;
 }
 
-export type { WorkspaceSession, ChatMessage, GeneratedFile };
+export type { WorkspaceSession, ChatMessage, GeneratedFile, PlaygroundAction };

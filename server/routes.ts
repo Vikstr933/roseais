@@ -568,7 +568,7 @@ export default defineConfig({
 
   app.patch('/api/agents/:id', async (req, res) => {
     try {
-      const agentId = parseInt(req.params.id);
+      const agentId = req.params.id;
       const { isActive } = req.body;
 
       const [updatedAgent] = await db

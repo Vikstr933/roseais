@@ -221,7 +221,8 @@ export default function PromptPlayground() {
     getPendingPrompt,
     clearPendingPrompt,
     isSaving,
-    lastSaved
+    lastSaved,
+    registerPlaygroundActionListener
   } = useWorkspace();
 
   const [match, params] = useRoute('/playground/:projectId');
@@ -2145,8 +2146,120 @@ export default function PromptPlayground() {
     }
   }, [user, currentSession]); // Simplified dependencies - only re-run when user or session changes
 
+  useEffect(() => {
+    if (!registerPlaygroundActionListener) return;
+
+    const unsubscribe = registerPlaygroundActionListener(async (action) => {
+      if (action.type === 'runPrompt') {
+        const prompt = action.prompt?.trim();
+        if (!prompt) {
+          toast({
+            title: "Missing prompt",
+            description: "Elon tried to run a request, but no prompt was provided.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        processedPromptRef.current = prompt;
+        form.setValue('userPrompt', prompt, { shouldDirty: true, shouldTouch: true });
+        setActiveTab('editor');
+
+        toast({
+          title: action.metadata?.title || "Elon is updating your playground",
+          description: action.metadata?.message || "Running the request directly in Chap-ZPT…",
+        });
+
+        const payload: PromptForm = form.getValues();
+        generateMutation.mutate(payload);
+        return;
+      }
+
+      if (action.type === 'applyCode') {
+        if (!action.files?.length) {
+          toast({
+            title: "No code to apply",
+            description: "Elon tried to update the project, but no files were included.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const incomingFiles = action.files.map(file => createGeneratedFile(file.path, file.content));
+        const existingFiles = response?.files?.length ? response.files : currentSession?.generatedFiles || [];
+        const fileMap = new Map(existingFiles.map(file => [file.path, file]));
+
+        incomingFiles.forEach(file => fileMap.set(file.path, file));
+        const mergedFiles = Array.from(fileMap.values());
+
+        setResponse({
+          type: 'component',
+          text: action.metadata?.message || `Applied ${incomingFiles.length} update${incomingFiles.length === 1 ? '' : 's'} via ${action.metadata?.source || 'Elon'}`,
+          files: mergedFiles,
+        });
+
+        updateGeneratedFiles(mergedFiles);
+        setSelectedFileIndex(0);
+        setActiveTab('editor');
+        addChatMessage({
+          role: 'assistant',
+          content: action.metadata?.message || '✅ Elon applied the requested code updates directly to your workspace.',
+          timestamp: Date.now(),
+        });
+
+        if (action.metadata?.autoDeploy) {
+          const filesForRuntime = mergedFiles.map(file => ({ path: file.path, content: file.content }));
+          await deployToRuntime(filesForRuntime, currentComponentName || 'App');
+        }
+        return;
+      }
+
+      if (action.type === 'restartDevServer') {
+        const existingFiles = response?.files?.length ? response.files : currentSession?.generatedFiles || [];
+
+        if (existingFiles.length === 0) {
+          toast({
+            title: "Nothing to preview",
+            description: "There are no generated files yet, so the dev server can't be started.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const componentName = action.metadata?.componentName || currentComponentName || 'App';
+        addChatMessage({
+          role: 'assistant',
+          content: action.metadata?.message || '🔁 Elon is restarting the dev server for you…',
+          timestamp: Date.now(),
+        });
+
+        setActiveTab('preview');
+        const filesForRuntime = existingFiles.map(file => ({ path: file.path, content: file.content }));
+        await deployToRuntime(filesForRuntime, componentName);
+        setDevServerRunning(true);
+        return;
+      }
+    });
+
+    return unsubscribe;
+  }, [
+    registerPlaygroundActionListener,
+    form,
+    generateMutation,
+    response?.files,
+    currentSession?.generatedFiles,
+    updateGeneratedFiles,
+    addChatMessage,
+    toast,
+    currentComponentName,
+    setSelectedFileIndex,
+    setActiveTab,
+    deployToRuntime,
+    setDevServerRunning
+  ]);
+
   return (
-    <div className="min-h-[calc(100vh-5rem)] bg-background flex flex-col overflow-hidden rounded-none">
+    <div className="h-[calc(100vh-5rem)] bg-background flex flex-col overflow-hidden rounded-none min-h-0">
       <ErrorBoundary
         onError={(error, errorInfo) => {
           console.error('Playground error:', error, errorInfo);
@@ -2550,9 +2663,9 @@ export default function PromptPlayground() {
       </div>
 
       {/* Main Content - Bolt.new Style Layout - No scroll container */}
-      <div className="flex-1 overflow-hidden flex relative z-10">
+      <div className="flex-1 overflow-hidden flex relative z-10 min-h-0">
           {/* Chap-ZPT Chat Panel */}
-          <div className="w-[32%] min-w-[320px] max-w-[480px] border-r border-white/5 flex flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white relative shadow-2xl">
+          <div className="w-[32%] min-w-[320px] max-w-[480px] border-r border-white/5 flex flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white relative shadow-2xl min-h-0">
           {/* Chat Header */}
           <div className="panel-padding border-b border-white/10 flex-shrink-0 bg-transparent relative z-10">
             <div className="flex items-center justify-between">

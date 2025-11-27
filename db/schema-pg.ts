@@ -99,6 +99,7 @@ export const agents = pgTable('agents', {
   maxTokens: integer('max_tokens').default(4096),
   tools: jsonb('tools').default([]),
   createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
   isActive: boolean('is_active').default(true),
@@ -111,6 +112,8 @@ export const agents = pgTable('agents', {
   libraries: jsonb('libraries').default({}),
   bestPractices: jsonb('best_practices').default({}),
   enabledPlugins: jsonb('enabled_plugins').default([]),
+  isSystem: integer('is_system').default(0),
+  customInstructions: jsonb('custom_instructions').default({}),
 });
 
 export const projectFiles = pgTable('project_files', {

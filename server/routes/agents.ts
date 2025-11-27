@@ -208,7 +208,7 @@ const checkAgentStatus = async (req: any, res: any, next: any) => {
     const agent = await db
       .select()
       .from(agents)
-      .where(eq(agents.id, Number(agentId)));
+      .where(eq(agents.id, agentId));
 
     if (agent.length === 0) {
       return res.status(404).json({ error: 'Agent not found' });
@@ -370,7 +370,7 @@ router.get('/agents/:id', optionalAuth, checkAdminStatus, async (req, res) => {
     const agent = await db
       .select()
       .from(agents)
-      .where(eq(agents.id, isNaN(Number(id)) ? id : Number(id)));
+      .where(eq(agents.id, id));
 
     if (agent.length === 0) {
       return res.status(404).json({ error: 'Agent not found' });
@@ -561,7 +561,7 @@ router.put('/agents/:id', authenticateUser, checkAdminStatus, async (req, res) =
     const existingAgent = await db
       .select()
       .from(agents)
-      .where(eq(agents.id, Number(id)));
+      .where(eq(agents.id, id));
 
     if (existingAgent.length === 0) {
       await logger?.warning('AgentManager', `Agent ${id} not found for update`, {
@@ -649,7 +649,7 @@ router.put('/agents/:id', authenticateUser, checkAdminStatus, async (req, res) =
     const updatedAgent = await db
       .update(agents)
       .set(updateData)
-      .where(eq(agents.id, Number(id)))
+      .where(eq(agents.id, id))
       .returning();
 
     await logger?.info('AgentManager', `Successfully updated agent ${id}`, {

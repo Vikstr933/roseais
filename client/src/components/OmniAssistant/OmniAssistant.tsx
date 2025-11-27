@@ -66,7 +66,12 @@ export function OmniAssistant() {
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
-  const { currentSession, updateGeneratedFiles } = useWorkspace();
+  const {
+    currentSession,
+    updateGeneratedFiles,
+    setPendingPrompt,
+    dispatchPlaygroundAction,
+  } = useWorkspace();
   const { sessionToken, user } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -79,7 +84,6 @@ export function OmniAssistant() {
   } = useOmniAssistant();
 
   // Get WorkspaceContext methods for prompt forwarding
-  const { setPendingPrompt } = useWorkspace();
   const userDisplayName = user?.displayName || user?.email || 'You';
 
   // Fetch user projects
@@ -283,6 +287,18 @@ export function OmniAssistant() {
       workspaceId: currentSession?.id as number | undefined,
       playgroundContext,
     });
+
+    const wantsDevServer = /\b(start|run)\b.*\b(dev|preview)\s*server\b/i.test(message.toLowerCase());
+    if (wantsDevServer) {
+      dispatchPlaygroundAction({
+        type: 'restartDevServer',
+        metadata: {
+          source: 'elon',
+          message: '🔁 Starting the playground dev server as requested…',
+          fromPage: window.location.pathname,
+        },
+      });
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -404,10 +420,31 @@ export function OmniAssistant() {
       prompt = `[Projekt: ${playgroundContext.currentProject}]\n\n${prompt}`;
     }
     
-    // Set pending prompt using WorkspaceContext
+    dispatchPlaygroundAction({
+      type: 'runPrompt',
+      prompt,
+      metadata: {
+        source: 'elon-suggestion',
+        title: 'Elon is updating your playground',
+        message: 'Running these instructions directly in Chap-ZPT…',
+        originalMessage: messageContent.substring(0, 200),
+      },
+    });
+
+    // Set pending prompt using WorkspaceContext (fallback / persistence)
     setPendingPrompt(prompt, 'elon-suggestion', {
       fromPage: window.location.pathname,
       originalMessage: messageContent.substring(0, 200),
+    });
+
+    dispatchPlaygroundAction({
+      type: 'runPrompt',
+      prompt,
+      metadata: {
+        source: 'elon',
+        fromPage: window.location.pathname,
+        originalMessage: messageContent.substring(0, 200),
+      },
     });
     
     // Navigate to playground if not already there
@@ -548,6 +585,16 @@ export function OmniAssistant() {
         files,
         fileCount: files.length,
         fromPage: window.location.pathname,
+      });
+
+      dispatchPlaygroundAction({
+        type: 'applyCode',
+        files,
+        metadata: {
+          source: 'elon',
+          message: `🔧 Elon prepared ${files.length} file update${files.length === 1 ? '' : 's'}. Applying now...`,
+          fromPage: window.location.pathname,
+        },
       });
       
       // Navigate to playground if not already there
