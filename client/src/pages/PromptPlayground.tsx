@@ -67,7 +67,7 @@ import { AdvancedPreview } from "../components/AdvancedPreview";
 import { useAuth, getAuthHeaders } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import type { GeneratedFile, ChatMessage as WorkspaceChatMessage } from "../contexts/WorkspaceContext";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useKeyboardShortcuts, createShortcut } from "../hooks/useKeyboardShortcuts";
@@ -591,6 +591,13 @@ export default function PromptPlayground() {
   useEffect(() => {
     if (params?.projectId && sessionToken) {
       const projectId = params.projectId;
+
+      // Clear workspace state while the new project data loads
+      setResponse(null);
+      updateGeneratedFiles([]);
+      setSelectedFileIndex(0);
+      setCurrentComponentName('');
+      setLivePreviewUrl(null);
       
       // Load project details
       apiFetch(`/api/workspaces/${projectId}`, {
@@ -679,7 +686,8 @@ export default function PromptPlayground() {
               text: '',
               files: fileList
             });
-            console.log(`âœ… Loaded ${fileList.length} project files`);
+            updateGeneratedFiles(fileList);
+            console.log(`Loaded ${fileList.length} project files`);
             
             // Set the first file as selected
             if (fileList.length > 0) {
@@ -688,6 +696,7 @@ export default function PromptPlayground() {
             }
           } else {
             console.log('No files found in project');
+            updateGeneratedFiles([]);
           }
         })
         .catch(err => {
@@ -697,7 +706,7 @@ export default function PromptPlayground() {
   }, [params?.projectId, sessionToken]);
 
   // Load user projects list
-  const { data: userProjects = [] } = useQuery<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>>({
+  const { data: userProjects = [], isLoading: isLoadingProjects } = useQuery<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>>({
     queryKey: ['/api/workspaces'],
     queryFn: async () => {
       if (!sessionToken) return [];
@@ -719,6 +728,108 @@ export default function PromptPlayground() {
       setProjects(userProjects);
     }
   }, [userProjects]);
+
+  useEffect(() => {
+    if (!projects.length || !params?.projectId) return;
+    const projectId = Number(params.projectId);
+    if (Number.isNaN(projectId)) return;
+
+    const matchingProject = projects.find(project => project.id === projectId);
+    if (matchingProject && currentProject?.id !== matchingProject.id) {
+      setCurrentProject(prev => ({
+        id: matchingProject.id,
+        name: matchingProject.name,
+        description: matchingProject.description,
+        workspaceType: matchingProject.workspaceType || prev?.workspaceType || 'personal',
+      }));
+    }
+  }, [projects, params?.projectId, currentProject?.id]);
+
+  const createProjectDialog = (
+    <CreateProjectDialog
+      open={showCreateProjectDialog}
+      onOpenChange={setShowCreateProjectDialog}
+      onCreateProject={createProjectHook}
+      isLoading={isCreating}
+    />
+  );
+
+  if (!hasProjectRoute) {
+    const hasProjects = (userProjects?.length || 0) > 0;
+    return (
+      <>
+        {createProjectDialog}
+        <div className="min-h-[calc(100vh-5rem)] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-6 py-10">
+          <Card className="w-full max-w-3xl bg-slate-950/80 border-white/10 shadow-2xl text-white">
+            <CardHeader>
+              <CardTitle className="text-2xl font-semibold">Choose a project to continue</CardTitle>
+              <CardDescription className="text-white/70">
+                The playground needs an active project so we can save files, chat history, and deploy previews for you.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {isLoadingProjects ? (
+                <div className="flex items-center justify-center py-10 text-white/70">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  Loading your projects...
+                </div>
+              ) : hasProjects ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {userProjects.map(project => (
+                    <button
+                      key={project.id}
+                      onClick={() => setLocation(`/playground/${project.id}`)}
+                      className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-white">{project.name}</h3>
+                        {project.workspaceType === 'team' ? (
+                          <Users className="h-4 w-4 text-white/70" />
+                        ) : (
+                          <User className="h-4 w-4 text-white/70" />
+                        )}
+                      </div>
+                      <p className="text-sm text-white/70 mt-2 line-clamp-2">
+                        {project.description || 'No description provided yet.'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-white/20 p-6 text-center text-white/80">
+                  <p className="text-base font-semibold text-white">Create your first project</p>
+                  <p className="text-sm mt-2 text-white/70">
+                    Projects keep your generated code, chat history, and preview deployments organized.
+                  </p>
+                  <Button className="mt-4" onClick={() => setShowCreateProjectDialog(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Project
+                  </Button>
+                </div>
+              )}
+
+              {hasProjects && (
+                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-white">Need a brand-new workspace?</p>
+                    <p className="text-xs text-white/70">Create a project before entering the playground.</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowCreateProjectDialog(true)}
+                    className="border-white/30 text-white hover:bg-white/10"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Project
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   // Keyboard shortcuts
   useKeyboardShortcuts([
@@ -3297,3 +3408,5 @@ export default function PromptPlayground() {
     </div>
   );
 }
+
+
