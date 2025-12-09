@@ -22,9 +22,9 @@ export const supabase = createClient(
 
 /**
  * OAuth Sign In
- * @param provider - 'google', 'github', or 'discord'
+ * @param provider - 'google', 'github', 'discord', 'apple', or 'facebook'
  */
-export async function signInWithOAuth(provider: 'google' | 'github' | 'discord') {
+export async function signInWithOAuth(provider: 'google' | 'github' | 'discord' | 'apple' | 'facebook') {
   // Use the full URL including protocol for redirectTo
   const redirectUrl = `${window.location.origin}/auth/callback`;
   console.log('OAuth redirect URL:', redirectUrl);

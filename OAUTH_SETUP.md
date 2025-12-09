@@ -57,6 +57,80 @@ Supabase Auth provides:
    - Paste Client ID and Client Secret
    - Save
 
+#### Apple OAuth (Sign in with Apple)
+
+1. Go to [Apple Developer Portal](https://developer.apple.com/)
+2. Sign in with your Apple Developer account (requires paid membership)
+3. Go to **Certificates, Identifiers & Profiles**
+4. Click **Identifiers** → **+** to create a new identifier
+5. Select **Services IDs** → **Continue**
+6. Fill in:
+   - Description: Your App Name
+   - Identifier: `com.yourcompany.yourapp` (unique identifier)
+7. Enable **Sign in with Apple** → **Configure**
+8. Add domains and subdomains:
+   - Primary App Domain: `yourdomain.com`
+   - Return URLs:
+     ```
+     https://[your-project-ref].supabase.co/auth/v1/callback
+     ```
+9. Save and continue
+10. Go to **Keys** → **+** to create a new key
+11. Enable **Sign in with Apple**
+12. Download the key file (`.p8`) - **you can only download this once!**
+13. Note the **Key ID** and **Team ID**
+
+14. In Supabase Dashboard:
+    - Go to **Authentication** → **Providers** → **Apple**
+    - Enable Apple
+    - Fill in:
+      - **Services ID**: The identifier you created (e.g., `com.yourcompany.yourapp`)
+      - **Secret Key**: The contents of the `.p8` file you downloaded
+      - **Key ID**: The Key ID from Apple Developer Portal
+      - **Team ID**: Your Apple Team ID
+    - Save
+
+**Note**: Apple OAuth requires an active Apple Developer Program membership ($99/year).
+
+#### Facebook OAuth
+
+1. Go to [Facebook Developers](https://developers.facebook.com/)
+2. Sign in with your Facebook account
+3. Click **My Apps** → **Create App**
+4. Select **Consumer** as the app type → **Next**
+5. Fill in:
+   - App Display Name: Your App Name
+   - App Contact Email: Your email
+   - Business Account: (Optional) Select if you have one
+6. Click **Create App**
+7. In the app dashboard, go to **Settings** → **Basic**
+8. Add **App Domains**:
+   - For development: `localhost`
+   - For production: `yourdomain.com`
+9. Click **+ Add Platform** → Select **Website**
+10. Add **Site URL**:
+    - For development: `http://localhost:5173`
+    - For production: `https://yourdomain.com`
+11. Go to **Facebook Login** → **Settings**
+12. Add **Valid OAuth Redirect URIs**:
+    ```
+    https://[your-project-ref].supabase.co/auth/v1/callback
+    ```
+13. Go to **Settings** → **Basic** and note:
+    - **App ID**
+    - **App Secret** (click **Show** to reveal)
+
+14. In Supabase Dashboard:
+    - Go to **Authentication** → **Providers** → **Facebook**
+    - Enable Facebook
+    - Paste **App ID** and **App Secret**
+    - Save
+
+**Note**: 
+- Facebook requires app review for certain permissions in production
+- For development, you can use the app in "Development Mode" without review
+- Make sure to add test users in Facebook App Dashboard for testing
+
 ### 3. Get Supabase Credentials
 
 In your Supabase Dashboard:
@@ -146,6 +220,13 @@ To add more providers (Twitter, Facebook, etc.):
 2. Get provider credentials
 3. Add to `signInWithOAuth` function in `client/src/lib/supabase.ts`
 4. Add button to `AuthDialog.tsx`
+
+### Apple OAuth Notes
+
+- **Requires Apple Developer Account**: Sign in with Apple requires an active Apple Developer Program membership
+- **Email Privacy**: Apple may hide user emails. Users can choose to share their real email or use Apple's private relay email
+- **Testing**: You can test Apple OAuth in development, but it works best in production with a verified domain
+- **Domain Verification**: Apple requires domain verification for production use
 
 ## Production Checklist
 
