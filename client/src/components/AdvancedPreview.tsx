@@ -116,12 +116,19 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
       setIsLoading(true);
       setIframeError(null);
       
+      // Clear any existing timeout
+      if (loadTimeout) {
+        clearTimeout(loadTimeout);
+        setLoadTimeout(null);
+      }
+      
       // Set a timeout to detect if the iframe fails to load
       const timeout = setTimeout(() => {
         console.warn('⚠️ Preview iframe load timeout - page may have errors');
+        // Show error if timeout reached (iframe onLoad didn't fire in time)
         setIframeError('Preview is taking longer than expected to load. The page may have JavaScript errors. Check the browser console.');
         setIsLoading(false);
-      }, 15000); // 15 second timeout
+      }, 20000); // 20 second timeout (increased from 15)
       
       setLoadTimeout(timeout);
       
@@ -137,6 +144,14 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
       };
       document.addEventListener('visibilitychange', visibilityHandler);
       return () => document.removeEventListener('visibilitychange', visibilityHandler);
+    } else if (!previewUrl) {
+      // No preview URL, clear loading state
+      setIsLoading(false);
+      setIframeError(null);
+      if (loadTimeout) {
+        clearTimeout(loadTimeout);
+        setLoadTimeout(null);
+      }
     }
   }, [previewUrl]);
 
@@ -397,44 +412,71 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                   title={`Preview of ${projectName}`}
                   onLoad={() => {
                     console.log('✅ Preview iframe loaded successfully');
-                    setIsLoading(false);
+                    
+                    // Clear timeout immediately
                     if (loadTimeout) {
                       clearTimeout(loadTimeout);
                       setLoadTimeout(null);
                     }
-                    setIframeError(null);
                     
-                    // Try to detect if the iframe content is blank/white
-                    try {
-                      const iframe = iframeRef.current;
-                      if (iframe && iframe.contentWindow) {
-                        // Check if the iframe has content
-                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                        if (iframeDoc) {
-                          const body = iframeDoc.body;
-                          if (body && body.children.length === 0 && body.textContent?.trim() === '') {
-                            console.warn('⚠️ Preview iframe appears to be blank/white');
-                            // Check for console errors after a short delay
-                            setTimeout(() => {
-                              // Try to access console errors (may be blocked by CORS)
-                              try {
-                                const scripts = iframeDoc.querySelectorAll('script');
-                                console.log(`📄 Found ${scripts.length} script tags in preview`);
-                              } catch (e) {
-                                console.warn('Cannot access iframe content (CORS):', e);
+                    // Give the iframe a moment to render before clearing loading state
+                    // This helps catch cases where onLoad fires but content isn't ready
+                    setTimeout(() => {
+                      setIsLoading(false);
+                      setIframeError(null);
+                      
+                      // Try to detect if the iframe content is blank/white
+                      try {
+                        const iframe = iframeRef.current;
+                        if (iframe && iframe.contentWindow) {
+                          // Check if the iframe has content
+                          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                          if (iframeDoc) {
+                            const body = iframeDoc.body;
+                            // Check if body exists and has some content
+                            if (body) {
+                              const hasContent = body.children.length > 0 || 
+                                               body.textContent?.trim().length > 0 ||
+                                               body.innerHTML.trim().length > 0;
+                              
+                              if (!hasContent) {
+                                console.warn('⚠️ Preview iframe appears to be blank/white');
+                                // Wait a bit more and check again (might be loading)
+                                setTimeout(() => {
+                                  const bodyCheck = iframeDoc.body;
+                                  if (bodyCheck && 
+                                      bodyCheck.children.length === 0 && 
+                                      bodyCheck.textContent?.trim() === '' &&
+                                      bodyCheck.innerHTML.trim() === '') {
+                                    console.warn('⚠️ Preview iframe still blank after delay');
+                                    setIframeError('Preview loaded but appears to be blank. The app may have JavaScript errors. Check the browser console.');
+                                  }
+                                }, 2000);
+                              } else {
+                                console.log('✅ Preview iframe has content');
                               }
-                            }, 1000);
+                            }
+                            
+                            // Log script tags for debugging
+                            try {
+                              const scripts = iframeDoc.querySelectorAll('script');
+                              console.log(`📄 Found ${scripts.length} script tags in preview`);
+                            } catch (e) {
+                              // CORS may prevent access
+                            }
                           }
                         }
+                      } catch (e) {
+                        // CORS or other security restrictions may prevent access
+                        console.warn('Cannot inspect iframe content:', e);
+                        // Still clear loading state even if we can't inspect
+                        setIsLoading(false);
                       }
-                    } catch (e) {
-                      // CORS or other security restrictions may prevent access
-                      console.warn('Cannot inspect iframe content:', e);
-                    }
+                    }, 500); // Small delay to let content render
                   }}
                   onError={(e) => {
                     console.error('❌ Preview iframe error:', e);
-                    setIframeError('Failed to load preview. The development server may not be running or there may be a network error.');
+                    setIframeError('Failed to load preview. The development server may not be running or there may be a network error. Try refreshing or check if the server is accessible.');
                     setIsLoading(false);
                     if (loadTimeout) {
                       clearTimeout(loadTimeout);
@@ -496,10 +538,13 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
 
             {/* Loading Overlay */}
             {isLoading && previewUrl && (
-              <div className="absolute inset-0 bg-background/75 flex items-center justify-center backdrop-blur-sm">
+              <div className="absolute inset-0 bg-background/75 flex items-center justify-center backdrop-blur-sm z-40">
                 <div className="text-center">
                   <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-                  <p className="text-xs text-muted-foreground">Refreshing...</p>
+                  <p className="text-xs text-muted-foreground mb-1">Loading preview...</p>
+                  <p className="text-[10px] text-muted-foreground/70">
+                    {previewUrl}
+                  </p>
                 </div>
               </div>
             )}
