@@ -1,0 +1,34 @@
+# Dependencies
+node_modules
+
+# Development
+.env.local
+.env.development.local
+
+# Build artifacts
+.next
+.vercel
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Tests
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+server/tests
+
+# Misc
+.DS_Store
+*.log
+workspaces
+localhost-backup.sql
+deployments
+
+# Development scripts
+test-*.js
+test-*.mjs
+demo-prompts.mjs

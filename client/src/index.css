@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Design System */
+@import './styles/design-system.css';
+
+@layer base {
+  :root {
+    /* Bright & Happy Color Scheme */
+    --background: 0 0% 100%; /* Pure white */
+    --foreground: 240 10% 15%; /* Dark gray for text */
+    
+    --card: 0 0% 100%; /* White cards */
+    --card-foreground: 240 10% 15%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 15%;
+    
+    --primary: 280 90% 65%; /* Bright purple */
+    --primary-foreground: 0 0% 100%; /* White text on primary */
+    
+    --secondary: 280 30% 95%; /* Light purple tint */
+    --secondary-foreground: 280 60% 30%;
+    
+    --muted: 280 20% 96%; /* Very light purple-gray */
+    --muted-foreground: 240 10% 40%;
+    
+    --accent: 320 80% 70%; /* Bright pink */
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%; /* Bright red */
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 280 20% 85%; /* Light purple-gray border */
+    --input: 280 20% 90%; /* Light input background */
+    --ring: 280 90% 65%; /* Bright purple ring */
+    
+    --radius: 0.5rem;
+    
+    /* Chart colors - bright and vibrant */
+    --chart-1: 280 90% 65%; /* Purple */
+    --chart-2: 320 80% 70%; /* Pink */
+    --chart-3: 200 90% 65%; /* Cyan */
+    --chart-4: 40 90% 65%; /* Yellow */
+    --chart-5: 160 70% 60%; /* Green */
+    
+    /* Sidebar colors */
+    --sidebar-background: 280 15% 98%; /* Very light purple */
+    --sidebar-foreground: 240 10% 15%;
+    --sidebar-primary: 280 90% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 280 30% 95%;
+    --sidebar-accent-foreground: 280 60% 30%;
+    --sidebar-border: 280 20% 85%;
+    --sidebar-ring: 280 90% 65%;
+  }
+  
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}

@@ -1,0 +1,52 @@
+services:
+  # Backend API Service
+  - type: web
+    name: ai-library-backend
+    env: node
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: .
+    buildCommand: npm install && npx playwright install chromium && npm run build:backend
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://newai-sigma.vercel.app,https://newai.vercel.app,http://localhost:5173
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+    autoDeploy: true
+    disk:
+      name: ai-library-data
+      mountPath: /opt/render/project/src/workspaces
+      sizeGB: 1

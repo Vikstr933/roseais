@@ -1,0 +1,229 @@
+AI LIBRARY PLUGIN ARCHITECTURE ANALYSIS
+
+EXECUTIVE SUMMARY
+================================================================================
+
+The AI Library codebase demonstrates a well-structured multi-agent architecture
+with excellent extensibility points for building productivity integrations.
+
+Key Findings:
+- Solid BaseAgent architecture (abstract class pattern)
+- Registry-based tool system for flexible capabilities
+- Encrypted credential storage with key management
+- Three-tier knowledge system (companies, frameworks, workspaces)
+- Clear patterns for agent communication and coordination
+
+KEY FILES:
+- BaseAgent.ts: Base agent class (23 lines)
+- ToolRegistry.ts: Tool management (37 lines)  
+- SharedMemory.ts: Inter-agent communication (54 lines)
+- APIKeyService.ts: Credential management (773 lines)
+- KnowledgeService.ts: Knowledge base (150+ lines)
+- OrchestrationAgent.ts: Agent coordination (100+ lines)
+- ExecutionGraph.ts: Dependency management (90 lines)
+- schema-pg.ts: Database schema (200+ lines)
+
+Total TypeScript files in server: 121 files
+
+AGENT HIERARCHY
+================================================================================
+BaseAgent (abstract class)
+  ├── CodeGeneratorAgent
+  ├── UIDesignerAgent
+  ├── CompletionAgent
+  ├── RequirementsAgent
+  ├── ComponentArchitectAgent
+  ├── StyleGeneratorAgent
+  └── OrchestrationAgent (coordinates others)
+
+All agents must implement:
+  - constructor(name: string)
+  - setup(): Promise<void>
+  - executeTask(task: string | config): Promise<any>
+
+TOOL REGISTRY PATTERN
+================================================================================
+Agents register tools during setup:
+
+  this.toolRegistry.registerTool({
+    name: 'unique-name',
+    description: 'What it does',
+    execute: async (...args) => { /* implementation */ }
+  });
+
+Tools can be called by any agent:
+  const result = await this.toolRegistry.executeTool('tool-name', args);
+
+Enables dynamic capability injection at runtime.
+
+INTER-AGENT COMMUNICATION
+================================================================================
+SharedMemory provides key-value storage for data passing:
+
+  // Agent 1: Store data
+  sharedMemory.set('extracted-data', data);
+
+  // Agent 2: Retrieve data
+  const data = sharedMemory.require<Type>('extracted-data');
+
+Supports:
+  - Type-safe get/set
+  - Namespace support
+  - Snapshots for debugging
+  - Existence checking
+
+API INTEGRATION PATTERNS
+================================================================================
+APIKeyService handles all credential management:
+
+- AES-256-CBC encryption for storage
+- Per-request initialization vectors (IV)
+- Automatic API key requirement detection
+- Usage tracking (count, last_used)
+- Support for: api_key, secret, token, password types
+
+Predefined services:
+  - OpenAI, Anthropic, Hugging Face
+  - GitHub, Stripe
+
+OAuth pattern (server/routes/oauth.ts):
+  1. Receive OAuth callback
+  2. Check/create user
+  3. Create session
+  4. Return session token
+
+Database storage (db/schema-pg.ts userAPIKeys table):
+  - encryptedKey (AES-256-CBC encrypted)
+  - serviceName, keyName, keyType
+  - lastUsed, usageCount, isActive
+  - description, website
+
+KNOWLEDGE BASE SYSTEM
+================================================================================
+KnowledgeService provides three-tier knowledge system:
+
+1. Companies - product ecosystem
+2. Frameworks - development frameworks
+3. Workspaces - user projects
+
+getRelevantKnowledge(prompt) process:
+  1. Extract keywords and concepts
+  2. Get system knowledge (top items)
+  3. Search for relevant knowledge
+  4. Combine: relevant > system
+  5. Return top results
+
+Knowledge API Routes:
+  GET /api/knowledge/search?q=query
+  GET /api/knowledge/all
+  POST /api/knowledge/selected
+
+USER CONTEXT & PERSONALIZATION
+================================================================================
+User Model (db/schema-pg.ts):
+  - Authentication (username, email, passwordHash)
+  - Preferences (theme, autoSave, defaultLanguage)
+  - Subscription (tier, stripe ID, status)
+  - Roles (user, admin, superadmin)
+
+Session Management:
+  - 7-day session tokens
+  - Automatic expiration
+  - Last activity tracking
+
+Workspace Management:
+  - User-owned projects
+  - Agent configurations
+  - Collaborators
+  - Custom settings
+
+EXTENSIBILITY ROADMAP
+================================================================================
+Phase 1: Plugin Foundation (1-2 weeks)
+  - Create ProductivityPlugin interface
+  - Implement PluginRegistry
+  - Add database tables
+
+Phase 2: OAuth Integration (2-3 weeks)
+  - OAuth code exchange
+  - Token refresh
+  - Scope management
+
+Phase 3: Gmail Plugin (3-4 weeks)
+  - Email fetching
+  - Action item extraction
+  - Email-to-task conversion
+
+Phase 4: Calendar Plugin (4-5 weeks)
+  - Event fetching
+  - Free time detection
+  - Cross-plugin scheduling
+
+Phase 5: Tasks Plugin (5-6 weeks)
+  - Task CRUD
+  - Multi-source aggregation
+
+PROPOSED PLUGIN INTERFACE
+================================================================================
+interface ProductivityPlugin {
+  config: ProductivityPluginConfig;
+
+  onEnable(userId: string): Promise<void>;
+  onDisable(userId: string): Promise<void>;
+  getCredentials(userId: string): Promise<Credentials>;
+  sync(userId: string, options?: any): Promise<SyncResult>;
+  getAgentTools(): Tool[];
+  getKnowledgeItems(prompt: string): Promise<KnowledgeItem[]>;
+}
+
+SECURITY FEATURES
+================================================================================
+- AES-256-CBC encryption for credentials
+- Per-request IV generation
+- OAuth PKCE support
+- Rate limiting per service
+- User data isolation
+- Session validation
+- Audit logging support
+
+SUGGESTED PLUGINS
+================================================================================
+1. Gmail - Email management and action item extraction
+2. Google Calendar - Event sync and scheduling
+3. Google Tasks - Task management and aggregation
+4. Outlook - Email and calendar (Microsoft)
+5. Notion - Note-taking and database integration
+6. Microsoft To Do - Task management (Microsoft)
+
+DATABASE ADDITIONS
+================================================================================
+user_plugin_configs table:
+  - user_id, service_name, enabled
+  - settings, last_sync
+  - sync_interval_minutes
+
+plugin_sync_logs table:
+  - user_id, service_name, status
+  - items_processed, created, updated
+  - errors, duration_ms
+  - started_at, completed_at
+
+plugin_extracted_items table:
+  - user_id, service_name, source_id
+  - item_type (task, event, reminder)
+  - title, description, due_date
+  - priority, status, metadata
+
+GETTING STARTED
+================================================================================
+1. Study BaseAgent implementation
+2. Review ToolRegistry patterns
+3. Examine APIKeyService for credential handling
+4. Create ProductivityPlugin interface
+5. Implement PluginRegistry
+6. Build first plugin (Gmail)
+7. Extend to other services
+
+The codebase is well-architected for extensibility. The proposed plugin
+system maintains consistency with existing patterns while enabling clean
+integration of third-party productivity services.

@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "newai",
+			"path": "../../.."
+		},
+		{
+			"name": "agents",
+			"path": "../../../../../Desktop/Cursorsetup/agents"
+		}
+	],
+	"settings": {}
+}

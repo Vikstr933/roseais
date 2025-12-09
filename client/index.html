@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#9333ea" />
+    <meta name="description" content="Elon AI Assistant - Your AI-powered digital office assistant" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Apple Touch Icons (iOS) -->
+    <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180x180.png" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon.png" />
+    <link rel="shortcut icon" href="/icons/favicon.png" />
+    
+    <!-- Build: v2025.11.03 -->
+    <!-- Google Maps JavaScript API -->
+    <!-- Note: API key errors may occur in preview environments. Maps will work in production with proper API key configuration. -->
+    <script async defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA3WNWE-9o43b8mjB5R_-_OHxK_WSyXhSE&libraries=places,marker&loading=async"
+      onerror="console.warn('Google Maps API failed to load. This is normal in preview environments without proper API key configuration.')">
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
