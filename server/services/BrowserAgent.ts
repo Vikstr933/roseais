@@ -182,6 +182,30 @@ export class BrowserAgent {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
       const loadTime = Date.now() - navigationStart;
 
+      // Wait for page content to actually render (not just network idle)
+      // This is important for React/Vite apps that may show white screen initially
+      try {
+        // Wait for body to have content (not just empty)
+        await page.waitForFunction(
+          () => {
+            const body = document.body;
+            if (!body) return false;
+            // Check if body has visible content (not just whitespace)
+            const hasContent = body.children.length > 0 || 
+                             body.textContent?.trim().length > 0 ||
+                             body.innerHTML.trim().length > 100; // At least some HTML
+            return hasContent;
+          },
+          { timeout: 10000 } // Wait up to 10 seconds for content
+        );
+        
+        // Additional wait for React apps to hydrate
+        await page.waitForTimeout(1000); // Give React/Vite apps time to render
+      } catch (error) {
+        this.logger.warn('Page content check timeout, proceeding anyway', error as Error);
+        // Continue even if content check times out - might be a static page
+      }
+
       // Get performance metrics
       const metrics = await this.getPerformanceMetrics(page);
 
@@ -218,9 +242,38 @@ export class BrowserAgent {
       // Take screenshot if requested
       let screenshot: string | undefined;
       if (options.takeScreenshot !== false) {
+        // Double-check that page has content before taking screenshot
+        const hasContent = await page.evaluate(() => {
+          const body = document.body;
+          if (!body) return false;
+          // Check for visible content
+          const hasVisibleContent = body.children.length > 0 || 
+                                   body.textContent?.trim().length > 0 ||
+                                   window.getComputedStyle(body).backgroundColor !== 'rgb(255, 255, 255)'; // Not just white background
+          return hasVisibleContent;
+        });
+
+        if (!hasContent) {
+          this.logger.warn('Page appears to be blank/white, waiting longer before screenshot');
+          // Wait a bit more for content to load
+          await page.waitForTimeout(2000);
+          
+          // Check again
+          const stillBlank = await page.evaluate(() => {
+            const body = document.body;
+            return !body || (body.children.length === 0 && body.textContent?.trim().length === 0);
+          });
+          
+          if (stillBlank) {
+            this.logger.warn('Page still appears blank after additional wait');
+            // Continue anyway - might be a legitimate blank page or error page
+          }
+        }
+
         screenshot = await page.screenshot({ 
           type: 'png', 
-          fullPage: false // Just viewport for now
+          fullPage: false, // Just viewport for now
+          timeout: 5000 // 5 second timeout for screenshot
         }).then(buf => buf.toString('base64'));
       }
 

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
+import * as fs from 'fs';
 import EventEmitter from 'events';
 import { Logger } from './utils/Logger';
 import { sentryService } from './services/SentryService';
@@ -94,6 +95,18 @@ const initializeApp = async () => {
     app.use(sentryRequestHandler());
     app.use(sentryTracingHandler());
 
+    // Log ALL incoming requests BEFORE CORS (for debugging)
+    app.use((req, res, next) => {
+      const origin = req.headers.origin;
+      console.log(`[REQUEST] ${req.method} ${req.path} - Origin: ${origin || 'none'}`);
+      console.log(`[REQUEST] Headers:`, JSON.stringify({
+        'user-agent': req.get('User-Agent'),
+        'content-type': req.get('Content-Type'),
+        origin: origin,
+      }, null, 2));
+      next();
+    });
+
     // Build allowed origins from environment variables FIRST (before CORS)
     // Render automatically sets RENDER_EXTERNAL_URL, but we can also use BACKEND_URL
     const backendUrl = process.env.BACKEND_URL || 
@@ -128,25 +141,15 @@ const initializeApp = async () => {
       allowedOrigins.push(process.env.FRONTEND_URL);
     }
 
-    // Advanced Security Middleware
-    app.use(securityMiddleware.securityHeaders({
-      allowedOrigins: allowedOrigins.filter(origin => typeof origin === 'string')
-    }));
-    app.use(securityMiddleware.requestMonitoring());
-    app.use(securityMiddleware.inputValidation());
-    app.use(securityMiddleware.apiRateLimit());
-
-    // Performance Optimization Middleware
-    app.use(compressionMiddleware());
-    app.use(memoryMonitoring());
-    app.use('/api', apiCache(performanceService.getCache(), 300)); // 5 minute cache for API routes
-
-    // Handle preflight OPTIONS requests explicitly
+    // Handle preflight OPTIONS requests FIRST (before any other middleware that might interfere)
+    // This ensures CORS preflight requests are handled immediately
     app.options('*', (req, res, next) => {
       const origin = req.headers.origin;
+      console.log(`[CORS Preflight] OPTIONS request from origin: ${origin || 'none'}`);
       
       // Always allow requests from backend to itself
       if (!origin || origin === backendUrl || origin.includes('onrender.com')) {
+        console.log(`[CORS Preflight] ✅ Allowing backend/onrender origin: ${origin || 'none'}`);
         res.setHeader('Access-Control-Allow-Origin', origin || '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
@@ -157,7 +160,7 @@ const initializeApp = async () => {
       
       // In production, always allow Vercel and Render origins as fallback (check this FIRST)
       if (origin && origin.includes('vercel.app')) {
-        console.log(`[CORS Preflight] Allowing Vercel origin: ${origin}`);
+        console.log(`[CORS Preflight] ✅ Allowing Vercel origin: ${origin}`);
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
@@ -166,7 +169,7 @@ const initializeApp = async () => {
         return res.status(204).send();
       }
       if (origin && origin.includes('onrender.com')) {
-        console.log(`[CORS Preflight] Allowing Render origin: ${origin}`);
+        console.log(`[CORS Preflight] ✅ Allowing Render origin: ${origin}`);
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
@@ -185,6 +188,7 @@ const initializeApp = async () => {
       });
 
       if (isAllowed) {
+        console.log(`[CORS Preflight] ✅ Allowing origin from allowed list: ${origin}`);
         res.setHeader('Access-Control-Allow-Origin', origin || '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
@@ -192,33 +196,50 @@ const initializeApp = async () => {
         res.setHeader('Access-Control-Max-Age', '86400');
         res.status(204).send();
       } else {
-        console.warn(`[CORS Preflight] Blocked origin: ${origin}`);
+        console.error(`[CORS Preflight] ❌ Blocked origin: ${origin}`);
+        console.error(`[CORS Preflight] Allowed origins:`, allowedOrigins.map(o => o.toString()));
         res.status(403).send();
       }
     });
 
+    // Advanced Security Middleware
+    app.use(securityMiddleware.securityHeaders({
+      allowedOrigins: allowedOrigins.filter(origin => typeof origin === 'string')
+    }));
+    app.use(securityMiddleware.requestMonitoring());
+    app.use(securityMiddleware.inputValidation());
+    app.use(securityMiddleware.apiRateLimit());
+
+    // Performance Optimization Middleware
+    app.use(compressionMiddleware());
+    app.use(memoryMonitoring());
+    app.use('/api', apiCache(performanceService.getCache(), 300)); // 5 minute cache for API routes
+
     // Apply CORS to all routes (including health checks for browser access)
     app.use(cors({
       origin: (origin, callback) => {
+        // Log every CORS check for debugging
+        console.log(`[CORS CHECK] Origin: ${origin || 'none'}`);
+        
         // Allow requests without origin (monitoring services, same-origin requests)
         if (!origin) {
-          console.log('[CORS] Allowing request without origin');
+          console.log('[CORS] ✅ Allowing request without origin');
           return callback(null, true);
         }
 
         // Always allow requests from backend to itself
         if (origin === backendUrl || origin.includes('onrender.com')) {
-          console.log(`[CORS] Allowing backend self-request: ${origin}`);
+          console.log(`[CORS] ✅ Allowing backend self-request: ${origin}`);
           return callback(null, true);
         }
 
         // In production, always allow Vercel and Render origins as fallback (check this FIRST)
         if (origin.includes('vercel.app')) {
-          console.log(`[CORS] Allowing Vercel origin: ${origin}`);
+          console.log(`[CORS] ✅ Allowing Vercel origin: ${origin}`);
           return callback(null, true);
         }
         if (origin.includes('onrender.com')) {
-          console.log(`[CORS] Allowing Render origin: ${origin}`);
+          console.log(`[CORS] ✅ Allowing Render origin: ${origin}`);
           return callback(null, true);
         }
 
@@ -233,14 +254,16 @@ const initializeApp = async () => {
         });
 
         if (isAllowed) {
-          console.log(`[CORS] Allowing origin: ${origin}`);
+          console.log(`[CORS] ✅ Allowing origin from allowed list: ${origin}`);
           callback(null, true);
         } else {
           // Log detailed info for debugging
-          console.error(`[CORS] REJECTED origin: ${origin}`);
+          console.error(`[CORS] ❌ REJECTED origin: ${origin}`);
           console.error(`[CORS] Allowed origins:`, allowedOrigins.map(o => o.toString()));
           console.error(`[CORS] Backend URL: ${backendUrl}`);
           console.error(`[CORS] NODE_ENV: ${process.env.NODE_ENV}`);
+          console.error(`[CORS] FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+          console.error(`[CORS] ALLOWED_ORIGINS: ${process.env.ALLOWED_ORIGINS}`);
           callback(new Error('Not allowed by CORS'));
         }
       },
@@ -526,6 +549,17 @@ const initializeApp = async () => {
 
     // Serve static files from client directory
     app.use(express.static(path.join(process.cwd(), 'client')));
+    
+    // Serve uploads directory (for screenshots, etc.)
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      app.use('/uploads', express.static(uploadsDir));
+      console.log('✅ Static file serving enabled for uploads directory');
+    } else {
+      console.warn('⚠️ Uploads directory not found, creating it...');
+      fs.mkdirSync(uploadsDir, { recursive: true });
+      app.use('/uploads', express.static(uploadsDir));
+    }
 
     // Sentry error handler - MUST be after routes but BEFORE error handlers
     app.use(sentryErrorHandler());

@@ -94,20 +94,28 @@ export class ScreenshotService {
           // Copy screenshot as thumbnail (in production, resize it)
           fs.writeFileSync(thumbnailPath, screenshotBuffer);
           
+          // Store relative path, will be converted to absolute URL later
           thumbnailUrl = `/uploads/screenshots/${thumbnailFilename}`;
         } catch (error) {
           logger.warn('Failed to generate thumbnail', error as Error);
         }
       }
 
-      const screenshotUrl = `/uploads/screenshots/${screenshotFilename}`;
+      // Use absolute URL for screenshots (backend URL + path)
+      // This ensures screenshots work when frontend is on different domain
+      const backendUrl = process.env.BACKEND_URL || 
+                        process.env.RENDER_EXTERNAL_URL || 
+                        'https://ai-library-backend.onrender.com';
+      
+      const screenshotUrl = `${backendUrl}/uploads/screenshots/${screenshotFilename}`;
+      const finalThumbnailUrl = thumbnailUrl ? `${backendUrl}${thumbnailUrl}` : null;
 
       // Update project with screenshot URLs
       await db
         .update(workspaces)
         .set({
           screenshotUrl,
-          thumbnailUrl: thumbnailUrl || null,
+          thumbnailUrl: finalThumbnailUrl,
         })
         .where(eq(workspaces.id, projectId));
 

@@ -8,6 +8,28 @@ import { screenshotService } from '../services/ScreenshotService';
 const router = Router();
 
 /**
+ * Convert relative screenshot URLs to absolute URLs
+ * This ensures screenshots work when frontend is on different domain
+ */
+function ensureAbsoluteUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  
+  // If already absolute, return as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  
+  // Convert relative URL to absolute
+  const backendUrl = process.env.BACKEND_URL || 
+                    process.env.RENDER_EXTERNAL_URL || 
+                    'https://ai-library-backend.onrender.com';
+  
+  // Ensure URL starts with /
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${backendUrl}${path}`;
+}
+
+/**
  * GET /api/public-projects
  * Get all public projects with filtering and sorting
  */
@@ -100,9 +122,16 @@ router.get('/', optionalAuth, async (req, res) => {
         )
       );
 
+    // Convert screenshot URLs to absolute URLs
+    const projectsWithAbsoluteUrls = projects.map(project => ({
+      ...project,
+      screenshotUrl: ensureAbsoluteUrl(project.screenshotUrl),
+      thumbnailUrl: ensureAbsoluteUrl(project.thumbnailUrl),
+    }));
+
     res.json({
       success: true,
-      projects,
+      projects: projectsWithAbsoluteUrls,
       total: totalResult[0]?.count || 0,
       limit: Number(limit),
       offset: Number(offset),
@@ -182,9 +211,16 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .set({ viewCount: sql`${workspaces.viewCount} + 1` })
       .where(eq(workspaces.id, projectId));
 
+    // Convert screenshot URLs to absolute URLs
+    const projectWithAbsoluteUrls = {
+      ...project[0],
+      screenshotUrl: ensureAbsoluteUrl(project[0].screenshotUrl),
+      thumbnailUrl: ensureAbsoluteUrl(project[0].thumbnailUrl),
+    };
+
     res.json({
       success: true,
-      project: project[0],
+      project: projectWithAbsoluteUrls,
     });
   } catch (error: any) {
     console.error('Error fetching public project:', error);

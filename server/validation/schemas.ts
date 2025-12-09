@@ -16,26 +16,49 @@ export const userPromptSchema = z.object({
   userPrompt: z
     .string()
     .min(3, 'Prompt must be at least 3 characters')
-    .max(5000, 'Prompt must be less than 5000 characters')
+    .max(10000, 'Prompt must be less than 10000 characters') // Increased from 5000 to allow detailed instructions
     .refine(
-      (val) => !/<script[^>]*>/i.test(val) || val.includes('```'),
-      'Prompt cannot contain script tags (unless in code blocks)'
+      (val) => {
+        // Allow script tags only if they're inside code blocks (markdown)
+        const hasScriptTags = /<script[^>]*>/i.test(val);
+        if (!hasScriptTags) {
+          return true; // No script tags, allow
+        }
+        // If there are script tags, check if they're in code blocks
+        // Simple heuristic: if code blocks exist, assume script tags are in them
+        return val.includes('```');
+      },
+      'Prompt cannot contain script tags outside of code blocks. Please wrap code examples in markdown code blocks (```)'
     )
     .refine(
       (val) => {
-        // Allow these functions if they appear in code blocks (markdown) or are teaching/example code
-        const hasCodeBlocks = val.includes('```') || val.includes('// file:');
-        const isCodeExample = val.includes('Code to apply:') || val.includes('```typescript') || val.includes('```javascript');
+        // Allow dangerous functions if they appear in code blocks (markdown) or are teaching/example code
+        const hasCodeBlocks = val.includes('```');
+        const hasFileMarker = val.includes('// file:') || val.includes('// File:');
+        const isCodeExample = val.includes('Code to apply:') || 
+                             val.includes('Example:') ||
+                             val.includes('Here is the code:') ||
+                             val.includes('```typescript') || 
+                             val.includes('```javascript') ||
+                             val.includes('```jsx') ||
+                             val.includes('```tsx') ||
+                             val.includes('```js') ||
+                             val.includes('```ts');
         
         // If it's a code example or has code blocks, allow dangerous functions
-        if (hasCodeBlocks || isCodeExample) {
+        if (hasCodeBlocks || hasFileMarker || isCodeExample) {
           return true;
         }
         
         // Otherwise, block direct use of dangerous functions in plain text prompts
-        return !/(eval|new\s+Function|setTimeout|setInterval)\s*\(/i.test(val);
+        // But be more lenient - only block if it looks like actual code execution attempt
+        const dangerousPattern = /(eval|new\s+Function|setTimeout|setInterval)\s*\([^)]*\)/i;
+        const looksLikeCodeExecution = dangerousPattern.test(val);
+        
+        // If it looks like actual code execution (not just mentioning the function), block it
+        return !looksLikeCodeExecution;
       },
-      'Prompt cannot contain dangerous JavaScript functions outside of code examples'
+      'Prompt cannot contain dangerous JavaScript function calls outside of code examples. Please wrap code in markdown code blocks (```)'
     ),
   systemPrompt: z.string().optional(),
   model: z.enum([
