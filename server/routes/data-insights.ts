@@ -86,7 +86,7 @@ router.get('/overview', async (req, res) => {
       .where(
         and(
           eq(workspaces.ownerId, userId),
-          gte(workspaces.lastActivity, thirtyDaysAgo)
+          sql`${workspaces.lastActivity} >= ${thirtyDaysAgo.toISOString()}`
         )
       )
       .groupBy(sql`DATE(${workspaces.lastActivity})`)
