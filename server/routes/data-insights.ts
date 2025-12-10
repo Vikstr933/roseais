@@ -170,16 +170,18 @@ router.get('/overview', async (req, res) => {
     }
 
     // Find best performing agent
-    const bestAgent = agentPerformance.reduce((max, a) => 
-      (a.successRate || 0) > (max.successRate || 0) ? a : max, 
-      agentPerformance[0] || { agentName: null, agentId: null, successRate: 0 }
-    );
+    const bestAgent = agentPerformance.reduce((max, a) => {
+      const maxRate = Number(max.successRate) || 0;
+      const aRate = Number(a.successRate) || 0;
+      return aRate > maxRate ? a : max;
+    }, agentPerformance[0] || { agentName: null, agentId: null, successRate: 0 });
     if (bestAgent && bestAgent.totalSessions > 0) {
       const agentDisplayName = bestAgent.agentName || `Agent ${bestAgent.agentId || 'Okänd'}`;
+      const successRate = Number(bestAgent.successRate) || 0;
       insights.push({
         type: 'agent_performance',
         title: 'Bäst presterande agent',
-        description: `${agentDisplayName} har högst framgångsfrekvens (${(bestAgent.successRate || 0).toFixed(1)}%) med ${bestAgent.totalSessions} sessioner`,
+        description: `${agentDisplayName} har högst framgångsfrekvens (${successRate.toFixed(1)}%) med ${bestAgent.totalSessions} sessioner`,
         data: bestAgent,
       });
     }
