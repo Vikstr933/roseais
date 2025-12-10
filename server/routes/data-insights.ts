@@ -29,7 +29,6 @@ router.get('/overview', async (req, res) => {
     }
 
     // 1. Agent Performance Analysis
-    // Filter out sessions with extremely short code (likely test data) - minimum 10 characters
     const agentPerformance = await db
       .select({
         agentId: codeGenerationSessions.agentId,
@@ -51,18 +50,12 @@ router.get('/overview', async (req, res) => {
       })
       .from(codeGenerationSessions)
       .leftJoin(agents, eq(codeGenerationSessions.agentId, agents.id.toString()))
-      .where(
-        and(
-          eq(codeGenerationSessions.userId, userId),
-          sql`LENGTH(${codeGenerationSessions.generatedCode}) >= 10` // Filter out test data
-        )
-      )
+      .where(eq(codeGenerationSessions.userId, userId))
       .groupBy(codeGenerationSessions.agentId, agents.name)
       .orderBy(desc(sql`COUNT(*)`))
       .limit(10);
 
     // 2. Code Generation Patterns
-    // Filter out test data (sessions with code < 10 characters)
     const codePatterns = await db
       .select({
         hour: sql<number>`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`,
@@ -70,12 +63,7 @@ router.get('/overview', async (req, res) => {
         avgLength: sql<number>`ROUND(AVG(LENGTH(${codeGenerationSessions.generatedCode})), 0)`,
       })
       .from(codeGenerationSessions)
-      .where(
-        and(
-          eq(codeGenerationSessions.userId, userId),
-          sql`LENGTH(${codeGenerationSessions.generatedCode}) >= 10` // Filter out test data
-        )
-      )
+      .where(eq(codeGenerationSessions.userId, userId))
       .groupBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`)
       .orderBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`);
 
