@@ -911,7 +911,12 @@ export default function PromptPlayground() {
               timestamp: new Date(msg.message.createdAt).getTime()
             }));
             if (!isMounted) return;
-            history.forEach((msg: any) => addChatMessage(msg));
+            history.forEach((msg: any) => {
+              // Only add messages with valid content
+              if (msg && msg.content && typeof msg.content === 'string' && msg.content.trim().length > 0) {
+                addChatMessage(msg);
+              }
+            });
             console.log(`✅ Loaded ${history.length} chat messages`);
             // Mark as loaded
             welcomeMessageAddedRef.current = projectId;
