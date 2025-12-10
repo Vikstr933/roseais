@@ -60,6 +60,7 @@ export class PersonalAssistantAgent {
   private detectLanguageTool: Tool;
   private trackErrorTool: Tool;
   private getUsageStatsTool: Tool;
+  private getDataInsightsTool: Tool;
   private selectedProjects: Map<string, { projectId: string; projectName: string; projectDescription?: string; isGitHubRepo?: boolean; githubRepo?: { fullName: string; owner: string; repo: string; defaultBranch?: string } }> = new Map(); // Store selected project per session
   private userMessageCounts: Map<string, number> = new Map(); // Track message count per user for Discord recommendations
   private lastDiscordRecommendation: Map<string, number> = new Map(); // Track last recommendation timestamp
@@ -831,6 +832,26 @@ export class PersonalAssistantAgent {
         return await this.getUsageStats(params);
       }
     };
+
+    // Initialize data insights tool
+    this.getDataInsightsTool = {
+      name: 'get_data_insights',
+      description: 'Get comprehensive data insights and analytics about AI agent performance, code generation patterns, project activity, and interesting correlations. Use this when the user asks about data insights, analytics, patterns in their data, agent performance, productivity patterns, or wants to discuss data analysis. This provides detailed insights including agent success rates, time patterns, project activity trends, collaboration statistics, and automatically generated hypotheses.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['overview', 'hypotheses'],
+            description: 'Type of insights to retrieve: overview (comprehensive insights with all data), hypotheses (only AI-generated hypotheses based on data patterns). Default: overview.'
+          }
+        },
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.getDataInsights(params);
+      }
+    };
   }
 
   /**
@@ -1327,6 +1348,14 @@ export class PersonalAssistantAgent {
           }
         };
         builtInTools.push(getUsageStatsToolWithUserId);
+
+        const getDataInsightsToolWithUserId = {
+          ...this.getDataInsightsTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.getDataInsights({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        };
+        builtInTools.push(getDataInsightsToolWithUserId);
       }
 
       // Add memory, error tracking, and analytics tools even without project context
@@ -1362,6 +1391,14 @@ export class PersonalAssistantAgent {
           }
         };
         builtInTools.push(getUsageStatsToolWithUserId);
+
+        const getDataInsightsToolWithUserId = {
+          ...this.getDataInsightsTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.getDataInsights({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        };
+        builtInTools.push(getDataInsightsToolWithUserId);
       }
       // Filter out any invalid tools before combining
       const validBuiltInTools = builtInTools.filter(t => t && t.name && typeof t.name === 'string' && t.name.trim().length > 0);
@@ -1729,6 +1766,23 @@ Your capabilities:
       - "What did people say in Discord?"
     * After reading, summarize the messages clearly and mention who said what
     * If no messages are found or bot is not connected, explain the situation clearly
+- **Data Insights & Analytics**: Get comprehensive data insights about AI agent performance, code generation patterns, project activity, and interesting correlations
+  * Use the get_data_insights tool when users ask about:
+    - Data insights, analytics, or patterns in their data
+    - Agent performance or which agents work best
+    - Productivity patterns or when they're most productive
+    - Code generation statistics or trends
+    - Project activity over time
+    - Collaboration statistics
+    - Hypotheses or correlations in their data
+  * The tool provides detailed insights including:
+    - Agent success rates and performance metrics
+    - Time patterns (when code is generated most)
+    - Project activity trends
+    - Collaboration statistics
+    - Automatically generated hypotheses based on data patterns
+  * Example: "What are my data insights?" or "Show me agent performance" or "When am I most productive?"
+  * You can discuss the insights naturally and help users understand what the data means
 - **Web Search**: Search the web for real-time information about companies, addresses, business hours, contact details, or any current information
   * Use the web_search tool when users ask for specific real-world details like "Colorama Lund address" or "contact information for [business]"
   * ALWAYS use web_search for company addresses, phone numbers, business hours, and contact information
@@ -1991,6 +2045,7 @@ ${playgroundContext ? `
 
 - **ANALYTICS**: You have access to analytics tools:
   * **get_usage_stats**: Get usage statistics and analytics. Use this when the user asks about statistics, usage data, or analytics.
+  * **get_data_insights**: Get comprehensive data insights about AI agent performance, code generation patterns, project activity, and interesting correlations. Use this when the user asks about data insights, analytics, patterns in their data, agent performance, productivity patterns, or wants to discuss data analysis.
 
 - **CODE ANALYSIS**: You have access to comprehensive code analysis tools:
   * **analyze_code**: Comprehensive code analysis. Use this when the user asks you to analyze code, check for errors, review code quality, or find issues. This performs full analysis including syntax errors, type errors, security issues, performance problems, and best practices.
@@ -5608,6 +5663,263 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Get data insights - comprehensive analytics about AI agent performance and patterns
+   */
+  private async getDataInsights(params: Record<string, any>): Promise<any> {
+    const insightType = (params.type as 'overview' | 'hypotheses') || 'overview';
+    const userId = params._userId as string | undefined;
+
+    if (!userId) {
+      return {
+        success: false,
+        error: 'User ID is required',
+        message: 'I need your user ID to get data insights. Please ensure you are logged in.'
+      };
+    }
+
+    try {
+      logger.info(`Getting data insights for user ${userId}: type=${insightType}`);
+
+      // Import the data insights router logic directly
+      const dataInsightsRouter = await import('../routes/data-insights');
+      
+      // Create a mock request/response to call the router handler
+      // We'll call the handler function directly instead
+      const { db } = await import('../../db');
+      const { 
+        codeGenerationSessions, 
+        agents, 
+        workspaces, 
+        chainExecutions,
+        promptChains,
+        projectMembers
+      } = await import('../../db/schema-pg');
+      const { sql, eq, desc, and, gte } = await import('drizzle-orm');
+
+      if (insightType === 'overview') {
+        // Replicate the overview endpoint logic
+        const agentPerformance = await db
+          .select({
+            agentId: codeGenerationSessions.agentId,
+            agentName: agents.name,
+            totalSessions: sql<number>`COUNT(*)`,
+            successRate: sql<number>`
+              ROUND(
+                (SUM(CASE WHEN ${codeGenerationSessions.status} = 'completed' THEN 1 ELSE 0 END) * 100.0) / 
+                NULLIF(COUNT(*), 0),
+                2
+              )
+            `,
+            avgCodeLength: sql<number>`
+              ROUND(
+                AVG(LENGTH(${codeGenerationSessions.generatedCode})),
+                0
+              )
+            `,
+          })
+          .from(codeGenerationSessions)
+          .leftJoin(agents, eq(codeGenerationSessions.agentId, agents.id.toString()))
+          .where(eq(codeGenerationSessions.userId, userId))
+          .groupBy(codeGenerationSessions.agentId, agents.name)
+          .orderBy(desc(sql`COUNT(*)`))
+          .limit(10);
+
+        const codePatterns = await db
+          .select({
+            hour: sql<number>`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`,
+            count: sql<number>`COUNT(*)`,
+            avgLength: sql<number>`ROUND(AVG(LENGTH(${codeGenerationSessions.generatedCode})), 0)`,
+          })
+          .from(codeGenerationSessions)
+          .where(eq(codeGenerationSessions.userId, userId))
+          .groupBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`)
+          .orderBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`);
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const projectActivity = await db
+          .select({
+            date: sql<string>`DATE(${workspaces.lastActivity})`,
+            activeProjects: sql<number>`COUNT(DISTINCT ${workspaces.id})`,
+            newProjects: sql<number>`
+              COUNT(DISTINCT CASE 
+                WHEN DATE(${workspaces.createdAt}) = DATE(${workspaces.lastActivity}) 
+                THEN ${workspaces.id} 
+              END)
+            `,
+          })
+          .from(workspaces)
+          .where(
+            and(
+              eq(workspaces.ownerId, userId),
+              gte(workspaces.lastActivity, thirtyDaysAgo)
+            )
+          )
+          .groupBy(sql`DATE(${workspaces.lastActivity})`)
+          .orderBy(sql`DATE(${workspaces.lastActivity}) DESC`)
+          .limit(30);
+
+        const collaborationStats = await db
+          .select({
+            totalCollaborators: sql<number>`COUNT(DISTINCT ${projectMembers.userId})`,
+            mostCollaborativeProject: sql<string>`MAX(${workspaces.name})`,
+            avgCollaboratorsPerProject: sql<number>`
+              ROUND(
+                COUNT(DISTINCT ${projectMembers.userId})::numeric / 
+                NULLIF(COUNT(DISTINCT ${projectMembers.projectId}), 0),
+                2
+              )
+            `,
+          })
+          .from(projectMembers)
+          .leftJoin(workspaces, eq(projectMembers.projectId, workspaces.id))
+          .where(eq(workspaces.ownerId, userId));
+
+        const chainAnalysis = await db
+          .select({
+            chainId: chainExecutions.chainId,
+            chainName: promptChains.name,
+            totalExecutions: sql<number>`COUNT(*)`,
+            successRate: sql<number>`
+              ROUND(
+                (SUM(CASE WHEN ${chainExecutions.status} = 'completed' THEN 1 ELSE 0 END) * 100.0) / 
+                NULLIF(COUNT(*), 0),
+                2
+              )
+            `,
+            avgDuration: sql<number>`
+              ROUND(
+                AVG(
+                  EXTRACT(EPOCH FROM (${chainExecutions.completedAt}::timestamp - ${chainExecutions.startedAt}::timestamp))
+                ),
+                2
+              )
+            `,
+          })
+          .from(chainExecutions)
+          .leftJoin(promptChains, eq(chainExecutions.chainId, promptChains.id))
+          .groupBy(chainExecutions.chainId, promptChains.name)
+          .orderBy(desc(sql`COUNT(*)`))
+          .limit(10);
+
+        const correlations = {
+          agentSuccessVsCodeLength: agentPerformance.map(a => ({
+            agent: a.agentName || 'Unknown',
+            successRate: a.successRate || 0,
+            avgCodeLength: a.avgCodeLength || 0,
+          })),
+          timeOfDayVsProductivity: codePatterns.map(p => ({
+            hour: p.hour || 0,
+            sessions: p.count || 0,
+            avgCodeLength: p.avgLength || 0,
+          })),
+        };
+
+        const insights = [];
+        
+        const mostProductiveHour = codePatterns.reduce((max, p) => 
+          (p.count || 0) > (max.count || 0) ? p : max, codePatterns[0] || { hour: 0, count: 0 }
+        );
+        if (mostProductiveHour) {
+          insights.push({
+            type: 'productivity',
+            title: 'Mest produktiva tiden',
+            description: `Du genererar mest kod klockan ${mostProductiveHour.hour}:00`,
+            data: mostProductiveHour,
+          });
+        }
+
+        const bestAgent = agentPerformance.reduce((max, a) => 
+          (a.successRate || 0) > (max.successRate || 0) ? a : max, 
+          agentPerformance[0] || { agentName: 'N/A', successRate: 0 }
+        );
+        if (bestAgent && bestAgent.agentName) {
+          insights.push({
+            type: 'agent_performance',
+            title: 'Bäst presterande agent',
+            description: `${bestAgent.agentName} har högst framgångsfrekvens (${bestAgent.successRate}%)`,
+            data: bestAgent,
+          });
+        }
+
+        if (collaborationStats[0]?.totalCollaborators) {
+          insights.push({
+            type: 'collaboration',
+            title: 'Samarbete',
+            description: `Du har ${collaborationStats[0].totalCollaborators} medarbetare i dina projekt`,
+            data: collaborationStats[0],
+          });
+        }
+
+        return {
+          success: true,
+          data: {
+            agentPerformance,
+            codePatterns,
+            projectActivity,
+            collaborationStats: collaborationStats[0] || {},
+            chainAnalysis,
+            correlations,
+            insights,
+            summary: {
+              totalSessions: agentPerformance.reduce((sum, a) => sum + (a.totalSessions || 0), 0),
+              uniqueAgents: agentPerformance.length,
+              activeProjects: projectActivity.reduce((sum, p) => sum + (p.activeProjects || 0), 0),
+            },
+          },
+          message: `Data insights retrieved: ${agentPerformance.reduce((sum, a) => sum + (a.totalSessions || 0), 0)} total sessions, ${agentPerformance.length} unique agents, ${projectActivity.reduce((sum, p) => sum + (p.activeProjects || 0), 0)} active projects`
+        };
+      } else {
+        // Hypotheses endpoint logic
+        const sessions = await db
+          .select()
+          .from(codeGenerationSessions)
+          .where(eq(codeGenerationSessions.userId, userId))
+          .limit(100);
+
+        const hypotheses = [];
+
+        const promptLengths = sessions.map(s => ({
+          promptLength: s.inputPrompt?.length || 0,
+          codeLength: s.generatedCode?.length || 0,
+        }));
+        
+        if (promptLengths.length > 0) {
+          const avgPromptLength = promptLengths.reduce((sum, p) => sum + p.promptLength, 0) / promptLengths.length;
+          const avgCodeLength = promptLengths.reduce((sum, p) => sum + p.codeLength, 0) / promptLengths.length;
+          
+          hypotheses.push({
+            id: 'prompt-code-correlation',
+            title: 'Samband mellan prompt-längd och kod-längd',
+            description: `Genomsnittlig prompt-längd: ${Math.round(avgPromptLength)} tecken. Genomsnittlig kod-längd: ${Math.round(avgCodeLength)} tecken.`,
+            hypothesis: 'Längre prompts tenderar att generera längre kod',
+            confidence: 'medium',
+            data: {
+              avgPromptLength: Math.round(avgPromptLength),
+              avgCodeLength: Math.round(avgCodeLength),
+              sampleSize: promptLengths.length,
+            },
+          });
+        }
+
+        return {
+          success: true,
+          hypotheses,
+          message: `Generated ${hypotheses.length} hypotheses based on your data patterns`
+        };
+      }
+    } catch (error) {
+      logger.error('Error getting data insights', error as Error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        message: 'Failed to retrieve data insights. Please try again later.'
       };
     }
   }
