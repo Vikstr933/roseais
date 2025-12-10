@@ -54,6 +54,7 @@ import aiRouter from './routes/ai';
 import statsRouter from './routes/stats';
 import publicProjectsRouter from './routes/public-projects';
 import screenshotsRouter from './routes/screenshots';
+import dataInsightsRouter from './routes/data-insights';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -481,6 +482,7 @@ const initializeApp = async () => {
     app.use('/api/stats', statsRouter); // Platform statistics
     app.use('/api/public-projects', publicProjectsRouter); // Public projects showcase
     app.use('/api/screenshots', screenshotsRouter); // Screenshot capture service
+    app.use('/api/data-insights', dataInsightsRouter); // Data insights and analytics
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
 
     app.get('/api/sse/agent-activity', (req, res) => {
