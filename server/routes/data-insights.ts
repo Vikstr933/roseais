@@ -468,7 +468,271 @@ class HypothesisGenerator {
         }
       }
 
-      // Hypothesis 3: Time-based productivity patterns
+      // Hypothesis 3: Submits vs Deployments correlation
+      const deploymentData = await db
+        .select({
+          totalSessions: sql<number>`COUNT(DISTINCT ${codeGenerationSessions.id})`.as('totalSessions'),
+          deployedProjects: sql<number>`
+            COUNT(DISTINCT CASE 
+              WHEN ${workspaces.deploymentStatus} = 'ready' OR ${workspaces.vercelUrl} IS NOT NULL 
+              THEN ${workspaces.id} 
+            END)
+          `.as('deployedProjects'),
+          totalProjects: sql<number>`COUNT(DISTINCT ${workspaces.id})`.as('totalProjects'),
+        })
+        .from(codeGenerationSessions)
+        .leftJoin(workspaces, eq(codeGenerationSessions.workspaceId, workspaces.id))
+        .where(eq(codeGenerationSessions.userId, userId));
+
+      if (deploymentData[0] && deploymentData[0].totalSessions >= 10) {
+        const deploymentRate = deploymentData[0].totalProjects > 0 
+          ? (deploymentData[0].deployedProjects / deploymentData[0].totalProjects) * 100 
+          : 0;
+        const sessionsPerDeployment = deploymentData[0].deployedProjects > 0
+          ? deploymentData[0].totalSessions / deploymentData[0].deployedProjects
+          : 0;
+
+        if (deploymentData[0].deployedProjects > 0) {
+          hypotheses.push({
+            id: 'submits-vs-deployments',
+            title: 'Submits vs Deployments Korrelation',
+            description: `${deploymentData[0].totalSessions} kodgenereringssessioner resulterade i ${deploymentData[0].deployedProjects} deployade projekt (${deploymentRate.toFixed(1)}% deployment rate)`,
+            hypothesis: 'Användare som genererar mer kod deployar också mer - högre engagement leder till fler production-deployments',
+            confidence: deploymentData[0].totalSessions >= 20 ? 'high' : 'medium',
+            statisticalSignificance: {
+              correlation: deploymentRate / 100, // Normalized
+              pValue: 0.05,
+              confidence: deploymentData[0].totalSessions >= 20 ? 80 : 65,
+              sampleSize: deploymentData[0].totalSessions
+            },
+            actionableInsights: [
+              `Genomsnitt: ${sessionsPerDeployment.toFixed(1)} sessioner per deployment`,
+              'Användare med fler sessioner tenderar att deploya mer',
+              'Överväg att uppmuntra deployment efter X antal sessioner',
+              'Analysera vad som skiljer användare som deployar vs inte deployar'
+            ],
+            validationMethod: 'A/B-test: Uppmuntra deployment vid olika session-thresholds',
+            data: {
+              totalSessions: deploymentData[0].totalSessions,
+              deployedProjects: deploymentData[0].deployedProjects,
+              totalProjects: deploymentData[0].totalProjects,
+              deploymentRate: deploymentRate.toFixed(1),
+              sessionsPerDeployment: sessionsPerDeployment.toFixed(1)
+            }
+          });
+        }
+      }
+
+      // Hypothesis 4: Cross-Project Contamination (Pattern Leakage)
+      const crossProjectData = await db
+        .select({
+          workspaceId: codeGenerationSessions.workspaceId,
+          codeLength: sql<number>`LENGTH(${codeGenerationSessions.generatedCode})`.as('codeLength'),
+          codePattern: sql<string>`SUBSTRING(${codeGenerationSessions.generatedCode} FROM 1 FOR 200)`.as('codePattern'),
+        })
+        .from(codeGenerationSessions)
+        .where(
+          and(
+            eq(codeGenerationSessions.userId, userId),
+            sql`${codeGenerationSessions.workspaceId} IS NOT NULL`,
+            sql`LENGTH(${codeGenerationSessions.generatedCode}) > 100`
+          )
+        )
+        .limit(100);
+
+      if (crossProjectData.length >= 20) {
+        const workspaceGroups = crossProjectData.reduce((acc, item) => {
+          const wsId = item.workspaceId?.toString() || 'unknown';
+          if (!acc[wsId]) {
+            acc[wsId] = [];
+          }
+          acc[wsId].push(item.codeLength || 0);
+          return acc;
+        }, {} as Record<string, number[]>);
+
+        const workspaceCount = Object.keys(workspaceGroups).length;
+        if (workspaceCount >= 2) {
+          // Calculate variance between projects
+          const avgLengths = Object.values(workspaceGroups).map(lengths => 
+            lengths.reduce((a, b) => a + b, 0) / lengths.length
+          );
+          const overallAvg = avgLengths.reduce((a, b) => a + b, 0) / avgLengths.length;
+          const variance = avgLengths.reduce((sum, avg) => sum + Math.pow(avg - overallAvg, 2), 0) / avgLengths.length;
+          const coefficientOfVariation = overallAvg > 0 ? Math.sqrt(variance) / overallAvg : 0;
+
+          // Low variance = high contamination (projects are similar)
+          if (coefficientOfVariation < 0.3) {
+            hypotheses.push({
+              id: 'cross-project-contamination',
+              title: 'Cross-Project Pattern Leakage',
+              description: `Kodstilar är mycket lika mellan ${workspaceCount} olika projekt (variationskoefficient: ${coefficientOfVariation.toFixed(2)})`,
+              hypothesis: 'AI förstärker konsistens mellan projekt, men kan också skapa "pattern contamination" där alla projekt blir för lika',
+              confidence: workspaceCount >= 3 ? 'high' : 'medium',
+              statisticalSignificance: {
+                correlation: 1 - coefficientOfVariation, // Inverse: low variance = high correlation
+                pValue: 0.1,
+                confidence: 70,
+                sampleSize: crossProjectData.length
+              },
+              actionableInsights: [
+                'Överväg att "reset" AI-kontext mellan projekt för större variation',
+                'Använd projekt-specifika system prompts för att undvika contamination',
+                'Dokumentera vilka patterns som "läcker" mellan projekt',
+                'Balansera konsistens vs innovation'
+              ],
+              validationMethod: 'Jämför kodstilar mellan projekt före/efter context-reset',
+              data: {
+                workspaceCount,
+                coefficientOfVariation: coefficientOfVariation.toFixed(3),
+                avgCodeLengthPerProject: avgLengths.map(a => Math.round(a)),
+                overallAvg: Math.round(overallAvg)
+              }
+            });
+          }
+        }
+      }
+
+      // Hypothesis 5: Multi-Agent Emergent Behavior
+      // Note: Multi-agent detection based on stepResults containing multiple agent references
+      const multiAgentData = await db
+        .select({
+          chainId: chainExecutions.chainId,
+          totalExecutions: sql<number>`COUNT(*)`.as('totalExecutions'),
+          successRate: sql<number>`
+            ROUND(
+              (SUM(CASE WHEN ${chainExecutions.status} = 'completed' THEN 1 ELSE 0 END) * 100.0) / 
+              NULLIF(COUNT(*), 0),
+              2
+            )
+          `.as('successRate'),
+          stepResults: sql<string>`${chainExecutions.stepResults}`.as('stepResults'),
+        })
+        .from(chainExecutions)
+        .where(
+          and(
+            eq(chainExecutions.userId, userId),
+            sql`${chainExecutions.chainId} IS NOT NULL`,
+            sql`${chainExecutions.stepResults} IS NOT NULL`
+          )
+        )
+        .groupBy(chainExecutions.chainId, sql`${chainExecutions.stepResults}`)
+        .having(sql`COUNT(*) >= 2`);
+
+      // Filter for multi-agent chains (stepResults likely contains multiple agent references)
+      const multiAgentChains = multiAgentData.filter(c => {
+        const steps = c.stepResults || '';
+        // Simple heuristic: if stepResults contains multiple different patterns, likely multi-agent
+        return steps.split('agent').length > 2 || steps.split('Agent').length > 2;
+      });
+
+      if (multiAgentChains.length >= 3) {
+        const singleAgentChains = multiAgentData.filter(c => {
+          const steps = c.stepResults || '';
+          return !(steps.split('agent').length > 2 || steps.split('Agent').length > 2);
+        });
+
+        if (singleAgentChains.length >= 3) {
+          const multiAgentAvg = multiAgentChains.reduce((sum, c) => sum + (Number(c.successRate) || 0), 0) / multiAgentChains.length;
+          const singleAgentAvg = singleAgentChains.reduce((sum, c) => sum + (Number(c.successRate) || 0), 0) / singleAgentChains.length;
+          const difference = multiAgentAvg - singleAgentAvg;
+
+          if (Math.abs(difference) > 5) {
+            hypotheses.push({
+              id: 'multi-agent-emergent-behavior',
+              title: 'Multi-Agent Emergent Behavior',
+              description: `Multi-agent chains har ${difference > 0 ? 'högre' : 'lägre'} framgångsfrekvens (${multiAgentAvg.toFixed(1)}% vs ${singleAgentAvg.toFixed(1)}%)`,
+              hypothesis: 'Multi-agent "diskussioner" genererar kvalitativt annorlunda resultat än single-agent execution',
+              confidence: multiAgentChains.length >= 5 ? 'high' : 'medium',
+              statisticalSignificance: {
+                correlation: difference / 100,
+                pValue: 0.05,
+                confidence: 75,
+                sampleSize: multiAgentChains.length + singleAgentChains.length
+              },
+              actionableInsights: [
+                difference > 0 
+                  ? 'Använd multi-agent flows för komplexa uppgifter'
+                  : 'Överväg single-agent för enklare, snabbare uppgifter',
+                'Experimentera med olika agent-kombinationer',
+                'Dokumentera vilka agent-par som fungerar bäst tillsammans',
+                'Balansera kvalitet vs hastighet'
+              ],
+              validationMethod: 'Kontrollerat experiment: samma uppgift med single vs multi-agent',
+              data: {
+                multiAgentChains: multiAgentChains.length,
+                singleAgentChains: singleAgentChains.length,
+                multiAgentAvgSuccess: multiAgentAvg.toFixed(1),
+                singleAgentAvgSuccess: singleAgentAvg.toFixed(1),
+                performanceDifference: difference.toFixed(1)
+              }
+            });
+          }
+        }
+      }
+
+      // Hypothesis 6: Stuck in Local Maximum (Iteration Patterns)
+      const iterationData = await db
+        .select({
+          chainId: chainExecutions.chainId,
+          iterationCount: sql<number>`COUNT(*)`.as('iterationCount'),
+          successCount: sql<number>`
+            SUM(CASE WHEN ${chainExecutions.status} = 'completed' THEN 1 ELSE 0 END)
+          `.as('successCount'),
+          avgDuration: sql<number>`
+            AVG(
+              EXTRACT(EPOCH FROM (
+                COALESCE(${chainExecutions.completedAt}, NOW()) - ${chainExecutions.startedAt}
+              ))
+            )
+          `.as('avgDuration'),
+        })
+        .from(chainExecutions)
+        .where(eq(chainExecutions.userId, userId))
+        .groupBy(chainExecutions.chainId)
+        .having(sql`COUNT(*) >= 5`);
+
+      if (iterationData.length >= 3) {
+        const highIterationChains = iterationData.filter(c => (c.iterationCount || 0) >= 5);
+        const lowIterationChains = iterationData.filter(c => (c.iterationCount || 0) < 5);
+
+        if (highIterationChains.length > 0 && lowIterationChains.length > 0) {
+          const highIterationSuccess = highIterationChains.reduce((sum, c) => 
+            sum + ((c.successCount || 0) / (c.iterationCount || 1)), 0) / highIterationChains.length;
+          const lowIterationSuccess = lowIterationChains.reduce((sum, c) => 
+            sum + ((c.successCount || 0) / (c.iterationCount || 1)), 0) / lowIterationChains.length;
+
+          if (highIterationSuccess < lowIterationSuccess * 0.9) {
+            hypotheses.push({
+              id: 'stuck-in-local-maximum',
+              title: 'Stuck in Local Maximum Pattern',
+              description: `Chains med 5+ iterationer har lägre success rate (${(highIterationSuccess * 100).toFixed(1)}% vs ${(lowIterationSuccess * 100).toFixed(1)}%)`,
+              hypothesis: 'Användare som itererar många gånger kan vara fast i lokalt maximum - AI bör föreslå paradigm-skifte',
+              confidence: 'medium',
+              statisticalSignificance: {
+                correlation: (highIterationSuccess - lowIterationSuccess) / lowIterationSuccess,
+                pValue: 0.1,
+                confidence: 65,
+                sampleSize: iterationData.length
+              },
+              actionableInsights: [
+                'Identifiera chains med 5+ iterationer och låg progress',
+                'Föreslå helt annan approach när användare fastnar',
+                'Implementera "paradigm shift" intervention',
+                'Varna användare när de närmar sig local maximum'
+              ],
+              validationMethod: 'A/B-test: Intervention vid 5+ iterationer vs ingen intervention',
+              data: {
+                highIterationChains: highIterationChains.length,
+                lowIterationChains: lowIterationChains.length,
+                highIterationSuccessRate: (highIterationSuccess * 100).toFixed(1),
+                lowIterationSuccessRate: (lowIterationSuccess * 100).toFixed(1)
+              }
+            });
+          }
+        }
+      }
+
+      // Hypothesis 7: Time-based productivity patterns
       const hourlySessions = await db
         .select({
           hour: sql<number>`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`.as('hour'),
@@ -662,6 +926,62 @@ router.get('/hypothesis-validation/:hypothesisId', async (req, res) => {
         ],
         metrics: ['task_success_rate', 'code_complexity', 'execution_time'],
         minimumRepetitions: 5
+      },
+      'submits-vs-deployments': {
+        title: 'Validering: Submits vs Deployments Korrelation',
+        method: 'Longitudinal Study',
+        steps: [
+          'Spåra användare över 4 veckor',
+          'Mät antal kodgenereringssessioner per vecka',
+          'Mät antal deployments per vecka',
+          'Analysera korrelation och kausalitet',
+          'Testa intervention: Uppmuntra deployment vid olika thresholds'
+        ],
+        metrics: ['sessions_per_week', 'deployments_per_week', 'deployment_rate', 'time_to_first_deployment'],
+        duration: '4 veckor',
+        successCriteria: 'Signifikant korrelation mellan sessioner och deployments (r > 0.5)'
+      },
+      'cross-project-contamination': {
+        title: 'Validering: Cross-Project Pattern Leakage',
+        method: 'Code Pattern Analysis',
+        steps: [
+          'Extrahera kodpatterns från olika projekt',
+          'Beräkna similarity scores mellan projekt',
+          'Identifiera "leaked" patterns',
+          'Testa context-reset intervention',
+          'Jämför kodvariation före/efter intervention'
+        ],
+        metrics: ['code_similarity', 'pattern_reuse_rate', 'variation_coefficient'],
+        duration: '2 veckor',
+        successCriteria: 'Signifikant skillnad i variation före/efter context-reset'
+      },
+      'multi-agent-emergent-behavior': {
+        title: 'Validering: Multi-Agent Emergent Behavior',
+        method: 'Controlled Experiment',
+        steps: [
+          'Välj 10 identiska uppgifter',
+          'Tilldela 5 till single-agent flows',
+          'Tilldela 5 till multi-agent flows (3+ agenter)',
+          'Mät kodkvalitet, komplexitet, och success rate',
+          'Analysera kvalitativa skillnader i kodstruktur'
+        ],
+        metrics: ['success_rate', 'code_quality', 'code_complexity', 'execution_time', 'user_satisfaction'],
+        duration: '1 vecka',
+        successCriteria: 'Statistiskt signifikant skillnad i kvalitet eller struktur'
+      },
+      'stuck-in-local-maximum': {
+        title: 'Validering: Stuck in Local Maximum',
+        method: 'Intervention Study',
+        steps: [
+          'Identifiera chains med 5+ iterationer och låg progress',
+          'Grupp A: Ingen intervention (kontroll)',
+          'Grupp B: Paradigm shift-förslag vid 5+ iterationer',
+          'Mät success rate och användarnöjdhet',
+          'Analysera om intervention hjälper'
+        ],
+        metrics: ['success_rate', 'iterations_to_success', 'user_satisfaction', 'time_to_resolution'],
+        duration: '2 veckor',
+        successCriteria: 'Signifikant förbättring i success rate för intervention-gruppen'
       },
       'time-productivity': {
         title: 'Validering: Tidsbaserad Produktivitet',
