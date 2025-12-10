@@ -29,7 +29,7 @@ router.get('/overview', async (req, res) => {
     }
 
     // 1. Agent Performance Analysis
-    // Filter to only show agents with names (exclude unknown agents)
+    // Get all sessions with agentId, then try to match with agents table
     const agentPerformance = await db
       .select({
         agentId: codeGenerationSessions.agentId,
@@ -50,11 +50,35 @@ router.get('/overview', async (req, res) => {
         `,
       })
       .from(codeGenerationSessions)
-      .innerJoin(agents, eq(codeGenerationSessions.agentId, agents.id.toString()))
-      .where(eq(codeGenerationSessions.userId, userId))
+      .leftJoin(agents, sql`${codeGenerationSessions.agentId} = ${agents.id}`)
+      .where(
+        and(
+          eq(codeGenerationSessions.userId, userId),
+          sql`${codeGenerationSessions.agentId} IS NOT NULL AND ${codeGenerationSessions.agentId} != ''`
+        )
+      )
       .groupBy(codeGenerationSessions.agentId, agents.name)
       .orderBy(desc(sql`COUNT(*)`))
       .limit(10);
+    
+    // If agent name is missing, try to fetch it from agents table
+    const agentPerformanceWithNames = await Promise.all(
+      agentPerformance.map(async (agent) => {
+        if (!agent.agentName && agent.agentId) {
+          // Try to find agent by ID
+          const [foundAgent] = await db
+            .select({ name: agents.name })
+            .from(agents)
+            .where(eq(agents.id, agent.agentId))
+            .limit(1);
+          
+          if (foundAgent?.name) {
+            return { ...agent, agentName: foundAgent.name };
+          }
+        }
+        return agent;
+      })
+    );
 
     // 2. Code Generation Patterns
     const codePatterns = await db
@@ -141,7 +165,7 @@ router.get('/overview', async (req, res) => {
 
     // 6. Interesting Correlations
     const correlations = {
-      agentSuccessVsCodeLength: agentPerformance.map(a => ({
+      agentSuccessVsCodeLength: agentPerformanceWithNames.map(a => ({
         agent: a.agentName || `Agent ${a.agentId || 'Okänd'}`,
         agentId: a.agentId,
         successRate: Number(a.successRate) || 0,
@@ -171,11 +195,11 @@ router.get('/overview', async (req, res) => {
     }
 
     // Find best performing agent
-    const bestAgent = agentPerformance.reduce((max, a) => {
+    const bestAgent = agentPerformanceWithNames.reduce((max, a) => {
       const maxRate = Number(max.successRate) || 0;
       const aRate = Number(a.successRate) || 0;
       return aRate > maxRate ? a : max;
-    }, agentPerformance[0] || { agentName: null, agentId: null, successRate: 0 });
+    }, agentPerformanceWithNames[0] || { agentName: null, agentId: null, successRate: 0 });
     if (bestAgent && bestAgent.totalSessions > 0) {
       const agentDisplayName = bestAgent.agentName || `Agent ${bestAgent.agentId || 'Okänd'}`;
       const successRate = Number(bestAgent.successRate) || 0;
@@ -200,7 +224,7 @@ router.get('/overview', async (req, res) => {
     res.json({
       success: true,
       data: {
-        agentPerformance,
+        agentPerformance: agentPerformanceWithNames,
         codePatterns,
         projectActivity,
         collaborationStats: collaborationStats[0] || {},
@@ -208,8 +232,8 @@ router.get('/overview', async (req, res) => {
         correlations,
         insights,
         summary: {
-          totalSessions: agentPerformance.reduce((sum, a) => sum + (a.totalSessions || 0), 0),
-          uniqueAgents: agentPerformance.length,
+          totalSessions: agentPerformanceWithNames.reduce((sum, a) => sum + (a.totalSessions || 0), 0),
+          uniqueAgents: agentPerformanceWithNames.length,
           activeProjects: projectActivity.reduce((sum, p) => sum + (p.activeProjects || 0), 0),
         },
       },
