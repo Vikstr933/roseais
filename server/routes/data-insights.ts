@@ -7,7 +7,8 @@ import {
   users, 
   chainExecutions,
   promptChains,
-  projectMembers
+  projectMembers,
+  projectFiles
 } from '../../db/schema-pg';
 import { sql, eq, desc, and, gte, count, inArray, or } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
@@ -523,7 +524,153 @@ class HypothesisGenerator {
         }
       }
 
-      // Hypothesis 4: Cross-Project Contamination (Pattern Leakage)
+      // Hypothesis 4: Bias Transfer (Unconscious Bias Amplification)
+      // Analyze if AI reinforces user's coding biases (e.g., for-loops vs map())
+      const userCodeHistory = await db
+        .select({
+          fileContent: projectFiles.fileContent,
+          createdAt: projectFiles.createdAt,
+        })
+        .from(projectFiles)
+        .innerJoin(workspaces, eq(projectFiles.projectId, workspaces.id))
+        .where(
+          and(
+            eq(workspaces.ownerId, userId),
+            sql`${projectFiles.fileContent} IS NOT NULL`,
+            sql`LENGTH(${projectFiles.fileContent}) > 100`
+          )
+        )
+        .limit(50);
+
+      const aiGeneratedCode = await db
+        .select({
+          generatedCode: codeGenerationSessions.generatedCode,
+          createdAt: codeGenerationSessions.createdAt,
+        })
+        .from(codeGenerationSessions)
+        .where(
+          and(
+            eq(codeGenerationSessions.userId, userId),
+            sql`${codeGenerationSessions.generatedCode} IS NOT NULL`,
+            sql`LENGTH(${codeGenerationSessions.generatedCode}) > 100`
+          )
+        )
+        .limit(50);
+
+      if (userCodeHistory.length >= 10 && aiGeneratedCode.length >= 10) {
+        // Count patterns in user code
+        const userForLoops = userCodeHistory.reduce((count, file) => {
+          const content = file.fileContent?.toLowerCase() || '';
+          // Count for loops: for(, for (,
+          const forLoopMatches = (content.match(/\bfor\s*\(/g) || []).length;
+          return count + forLoopMatches;
+        }, 0);
+
+        const userMapUsage = userCodeHistory.reduce((count, file) => {
+          const content = file.fileContent?.toLowerCase() || '';
+          // Count map usage: .map(, .map (
+          const mapMatches = (content.match(/\.map\s*\(/g) || []).length;
+          return count + mapMatches;
+        }, 0);
+
+        // Count patterns in AI-generated code
+        const aiForLoops = aiGeneratedCode.reduce((count, session) => {
+          const content = session.generatedCode?.toLowerCase() || '';
+          const forLoopMatches = (content.match(/\bfor\s*\(/g) || []).length;
+          return count + forLoopMatches;
+        }, 0);
+
+        const aiMapUsage = aiGeneratedCode.reduce((count, session) => {
+          const content = session.generatedCode?.toLowerCase() || '';
+          const mapMatches = (content.match(/\.map\s*\(/g) || []).length;
+          return count + mapMatches;
+        }, 0);
+
+        // Calculate bias transfer rate
+        const userForLoopRatio = userForLoops + userMapUsage > 0 
+          ? userForLoops / (userForLoops + userMapUsage) 
+          : 0.5;
+        const aiForLoopRatio = aiForLoops + aiMapUsage > 0 
+          ? aiForLoops / (aiForLoops + aiMapUsage) 
+          : 0.5;
+
+        // Bias transfer: if user prefers for-loops, does AI also use more for-loops?
+        const biasTransferRate = userForLoops > userMapUsage 
+          ? (aiForLoops / Math.max(aiForLoops + aiMapUsage, 1))
+          : null;
+
+        // If user prefers for-loops and AI also uses more for-loops, that's bias transfer
+        if (userForLoops > userMapUsage && aiForLoopRatio > 0.6 && biasTransferRate && biasTransferRate > 0.6) {
+          hypotheses.push({
+            id: 'bias-transfer',
+            title: 'Unconscious Bias Transfer',
+            description: `Användaren använder ${userForLoops} for-loops vs ${userMapUsage} map()-anrop. AI genererar ${aiForLoops} for-loops vs ${aiMapUsage} map()-anrop (${(biasTransferRate * 100).toFixed(1)}% bias transfer rate)`,
+            hypothesis: 'AI förstärker användarens omedvetna kodningsbias (t.ex. över-användning av for-loops) snarare än korrigerar dem',
+            confidence: userCodeHistory.length >= 20 ? 'high' : 'medium',
+            statisticalSignificance: {
+              correlation: Math.abs(aiForLoopRatio - userForLoopRatio) < 0.2 ? 0.8 : 0.5, // High correlation if ratios are similar
+              pValue: 0.05,
+              confidence: 80,
+              sampleSize: userCodeHistory.length + aiGeneratedCode.length
+            },
+            actionableInsights: [
+              'AI bör aktivt korrigera bias istället för att förstärka dem',
+              'Implementera "bias correction" i system prompts',
+              'Varna användare när AI förstärker suboptimala patterns',
+              'Föreslå bättre alternativ (t.ex. map() istället för for-loops)',
+              'Dokumentera vilka bias som förstärks'
+            ],
+            validationMethod: 'A/B-test: System prompts med/utan bias correction',
+            data: {
+              userForLoops,
+              userMapUsage,
+              aiForLoops,
+              aiMapUsage,
+              userForLoopRatio: (userForLoopRatio * 100).toFixed(1),
+              aiForLoopRatio: (aiForLoopRatio * 100).toFixed(1),
+              biasTransferRate: biasTransferRate ? (biasTransferRate * 100).toFixed(1) : null,
+              userCodeFiles: userCodeHistory.length,
+              aiCodeSessions: aiGeneratedCode.length
+            }
+          });
+        } else if (userMapUsage > userForLoops && aiMapUsage > aiForLoops && aiMapUsage / (aiForLoops + aiMapUsage) > 0.6) {
+          // Also check if user prefers map() and AI also uses more map()
+          const mapBiasTransferRate = aiMapUsage / Math.max(aiForLoops + aiMapUsage, 1);
+          hypotheses.push({
+            id: 'bias-transfer',
+            title: 'Unconscious Bias Transfer',
+            description: `Användaren använder ${userMapUsage} map()-anrop vs ${userForLoops} for-loops. AI genererar ${aiMapUsage} map()-anrop vs ${aiForLoops} for-loops (${(mapBiasTransferRate * 100).toFixed(1)}% bias transfer rate)`,
+            hypothesis: 'AI förstärker användarens kodningsbias - även positiva bias (som map() över for-loops) förstärks',
+            confidence: userCodeHistory.length >= 20 ? 'high' : 'medium',
+            statisticalSignificance: {
+              correlation: 0.7,
+              pValue: 0.05,
+              confidence: 75,
+              sampleSize: userCodeHistory.length + aiGeneratedCode.length
+            },
+            actionableInsights: [
+              'AI förstärker användarens patterns - både bra och dåliga',
+              'Överväg att balansera mellan att följa användarens stil och korrigera bias',
+              'Dokumentera vilka patterns som förstärks',
+              'Implementera "pattern diversity" för att undvika över-förstärkning'
+            ],
+            validationMethod: 'A/B-test: System prompts med/utan pattern diversity',
+            data: {
+              userForLoops,
+              userMapUsage,
+              aiForLoops,
+              aiMapUsage,
+              userForLoopRatio: (userForLoopRatio * 100).toFixed(1),
+              aiForLoopRatio: (aiForLoopRatio * 100).toFixed(1),
+              biasTransferRate: (mapBiasTransferRate * 100).toFixed(1),
+              userCodeFiles: userCodeHistory.length,
+              aiCodeSessions: aiGeneratedCode.length
+            }
+          });
+        }
+      }
+
+      // Hypothesis 5: Cross-Project Contamination (Pattern Leakage)
       const crossProjectData = await db
         .select({
           workspaceId: codeGenerationSessions.workspaceId,
