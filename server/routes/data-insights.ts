@@ -29,6 +29,7 @@ router.get('/overview', async (req, res) => {
     }
 
     // 1. Agent Performance Analysis
+    // Filter out sessions with extremely short code (likely test data) - minimum 10 characters
     const agentPerformance = await db
       .select({
         agentId: codeGenerationSessions.agentId,
@@ -50,12 +51,18 @@ router.get('/overview', async (req, res) => {
       })
       .from(codeGenerationSessions)
       .leftJoin(agents, eq(codeGenerationSessions.agentId, agents.id.toString()))
-      .where(eq(codeGenerationSessions.userId, userId))
+      .where(
+        and(
+          eq(codeGenerationSessions.userId, userId),
+          sql`LENGTH(${codeGenerationSessions.generatedCode}) >= 10` // Filter out test data
+        )
+      )
       .groupBy(codeGenerationSessions.agentId, agents.name)
       .orderBy(desc(sql`COUNT(*)`))
       .limit(10);
 
     // 2. Code Generation Patterns
+    // Filter out test data (sessions with code < 10 characters)
     const codePatterns = await db
       .select({
         hour: sql<number>`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`,
@@ -63,7 +70,12 @@ router.get('/overview', async (req, res) => {
         avgLength: sql<number>`ROUND(AVG(LENGTH(${codeGenerationSessions.generatedCode})), 0)`,
       })
       .from(codeGenerationSessions)
-      .where(eq(codeGenerationSessions.userId, userId))
+      .where(
+        and(
+          eq(codeGenerationSessions.userId, userId),
+          sql`LENGTH(${codeGenerationSessions.generatedCode}) >= 10` // Filter out test data
+        )
+      )
       .groupBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`)
       .orderBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`);
 
@@ -141,14 +153,15 @@ router.get('/overview', async (req, res) => {
     // 6. Interesting Correlations
     const correlations = {
       agentSuccessVsCodeLength: agentPerformance.map(a => ({
-        agent: a.agentName || 'Unknown',
-        successRate: a.successRate || 0,
-        avgCodeLength: a.avgCodeLength || 0,
+        agent: a.agentName || `Agent ${a.agentId || 'Okänd'}`,
+        agentId: a.agentId,
+        successRate: Number(a.successRate) || 0,
+        avgCodeLength: Number(a.avgCodeLength) || 0,
       })),
       timeOfDayVsProductivity: codePatterns.map(p => ({
-        hour: p.hour || 0,
-        sessions: p.count || 0,
-        avgCodeLength: p.avgLength || 0,
+        hour: Number(p.hour) || 0,
+        sessions: Number(p.count) || 0,
+        avgCodeLength: Number(p.avgLength) || 0,
       })),
     };
 
@@ -159,11 +172,11 @@ router.get('/overview', async (req, res) => {
     const mostProductiveHour = codePatterns.reduce((max, p) => 
       (p.count || 0) > (max.count || 0) ? p : max, codePatterns[0] || { hour: 0, count: 0 }
     );
-    if (mostProductiveHour) {
+    if (mostProductiveHour && mostProductiveHour.count > 0) {
       insights.push({
         type: 'productivity',
         title: 'Mest produktiva tiden',
-        description: `Du genererar mest kod klockan ${mostProductiveHour.hour}:00`,
+        description: `Du genererar mest kod klockan ${mostProductiveHour.hour}:00 (${mostProductiveHour.count} sessioner, i snitt ${Math.round(mostProductiveHour.avgLength || 0).toLocaleString()} tecken)`,
         data: mostProductiveHour,
       });
     }
@@ -171,13 +184,14 @@ router.get('/overview', async (req, res) => {
     // Find best performing agent
     const bestAgent = agentPerformance.reduce((max, a) => 
       (a.successRate || 0) > (max.successRate || 0) ? a : max, 
-      agentPerformance[0] || { agentName: 'N/A', successRate: 0 }
+      agentPerformance[0] || { agentName: null, agentId: null, successRate: 0 }
     );
-    if (bestAgent && bestAgent.agentName) {
+    if (bestAgent && bestAgent.totalSessions > 0) {
+      const agentDisplayName = bestAgent.agentName || `Agent ${bestAgent.agentId || 'Okänd'}`;
       insights.push({
         type: 'agent_performance',
         title: 'Bäst presterande agent',
-        description: `${bestAgent.agentName} har högst framgångsfrekvens (${bestAgent.successRate}%)`,
+        description: `${agentDisplayName} har högst framgångsfrekvens (${(bestAgent.successRate || 0).toFixed(1)}%) med ${bestAgent.totalSessions} sessioner`,
         data: bestAgent,
       });
     }

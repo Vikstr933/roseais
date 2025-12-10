@@ -74,6 +74,7 @@ interface DataInsights {
     data: any;
   }>;
   agentPerformance: Array<{
+    agentId: string | null;
     agentName: string | null;
     totalSessions: number;
     successRate: number;
@@ -577,26 +578,29 @@ export default function AdminDashboard() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-purple-200/30">
-                              {insights.agentPerformance.slice(0, 10).map((agent, idx) => (
+                              {insights.agentPerformance.slice(0, 10).map((agent, idx) => {
+                                const agentDisplayName = agent.agentName || (agent.agentId ? `Agent ${agent.agentId}` : 'Okänd agent');
+                                return (
                                 <tr key={idx} className="hover:bg-purple-50/50">
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {agent.agentName || 'Okänd agent'}
+                                    {agentDisplayName}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{agent.totalSessions}</td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <span className={`px-2 py-1 text-xs rounded-full ${
-                                      agent.successRate >= 80 ? 'bg-emerald-100 text-emerald-700' :
-                                      agent.successRate >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                      (Number(agent.successRate) || 0) >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                                      (Number(agent.successRate) || 0) >= 60 ? 'bg-yellow-100 text-yellow-700' :
                                       'bg-rose-100 text-rose-700'
                                     }`}>
-                                      {agent.successRate.toFixed(1)}%
+                                      {(Number(agent.successRate) || 0).toFixed(1)}%
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                    {Math.round(agent.avgCodeLength).toLocaleString()} tecken
+                                    {Math.round(Number(agent.avgCodeLength) || 0).toLocaleString()} tecken
                                   </td>
                                 </tr>
-                              ))}
+                              );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -609,15 +613,34 @@ export default function AdminDashboard() {
                         <h3 className="text-lg font-semibold text-gray-900 mb-4">⏰ Tidsmönster</h3>
                         <p className="text-sm text-gray-600 mb-4">När genereras mest kod?</p>
                         <div className="grid grid-cols-6 md:grid-cols-12 gap-2">
-                          {insights.codePatterns.map((pattern, idx) => (
-                            <div key={idx} className="text-center">
-                              <div className="text-xs text-gray-600 mb-1">{pattern.hour}:00</div>
-                              <div className="bg-violet-100 rounded p-2">
-                                <div className="text-sm font-semibold text-gray-900">{pattern.count}</div>
-                                <div className="text-xs text-gray-600">sessioner</div>
+                          {Array.from({ length: 24 }, (_, hour) => {
+                            const pattern = insights.codePatterns.find(p => Number(p.hour) === hour);
+                            const count = pattern ? Number(pattern.count) : 0;
+                            const maxCount = Math.max(...insights.codePatterns.map(p => Number(p.count) || 0), 1);
+                            const heightPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                            
+                            return (
+                              <div key={hour} className="text-center">
+                                <div className="text-xs text-gray-600 mb-1">{hour.toString().padStart(2, '0')}:00</div>
+                                <div className="bg-violet-50 rounded p-1 min-h-[60px] flex flex-col justify-end">
+                                  {count > 0 ? (
+                                    <>
+                                      <div 
+                                        className="bg-violet-500 rounded transition-all hover:bg-violet-600"
+                                        style={{ height: `${Math.max(heightPercent, 10)}%` }}
+                                        title={`${count} sessioner, i snitt ${Math.round(Number(pattern?.avgLength) || 0).toLocaleString()} tecken`}
+                                      >
+                                        <div className="text-xs font-semibold text-white pt-1">{count}</div>
+                                      </div>
+                                      <div className="text-xs text-gray-600 mt-1">sessioner</div>
+                                    </>
+                                  ) : (
+                                    <div className="text-xs text-gray-400">-</div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

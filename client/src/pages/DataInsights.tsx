@@ -227,9 +227,14 @@ export default function DataInsights() {
             <CardContent>
               {insights.agentPerformance && insights.agentPerformance.length > 0 ? (
                 <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={insights.agentPerformance}>
+                  <BarChart data={insights.agentPerformance.map(a => ({
+                    ...a,
+                    agentName: a.agentName || (a.agentId ? `Agent ${a.agentId}` : 'Okänd agent'),
+                    successRate: Number(a.successRate) || 0,
+                    avgCodeLength: Number(a.avgCodeLength) || 0,
+                  }))}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="agentName" />
+                    <XAxis dataKey="agentName" angle={-45} textAnchor="end" height={100} />
                     <YAxis yAxisId="left" />
                     <YAxis yAxisId="right" orientation="right" />
                     <Tooltip />
