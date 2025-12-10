@@ -1130,6 +1130,26 @@ router.get('/hypothesis-validation/:hypothesisId', async (req, res) => {
         duration: '2 veckor',
         successCriteria: 'Signifikant förbättring i success rate för intervention-gruppen'
       },
+      'bias-transfer': {
+        title: 'Validering: Unconscious Bias Transfer',
+        method: 'Controlled Code Analysis',
+        steps: [
+          'Identifiera användare med tydlig kodningsbias (t.ex. för mycket for-loops)',
+          'Grupp A: Standard system prompts (kontroll)',
+          'Grupp B: System prompts med explicit bias correction',
+          'Analysera AI-genererad kod för båda grupperna',
+          'Jämför om AI korrigerar eller förstärker bias',
+          'Mät kodkvalitet och användarnöjdhet'
+        ],
+        metrics: ['bias_transfer_rate', 'code_quality', 'pattern_diversity', 'user_satisfaction'],
+        duration: '3 veckor',
+        successCriteria: 'Signifikant skillnad i bias transfer rate mellan grupper (p < 0.05)',
+        ethicalConsiderations: [
+          'Viktigt att inte tvinga användare att ändra sin kodningsstil',
+          'Balansera mellan att korrigera suboptimala patterns och respektera användarens preferenser',
+          'Transparent om när och varför AI föreslår alternativa patterns'
+        ]
+      },
       'time-productivity': {
         title: 'Validering: Tidsbaserad Produktivitet',
         method: 'Observationsstudie',
