@@ -121,7 +121,7 @@ export default function DataInsights() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto px-4 pt-20 sm:pt-24 pb-8">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -134,7 +134,7 @@ export default function DataInsights() {
 
   if (error) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto px-4 pt-20 sm:pt-24 pb-8">
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -144,7 +144,7 @@ export default function DataInsights() {
 
   if (!insights) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto px-4 pt-20 sm:pt-24 pb-8">
         <Alert>
           <AlertDescription>Ingen data hittades. Generera lite kod för att se intressanta insikter!</AlertDescription>
         </Alert>
@@ -153,7 +153,7 @@ export default function DataInsights() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto px-4 pt-20 sm:pt-24 pb-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Dataanalys & Insikter</h1>
