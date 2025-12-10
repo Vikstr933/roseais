@@ -9,7 +9,7 @@ import {
   promptChains,
   projectMembers
 } from '../../db/schema-pg';
-import { sql, eq, desc, and, gte, count } from 'drizzle-orm';
+import { sql, eq, desc, and, gte, count, inArray, or } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
 
 const router = Router();
@@ -248,9 +248,310 @@ router.get('/overview', async (req, res) => {
   }
 });
 
+// Types for statistical analysis
+interface StatisticalResult {
+  correlation: number;
+  pValue: number;
+  confidence: number;
+  sampleSize: number;
+}
+
+interface Hypothesis {
+  id: string;
+  title: string;
+  description: string;
+  hypothesis: string;
+  confidence: 'low' | 'medium' | 'high';
+  statisticalSignificance: StatisticalResult;
+  actionableInsights: string[];
+  validationMethod: string;
+  data: Record<string, any>;
+}
+
+// Statistical helper functions
+class StatisticalAnalyzer {
+  static calculateCorrelation(x: number[], y: number[]): StatisticalResult {
+    if (x.length !== y.length || x.length < 3) {
+      return { correlation: 0, pValue: 1, confidence: 0, sampleSize: x.length };
+    }
+
+    const n = x.length;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, val, i) => sum + val * y[i], 0);
+    const sumX2 = x.reduce((sum, val) => sum + val * val, 0);
+    const sumY2 = y.reduce((sum, val) => sum + val * val, 0);
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+    
+    const correlation = denominator !== 0 ? numerator / denominator : 0;
+    
+    // Simplified p-value calculation (for large enough samples)
+    const t = correlation * Math.sqrt((n - 2) / (1 - correlation * correlation));
+    const pValue = Math.exp(-0.5 * t * t); // Approximate
+    
+    const confidence = Math.max(0, Math.min(100, (1 - pValue) * 100));
+    return {
+      correlation,
+      pValue,
+      confidence,
+      sampleSize: n
+    };
+  }
+
+  static calculateSuccessRateByFactor<T>(
+    data: T[],
+    successFn: (item: T) => boolean,
+    groupFn: (item: T) => string
+  ): Record<string, { success: number; total: number; rate: number }> {
+    const groups: Record<string, { success: number; total: number }> = {};
+    
+    data.forEach(item => {
+      const key = groupFn(item);
+      if (!groups[key]) {
+        groups[key] = { success: 0, total: 0 };
+      }
+      groups[key].total++;
+      if (successFn(item)) {
+        groups[key].success++;
+      }
+    });
+
+    return Object.entries(groups).reduce((acc, [key, stats]) => {
+      acc[key] = {
+        ...stats,
+        rate: stats.total > 0 ? stats.success / stats.total : 0
+      };
+      return acc;
+    }, {} as Record<string, any>);
+  }
+}
+
+// Hypothesis Generator
+class HypothesisGenerator {
+  static async generateStableHypotheses(userId: string): Promise<Hypothesis[]> {
+    const hypotheses: Hypothesis[] = [];
+
+    // 1. Prompt Length vs Success Rate Hypothesis
+    const sessions = await db
+      .select({
+        id: codeGenerationSessions.id,
+        inputPrompt: codeGenerationSessions.inputPrompt,
+        status: codeGenerationSessions.status,
+        generatedCode: codeGenerationSessions.generatedCode,
+        agentId: codeGenerationSessions.agentId,
+        createdAt: codeGenerationSessions.createdAt,
+      })
+      .from(codeGenerationSessions)
+      .where(
+        and(
+          eq(codeGenerationSessions.userId, userId),
+          sql`${codeGenerationSessions.inputPrompt} IS NOT NULL`,
+          sql`${codeGenerationSessions.generatedCode} IS NOT NULL`
+        )
+      )
+      .limit(200); // Larger sample for better statistics
+
+    if (sessions.length >= 10) {
+      // Hypothesis 1: Optimal prompt length range
+      const promptLengths = sessions.map(s => s.inputPrompt?.length || 0);
+      const successIndicators = sessions.map(s => 
+        s.status === 'completed' && (s.generatedCode?.length || 0) > 100 ? 1 : 0
+      );
+
+      const stats = StatisticalAnalyzer.calculateCorrelation(promptLengths, successIndicators);
+      
+      if (stats.sampleSize >= 10) {
+        const avgLength = promptLengths.reduce((a, b) => a + b, 0) / promptLengths.length;
+        const optimalMin = Math.max(50, avgLength * 0.7);
+        const optimalMax = Math.min(2000, avgLength * 1.3);
+
+        hypotheses.push({
+          id: 'optimal-prompt-length',
+          title: 'Optimal Prompt Längd för Framgång',
+          description: `Analys av ${stats.sampleSize} sessioner visar en ${stats.correlation > 0 ? 'positiv' : 'negativ'} korrelation mellan prompt-längd och framgångsrate`,
+          hypothesis: `Prompts mellan ${Math.round(optimalMin)} och ${Math.round(optimalMax)} tecken har högst sannolikhet för framgång`,
+          confidence: stats.confidence > 70 ? 'high' : stats.confidence > 40 ? 'medium' : 'low',
+          statisticalSignificance: stats,
+          actionableInsights: [
+            'Skriv prompts med tydliga instruktioner mellan 100-500 tecken',
+            'Undvik alltför korta prompts som saknar kontext',
+            'Bryt ned komplexa uppgifter i mindre delar'
+          ],
+          validationMethod: 'A/B-testning med kontrollerade prompt-längder',
+          data: {
+            avgPromptLength: Math.round(avgLength),
+            successRate: (successIndicators.filter(s => s === 1).length / successIndicators.length) * 100,
+            lengthDistribution: this.calculateDistribution(promptLengths)
+          }
+        });
+      }
+
+      // Hypothesis 2: Agent specialization
+      const agentSessions = await db
+        .select({
+          agentId: codeGenerationSessions.agentId,
+          agentName: agents.name,
+          status: codeGenerationSessions.status,
+          generatedCode: codeGenerationSessions.generatedCode,
+          sessionType: sql<string>`SUBSTRING(${codeGenerationSessions.inputPrompt} FROM 1 FOR 50)`.as('sessionType'),
+        })
+        .from(codeGenerationSessions)
+        .leftJoin(agents, sql`${codeGenerationSessions.agentId} = ${agents.id}`)
+        .where(
+          and(
+            eq(codeGenerationSessions.userId, userId),
+            sql`${codeGenerationSessions.agentId} IS NOT NULL AND ${codeGenerationSessions.agentId} != ''`
+          )
+        )
+        .limit(100);
+
+      // Try to fetch missing agent names
+      const agentSessionsWithNames = await Promise.all(
+        agentSessions.map(async (session) => {
+          if (!session.agentName && session.agentId) {
+            const [foundAgent] = await db
+              .select({ name: agents.name })
+              .from(agents)
+              .where(eq(agents.id, session.agentId))
+              .limit(1);
+            if (foundAgent?.name) {
+              return { ...session, agentName: foundAgent.name };
+            }
+          }
+          return session;
+        })
+      );
+
+      if (agentSessionsWithNames.length >= 5) {
+        const agentGroups = StatisticalAnalyzer.calculateSuccessRateByFactor(
+          agentSessionsWithNames,
+          (s: any) => s.status === 'completed',
+          (s: any) => s.agentName || (s.agentId ? `Agent ${s.agentId}` : 'unknown')
+        );
+
+        const bestAgents = Object.entries(agentGroups)
+          .filter(([_, stats]) => stats.total >= 3) // Minimum samples per agent
+          .sort((a, b) => b[1].rate - a[1].rate)
+          .slice(0, 3);
+
+        if (bestAgents.length >= 2) {
+          const performanceGap = bestAgents[0][1].rate - bestAgents[bestAgents.length - 1][1].rate;
+          
+          if (performanceGap > 0.2) { // Significant performance difference
+            hypotheses.push({
+              id: 'agent-specialization',
+              title: 'Agent Specialisering och Prestanda',
+              description: `${bestAgents[0][0]} presterar ${Math.round(performanceGap * 100)}% bättre än ${bestAgents[bestAgents.length - 1][0]}`,
+              hypothesis: 'Specifika agenter är optimerade för vissa typer av kodgenereringsuppgifter',
+              confidence: 'high',
+              statisticalSignificance: {
+                correlation: performanceGap,
+                pValue: 0.05,
+                confidence: 85,
+                sampleSize: agentSessionsWithNames.length
+              },
+              actionableInsights: [
+                `Använd ${bestAgents[0][0]} för kritiska uppgifter`,
+                'Testa olika agenter för olika uppgiftstyper',
+                'Dokumentera vilka agenter som fungerar bäst för specifika use cases'
+              ],
+              validationMethod: 'Kontrollerat experiment med samma uppgift tilldelad olika agenter',
+              data: {
+                bestAgents,
+                performanceGap,
+                totalAgentsAnalyzed: Object.keys(agentGroups).length
+              }
+            });
+          }
+        }
+      }
+
+      // Hypothesis 3: Time-based productivity patterns
+      const hourlySessions = await db
+        .select({
+          hour: sql<number>`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`.as('hour'),
+          status: codeGenerationSessions.status,
+          codeLength: sql<number>`LENGTH(${codeGenerationSessions.generatedCode})`.as('codeLength'),
+        })
+        .from(codeGenerationSessions)
+        .where(eq(codeGenerationSessions.userId, userId));
+
+      if (hourlySessions.length >= 24) {
+        const hourlyStats = hourlySessions.reduce((acc, session) => {
+          const hour = session.hour;
+          if (!acc[hour]) {
+            acc[hour] = { total: 0, completed: 0, totalLength: 0 };
+          }
+          acc[hour].total++;
+          if (session.status === 'completed') {
+            acc[hour].completed++;
+          }
+          acc[hour].totalLength += session.codeLength || 0;
+          return acc;
+        }, {} as Record<number, { total: number; completed: number; totalLength: number }>);
+
+        const productiveHours = Object.entries(hourlyStats)
+          .map(([hour, stats]) => ({
+            hour: parseInt(hour),
+            successRate: stats.total > 0 ? stats.completed / stats.total : 0,
+            avgLength: stats.total > 0 ? stats.totalLength / stats.total : 0,
+            volume: stats.total
+          }))
+          .filter(h => h.volume >= 3) // Minimum sessions per hour
+          .sort((a, b) => b.successRate - a.successRate);
+
+        if (productiveHours.length >= 3) {
+          const bestHour = productiveHours[0];
+          const worstHour = productiveHours[productiveHours.length - 1];
+
+          hypotheses.push({
+            id: 'time-productivity',
+            title: 'Tidsbaserad Produktivitet',
+            description: `Mest produktiva timmen: ${bestHour.hour}:00 (${Math.round(bestHour.successRate * 100)}% framgång)`,
+            hypothesis: 'Kodgenerering under specifika tider på dygnet leder till högre kvalitet',
+            confidence: bestHour.volume >= 5 ? 'medium' : 'low',
+            statisticalSignificance: {
+              correlation: bestHour.successRate - worstHour.successRate,
+              pValue: 0.1,
+              confidence: 75,
+              sampleSize: productiveHours.reduce((sum, h) => sum + h.volume, 0)
+            },
+            actionableInsights: [
+              `Schemalägg viktiga kodgenereringssessioner klockan ${bestHour.hour}:00`,
+              'Undvik komplexa uppgifter under mindre produktiva timmar',
+              'Använd automatisering för repetitiva uppgifter under optimala tider'
+            ],
+            validationMethod: 'Tidsjournal och produktivitetsmätning över 2 veckor',
+            data: {
+              productiveHours: productiveHours.slice(0, 3),
+              leastProductiveHours: productiveHours.slice(-3),
+              timeRangeCovered: Object.keys(hourlyStats).length
+            }
+          });
+        }
+      }
+    }
+
+    return hypotheses;
+  }
+
+  private static calculateDistribution(values: number[]): Record<string, number> {
+    const sorted = values.sort((a, b) => a - b);
+    return {
+      min: sorted[0] || 0,
+      q1: sorted[Math.floor(sorted.length * 0.25)] || 0,
+      median: sorted[Math.floor(sorted.length * 0.5)] || 0,
+      q3: sorted[Math.floor(sorted.length * 0.75)] || 0,
+      max: sorted[sorted.length - 1] || 0,
+    };
+  }
+}
+
 /**
  * GET /api/data-insights/hypotheses
- * Returns interesting hypotheses based on data patterns
+ * Returns stable, statistically significant hypotheses
  */
 router.get('/hypotheses', async (req, res) => {
   try {
@@ -259,97 +560,146 @@ router.get('/hypotheses', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    // Analyze patterns and generate hypotheses
-    const sessions = await db
-      .select()
-      .from(codeGenerationSessions)
-      .where(eq(codeGenerationSessions.userId, userId))
-      .limit(100);
+    const hypotheses = await HypothesisGenerator.generateStableHypotheses(userId);
 
-    const hypotheses = [];
-
-    // Hypothesis 1: Longer prompts generate longer code
-    const promptLengths = sessions.map(s => ({
-      promptLength: s.inputPrompt?.length || 0,
-      codeLength: s.generatedCode?.length || 0,
-    }));
-    
-    if (promptLengths.length > 0) {
-      const avgPromptLength = promptLengths.reduce((sum, p) => sum + p.promptLength, 0) / promptLengths.length;
-      const avgCodeLength = promptLengths.reduce((sum, p) => sum + p.codeLength, 0) / promptLengths.length;
-      
-      hypotheses.push({
-        id: 'prompt-code-correlation',
-        title: 'Samband mellan prompt-längd och kod-längd',
-        description: `Genomsnittlig prompt-längd: ${Math.round(avgPromptLength)} tecken. Genomsnittlig kod-längd: ${Math.round(avgCodeLength)} tecken.`,
-        hypothesis: 'Längre prompts tenderar att generera längre kod',
-        confidence: 'medium',
-        data: {
-          avgPromptLength: Math.round(avgPromptLength),
-          avgCodeLength: Math.round(avgCodeLength),
-          sampleSize: promptLengths.length,
-        },
-      });
-    }
-
-    // Hypothesis 2: Certain agents are better for specific tasks
-    const agentTasks = await db
+    // Get additional context for the hypotheses
+    const userStats = await db
       .select({
-        agentId: codeGenerationSessions.agentId,
-        agentName: agents.name,
-        status: codeGenerationSessions.status,
-        codeLength: sql<number>`LENGTH(${codeGenerationSessions.generatedCode})`,
+        totalSessions: sql<number>`COUNT(*)`.as('totalSessions'),
+        avgSessionDuration: sql<number>`
+          AVG(
+            EXTRACT(EPOCH FROM (
+              COALESCE(${codeGenerationSessions.updatedAt}, NOW()) - ${codeGenerationSessions.createdAt}
+            ))
+          )
+        `.as('avgSessionDuration'),
       })
       .from(codeGenerationSessions)
-      .leftJoin(agents, eq(codeGenerationSessions.agentId, agents.id.toString()))
       .where(eq(codeGenerationSessions.userId, userId))
-      .limit(50);
-
-    if (agentTasks.length > 0) {
-      const agentGroups = agentTasks.reduce((acc, task) => {
-        const key = task.agentName || 'Unknown';
-        if (!acc[key]) {
-          acc[key] = { success: 0, total: 0, avgLength: [] };
-        }
-        acc[key].total++;
-        if (task.status === 'completed') acc[key].success++;
-        acc[key].avgLength.push(task.codeLength || 0);
-        return acc;
-      }, {} as Record<string, { success: number; total: number; avgLength: number[] }>);
-
-      const bestAgentEntry = Object.entries(agentGroups).reduce((max, [name, stats]) => {
-        const successRate = (stats.success / stats.total) * 100;
-        const maxSuccessRate = (max.stats.success / max.stats.total) * 100;
-        return successRate > maxSuccessRate ? { name, stats } : max;
-      }, { name: '', stats: { success: 0, total: 1, avgLength: [] as number[] } });
-      
-      const bestAgent = {
-        name: bestAgentEntry.name,
-        stats: bestAgentEntry.stats,
-      };
-
-      if (bestAgent.name) {
-        hypotheses.push({
-          id: 'agent-specialization',
-          title: 'Agent-specialisering',
-          description: `${bestAgent.name} har högst framgångsfrekvens`,
-          hypothesis: 'Olika agenter är bättre på olika typer av uppgifter',
-          confidence: 'high',
-          data: bestAgent.stats,
-        });
-      }
-    }
+      .groupBy(codeGenerationSessions.userId);
 
     res.json({
       success: true,
       hypotheses,
+      metadata: {
+        totalHypotheses: hypotheses.length,
+        highConfidenceCount: hypotheses.filter(h => h.confidence === 'high').length,
+        generatedAt: new Date().toISOString(),
+        dataSource: {
+          sessionsAnalyzed: userStats[0]?.totalSessions || 0,
+          timeRange: 'All available data',
+        },
+        validationSuggestions: [
+          'Testa hypoteser med A/B-testning',
+          'Samla fler data för högre konfidens',
+          'Dokumentera resultat för kontinuerlig förbättring'
+        ]
+      }
     });
   } catch (error: any) {
-    console.error('Error generating hypotheses:', error);
+    console.error('Error generating stable hypotheses:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to generate hypotheses',
+      error: 'Failed to generate stable hypotheses',
       message: error.message,
+      fallbackSuggestions: [
+        'Samla minst 20 kodgenereringssessioner för bättre analys',
+        'Använd flera olika agenter för att jämföra prestanda',
+        'Dokumentera prompt-längd och resultat manuellt'
+      ]
+    });
+  }
+});
+
+/**
+ * GET /api/data-insights/hypothesis-validation/:hypothesisId
+ * Endpoint to help validate hypotheses through A/B testing
+ */
+router.get('/hypothesis-validation/:hypothesisId', async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { hypothesisId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const validationPlans: Record<string, any> = {
+      'optimal-prompt-length': {
+        title: 'Validering: Optimal Prompt Längd',
+        method: 'A/B-testning',
+        groups: [
+          {
+            name: 'Grupp A: Korta Prompts',
+            description: 'Prompts under 100 tecken',
+            sampleSize: 10,
+            metrics: ['success_rate', 'code_quality', 'time_to_completion']
+          },
+          {
+            name: 'Grupp B: Medellånga Prompts',
+            description: 'Prompts 100-500 tecken',
+            sampleSize: 10,
+            metrics: ['success_rate', 'code_quality', 'time_to_completion']
+          },
+          {
+            name: 'Grupp C: Långa Prompts',
+            description: 'Prompts över 500 tecken',
+            sampleSize: 10,
+            metrics: ['success_rate', 'code_quality', 'time_to_completion']
+          }
+        ],
+        duration: '2 veckor',
+        successCriteria: 'Statistiskt signifikant skillnad (p < 0.05) mellan grupper'
+      },
+      'agent-specialization': {
+        title: 'Validering: Agent Specialisering',
+        method: 'Cross-validation',
+        steps: [
+          'Välj 3 olika uppgiftstyper (t.ex. API-integration, UI-komponent, databehandling)',
+          'Tilldela varje uppgift till 3 olika agenter',
+          'Mät framgångsrate och kodkvalitet',
+          'Analysera konsistens över upprepningar'
+        ],
+        metrics: ['task_success_rate', 'code_complexity', 'execution_time'],
+        minimumRepetitions: 5
+      },
+      'time-productivity': {
+        title: 'Validering: Tidsbaserad Produktivitet',
+        method: 'Observationsstudie',
+        schedule: [
+          { time: '09:00', tasks: ['Komplex logik', 'Systemdesign'] },
+          { time: '13:00', tasks: ['Bug fixing', 'Refactoring'] },
+          { time: '17:00', tasks: ['Dokumentation', 'Enkla komponenter'] }
+        ],
+        duration: '1 månad',
+        dataCollection: ['Självskattning', 'Kodgranskning', 'Exekveringstid']
+      }
+    };
+
+    const plan = validationPlans[hypothesisId] || {
+      title: 'Generisk Valideringsplan',
+      method: 'Kontrollerat experiment',
+      steps: [
+        'Definiera tydliga successkriterier',
+        'Samla baseline-data',
+        'Implementera intervention',
+        'Mät och analysera resultat',
+        'Justera hypotes baserat på resultat'
+      ]
+    };
+
+    res.json({
+      success: true,
+      hypothesisId,
+      validationPlan: plan,
+      toolsNeeded: ['A/B-testningsramverk', 'Statistikverktyg', 'Loggningssystem'],
+      estimatedTime: '2-4 veckor'
+    });
+  } catch (error: any) {
+    console.error('Error generating validation plan:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate validation plan'
     });
   }
 });

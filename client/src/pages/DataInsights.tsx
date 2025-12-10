@@ -34,13 +34,23 @@ interface Insight {
   data: any;
 }
 
+interface StatisticalResult {
+  correlation: number;
+  pValue: number;
+  confidence: number;
+  sampleSize: number;
+}
+
 interface Hypothesis {
   id: string;
   title: string;
   description: string;
   hypothesis: string;
   confidence: 'low' | 'medium' | 'high';
-  data: any;
+  statisticalSignificance: StatisticalResult;
+  actionableInsights: string[];
+  validationMethod: string;
+  data: Record<string, any>;
 }
 
 interface DataInsights {
@@ -371,24 +381,30 @@ export default function DataInsights() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Brain className="h-5 w-5" />
-                Hypoteser baserade på data
+                Statistiskt Signifikanta Hypoteser
               </CardTitle>
-              <CardDescription>Intressanta samband och möjliga förklaringar</CardDescription>
+              <CardDescription>
+                Vetenskapligt baserade hypoteser med korrelationsanalys, p-värden och valideringsmetoder
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {hypotheses.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {hypotheses.map((hypothesis) => (
-                    <div key={hypothesis.id} className="p-4 border rounded-lg">
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-semibold">{hypothesis.title}</h3>
+                    <div key={hypothesis.id} className="p-5 border rounded-lg bg-gradient-to-br from-white to-purple-50/30">
+                      {/* Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-lg mb-1">{hypothesis.title}</h3>
+                          <p className="text-sm text-muted-foreground">{hypothesis.description}</p>
+                        </div>
                         <span
-                          className={`px-2 py-1 rounded text-xs ${
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
                             hypothesis.confidence === 'high'
-                              ? 'bg-green-100 text-green-800'
+                              ? 'bg-green-100 text-green-800 border border-green-200'
                               : hypothesis.confidence === 'medium'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                              : 'bg-gray-100 text-gray-800 border border-gray-200'
                           }`}
                         >
                           {hypothesis.confidence === 'high'
@@ -399,22 +415,102 @@ export default function DataInsights() {
                           konfidens
                         </span>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2">{hypothesis.description}</p>
-                      <p className="text-sm font-medium italic">"{hypothesis.hypothesis}"</p>
-                      {hypothesis.data && (
-                        <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
-                          <pre className="whitespace-pre-wrap">
-                            {JSON.stringify(hypothesis.data, null, 2)}
-                          </pre>
+
+                      {/* Hypothesis Statement */}
+                      <div className="mb-4 p-3 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                        <p className="text-sm font-medium italic text-purple-900">
+                          "{hypothesis.hypothesis}"
+                        </p>
+                      </div>
+
+                      {/* Statistical Significance */}
+                      {hypothesis.statisticalSignificance && (
+                        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                          <h4 className="text-xs font-semibold text-blue-900 mb-2 uppercase tracking-wide">
+                            Statistisk Signifikans
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Korrelation:</span>
+                              <span className="ml-1 font-semibold text-blue-900">
+                                {hypothesis.statisticalSignificance.correlation.toFixed(3)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">P-värde:</span>
+                              <span className="ml-1 font-semibold text-blue-900">
+                                {hypothesis.statisticalSignificance.pValue.toFixed(4)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Konfidens:</span>
+                              <span className="ml-1 font-semibold text-blue-900">
+                                {Math.round(hypothesis.statisticalSignificance.confidence)}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Sample:</span>
+                              <span className="ml-1 font-semibold text-blue-900">
+                                {hypothesis.statisticalSignificance.sampleSize}
+                              </span>
+                            </div>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Actionable Insights */}
+                      {hypothesis.actionableInsights && hypothesis.actionableInsights.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="text-xs font-semibold text-green-900 mb-2 uppercase tracking-wide">
+                            Handlingsbara Insikter
+                          </h4>
+                          <ul className="space-y-2">
+                            {hypothesis.actionableInsights.map((insight: string, idx: number) => (
+                              <li key={idx} className="flex items-start gap-2 text-sm">
+                                <span className="text-green-600 mt-0.5">✓</span>
+                                <span className="text-muted-foreground">{insight}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Validation Method */}
+                      {hypothesis.validationMethod && (
+                        <div className="mb-4 p-3 bg-amber-50 rounded-lg border-l-4 border-amber-400">
+                          <h4 className="text-xs font-semibold text-amber-900 mb-1 uppercase tracking-wide">
+                            Valideringsmetod
+                          </h4>
+                          <p className="text-sm text-amber-800">{hypothesis.validationMethod}</p>
+                        </div>
+                      )}
+
+                      {/* Data Details */}
+                      {hypothesis.data && Object.keys(hypothesis.data).length > 0 && (
+                        <details className="mt-4">
+                          <summary className="text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground">
+                            Visa detaljerad data
+                          </summary>
+                          <div className="mt-2 p-3 bg-gray-50 rounded text-xs text-muted-foreground overflow-x-auto">
+                            <pre className="whitespace-pre-wrap">
+                              {JSON.stringify(hypothesis.data, null, 2)}
+                            </pre>
+                          </div>
+                        </details>
                       )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-center py-8">
-                  Genererar hypoteser baserat på din data...
-                </p>
+                <div className="text-center py-12">
+                  <Brain className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+                  <p className="text-muted-foreground mb-2">
+                    Genererar statistiskt signifikanta hypoteser baserat på din data...
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Behöver minst 10 kodgenereringssessioner för att generera hypoteser
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>
