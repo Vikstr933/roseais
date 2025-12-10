@@ -12,11 +12,13 @@ import {
 } from '../../db/schema-pg';
 import { sql, eq, desc, and, gte, count, inArray, or } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
+import { checkAdminStatus } from '../middleware/admin';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticateUser);
+router.use(checkAdminStatus as any);
 
 /**
  * GET /api/data-insights/overview
@@ -25,9 +27,15 @@ router.use(authenticateUser);
 router.get('/overview', async (req, res) => {
   try {
     const userId = (req as any).user?.id;
+    const isAdmin = (req as any).isAdmin || false;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
+
+    // Helper function to build user filter condition
+    const getUserFilter = (field: any) => {
+      return isAdmin ? sql`1=1` : eq(field, userId);
+    };
 
     // 1. Agent Performance Analysis
     // Get all sessions with agentId, then try to match with agents table
@@ -54,7 +62,7 @@ router.get('/overview', async (req, res) => {
       .leftJoin(agents, sql`${codeGenerationSessions.agentId} = ${agents.id}`)
       .where(
         and(
-          eq(codeGenerationSessions.userId, userId),
+          getUserFilter(codeGenerationSessions.userId),
           sql`${codeGenerationSessions.agentId} IS NOT NULL AND ${codeGenerationSessions.agentId} != ''`
         )
       )
@@ -89,7 +97,7 @@ router.get('/overview', async (req, res) => {
         avgLength: sql<number>`ROUND(AVG(LENGTH(${codeGenerationSessions.generatedCode})), 0)`,
       })
       .from(codeGenerationSessions)
-      .where(eq(codeGenerationSessions.userId, userId))
+      .where(getUserFilter(codeGenerationSessions.userId))
       .groupBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`)
       .orderBy(sql`EXTRACT(HOUR FROM ${codeGenerationSessions.createdAt}::timestamp)`);
 
@@ -111,7 +119,7 @@ router.get('/overview', async (req, res) => {
       .from(workspaces)
       .where(
         and(
-          eq(workspaces.ownerId, userId),
+          getUserFilter(workspaces.ownerId),
           sql`${workspaces.lastActivity} >= ${thirtyDaysAgo.toISOString()}`
         )
       )
@@ -134,7 +142,7 @@ router.get('/overview', async (req, res) => {
       })
       .from(projectMembers)
       .leftJoin(workspaces, eq(projectMembers.projectId, workspaces.id))
-      .where(eq(workspaces.ownerId, userId));
+      .where(getUserFilter(workspaces.ownerId));
 
     // 5. Prompt Chain Success Analysis
     const chainAnalysis = await db
@@ -331,8 +339,13 @@ class StatisticalAnalyzer {
 
 // Hypothesis Generator
 class HypothesisGenerator {
-  static async generateStableHypotheses(userId: string): Promise<Hypothesis[]> {
+  static async generateStableHypotheses(userId: string, isAdmin: boolean = false): Promise<Hypothesis[]> {
     const hypotheses: Hypothesis[] = [];
+
+    // Helper function to build user filter condition
+    const getUserFilter = (field: any) => {
+      return isAdmin ? sql`1=1` : eq(field, userId);
+    };
 
     // 1. Prompt Length vs Success Rate Hypothesis
     const sessions = await db
@@ -347,7 +360,7 @@ class HypothesisGenerator {
       .from(codeGenerationSessions)
       .where(
         and(
-          eq(codeGenerationSessions.userId, userId),
+          getUserFilter(codeGenerationSessions.userId),
           sql`${codeGenerationSessions.inputPrompt} IS NOT NULL`,
           sql`${codeGenerationSessions.generatedCode} IS NOT NULL`
         )
@@ -402,7 +415,7 @@ class HypothesisGenerator {
         .leftJoin(agents, sql`${codeGenerationSessions.agentId} = ${agents.id}`)
         .where(
           and(
-            eq(codeGenerationSessions.userId, userId),
+            getUserFilter(codeGenerationSessions.userId),
             sql`${codeGenerationSessions.agentId} IS NOT NULL AND ${codeGenerationSessions.agentId} != ''`
           )
         )
@@ -483,7 +496,7 @@ class HypothesisGenerator {
         })
         .from(codeGenerationSessions)
         .leftJoin(workspaces, eq(codeGenerationSessions.workspaceId, workspaces.id))
-        .where(eq(codeGenerationSessions.userId, userId));
+        .where(getUserFilter(codeGenerationSessions.userId));
 
       if (deploymentData[0] && deploymentData[0].totalSessions >= 10) {
         const deploymentRate = deploymentData[0].totalProjects > 0 
@@ -535,7 +548,7 @@ class HypothesisGenerator {
         .innerJoin(workspaces, eq(projectFiles.projectId, workspaces.id))
         .where(
           and(
-            eq(workspaces.ownerId, userId),
+            getUserFilter(workspaces.ownerId),
             sql`${projectFiles.fileContent} IS NOT NULL`,
             sql`LENGTH(${projectFiles.fileContent}) > 100`
           )
@@ -550,7 +563,7 @@ class HypothesisGenerator {
         .from(codeGenerationSessions)
         .where(
           and(
-            eq(codeGenerationSessions.userId, userId),
+            getUserFilter(codeGenerationSessions.userId),
             sql`${codeGenerationSessions.generatedCode} IS NOT NULL`,
             sql`LENGTH(${codeGenerationSessions.generatedCode}) > 100`
           )
@@ -680,7 +693,7 @@ class HypothesisGenerator {
         .from(codeGenerationSessions)
         .where(
           and(
-            eq(codeGenerationSessions.userId, userId),
+            getUserFilter(codeGenerationSessions.userId),
             sql`${codeGenerationSessions.workspaceId} IS NOT NULL`,
             sql`LENGTH(${codeGenerationSessions.generatedCode}) > 100`
           )
@@ -757,7 +770,7 @@ class HypothesisGenerator {
         .from(chainExecutions)
         .where(
           and(
-            eq(chainExecutions.userId, userId),
+            getUserFilter(chainExecutions.userId),
             sql`${chainExecutions.chainId} IS NOT NULL`,
             sql`${chainExecutions.stepResults} IS NOT NULL`
           )
@@ -834,7 +847,7 @@ class HypothesisGenerator {
           `.as('avgDuration'),
         })
         .from(chainExecutions)
-        .where(eq(chainExecutions.userId, userId))
+        .where(getUserFilter(chainExecutions.userId))
         .groupBy(chainExecutions.chainId)
         .having(sql`COUNT(*) >= 5`);
 
@@ -887,7 +900,7 @@ class HypothesisGenerator {
           codeLength: sql<number>`LENGTH(${codeGenerationSessions.generatedCode})`.as('codeLength'),
         })
         .from(codeGenerationSessions)
-        .where(eq(codeGenerationSessions.userId, userId));
+        .where(getUserFilter(codeGenerationSessions.userId));
 
       if (hourlySessions.length >= 24) {
         const hourlyStats = hourlySessions.reduce((acc, session) => {
@@ -967,11 +980,17 @@ class HypothesisGenerator {
 router.get('/hypotheses', async (req, res) => {
   try {
     const userId = (req as any).user?.id;
+    const isAdmin = (req as any).isAdmin || false;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const hypotheses = await HypothesisGenerator.generateStableHypotheses(userId);
+    const hypotheses = await HypothesisGenerator.generateStableHypotheses(userId, isAdmin);
+
+    // Helper function to build user filter condition
+    const getUserFilter = (field: any) => {
+      return isAdmin ? sql`1=1` : eq(field, userId);
+    };
 
     // Get additional context for the hypotheses
     const userStats = await db
@@ -986,7 +1005,7 @@ router.get('/hypotheses', async (req, res) => {
         `.as('avgSessionDuration'),
       })
       .from(codeGenerationSessions)
-      .where(eq(codeGenerationSessions.userId, userId))
+      .where(getUserFilter(codeGenerationSessions.userId))
       .groupBy(codeGenerationSessions.userId);
 
     res.json({
@@ -999,6 +1018,7 @@ router.get('/hypotheses', async (req, res) => {
         dataSource: {
           sessionsAnalyzed: userStats[0]?.totalSessions || 0,
           timeRange: 'All available data',
+          scope: isAdmin ? 'All users (admin view)' : 'Current user only',
         },
         validationSuggestions: [
           'Testa hypoteser med A/B-testning',
