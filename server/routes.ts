@@ -30,6 +30,7 @@ import userRouter from './routes/user';
 import userPluginsRouter from './routes/user-plugins';
 import credentialsRouter from './routes/credentials';
 import statsRouter from './routes/stats';
+import dataInsightsRouter from './routes/data-insights';
 import publicProjectsRouter from './routes/public-projects';
 import screenshotsRouter from './routes/screenshots';
 
@@ -336,6 +337,11 @@ export function registerRoutes(app: Express): Server {
   console.log('📊 Registering stats router...');
   app.use('/api/stats', statsRouter);
   console.log('✅ Stats router registered at /api/stats');
+
+  // Register data insights router
+  console.log('🔍 Registering data insights router...');
+  app.use('/api/data-insights', dataInsightsRouter);
+  console.log('✅ Data insights router registered at /api/data-insights');
 
   // Register public projects router
   console.log('🌐 Registering public projects router...');

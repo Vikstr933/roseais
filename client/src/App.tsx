@@ -30,6 +30,7 @@ const PluginGenerator = lazy(() => import('./pages/PluginGenerator'));
 const ElonChat = lazy(() => import('./pages/ElonChat'));
 const PublicProjects = lazy(() => import('./pages/PublicProjects'));
 const PublicProjectDetail = lazy(() => import('./pages/PublicProjectDetail'));
+const DataInsights = lazy(() => import('./pages/DataInsights'));
 
 // Lazy load heavy components
 const AssistantWidget = lazy(() => import('./components/AssistantWidget'));
@@ -143,6 +144,11 @@ function AppContent() {
         <Route path="/settings">
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/data-insights">
+          <ProtectedRoute>
+            <DataInsights />
           </ProtectedRoute>
         </Route>
         <Route path="/admin">

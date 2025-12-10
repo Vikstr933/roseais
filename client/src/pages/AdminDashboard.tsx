@@ -61,15 +61,41 @@ interface Workspace {
   updatedAt: Date;
 }
 
+interface DataInsights {
+  summary: {
+    totalSessions: number;
+    uniqueAgents: number;
+    activeProjects: number;
+  };
+  insights: Array<{
+    type: string;
+    title: string;
+    description: string;
+    data: any;
+  }>;
+  agentPerformance: Array<{
+    agentName: string | null;
+    totalSessions: number;
+    successRate: number;
+    avgCodeLength: number;
+  }>;
+  codePatterns: Array<{
+    hour: number;
+    count: number;
+    avgLength: number;
+  }>;
+}
+
 export default function AdminDashboard() {
   const { user, isLoading, sessionToken } = useAuth();
   const [, setLocation] = useLocation();
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'agents' | 'workspaces'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'agents' | 'workspaces' | 'insights'>('stats');
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [insights, setInsights] = useState<DataInsights | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,6 +137,13 @@ export default function AdminDashboard() {
           if (!res.ok) throw new Error('Failed to fetch workspaces');
           const data = await res.json();
           setWorkspaces(data);
+        } else if (activeTab === 'insights') {
+          const res = await apiFetch('/api/data-insights/overview');
+          if (!res.ok) throw new Error('Failed to fetch insights');
+          const data = await res.json();
+          if (data.success) {
+            setInsights(data.data);
+          }
         }
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -187,6 +220,7 @@ export default function AdminDashboard() {
           <div className="flex space-x-1">
             {[
               { key: 'stats', label: 'Statistics', icon: '📊' },
+              { key: 'insights', label: 'Data Insights', icon: '🔍' },
               { key: 'users', label: 'Users', icon: '👥' },
               { key: 'agents', label: 'Agents', icon: '🤖' },
               { key: 'workspaces', label: 'Workspaces', icon: '📁' }
@@ -456,6 +490,143 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {/* Data Insights Tab */}
+            {activeTab === 'insights' && (
+              <div className="space-y-6">
+                {/* Link to full insights page */}
+                <div className="bg-white/95 backdrop-blur-sm rounded-lg p-4 border border-purple-200/50 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Data Insights & Analytics</h3>
+                      <p className="text-sm text-gray-600">Utforska intressanta mönster och kopplingar i systemets data</p>
+                    </div>
+                    <button
+                      onClick={() => setLocation('/data-insights')}
+                      className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
+                    >
+                      Öppna fullständig analys →
+                    </button>
+                  </div>
+                </div>
+
+                {insights ? (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="bg-white/95 backdrop-blur-sm border border-purple-200/50 rounded-lg p-6 shadow-lg">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900">Totala Sessioner</h3>
+                          <span className="text-3xl">📊</span>
+                        </div>
+                        <div className="text-4xl font-bold text-gray-900 mb-2">{insights.summary.totalSessions}</div>
+                        <p className="text-sm text-gray-600">Kodgenereringssessioner</p>
+                      </div>
+
+                      <div className="bg-white/95 backdrop-blur-sm border border-purple-200/50 rounded-lg p-6 shadow-lg">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900">Aktiva Agenter</h3>
+                          <span className="text-3xl">🤖</span>
+                        </div>
+                        <div className="text-4xl font-bold text-gray-900 mb-2">{insights.summary.uniqueAgents}</div>
+                        <p className="text-sm text-gray-600">Unika AI-agenter använda</p>
+                      </div>
+
+                      <div className="bg-white/95 backdrop-blur-sm border border-purple-200/50 rounded-lg p-6 shadow-lg">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900">Aktiva Projekt</h3>
+                          <span className="text-3xl">📁</span>
+                        </div>
+                        <div className="text-4xl font-bold text-gray-900 mb-2">{insights.summary.activeProjects}</div>
+                        <p className="text-sm text-gray-600">Projekt med aktivitet</p>
+                      </div>
+                    </div>
+
+                    {/* Key Insights */}
+                    {insights.insights && insights.insights.length > 0 && (
+                      <div className="bg-white/95 backdrop-blur-sm rounded-lg p-6 border border-purple-200/50 shadow-lg">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">🔍 Viktiga Insikter</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {insights.insights.map((insight, idx) => (
+                            <div key={idx} className="p-4 border border-purple-200/50 rounded-lg bg-purple-50/30">
+                              <h4 className="font-semibold text-gray-900 mb-1">{insight.title}</h4>
+                              <p className="text-sm text-gray-700">{insight.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Top Performing Agents */}
+                    {insights.agentPerformance && insights.agentPerformance.length > 0 && (
+                      <div className="bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden border border-purple-200/50 shadow-lg">
+                        <div className="p-6 border-b border-purple-200/50">
+                          <h3 className="text-lg font-semibold text-gray-900">Top Presterande Agenter</h3>
+                          <p className="text-sm text-gray-600 mt-1">Agenterna med högst framgångsfrekvens</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-purple-100/50">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Agent</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Sessioner</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Framgångsfrekvens</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Genomsnittlig Kodlängd</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-purple-200/30">
+                              {insights.agentPerformance.slice(0, 10).map((agent, idx) => (
+                                <tr key={idx} className="hover:bg-purple-50/50">
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {agent.agentName || 'Okänd agent'}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{agent.totalSessions}</td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`px-2 py-1 text-xs rounded-full ${
+                                      agent.successRate >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                                      agent.successRate >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-rose-100 text-rose-700'
+                                    }`}>
+                                      {agent.successRate.toFixed(1)}%
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                    {Math.round(agent.avgCodeLength).toLocaleString()} tecken
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Time Patterns */}
+                    {insights.codePatterns && insights.codePatterns.length > 0 && (
+                      <div className="bg-white/95 backdrop-blur-sm rounded-lg p-6 border border-purple-200/50 shadow-lg">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">⏰ Tidsmönster</h3>
+                        <p className="text-sm text-gray-600 mb-4">När genereras mest kod?</p>
+                        <div className="grid grid-cols-6 md:grid-cols-12 gap-2">
+                          {insights.codePatterns.map((pattern, idx) => (
+                            <div key={idx} className="text-center">
+                              <div className="text-xs text-gray-600 mb-1">{pattern.hour}:00</div>
+                              <div className="bg-violet-100 rounded p-2">
+                                <div className="text-sm font-semibold text-gray-900">{pattern.count}</div>
+                                <div className="text-xs text-gray-600">sessioner</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="bg-white/95 backdrop-blur-sm rounded-lg p-12 border border-purple-200/50 shadow-lg text-center">
+                    <p className="text-gray-600">Ingen data tillgänglig ännu. Generera lite kod för att se intressanta insikter!</p>
+                  </div>
+                )}
               </div>
             )}
           </>
