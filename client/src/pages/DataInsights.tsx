@@ -353,7 +353,7 @@ export default function DataInsights() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Genomsnitt per projekt:</span>
                       <span className="font-semibold">
-                        {insights.collaborationStats.avgCollaboratorsPerProject.toFixed(1)}
+                        {(Number(insights.collaborationStats.avgCollaboratorsPerProject) || 0).toFixed(1)}
                       </span>
                     </div>
                   )}
