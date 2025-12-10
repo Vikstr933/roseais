@@ -150,6 +150,9 @@ export default function DataInsights() {
           <p className="text-muted-foreground">
             Utforska intressanta mönster och kopplingar i din kodgenereringsdata
           </p>
+          <p className="text-sm text-muted-foreground mt-2 italic">
+            📊 All data kommer från verkliga kodgenereringssessioner, agentprestanda, och projektaktivitet i din databas
+          </p>
         </div>
       </div>
 

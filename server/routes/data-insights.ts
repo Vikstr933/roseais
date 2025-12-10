@@ -29,6 +29,7 @@ router.get('/overview', async (req, res) => {
     }
 
     // 1. Agent Performance Analysis
+    // Filter to only show agents with names (exclude unknown agents)
     const agentPerformance = await db
       .select({
         agentId: codeGenerationSessions.agentId,
@@ -49,7 +50,7 @@ router.get('/overview', async (req, res) => {
         `,
       })
       .from(codeGenerationSessions)
-      .leftJoin(agents, eq(codeGenerationSessions.agentId, agents.id.toString()))
+      .innerJoin(agents, eq(codeGenerationSessions.agentId, agents.id.toString()))
       .where(eq(codeGenerationSessions.userId, userId))
       .groupBy(codeGenerationSessions.agentId, agents.name)
       .orderBy(desc(sql`COUNT(*)`))

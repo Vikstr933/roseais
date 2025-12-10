@@ -548,7 +548,10 @@ export default function AdminDashboard() {
                     {/* Key Insights */}
                     {insights.insights && insights.insights.length > 0 && (
                       <div className="bg-white/95 backdrop-blur-sm rounded-lg p-6 border border-purple-200/50 shadow-lg">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">🔍 Viktiga Insikter</h3>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900">🔍 Viktiga Insikter</h3>
+                          <span className="text-xs text-gray-500 italic">Baserat på verklig data från databasen</span>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {insights.insights.map((insight, idx) => (
                             <div key={idx} className="p-4 border border-purple-200/50 rounded-lg bg-purple-50/30">
@@ -566,6 +569,7 @@ export default function AdminDashboard() {
                         <div className="p-6 border-b border-purple-200/50">
                           <h3 className="text-lg font-semibold text-gray-900">Top Presterande Agenter</h3>
                           <p className="text-sm text-gray-600 mt-1">Agenterna med högst framgångsfrekvens</p>
+                          <p className="text-xs text-gray-500 mt-2 italic">📊 Data från verkliga kodgenereringssessioner i systemet</p>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full">
