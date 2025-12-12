@@ -141,7 +141,21 @@ export class ProjectService {
       }
     }
 
-    return Array.from(projectMap.values());
+    // Sort: starred first, then by lastActivity
+    const sortedProjects = Array.from(projectMap.values()).sort((a, b) => {
+      // Starred projects first
+      const aStarred = (a as any).isStarred === true;
+      const bStarred = (b as any).isStarred === true;
+      if (aStarred !== bStarred) {
+        return aStarred ? -1 : 1;
+      }
+      // Then by lastActivity (most recent first)
+      const aActivity = a.lastActivity ? new Date(a.lastActivity).getTime() : 0;
+      const bActivity = b.lastActivity ? new Date(b.lastActivity).getTime() : 0;
+      return bActivity - aActivity;
+    });
+
+    return sortedProjects;
   }
 
   /**

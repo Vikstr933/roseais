@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Copy,
   MoreHorizontal,
+  Star,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation } from 'wouter';
@@ -45,6 +46,7 @@ interface ProjectCardProps {
     projectType: string;
     projectStatus: string;
     inviteCode?: string;
+    isStarred?: boolean;
     members: Array<{
       id: number;
       role: string;
@@ -65,14 +67,23 @@ interface ProjectCardProps {
     testCases?: any[];
   };
   onDelete?: () => void;
+  onStar?: (projectId: number, isStarred: boolean) => void;
 }
 
-export function ProjectCard({ project, onDelete }: ProjectCardProps) {
+export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isHovered, setIsHovered] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [isStarred, setIsStarred] = useState(project.isStarred || false);
+
+  const handleStar = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newStarredState = !isStarred;
+    setIsStarred(newStarredState);
+    onStar?.(project.id, newStarredState);
+  };
 
   const getProjectTypeIcon = (type: string) => {
     switch (type) {
@@ -159,7 +170,23 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
               </span>
               <h3 className="text-xl font-semibold truncate">{project.name}</h3>
             </div>
-            <DropdownMenu>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={handleStar}
+                title={isStarred ? 'Unstar project' : 'Star project'}
+              >
+                <Star
+                  className={`h-4 w-4 ${
+                    isStarred
+                      ? 'fill-yellow-400 text-yellow-400'
+                      : 'text-muted-foreground hover:text-yellow-400'
+                  }`}
+                />
+              </Button>
+              <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                   <MoreHorizontal className="h-4 w-4" />
@@ -186,6 +213,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           </div>
 
           <div className="flex items-center justify-between">

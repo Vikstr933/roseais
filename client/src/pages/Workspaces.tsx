@@ -7,7 +7,7 @@ import { CreateProjectDialog } from '@/components/CreateProjectDialog';
 import { JoinProjectDialog } from '@/components/JoinProjectDialog';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Users, Code2, AlertCircle } from 'lucide-react';
+import { Plus, Users, Code2, AlertCircle, Star, LayoutGrid, List } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -28,6 +28,7 @@ function WorkspacesContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const { toast } = useToast();
   const { sessionToken } = useAuth();
   const queryClient = useQueryClient();
@@ -179,12 +180,34 @@ function WorkspacesContent() {
     },
   });
 
+  const starProjectMutation = useMutation({
+    mutationFn: async ({ projectId, isStarred }: { projectId: number; isStarred: boolean }) => {
+      const response = await apiFetch(`/api/workspaces/${projectId}/star`, {
+        method: 'POST',
+        headers: getAuthHeaders(sessionToken),
+        body: JSON.stringify({ isStarred }),
+      });
+      if (!response.ok) throw new Error('Failed to star project');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/workspaces'] });
+    },
+  });
+
+  const handleStar = (projectId: number, isStarred: boolean) => {
+    starProjectMutation.mutate({ projectId, isStarred });
+  };
+
   const filteredProjects = projects.filter(
     project =>
       project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.projectType.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const starredProjects = filteredProjects.filter((p: any) => p.isStarred === true);
+  const otherProjects = filteredProjects.filter((p: any) => p.isStarred !== true);
 
   return (
     <div className="container mx-auto px-4 sm:px-6 pt-20 sm:pt-24 pb-6 sm:pb-8">
@@ -225,7 +248,25 @@ function WorkspacesContent() {
         </div>
       </motion.div>
 
-      <SearchBar onSearch={setSearchTerm} />
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <SearchBar onSearch={setSearchTerm} />
+        <div className="flex items-center gap-2">
+          <Button
+            variant={viewMode === 'grid' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('grid')}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'list' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('list')}
+          >
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
 
       {projectsError ? (
         <motion.div
@@ -288,21 +329,78 @@ function WorkspacesContent() {
           )}
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mt-6 sm:mt-8">
-          {filteredProjects.map((project, index) => (
+        <>
+          {starredProjects.length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                Starred Projects
+              </h2>
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6' : 'space-y-4'}>
+                {starredProjects.map((project: any, index: number) => (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <ProjectCard
+                      project={project}
+                      onDelete={() => deleteWorkspaceMutation.mutate(project.id)}
+                      onStar={handleStar}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+          {otherProjects.length > 0 && (
+            <div>
+              {starredProjects.length > 0 && (
+                <h2 className="text-lg font-semibold mb-4">All Projects</h2>
+              )}
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6' : 'space-y-4'}>
+                {otherProjects.map((project: any, index: number) => (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <ProjectCard
+                      project={project}
+                      onDelete={() => deleteWorkspaceMutation.mutate(project.id)}
+                      onStar={handleStar}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+          {filteredProjects.length === 0 && (
             <motion.div
-              key={project.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.1 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-12 sm:py-16 px-4"
             >
-              <ProjectCard
-                project={project}
-                onDelete={() => deleteWorkspaceMutation.mutate(project.id)}
-              />
+              <Code2 className="h-12 w-12 sm:h-16 sm:w-16 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg sm:text-xl font-semibold mb-2 text-foreground">No Projects Found</h3>
+              <p className="text-sm sm:text-base text-muted-foreground mb-6">
+                {searchTerm
+                  ? 'No projects match your search.'
+                  : 'Get started by creating your first project.'}
+              </p>
+              {!searchTerm && (
+                <Button 
+                  onClick={() => setShowCreateDialog(true)}
+                  className="min-h-[44px] px-6"
+                >
+                  Create Your First Project
+                </Button>
+              )}
             </motion.div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       <CreateProjectDialog

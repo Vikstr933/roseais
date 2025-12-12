@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { db } from '../../db';
-import { workspaces, projectMembers, projectRemixes } from '../../db/schema-pg';
+import { workspaces, projectMembers, projectRemixes, projectFolders } from '../../db/schema-pg';
 import { chatMessages, codeGenerationSessions } from '../../db/schema-pg';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { projectService } from '../services/ProjectService';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
 import { agentEventEmitter } from '../index';
@@ -1081,6 +1081,64 @@ router.post('/:id/retry-database-provisioning', authenticateUser, async (req, re
       error: 'Failed to retry database provisioning',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// POST /api/workspaces/:id/star - Star/unstar a project
+router.post('/:id/star', authenticateUser, async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.id);
+    const userId = req.user!.id;
+    const { isStarred } = req.body;
+
+    // Verify workspace exists and user has access
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if user owns the workspace or is a member
+    if (workspace.ownerId !== userId) {
+      const [member] = await db
+        .select()
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, workspaceId),
+            eq(projectMembers.userId, userId)
+          )
+        )
+        .limit(1);
+
+      if (!member) {
+        return res.status(403).json({ error: 'You do not have access to this workspace' });
+      }
+    }
+
+    // Update starred status
+    await db
+      .update(workspaces as any)
+      .set({ 
+        isStarred: isStarred === true,
+        updatedAt: new Date()
+      })
+      .where(eq((workspaces as any).id, workspaceId));
+
+    invalidateWorkspaceCache(userId);
+
+    res.json({ 
+      success: true, 
+      isStarred: isStarred === true,
+      message: isStarred ? 'Project starred' : 'Project unstarred'
+    });
+  } catch (error: any) {
+    console.error('Error starring project:', error);
+    res.status(500).json({ error: 'Failed to star project', message: error.message });
   }
 });
 

@@ -57,6 +57,15 @@ export const users = pgTable('users', {
   trialEndsAt: timestamp('trial_ends_at'),
 });
 
+export const projectFolders = pgTable('project_folders', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  color: text('color').default('#9333ea'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 export const workspaces = pgTable('workspaces', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
@@ -89,6 +98,10 @@ export const workspaces = pgTable('workspaces', {
   voteCount: integer('vote_count').default(0),
   featured: boolean('featured').default(false),
   tags: text('tags').array().default([]),
+  // Lovable-inspired features
+  isStarred: boolean('is_starred').default(false),
+  folderId: integer('folder_id').references(() => projectFolders.id, { onDelete: 'set null' }),
+  publishingPolicy: jsonb('publishing_policy').default({ allowExternalPublishing: true, allowedRoles: ['admin', 'owner'] }),
 });
 
 export const sessions = pgTable('sessions', {
@@ -1027,6 +1040,19 @@ export const userAPIKeys = pgTable('user_api_keys', {
   lastUsed: timestamp('last_used'),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// Tool permissions table for plugin tool permissions
+export const toolPermissions = pgTable('tool_permissions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  pluginId: text('plugin_id').notNull(),
+  toolId: text('tool_id').notNull(),
+  permission: text('permission').notNull().default('ask'), // 'allow', 'ask', 'deny'
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  uniqueUserPluginTool: unique().on(table.userId, table.pluginId, table.toolId),
+}));
 
 export type ScheduledEmail = typeof scheduledEmails.$inferSelect;
 export type InsertScheduledEmail = typeof scheduledEmails.$inferInsert;
