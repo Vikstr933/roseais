@@ -45,14 +45,12 @@ CREATE INDEX IF NOT EXISTS idx_workspaces_folder_id ON workspaces(folder_id);
 ALTER TABLE workspaces 
 ADD COLUMN IF NOT EXISTS publishing_policy JSONB DEFAULT '{"allowExternalPublishing": true, "allowedRoles": ["admin", "owner"]}'::jsonb;
 
--- 4. Add configured_by to api_keys (if missing)
-ALTER TABLE api_keys 
-ADD COLUMN IF NOT EXISTS configured_by TEXT REFERENCES users(id) ON DELETE SET NULL;
-
 -- 5. Ensure all other connector-related columns exist in api_keys
 ALTER TABLE api_keys 
+ADD COLUMN IF NOT EXISTS encrypted_key TEXT,
 ADD COLUMN IF NOT EXISTS is_shared BOOLEAN DEFAULT false,
 ADD COLUMN IF NOT EXISTS workspace_id TEXT,
+ADD COLUMN IF NOT EXISTS configured_by TEXT REFERENCES users(id) ON DELETE SET NULL,
 ADD COLUMN IF NOT EXISTS service_name TEXT,
 ADD COLUMN IF NOT EXISTS key_type TEXT DEFAULT 'api_key',
 ADD COLUMN IF NOT EXISTS connector_id TEXT,
@@ -65,6 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_connector_id ON api_keys(connector_id) W
 
 -- Add comments
 COMMENT ON COLUMN workspaces.is_starred IS 'Whether this workspace is starred/favorited by the owner';
+COMMENT ON COLUMN api_keys.encrypted_key IS 'The actual encrypted API key value';
 COMMENT ON COLUMN api_keys.configured_by IS 'User ID who configured this shared connector (admin)';
 COMMENT ON COLUMN api_keys.is_shared IS 'If true, this API key is workspace-wide and can be used by all users';
 COMMENT ON COLUMN api_keys.workspace_id IS 'Workspace ID for shared connectors (null for personal)';

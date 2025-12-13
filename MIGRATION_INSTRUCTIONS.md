@@ -30,6 +30,7 @@ psql $DATABASE_URL -f migrations/2025_12_13_fix_missing_columns.sql
 - ✅ `publishing_policy` - For external publishing control
 
 ### API Keys Table
+- ✅ `encrypted_key` - The actual encrypted API key value
 - ✅ `configured_by` - Tracks who configured shared connectors
 - ✅ `is_shared` - Marks workspace-wide connectors
 - ✅ `workspace_id` - Links connectors to workspaces
@@ -57,10 +58,17 @@ Once the migration is complete:
 
 After running, you can verify by checking if the columns exist:
 ```sql
+-- Check workspaces columns
 SELECT column_name 
 FROM information_schema.columns 
 WHERE table_name = 'workspaces' 
 AND column_name IN ('is_starred', 'folder_id', 'publishing_policy');
+
+-- Check api_keys columns
+SELECT column_name 
+FROM information_schema.columns 
+WHERE table_name = 'api_keys' 
+AND column_name IN ('encrypted_key', 'is_shared', 'workspace_id', 'configured_by', 'service_name', 'key_type', 'connector_id', 'metadata');
 ```
 
-All three should return results.
+All columns should return results.

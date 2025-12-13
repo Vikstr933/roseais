@@ -57,6 +57,7 @@ export default function AgentManager() {
 function AgentManagerContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false); // NEW: Separate state for view dialog
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [prompt, setPrompt] = useState('');
   const [generatedConfig, setGeneratedConfig] = useState<Omit<
@@ -899,7 +900,7 @@ function AgentManagerContent() {
               onClick={() => {
                 setSelectedAgent(agent);
                 setGeneratedConfig(null);
-                setIsDialogOpen(true);
+                setIsViewDialogOpen(true); // Use view dialog instead
               }}
               className="cursor-pointer"
             >
@@ -948,10 +949,10 @@ function AgentManagerContent() {
         })}
       </div>
 
-      {/* Agent Detail Dialog */}
-      <Dialog open={isDialogOpen && selectedAgent !== null && generatedConfig === null} onOpenChange={(open) => {
+      {/* Agent Detail View Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={(open) => {
         if (!open) {
-          setIsDialogOpen(false);
+          setIsViewDialogOpen(false);
           setSelectedAgent(null);
         }
       }}>
@@ -990,8 +991,8 @@ function AgentManagerContent() {
                           agentName: selectedAgent.name,
                         });
                         setGeneratedConfig(null);
-                        // Keep dialog open but switch to edit mode
-                        setIsDialogOpen(true);
+                        setIsViewDialogOpen(false); // Close view dialog
+                        setIsDialogOpen(true); // Open edit dialog
                       }}
                     >
                       <Edit2 className="h-4 w-4 mr-1" />
