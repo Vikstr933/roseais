@@ -53,7 +53,7 @@ Provide a clear, friendly description of what this project does, its main featur
       systemPrompt,
       maxTokens: 1000,
       temperature: 0.7,
-      useCase: 'code_analysis',
+      useCase: 'explanation',
       priority: 'quality'
     });
 
@@ -71,7 +71,7 @@ Provide a clear, friendly description of what this project does, its main featur
     });
 
   } catch (error: any) {
-    logger.error('Failed to describe project', { error: error.message });
+    logger.error(`Failed to describe project: ${error.message}`);
     res.status(500).json({ 
       error: 'Failed to generate project description',
       message: error.message 

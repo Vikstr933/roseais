@@ -64,7 +64,7 @@ router.get('/', authenticateUser, async (req, res) => {
       total: creds.length,
     });
   } catch (error) {
-    logger.error('Failed to fetch credentials', error);
+    logger.error('Failed to fetch credentials', error as Error);
     res.status(500).json({ error: 'Failed to fetch credentials' });
   }
 });
@@ -162,7 +162,7 @@ router.post('/', authenticateUser, async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error('Failed to add credential', error);
+    logger.error('Failed to add credential', error as Error);
 
     if (error instanceof z.ZodError) {
       return res.status(400).json({
@@ -228,7 +228,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    logger.error('Failed to update credential', error);
+    logger.error('Failed to update credential', error as Error);
     res.status(500).json({ error: 'Failed to update credential' });
   }
 });
@@ -262,7 +262,7 @@ router.delete('/:id', authenticateUser, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    logger.error('Failed to delete credential', error);
+    logger.error('Failed to delete credential', error as Error);
     res.status(500).json({ error: 'Failed to delete credential' });
   }
 });
@@ -335,7 +335,7 @@ router.post('/:id/test', authenticateUser, async (req, res) => {
       error: testResult.error,
     });
   } catch (error) {
-    logger.error('Failed to test credential', error);
+    logger.error('Failed to test credential', error as Error);
     res.status(500).json({ error: 'Failed to test credential' });
   }
 });
@@ -376,7 +376,7 @@ router.get('/oauth/:service/start', authenticateUser, async (req, res) => {
       state: stateToken,
     });
   } catch (error) {
-    logger.error('Failed to start OAuth flow', error);
+    logger.error('Failed to start OAuth flow', error as Error);
     res.status(500).json({ error: 'Failed to start OAuth flow' });
   }
 });
@@ -438,7 +438,7 @@ router.get('/oauth/:service/callback', async (req, res) => {
     // Redirect to success page
     res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/credentials?oauth=success&service=${serviceName}`);
   } catch (error) {
-    logger.error('OAuth callback failed', error);
+    logger.error('OAuth callback failed', error as Error);
     res.status(500).send('OAuth callback failed');
   }
 });
@@ -595,13 +595,13 @@ async function exchangeOAuthCode(serviceName: string, code: string): Promise<any
     }
 
     if (!response.ok) {
-      logger.error('OAuth token exchange failed', { serviceName, status: response.status });
+      logger.error(`OAuth token exchange failed for ${serviceName}: status ${response.status}`);
       return null;
     }
 
     return await response.json();
   } catch (error) {
-    logger.error('OAuth token exchange error', error);
+    logger.error('OAuth token exchange error', error as Error);
     return null;
   }
 }

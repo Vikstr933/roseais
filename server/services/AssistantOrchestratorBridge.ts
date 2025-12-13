@@ -149,31 +149,21 @@ export class AssistantOrchestratorBridge {
 
       if (useOrchestration) {
         // Use orchestration for high-quality multi-agent generation
-        const workflowId = `assistant-gen-${Date.now()}`;
-
         const result = await orchestrationAgent.executeTask({
-          id: workflowId,
-          type: 'code_generation',
           prompt: params.prompt,
-          context: {
-            source: 'assistant',
-            userId,
-            projectType: params.projectType || 'react',
-            enabledAgents: [
-              'requirements',
-              'component-architect',
-              'ui-designer',
-              'code-generator',
-              'style-generator'
-            ]
-          }
+          features: {
+            componentType: 'react',
+            styling: ['tailwind'],
+            functionality: [],
+            animations: false,
+            responsive: true
+          },
+          sessionId: `assistant-gen-${Date.now()}`
         });
 
         return {
           success: result.success,
-          componentName: result.componentName,
           filesGenerated: result.files.length,
-          files: result.files,
           message: result.success 
             ? `Successfully generated ${result.componentName} with ${result.files.length} files using multi-agent orchestration.`
             : `Generation failed: ${result.errors.join(', ')}`

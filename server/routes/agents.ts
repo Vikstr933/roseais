@@ -412,10 +412,10 @@ router.get('/agents/:id', optionalAuth, checkAdminStatus, async (req, res) => {
         typeof agent[0].bestPractices === 'string'
           ? JSON.parse(agent[0].bestPractices)
           : agent[0].bestPractices,
-      customInstructions: agent[0].customInstructions
-        ? typeof agent[0].customInstructions === 'string'
-          ? JSON.parse(agent[0].customInstructions)
-          : agent[0].customInstructions
+      customInstructions: (agent[0] as any).customInstructions
+        ? typeof (agent[0] as any).customInstructions === 'string'
+          ? JSON.parse((agent[0] as any).customInstructions)
+          : (agent[0] as any).customInstructions
         : null,
       enabledPlugins:
         typeof agent[0].enabledPlugins === 'string'
@@ -483,14 +483,13 @@ router.post('/agents', authenticateUser, checkAdminStatus, async (req, res) => {
     console.log(`Creating ${agentIsSystem ? 'system' : 'user'} agent for userId: ${agentUserId || 'none (system)'}`);
 
     // Transform Record fields to ensure correct format
-    const transformedData: typeof agents.$inferInsert = {
+    const transformedData: Partial<typeof agents.$inferInsert> = {
       name: name || '',
       description: description || '',
       role: role || '',
       model: model || '',
       systemPrompt: systemPrompt || '',
-      temperature: temperature || '',
-      customInstructions,
+      temperature: typeof temperature === 'number' ? temperature : 0.7,
       capabilities: typeof capabilities === 'object' ? capabilities : {},
       expertise: typeof expertise === 'object' ? expertise : {},
       frameworks: typeof frameworks === 'object' ? frameworks : {},

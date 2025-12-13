@@ -53,8 +53,8 @@ export class DatabaseSetupService {
     const envExample = files.find(f => f.path.includes('.env.example') || f.path.includes('.env.sample'));
     const envFile = files.find(f => f.path.includes('.env') && !f.path.includes('.env.example'));
 
-    // Detect MongoDB (enhanced with README analysis)
-    const mongodbRequirement = this.detectMongoDB(files, packageJson, readmeAnalysis);
+    // Detect MongoDB
+    const mongodbRequirement = this.detectMongoDB(files, packageJson);
     if (mongodbRequirement.detected) {
       requirements.push(mongodbRequirement);
       envVariables['MONGODB_URI'] = mongodbRequirement.connectionString || 'mongodb://localhost:27017/your-database-name';

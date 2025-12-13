@@ -32,11 +32,11 @@ router.post('/add', async (req, res) => {
       repository,
       message: `Successfully added ${repository.fullName} to knowledge base`,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding GitHub repository knowledge:', error);
     res.status(500).json({
       error: 'Failed to add repository knowledge',
-      details: error.message,
+      details: error?.message || 'Unknown error',
     });
   }
 });

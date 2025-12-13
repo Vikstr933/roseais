@@ -1,10 +1,10 @@
 import { db } from '../../db';
-import {
-  generationLocks,
-  type GenerationLock,
-  type InsertGenerationLock,
-} from '../../db/schema-pg';
+import { generationLocks } from '../../db/schema-pg';
 import { eq, and, lt } from 'drizzle-orm';
+
+// Infer types from schema
+type GenerationLock = typeof generationLocks.$inferSelect;
+type InsertGenerationLock = typeof generationLocks.$inferInsert;
 
 export type LockType =
   | 'component_generation'

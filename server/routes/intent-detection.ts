@@ -97,7 +97,7 @@ Classify the intent.`;
       systemPrompt,
       maxTokens: 200, // Small response for classification
       temperature: 0.1, // Low temperature for consistent classification
-      useCase: 'classification',
+      useCase: 'explanation',
       priority: 'speed' // Prioritize speed over quality for this quick check
     };
 
@@ -155,7 +155,7 @@ Classify the intent.`;
       }
 
     } catch (parseError) {
-      logger.warning('Failed to parse AI response, retrying with AI', { error: parseError, content: response.content });
+      logger.warn(`Failed to parse AI response, retrying with AI: ${parseError}`);
       
       // Retry with AI instead of keyword fallback - FULLY AI-DRIVEN
       try {
@@ -178,7 +178,7 @@ Respond with ONLY a JSON object:
           systemPrompt: 'You are an intent classification system. Analyze the user message and classify intent.',
           maxTokens: 300,
           temperature: 0.1,
-          useCase: 'classification',
+          useCase: 'explanation',
           priority: 'speed'
         });
 
@@ -207,7 +207,7 @@ Respond with ONLY a JSON object:
           throw new Error('No content in retry response');
         }
       } catch (retryError) {
-        logger.error('AI retry also failed, using safe default', { error: retryError });
+        logger.error('AI retry also failed, using safe default', retryError as Error);
         // Last resort: use conversational as safe default (won't break anything)
         intentResult = {
           intent: 'conversational',

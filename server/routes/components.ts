@@ -953,18 +953,24 @@ This is a basic Python application structure. You can extend it with your specif
     const projectKey = `${userId || 'anonymous'}/${componentName.toLowerCase()}-${timestamp}`;
 
     try {
+      // Ensure result has files before proceeding
+      if (!result.files || result.files.length === 0) {
+        throw new Error('No files generated');
+      }
+      const files = result.files;
+      
       // Try to save to R2 first (cloud storage - scalable and persistent)
       if (r2StorageService.isEnabled()) {
         addTerminalOutput(componentName, '☁️ Uploading files to cloud storage (R2)...');
 
-        const r2Files = result.files.map(file => ({
+        const r2Files = files.map(file => ({
           path: `${projectKey}/${file.path}`,
           content: file.content,
           contentType: r2StorageService['getContentType'](file.path)
         }));
 
         await r2StorageService.uploadFiles(r2Files);
-        addTerminalOutput(componentName, `✅ Uploaded ${result.files.length} files to R2 cloud storage`);
+        addTerminalOutput(componentName, `✅ Uploaded ${files.length} files to R2 cloud storage`);
         addTerminalOutput(componentName, `📍 Storage path: ${projectKey}`);
       } else {
         // Fallback to local filesystem
@@ -979,19 +985,19 @@ This is a basic Python application structure. You can extend it with your specif
         await mkdir(path.join(workspaceDir, 'src'), { recursive: true });
 
         await Promise.all(
-          result.files.map(async (file: { path: string; content: string }) => {
+          files.map(async (file: { path: string; content: string }) => {
             const filePath = path.join(workspaceDir, file.path);
             const fileDir = path.dirname(filePath);
             await mkdir(fileDir, { recursive: true });
             await fs.writeFile(filePath, file.content);
           })
         );
-        addTerminalOutput(componentName, `✅ Saved ${result.files.length} files to local disk`);
+        addTerminalOutput(componentName, `✅ Saved ${files.length} files to local disk`);
       }
 
       // Deploy using DeploymentService (works with in-memory files)
       addTerminalOutput(componentName, '🚀 Starting development server...');
-      const deploymentInstance = await deploymentService.deployApp(componentName, result.files);
+      const deploymentInstance = await deploymentService.deployApp(componentName, files);
       deploymentUrl = deploymentInstance.url;
       instanceId = deploymentInstance.id;
 
