@@ -865,217 +865,252 @@ function AgentManagerContent() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {filteredAndSortedAgents.map(agent => (
-          <motion.div
-            key={agent.id}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-          >
-            <Card className="h-full">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <h2 className="text-xl font-semibold">{agent.name}</h2>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      clientLogger.userAction('edit_agent', 'AgentManager', {
-                        agentId: agent.id,
-                        agentName: agent.name,
-                      });
-                      setSelectedAgent(agent);
-                      setGeneratedConfig(null);
-                      setIsDialogOpen(true);
-                    }}
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      clientLogger.userAction(
-                        'toggle_agent_status',
-                        'AgentManager',
-                        {
-                          agentId: agent.id,
-                          agentName: agent.name,
-                          currentStatus: agent.isActive ? 'active' : 'inactive',
-                          newStatus: agent.isActive ? 'inactive' : 'active',
-                        }
-                      );
-                      toggleActiveMutation.mutate(agent);
-                    }}
-                    disabled={toggleActiveMutation.isPending}
-                  >
-                    {agent.isActive ? (
-                      <Power className="h-4 w-4" />
-                    ) : (
-                      <PowerOff className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {agent.description}
-                </p>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium">Role</p>
-                    <p className="text-sm text-muted-foreground">
+      {/* Compact Agent Cards Grid - 4-6 columns */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        {filteredAndSortedAgents.map((agent, index) => {
+          const isSystemAgent = Boolean((agent as any).isSystem);
+          const agentRole = agent.role?.toLowerCase() || '';
+          
+          const roleColors: Record<string, string> = {
+            'code_generator': 'from-violet-500 to-purple-600',
+            'code-generator': 'from-violet-500 to-purple-600',
+            'component-architect': 'from-blue-500 to-cyan-600',
+            'component-developer': 'from-emerald-500 to-teal-600',
+            'component-qa': 'from-amber-500 to-orange-600',
+            'code-reviewer': 'from-rose-500 to-pink-600',
+            'browser-agent': 'from-indigo-500 to-blue-600',
+            'personal-assistant': 'from-fuchsia-500 to-purple-600',
+            'analysis': 'from-cyan-500 to-blue-600',
+          };
+          
+          const gradientClass = roleColors[agentRole] || 'from-slate-500 to-slate-600';
+          const capabilitiesCount = Array.isArray(agent.capabilities) 
+            ? agent.capabilities.length 
+            : Object.keys(agent.capabilities || {}).length;
+          
+          return (
+            <motion.div
+              key={agent.id}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: index * 0.02, duration: 0.2 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                setSelectedAgent(agent);
+                setGeneratedConfig(null);
+                setIsDialogOpen(true);
+              }}
+              className="cursor-pointer"
+            >
+              <Card className={`relative overflow-hidden transition-all duration-200 hover:shadow-lg group ${
+                agent.isActive 
+                  ? 'border-border hover:border-primary/50' 
+                  : 'border-muted opacity-50'
+              }`}>
+                {/* Gradient top bar */}
+                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${gradientClass}`} />
+                
+                <div className="p-3">
+                  {/* Header row: Status dot, name, badges */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      agent.isActive 
+                        ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' 
+                        : 'bg-slate-400'
+                    }`} />
+                    <h3 className="text-sm font-medium truncate flex-1">{agent.name}</h3>
+                  </div>
+                  
+                  {/* Role badge */}
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 truncate max-w-full">
                       {agent.role}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Model</p>
-                    <p className="text-sm text-muted-foreground">
-                      {agent.model}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Capabilities</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {(Array.isArray(agent.capabilities)
-                        ? agent.capabilities
-                        : Object.entries(agent.capabilities)
-                            .filter(([_, enabled]) => enabled)
-                            .map(([capability]) => capability)
-                      ).map(capability => (
-                        <Badge
-                          key={capability}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {capability}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Expertise</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {(Array.isArray(agent.expertise)
-                        ? agent.expertise
-                        : Object.entries(agent.expertise)
-                      ).map((item, index) => {
-                        if (Array.isArray(agent.expertise)) {
-                          // Handle array format: ["React: expert", "TypeScript: expert"]
-                          const [skill, level] = item.split(': ');
-                          return (
-                            <Badge
-                              key={index}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {skill}: {level}
-                            </Badge>
-                          );
-                        } else {
-                          // Handle object format: {React: "expert", TypeScript: "expert"}
-                          const [skill, level] = item;
-                          return (
-                            <Badge
-                              key={skill}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {skill}: {level}
-                            </Badge>
-                          );
-                        }
-                      })}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Frameworks</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {(Array.isArray(agent.frameworks)
-                        ? agent.frameworks
-                        : Object.entries(agent.frameworks)
-                            .filter(([_, enabled]) => enabled)
-                            .map(([framework]) => framework)
-                      ).map(framework => (
-                        <Badge
-                          key={framework}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {framework}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Libraries</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {(Array.isArray(agent.libraries)
-                        ? agent.libraries
-                        : Object.entries(agent.libraries)
-                            .filter(([_, enabled]) => enabled)
-                            .map(([lib]) => lib)
-                      ).map(lib => (
-                        <Badge
-                          key={lib}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {lib}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Best Practices</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {(Array.isArray(agent.bestPractices)
-                        ? agent.bestPractices
-                        : Object.entries(agent.bestPractices)
-                            .filter(([_, enabled]) => enabled)
-                            .map(([practice]) => practice)
-                      ).map(practice => (
-                        <Badge
-                          key={practice}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {practice}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Status</p>
-                    <Badge
-                      variant={agent.isActive ? 'default' : 'secondary'}
-                      className="mt-1"
-                    >
-                      {agent.isActive ? 'Active' : 'Inactive'}
                     </Badge>
+                    {isSystemAgent && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-5">
+                        🔒
+                      </Badge>
+                    )}
                   </div>
-                  {agent.enabledPlugins && Array.isArray(agent.enabledPlugins) && agent.enabledPlugins.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium">Enabled Plugins</p>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {agent.enabledPlugins.map((pluginId: string) => (
-                          <Badge
-                            key={pluginId}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {pluginId}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  
+                  {/* Stats row */}
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{capabilitiesCount} capabilities</span>
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity text-primary">
+                      Click to view →
+                    </span>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+              </Card>
+            </motion.div>
+          );
+        })}
       </div>
+
+      {/* Agent Detail Dialog */}
+      <Dialog open={isDialogOpen && selectedAgent !== null && generatedConfig === null} onOpenChange={(open) => {
+        if (!open) {
+          setIsDialogOpen(false);
+          setSelectedAgent(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedAgent && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      selectedAgent.isActive ? 'bg-emerald-500' : 'bg-slate-400'
+                    }`} />
+                    <DialogTitle className="text-xl">{selectedAgent.name}</DialogTitle>
+                    {Boolean((selectedAgent as any).isSystem) && (
+                      <Badge variant="outline" className="text-xs">🔒 System Agent</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleActiveMutation.mutate(selectedAgent);
+                      }}
+                      disabled={toggleActiveMutation.isPending || Boolean((selectedAgent as any).isSystem)}
+                    >
+                      {selectedAgent.isActive ? <Power className="h-4 w-4 mr-1" /> : <PowerOff className="h-4 w-4 mr-1" />}
+                      {selectedAgent.isActive ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        clientLogger.userAction('edit_agent', 'AgentManager', {
+                          agentId: selectedAgent.id,
+                          agentName: selectedAgent.name,
+                        });
+                        setGeneratedConfig(null);
+                        // Keep dialog open but switch to edit mode
+                        setIsDialogOpen(true);
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
+                </div>
+                <DialogDescription className="mt-2">
+                  {selectedAgent.description}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Role</p>
+                  <p className="text-sm">{selectedAgent.role}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Model</p>
+                  <p className="text-sm">{selectedAgent.model}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Temperature</p>
+                  <p className="text-sm">{selectedAgent.temperature}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</p>
+                  <Badge variant={selectedAgent.isActive ? 'default' : 'secondary'}>
+                    {selectedAgent.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+              </div>
+              
+              <div className="space-y-4 mt-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Capabilities</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(Array.isArray(selectedAgent.capabilities)
+                      ? selectedAgent.capabilities
+                      : Object.entries(selectedAgent.capabilities)
+                          .filter(([_, enabled]) => enabled)
+                          .map(([capability]) => capability)
+                    ).map(capability => (
+                      <Badge key={capability} variant="secondary" className="text-xs">
+                        {capability}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Expertise</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(Array.isArray(selectedAgent.expertise)
+                      ? selectedAgent.expertise
+                      : Object.entries(selectedAgent.expertise)
+                    ).map((item, index) => {
+                      if (Array.isArray(selectedAgent.expertise)) {
+                        const [skill, level] = item.split(': ');
+                        return (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {skill}: {level}
+                          </Badge>
+                        );
+                      } else {
+                        const [skill, level] = item;
+                        return (
+                          <Badge key={skill} variant="outline" className="text-xs">
+                            {skill}: {level}
+                          </Badge>
+                        );
+                      }
+                    })}
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Frameworks & Libraries</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(Array.isArray(selectedAgent.frameworks)
+                      ? selectedAgent.frameworks
+                      : Object.entries(selectedAgent.frameworks)
+                          .filter(([_, enabled]) => enabled)
+                          .map(([framework]) => framework)
+                    ).map(framework => (
+                      <Badge key={framework} variant="secondary" className="text-xs bg-blue-500/10 text-blue-600">
+                        {framework}
+                      </Badge>
+                    ))}
+                    {(Array.isArray(selectedAgent.libraries)
+                      ? selectedAgent.libraries
+                      : Object.entries(selectedAgent.libraries)
+                          .filter(([_, enabled]) => enabled)
+                          .map(([lib]) => lib)
+                    ).map(lib => (
+                      <Badge key={lib} variant="secondary" className="text-xs bg-emerald-500/10 text-emerald-600">
+                        {lib}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                {selectedAgent.enabledPlugins && Array.isArray(selectedAgent.enabledPlugins) && selectedAgent.enabledPlugins.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Enabled Plugins</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedAgent.enabledPlugins.map((pluginId: string) => (
+                        <Badge key={pluginId} variant="outline" className="text-xs">
+                          🔌 {pluginId}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
