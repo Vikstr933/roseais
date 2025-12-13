@@ -79,7 +79,7 @@ import {
 
 // Extracted components
 import { ChatPanel } from "./playground/components";
-import { DesktopTab, EditorTab, PreviewTab } from "./playground/tabs";
+import { DesktopTab, EditorTab, PreviewTab, MobileTab } from "./playground/tabs";
 import { MobileBottomNav, MobileChatSheet, MobileProgressIndicator, MobilePreviewModal } from "./playground/mobile";
 import { RenameProjectDialog } from "./playground/dialogs";
 
@@ -3239,22 +3239,45 @@ export default function PromptPlayground() {
           {/* Tab Content */}
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-background">
             <div className="flex-1 min-h-0 overflow-hidden">
-            {/* Desktop Tab */}
+            {/* Desktop/Mobile Tab - Responsive */}
             {activeTab === 'desktop' && (
-              <DesktopTab
-                projects={projects}
-                currentProjectId={currentProject?.id}
-                onSelectProject={(projectId) => {
-                  window.location.href = `/playground/${projectId}`;
-                }}
-                onCreateProject={() => setShowCreateProjectDialog(true)}
-                onEditProject={(projectId) => {
-                  setActiveTab('editor');
-                  window.location.href = `/playground/${projectId}`;
-                }}
-                webContainerService={webContainerService}
-                isWebContainerReady={webContainerReady}
-              />
+              <>
+                {/* Desktop view (hidden on mobile) */}
+                <div className="hidden md:block h-full">
+                  <DesktopTab
+                    projects={projects}
+                    currentProjectId={currentProject?.id}
+                    onSelectProject={(projectId) => {
+                      window.location.href = `/playground/${projectId}`;
+                    }}
+                    onCreateProject={() => setShowCreateProjectDialog(true)}
+                    onEditProject={(projectId) => {
+                      setActiveTab('editor');
+                      window.location.href = `/playground/${projectId}`;
+                    }}
+                    webContainerService={webContainerService}
+                    isWebContainerReady={webContainerReady}
+                  />
+                </div>
+                
+                {/* Mobile view (hidden on desktop) */}
+                <div className="block md:hidden h-full">
+                  <MobileTab
+                    projects={projects}
+                    currentProjectId={currentProject?.id}
+                    onSelectProject={(projectId) => {
+                      window.location.href = `/playground/${projectId}`;
+                    }}
+                    onCreateProject={() => setShowCreateProjectDialog(true)}
+                    onEditProject={(projectId) => {
+                      setActiveTab('editor');
+                      window.location.href = `/playground/${projectId}`;
+                    }}
+                    webContainerService={webContainerService}
+                    isWebContainerReady={webContainerReady}
+                  />
+                </div>
+              </>
             )}
 
             {/* Editor Tab */}
