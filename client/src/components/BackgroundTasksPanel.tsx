@@ -60,7 +60,7 @@ export default function BackgroundTasksPanel() {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('Code Generation Complete', {
         body: task.description || 'Your code is ready',
-        icon: '/favicon.ico',
+        icon: '/icons/favicon.png', // Use same favicon path as index.html
         tag: task.id
       });
     }

@@ -26,6 +26,7 @@ function crossOriginIsolation() {
 }
 
 export default defineConfig({
+  base: '/', // Ensure all asset paths are relative, not absolute
   plugins: [react(), runtimeErrorOverlay(), themePlugin(), crossOriginIsolation()],
   resolve: {
     alias: {
