@@ -1350,12 +1350,12 @@ export default function Integrations() {
       
 
       <Tabs defaultValue="all" className="w-full">
-        <TabsList>
-          <TabsTrigger value="all">All Skills</TabsTrigger>
-          <TabsTrigger value="shared">Shared</TabsTrigger>
-          <TabsTrigger value="personal">Personal</TabsTrigger>
-          <TabsTrigger value="connected">Connected</TabsTrigger>
-          <TabsTrigger value="available">Available</TabsTrigger>
+        <TabsList className="w-full flex-wrap h-auto">
+          <TabsTrigger value="all" className="flex-1 min-w-[80px]">All Skills</TabsTrigger>
+          <TabsTrigger value="shared" className="flex-1 min-w-[80px]">Shared</TabsTrigger>
+          <TabsTrigger value="personal" className="flex-1 min-w-[80px]">Personal</TabsTrigger>
+          <TabsTrigger value="connected" className="flex-1 min-w-[80px]">Connected</TabsTrigger>
+          <TabsTrigger value="available" className="flex-1 min-w-[80px]">Available</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="mt-6">
@@ -1383,13 +1383,13 @@ export default function Integrations() {
               const customPlugin = isCustomPlugin(plugin);
 
               return (
-                <div key={plugin.id} className={`flex items-center justify-between p-3 rounded-lg border ${enabled ? 'border-primary bg-primary/5' : 'border-border bg-card'}`}>
+                <div key={plugin.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-lg border ${enabled ? 'border-primary bg-primary/5' : 'border-border bg-card'} gap-3`}>
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="flex-shrink-0">
                       {getPluginIcon(plugin.icon, plugin.category)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-sm truncate">{plugin.name}</p>
                         {enabled && (
                           <Badge className="bg-green-500 hover:bg-green-600 text-xs px-1.5 py-0">
@@ -1400,7 +1400,7 @@ export default function Integrations() {
                         {enabled && status && getHealthBadge(status.status.health)}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{plugin.description}</p>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <Badge variant="outline" className="text-xs px-1.5 py-0">
                           {getCategoryLabel(plugin.category, (plugin as any).isUserGenerated)}
                         </Badge>

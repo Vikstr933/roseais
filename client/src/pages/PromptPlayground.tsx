@@ -3177,7 +3177,7 @@ export default function PromptPlayground() {
 
         {/* Workspace Panel - Right Side (70%) - Full width on mobile */}
         <div className="flex-1 flex flex-col min-h-0 w-full md:w-auto">
-          {/* Workspace Tabs - Hidden on mobile (shown in footer), visible on desktop */}
+          {/* Workspace Tabs - Desktop version (hidden on mobile) */}
           <div className="border-b border-border bg-card px-2 sm:px-4 hidden md:block">
             <div className="flex h-10 items-center gap-6 justify-between">
               <div className="flex items-center gap-6 min-w-max">
@@ -3235,6 +3235,54 @@ export default function PromptPlayground() {
                           </div>
                           </div>
                         </div>
+          
+          {/* Mobile Tab Bar - Bottom Navigation (visible only on mobile) */}
+          <div className="md:hidden border-b border-border bg-card">
+            <div className="flex items-center justify-around px-2 py-1">
+              <button
+                onClick={() => setActiveTab('desktop')}
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-smooth min-w-[70px] ${
+                  activeTab === 'desktop'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                <Smartphone className="h-5 w-5" />
+                <span className="text-[10px] font-medium">Apps</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('editor')}
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-smooth relative min-w-[70px] ${
+                  activeTab === 'editor'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                <Code className="h-5 w-5" />
+                <span className="text-[10px] font-medium">Editor</span>
+                {isLoading && activeTab === 'editor' && (
+                  <span className="absolute top-1 right-2 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('preview')}
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-smooth min-w-[70px] ${
+                  activeTab === 'preview'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                <Eye className="h-5 w-5" />
+                <span className="text-[10px] font-medium">Preview</span>
+                {currentComponentName && livePreviewUrl && (
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                )}
+              </button>
+            </div>
+          </div>
 
           {/* Tab Content */}
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-background">

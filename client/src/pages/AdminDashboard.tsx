@@ -211,14 +211,31 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-cyan-50">
       <div className="container mx-auto px-4 pt-20 sm:pt-24 pb-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-          <p className="text-purple-700">System management and administration</p>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
+          <p className="text-sm sm:text-base text-purple-700">System management and administration</p>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs - Mobile: Dropdown, Desktop: Buttons */}
         <div className="bg-white/90 backdrop-blur-sm rounded-lg p-1 mb-6 border border-purple-200/50 shadow-lg">
-          <div className="flex space-x-1">
+          {/* Mobile Dropdown */}
+          <div className="block md:hidden">
+            <select
+              value={activeTab}
+              onChange={(e) => setActiveTab(e.target.value as any)}
+              className="w-full px-4 py-3 rounded-md bg-violet-600 text-white font-medium focus:outline-none focus:ring-2 focus:ring-violet-400"
+            >
+              <option value="stats">📊 Statistics</option>
+              <option value="insights">🔍 Data Insights</option>
+              <option value="users">👥 Users</option>
+              <option value="agents">🤖 Agents</option>
+              <option value="workspaces">📁 Workspaces</option>
+              <option value="publishing">🚀 Publishing</option>
+            </select>
+          </div>
+
+          {/* Desktop Tabs */}
+          <div className="hidden md:flex space-x-1">
             {[
               { key: 'stats', label: 'Statistics', icon: '📊' },
               { key: 'insights', label: 'Data Insights', icon: '🔍' },
@@ -237,7 +254,7 @@ export default function AdminDashboard() {
                 }`}
               >
                 <span className="mr-2">{tab.icon}</span>
-                {tab.label}
+                <span className="hidden lg:inline">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -348,149 +365,274 @@ export default function AdminDashboard() {
 
             {/* Users Tab */}
             {activeTab === 'users' && (
-              <div className="bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden border border-purple-200/50 shadow-lg">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-purple-100/50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">User</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Email</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Role</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Tier</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Created</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-purple-200/30">
-                      {users.map(u => (
-                        <tr key={u.id} className="hover:bg-purple-50/50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{u.displayName}</div>
-                            <div className="text-sm text-gray-600">@{u.username}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{u.email}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <select
-                              value={u.role}
-                              onChange={(e) => updateUserRole(u.id, e.target.value)}
-                              className="bg-white text-gray-900 px-3 py-1 rounded text-sm border border-purple-200/50 focus:border-purple-500 focus:outline-none"
-                            >
-                              <option value="user">User</option>
-                              <option value="admin">Admin</option>
-                              <option value="superadmin">Superadmin</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <select
-                              value={u.tier}
-                              onChange={(e) => updateUserTier(u.id, e.target.value)}
-                              className="bg-white text-gray-900 px-3 py-1 rounded text-sm border border-purple-200/50 focus:border-purple-500 focus:outline-none"
-                            >
-                              <option value="free">Free</option>
-                              <option value="pro">Pro</option>
-                              <option value="enterprise">Enterprise</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs rounded-full ${u.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                              {u.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {new Date(u.createdAt).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <button className="text-violet-600 hover:text-violet-700 mr-3">View</button>
-                            <button className="text-rose-600 hover:text-rose-700">Delete</button>
-                          </td>
+              <div className="space-y-4">
+                {/* Mobile: Cards */}
+                <div className="block md:hidden space-y-3">
+                  {users.map(u => (
+                    <div key={u.id} className="bg-white/95 backdrop-blur-sm rounded-lg p-4 border border-purple-200/50 shadow-lg">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="text-base font-bold text-gray-900">{u.displayName}</div>
+                          <div className="text-sm text-gray-600">@{u.username}</div>
+                          <div className="text-xs text-gray-500 mt-1">{u.email}</div>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${u.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {u.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className="text-xs text-gray-600 block mb-1">Role</label>
+                          <select
+                            value={u.role}
+                            onChange={(e) => updateUserRole(u.id, e.target.value)}
+                            className="w-full bg-white text-gray-900 px-3 py-2 rounded text-sm border border-purple-200/50"
+                          >
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                            <option value="superadmin">Superadmin</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600 block mb-1">Tier</label>
+                          <select
+                            value={u.tier}
+                            onChange={(e) => updateUserTier(u.id, e.target.value)}
+                            className="w-full bg-white text-gray-900 px-3 py-2 rounded text-sm border border-purple-200/50"
+                          >
+                            <option value="free">Free</option>
+                            <option value="pro">Pro</option>
+                            <option value="enterprise">Enterprise</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t border-purple-200/30">
+                        <span className="text-xs text-gray-500">
+                          Joined {new Date(u.createdAt).toLocaleDateString()}
+                        </span>
+                        <div className="flex gap-2">
+                          <button className="text-xs text-violet-600 hover:text-violet-700 px-2 py-1">View</button>
+                          <button className="text-xs text-rose-600 hover:text-rose-700 px-2 py-1">Delete</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop: Table */}
+                <div className="hidden md:block bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden border border-purple-200/50 shadow-lg">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-purple-100/50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">User</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Email</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Role</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Tier</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Created</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-purple-200/30">
+                        {users.map(u => (
+                          <tr key={u.id} className="hover:bg-purple-50/50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{u.displayName}</div>
+                              <div className="text-sm text-gray-600">@{u.username}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{u.email}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <select
+                                value={u.role}
+                                onChange={(e) => updateUserRole(u.id, e.target.value)}
+                                className="bg-white text-gray-900 px-3 py-1 rounded text-sm border border-purple-200/50 focus:border-purple-500 focus:outline-none"
+                              >
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                                <option value="superadmin">Superadmin</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <select
+                                value={u.tier}
+                                onChange={(e) => updateUserTier(u.id, e.target.value)}
+                                className="bg-white text-gray-900 px-3 py-1 rounded text-sm border border-purple-200/50 focus:border-purple-500 focus:outline-none"
+                              >
+                                <option value="free">Free</option>
+                                <option value="pro">Pro</option>
+                                <option value="enterprise">Enterprise</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 text-xs rounded-full ${u.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                {u.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {new Date(u.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <button className="text-violet-600 hover:text-violet-700 mr-3">View</button>
+                              <button className="text-rose-600 hover:text-rose-700">Delete</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Agents Tab */}
             {activeTab === 'agents' && (
-              <div className="bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden border border-purple-200/50 shadow-lg">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-purple-100/50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Name</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Model</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Owner</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-purple-200/30">
-                      {agents.map(agent => (
-                        <tr key={agent.id} className="hover:bg-purple-50/50">
-                          <td className="px-6 py-4">
-                            <div className="text-sm font-medium text-gray-900">{agent.name}</div>
-                            <div className="text-sm text-gray-600 truncate max-w-xs">{agent.description}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs rounded-full ${agent._isSystemAgent ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                              {agent._isSystemAgent ? 'System' : 'User'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{agent.model}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {agent._ownerUserId || 'System'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs rounded-full ${agent.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                              {agent.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {new Date(agent.createdAt).toLocaleDateString()}
-                          </td>
+              <div className="space-y-4">
+                {/* Mobile: Cards */}
+                <div className="block md:hidden space-y-3">
+                  {agents.map(agent => (
+                    <div key={agent.id} className="bg-white/95 backdrop-blur-sm rounded-lg p-4 border border-purple-200/50 shadow-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="text-base font-bold text-gray-900">{agent.name}</div>
+                          <div className="text-xs text-gray-600 mt-1 line-clamp-2">{agent.description}</div>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ml-2 ${agent._isSystemAgent ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {agent._isSystemAgent ? 'System' : 'User'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm mt-3">
+                        <div>
+                          <span className="text-gray-600">Model:</span>
+                          <div className="text-gray-900 font-medium">{agent.model}</div>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Owner:</span>
+                          <div className="text-gray-900 font-medium">{agent._ownerUserId || 'System'}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 mt-3 border-t border-purple-200/30">
+                        <span className={`px-2 py-1 text-xs rounded-full ${agent.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {agent.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(agent.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop: Table */}
+                <div className="hidden md:block bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden border border-purple-200/50 shadow-lg">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-purple-100/50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Name</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Model</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Owner</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Created</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-purple-200/30">
+                        {agents.map(agent => (
+                          <tr key={agent.id} className="hover:bg-purple-50/50">
+                            <td className="px-6 py-4">
+                              <div className="text-sm font-medium text-gray-900">{agent.name}</div>
+                              <div className="text-sm text-gray-600 truncate max-w-xs">{agent.description}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 text-xs rounded-full ${agent._isSystemAgent ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {agent._isSystemAgent ? 'System' : 'User'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{agent.model}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {agent._ownerUserId || 'System'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 text-xs rounded-full ${agent.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                {agent.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {new Date(agent.createdAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Workspaces Tab */}
             {activeTab === 'workspaces' && (
-              <div className="bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden border border-purple-200/50 shadow-lg">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-purple-100/50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Name</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Owner ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-purple-200/30">
-                      {workspaces.map(ws => (
-                        <tr key={ws.id} className="hover:bg-purple-50/50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ws.name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700 truncate max-w-md">{ws.description || 'No description'}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{ws.ownerId}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">
-                              {ws.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {new Date(ws.createdAt).toLocaleDateString()}
-                          </td>
+              <div className="space-y-4">
+                {/* Mobile: Cards */}
+                <div className="block md:hidden space-y-3">
+                  {workspaces.map(ws => (
+                    <div key={ws.id} className="bg-white/95 backdrop-blur-sm rounded-lg p-4 border border-purple-200/50 shadow-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="text-base font-bold text-gray-900">{ws.name}</div>
+                          <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                            {ws.description || 'No description'}
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700 ml-2">
+                          {ws.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 mt-3 border-t border-purple-200/30">
+                        <div>
+                          <span className="text-xs text-gray-600">Owner ID:</span>
+                          <div className="text-xs text-gray-900 font-mono">{ws.ownerId.substring(0, 8)}...</div>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(ws.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop: Table */}
+                <div className="hidden md:block bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden border border-purple-200/50 shadow-lg">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-purple-100/50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Name</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Owner ID</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Created</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-purple-200/30">
+                        {workspaces.map(ws => (
+                          <tr key={ws.id} className="hover:bg-purple-50/50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ws.name}</td>
+                            <td className="px-6 py-4 text-sm text-gray-700 truncate max-w-md">{ws.description || 'No description'}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{ws.ownerId}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">
+                                {ws.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {new Date(ws.createdAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
