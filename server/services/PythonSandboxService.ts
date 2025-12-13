@@ -178,6 +178,21 @@ class PythonSandboxService {
         break;
     }
 
+    // Get list of local module names (from .py files in the project)
+    // These should NOT be treated as pip packages
+    const localModules = new Set<string>();
+    for (const file of files) {
+      // Extract module name from file path: "models.py" -> "models", "utils/helpers.py" -> "utils"
+      const fileName = file.path.replace(/\\/g, '/'); // normalize path
+      const baseName = fileName.split('/')[0]; // Get first part of path
+      const moduleName = baseName.replace('.py', '');
+      if (moduleName && !moduleName.includes('.')) {
+        localModules.add(moduleName);
+      }
+    }
+    
+    logger.info(`Local modules detected: ${Array.from(localModules).join(', ')}`);
+
     // Detect imports from code
     const importRegex = /^(?:from\s+(\w+)|import\s+(\w+))/gm;
     const stdLib = new Set([
@@ -185,7 +200,39 @@ class PythonSandboxService {
       'collections', 'itertools', 'functools', 're', 'string', 'typing',
       'abc', 'copy', 'pickle', 'csv', 'pathlib', 'tempfile', 'shutil',
       'urllib', 'http', 'html', 'xml', 'email', 'base64', 'hashlib',
-      'logging', 'unittest', 'dataclasses', 'enum', 'contextlib', 'asyncio'
+      'logging', 'unittest', 'dataclasses', 'enum', 'contextlib', 'asyncio',
+      'struct', 'socket', 'ssl', 'select', 'threading', 'multiprocessing',
+      'subprocess', 'queue', 'concurrent', 'signal', 'mmap', 'ctypes',
+      'warnings', 'weakref', 'gc', 'inspect', 'dis', 'traceback', 'linecache',
+      'tokenize', 'keyword', 'token', 'symbol', 'parser', 'ast', 'symtable',
+      'compileall', 'pyclbr', 'py_compile', 'zipimport', 'pkgutil', 'modulefinder',
+      'runpy', 'importlib', 'zipfile', 'tarfile', 'zlib', 'gzip', 'bz2', 'lzma',
+      'configparser', 'tomllib', 'netrc', 'xdrlib', 'plistlib', 'crypt', 'tty',
+      'termios', 'pty', 'fcntl', 'pipes', 'posixpath', 'ntpath', 'genericpath',
+      'fnmatch', 'glob', 'linecache', 'textwrap', 'codecs', 'unicodedata',
+      'stringprep', 'readline', 'rlcompleter', 'bisect', 'array', 'heapq',
+      'numbers', 'cmath', 'decimal', 'fractions', 'statistics', 'secrets',
+      'operator', 'contextvars', 'graphlib', 'types', 'pprint', 'reprlib',
+      '__future__', 'builtins'
+    ]);
+
+    // Known PyPI packages that should be installed
+    const knownPackages = new Set([
+      'numpy', 'pandas', 'matplotlib', 'seaborn', 'scipy', 'sklearn',
+      'tensorflow', 'keras', 'torch', 'PIL', 'cv2', 'requests', 'httpx',
+      'aiohttp', 'beautifulsoup4', 'bs4', 'lxml', 'selenium', 'playwright',
+      'sqlalchemy', 'psycopg2', 'pymongo', 'redis', 'celery', 'pydantic',
+      'fastapi', 'flask', 'django', 'streamlit', 'dash', 'plotly', 'bokeh',
+      'altair', 'pytest', 'hypothesis', 'black', 'flake8', 'mypy', 'pylint',
+      'boto3', 'google', 'azure', 'openai', 'anthropic', 'langchain',
+      'transformers', 'huggingface_hub', 'datasets', 'tokenizers',
+      'pillow', 'imageio', 'scikit-image', 'pyautogui', 'pyperclip',
+      'click', 'typer', 'rich', 'tqdm', 'colorama', 'tabulate', 'prettytable',
+      'yaml', 'pyyaml', 'toml', 'dotenv', 'python-dotenv', 'environs',
+      'arrow', 'pendulum', 'dateutil', 'python-dateutil', 'pytz',
+      'werkzeug', 'jinja2', 'markupsafe', 'itsdangerous', 'certifi',
+      'charset_normalizer', 'idna', 'urllib3', 'six', 'packaging', 'setuptools',
+      'wheel', 'pip', 'virtualenv', 'pipenv', 'poetry', 'twine'
     ]);
 
     const packageMapping: Record<string, string> = {
@@ -193,15 +240,37 @@ class PythonSandboxService {
       'cv2': 'opencv-python',
       'sklearn': 'scikit-learn',
       'bs4': 'beautifulsoup4',
+      'yaml': 'pyyaml',
+      'dotenv': 'python-dotenv',
+      'dateutil': 'python-dateutil',
     };
 
     for (const file of files) {
       let match;
       while ((match = importRegex.exec(file.content)) !== null) {
         const packageName = match[1] || match[2];
-        if (!stdLib.has(packageName) && packageName !== projectType) {
-          const mappedName = packageMapping[packageName] || packageName;
+        
+        // Skip if:
+        // 1. It's a standard library module
+        // 2. It's a local module (file in the project)
+        // 3. It's the framework being used (already added above)
+        if (stdLib.has(packageName)) continue;
+        if (localModules.has(packageName)) {
+          logger.info(`Skipping local module: ${packageName}`);
+          continue;
+        }
+        if (packageName === projectType) continue;
+        if (packageName === 'flask' || packageName === 'django' || 
+            packageName === 'fastapi' || packageName === 'streamlit') continue;
+        
+        // Only add if it's a known package or looks like a real package
+        // (to avoid adding random local imports as requirements)
+        const mappedName = packageMapping[packageName] || packageName;
+        if (knownPackages.has(packageName) || knownPackages.has(mappedName)) {
           requirements.add(mappedName);
+        } else {
+          // Log unknown imports that might be local modules
+          logger.info(`Skipping unknown import (might be local): ${packageName}`);
         }
       }
     }
