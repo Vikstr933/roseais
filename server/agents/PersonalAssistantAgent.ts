@@ -153,17 +153,34 @@ export class PersonalAssistantAgent {
     // Initialize code generation tool
     this.generateCodeTool = {
       name: 'generate_code',
-      description: 'Generate code for a React application in the playground OR start/restart the dev server. Use this tool when: (1) User asks to create an app, build a feature, generate code, or make changes to their project. (2) **CRITICAL: User asks to start, restart, or stop the dev server** - use this tool with prompt like "start the dev server" or "restart the dev server". The playground system will automatically handle dev server startup in the browser-based WebContainer. NEVER say you cannot start the dev server - you absolutely can by using this tool! Always use this tool when the user explicitly asks for code generation, app creation, building features, OR starting/restarting the dev server. If no projectId is provided, will use the currently selected project from the conversation.',
+      description: `Generate code for applications in the playground. Supports multiple languages:
+- **React/TypeScript**: Full WebContainer preview with hot reload
+- **Python Scripts**: Browser-based preview using Pyodide (WebAssembly)
+- **Python Web Apps (Flask/Django/FastAPI/Streamlit)**: Server-side sandbox preview with live URL
+- **Node.js**: WebContainer preview
+
+Use this tool when: (1) User asks to create an app, build a feature, generate code, or make changes to their project. (2) **CRITICAL: User asks to start, restart, or stop the dev server** - use this tool with prompt like "start the dev server" or "restart the dev server". 
+
+**Python Support**: When user asks for Python apps:
+- Simple scripts (data processing, algorithms, etc.) → Generates .py files, runs in browser via Pyodide
+- Web apps (Flask, FastAPI, Django, Streamlit) → Generates .py files + requirements.txt, runs on server sandbox
+- Preview auto-detects project type and uses appropriate runtime
+
+If no projectId is provided, will use the currently selected project from the conversation.`,
       parameters: {
         type: 'object',
         properties: {
           prompt: {
             type: 'string',
-            description: 'Detailed description of what code to generate (e.g., "Create an iPhone homescreen app with app icons, status bar, and dock")'
+            description: 'Detailed description of what code to generate (e.g., "Create an iPhone homescreen app" or "Build a Flask API with user authentication" or "Create a Python data analysis script")'
           },
           projectId: {
             type: 'string',
             description: 'Optional project ID to generate code for. If not provided, will use the currently selected project from the conversation (set via select_project tool).'
+          },
+          language: {
+            type: 'string',
+            description: 'Optional: Target language/framework (react, python, flask, fastapi, django, node). Auto-detected from prompt if not specified.'
           }
         },
         required: ['prompt']
