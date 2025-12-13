@@ -110,6 +110,38 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
   const [loadTimeout, setLoadTimeout] = useState<NodeJS.Timeout | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Listen for console messages from the iframe via postMessage
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Only accept messages from our preview iframe
+      if (!previewUrl || !event.origin) return;
+      
+      try {
+        const data = event.data;
+        if (data && data.type === 'console' && data.level && data.message) {
+          setConsoleMessages(prev => [
+            ...prev.slice(-99), // Keep last 100 messages
+            {
+              type: data.level as 'log' | 'error' | 'warn',
+              message: typeof data.message === 'string' ? data.message : JSON.stringify(data.message),
+              timestamp: new Date()
+            }
+          ]);
+        }
+      } catch (e) {
+        // Ignore invalid messages
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [previewUrl]);
+
+  // Clear console when URL changes
+  useEffect(() => {
+    setConsoleMessages([]);
+  }, [previewUrl]);
+
   useEffect(() => {
     console.log('🔍 AdvancedPreview URL updated:', previewUrl);
     if (previewUrl && !document.hidden) {
@@ -343,15 +375,15 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
       {/* Preview Area */}
       <div className="flex-1 flex min-h-0">
         {/* Main Preview */}
-        <div className="flex-1 flex flex-col items-center justify-center p-3 bg-muted/20 overflow-auto">
+        <div className="flex-1 flex flex-col items-center justify-start p-2 bg-muted/20 overflow-auto">
           {/* Device Frame */}
           <div
-            className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-2xl ring-1 ring-black/5 overflow-hidden"
+            className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-2xl ring-1 ring-black/5 overflow-hidden flex-shrink-0"
             style={{
-              width: currentWidth * (zoom / 100),
-              height: currentHeight * (zoom / 100),
-              maxWidth: '100%',
-              maxHeight: '100%',
+              width: Math.min(currentWidth * (zoom / 100), window.innerWidth - 100),
+              height: Math.min(currentHeight * (zoom / 100), window.innerHeight - 200),
+              maxWidth: 'calc(100vw - 2rem)',
+              maxHeight: 'calc(100vh - 10rem)',
             }}
           >
             {/* Rulers */}
@@ -402,12 +434,10 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                 <iframe
                   ref={iframeRef}
                   src={previewUrl}
-                  className="w-full h-full border-0"
+                  className="border-0 absolute inset-0"
                   style={{
-                    transform: `scale(${zoom / 100})`,
-                    transformOrigin: 'top left',
-                    width: `${(100 / zoom) * 100}%`,
-                    height: `${(100 / zoom) * 100}%`,
+                    width: '100%',
+                    height: '100%',
                   }}
                   title={`Preview of ${projectName}`}
                   onLoad={() => {

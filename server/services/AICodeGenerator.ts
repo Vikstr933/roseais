@@ -551,6 +551,16 @@ CRITICAL RULES:
    - No interface Name {; or return {; patterns
    - All brackets/braces/parens must be balanced
 
+**NULL-SAFETY (CRITICAL - PREVENTS RUNTIME CRASHES):**
+- ALWAYS use optional chaining: object?.property instead of object.property
+- ALWAYS use nullish coalescing: value ?? defaultValue for safe defaults
+- ALWAYS initialize Date objects safely: new Date(value || Date.now())
+- ALWAYS check arrays before mapping: (array || []).map(...)
+- ALWAYS provide default values for all props and state
+- NEVER assume data exists - always check first!
+- Example safe date: const date = entry?.date ? new Date(entry.date) : new Date();
+- Example safe array: const items = (data?.items || []).filter(i => i?.id);
+
 FILE STRUCTURE:
 - src/App.tsx (default export)
 - src/components/*.tsx (named exports)

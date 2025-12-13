@@ -589,6 +589,17 @@ MODE: Modification - only modify/create files listed above, preserve others
 ${isLandingPage ? `
 NOTE: This is a landing page - make it visually impressive
 ` : ''}
+
+**NULL-SAFETY (CRITICAL - PREVENTS RUNTIME CRASHES):**
+All code MUST handle undefined/null values safely:
+- Use optional chaining: object?.property?.nested
+- Use nullish coalescing: value ?? defaultValue
+- Safe Date: new Date(value || Date.now()) NOT new Date(value)
+- Safe array: (array || []).map(...) NOT array.map(...)
+- Always check before .getTime(): if (date instanceof Date) date.getTime()
+- Initialize state with valid defaults, not undefined
+Example: const startTime = entry?.startTime ? new Date(entry.startTime) : new Date();
+
 OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
   }
 
