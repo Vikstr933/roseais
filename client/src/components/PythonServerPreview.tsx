@@ -117,8 +117,43 @@ export function PythonServerPreview({ files, onServerReady }: PythonServerPrevie
       setSandbox(data.sandbox);
       setLogs(prev => [...prev, ...data.sandbox.logs]);
 
-      if (data.sandbox.url && data.sandbox.status === 'running') {
-        onServerReady?.(data.sandbox.url);
+      // Poll for status updates until server is ready
+      if (data.sandbox.status === 'starting' || data.sandbox.status === 'running') {
+        const pollStatus = async () => {
+          try {
+            const statusResponse = await apiFetch(`/api/python/sandbox/${data.sandbox.id}`, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+            });
+            
+            if (statusResponse.ok) {
+              const statusData = await statusResponse.json();
+              if (statusData.sandbox) {
+                setSandbox(statusData.sandbox);
+                setLogs(prev => {
+                  const newLogs = statusData.sandbox.logs.slice(prev.length);
+                  return [...prev, ...newLogs];
+                });
+                
+                // If server is running and has URL, notify
+                if (statusData.sandbox.status === 'running' && statusData.sandbox.url) {
+                  // Ensure URL has https:// prefix
+                  const url = statusData.sandbox.url.startsWith('http') 
+                    ? statusData.sandbox.url 
+                    : `https://${statusData.sandbox.url}`;
+                  onServerReady?.(url);
+                } else if (statusData.sandbox.status === 'starting') {
+                  // Continue polling if still starting
+                  setTimeout(pollStatus, 2000);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error polling sandbox status:', err);
+          }
+        };
+        
+        // Start polling after a short delay
+        setTimeout(pollStatus, 1000);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start server');
@@ -257,13 +292,21 @@ export function PythonServerPreview({ files, onServerReady }: PythonServerPrevie
       <div className="flex-1 flex flex-col min-h-0">
         {/* Preview iframe (when running) */}
         {isRunning && sandbox?.url && (
-          <div className="flex-1 min-h-0 border-b">
+          <div className="flex-1 min-h-0 border-b relative">
             <iframe
-              src={sandbox.url}
+              src={sandbox.url.startsWith('http') ? sandbox.url : `https://${sandbox.url}`}
               className="w-full h-full border-0"
               title="Python Server Preview"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation allow-top-navigation-by-user-activation"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              referrerPolicy="no-referrer-when-downgrade"
             />
+            {/* Fallback message if iframe fails to load */}
+            <div className="absolute bottom-2 right-2 bg-yellow-100 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700 rounded p-2 text-xs">
+              <p className="text-yellow-800 dark:text-yellow-200">
+                If preview doesn't load, click "Open" button to view in new tab
+              </p>
+            </div>
           </div>
         )}
 
