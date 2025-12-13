@@ -327,6 +327,44 @@ const initializeApp = async () => {
     app.use(memoryMonitoring());
     app.use('/api', apiCache(performanceService.getCache(), 300)); // 5 minute cache for API routes
 
+    // Fallback CORS middleware - ensure CORS headers are ALWAYS set for API routes
+    // This runs AFTER all other middleware to guarantee CORS headers are present
+    app.use('/api', (req, res, next) => {
+      const origin = req.headers.origin;
+      
+      // Always allow localhost in development
+      if (origin && origin.includes('localhost')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Max-Age', '86400');
+      }
+      // Allow Vercel
+      else if (origin && origin.includes('vercel.app')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Max-Age', '86400');
+      }
+      // Allow Render
+      else if (origin && origin.includes('onrender.com')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Max-Age', '86400');
+      }
+      
+      // Handle OPTIONS preflight here as well
+      if (req.method === 'OPTIONS') {
+        return res.status(204).send();
+      }
+      
+      next();
+    });
+
     // Special CORS handling for SSE endpoints
     app.use('/api/sse', (req, res, next) => {
       const origin = req.headers.origin;
