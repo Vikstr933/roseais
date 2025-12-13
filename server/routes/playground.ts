@@ -18,7 +18,7 @@ const router = Router();
 router.post('/chat', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
-    const { message, projectId, sessionId } = req.body;
+    const { message, projectId, sessionId, chatMode } = req.body;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({
@@ -52,7 +52,8 @@ router.post('/chat', authenticateUser, async (req, res) => {
     const result = await playgroundAssistantAgent.processRequest(userId, message, {
       sessionId: sessionId || userId,
       projectId,
-      existingFiles
+      existingFiles,
+      chatMode: chatMode === true // Pass chat mode flag
     });
 
     res.json({

@@ -265,6 +265,7 @@ export class PlaygroundAssistantAgent {
       sessionId?: string;
       projectId?: string;
       existingFiles?: Array<{ path: string; content: string }>;
+      chatMode?: boolean; // If true, AI should only chat, not generate code
     }
   ): Promise<{
     response: string;
@@ -306,7 +307,7 @@ export class PlaygroundAssistantAgent {
       }
 
       // Build system prompt
-      const systemPrompt = this.buildSystemPrompt(hasProjectContext, projectId, options?.existingFiles);
+      const systemPrompt = this.buildSystemPrompt(hasProjectContext, projectId, options?.existingFiles, isChatMode);
 
       // Build user message
       const enhancedMessage = this.buildEnhancedMessage(userMessage, options?.existingFiles);
@@ -508,15 +509,20 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
   private buildSystemPrompt(
     hasProjectContext: boolean,
     projectId?: string,
-    existingFiles?: Array<{ path: string; content: string }>
+    existingFiles?: Array<{ path: string; content: string }>,
+    isChatMode?: boolean
   ): string {
+    const chatModeNote = isChatMode 
+      ? `\n\n**CHAT MODE ACTIVE**: You are currently in chat-only mode. This means:\n- You should NOT generate code or use code generation tools\n- You can discuss code, answer questions, provide explanations, and help with planning\n- You can read and analyze existing code, but should not create or modify files\n- Focus on conversation, guidance, and answering questions about the project\n- If the user wants to generate code, they should switch to Code Mode\n`
+      : '';
+
     const basePrompt = `You are Chap-ZPT, a dedicated AI assistant for the AI Code Playground. Your primary focus is on code generation, project management, and helping users build amazing applications.
 
 **Your Role:**
 - You are specialized for the playground environment
 - You excel at understanding code generation requests
 - You automatically improve prompts before generating code
-- You provide clear, actionable responses focused on code and projects
+- You provide clear, actionable responses focused on code and projects${chatModeNote}
 
 **Key Capabilities:**
 1. **Automatic Prompt Improvement**: When a user asks for code generation, you automatically improve their prompt to ensure high-quality results. You add technical details, best practices, and missing requirements.

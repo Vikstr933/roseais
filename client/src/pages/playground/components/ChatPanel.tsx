@@ -30,6 +30,10 @@ interface ChatPanelProps {
   
   // Refs
   chatMessagesRef: RefObject<HTMLDivElement>;
+  
+  // Chat mode
+  isChatMode: boolean;
+  onChatModeChange: (enabled: boolean) => void;
 }
 
 export const ChatPanel = memo(function ChatPanel({
@@ -41,6 +45,8 @@ export const ChatPanel = memo(function ChatPanel({
   onSubmit,
   onClearChat,
   chatMessagesRef,
+  isChatMode,
+  onChatModeChange,
 }: ChatPanelProps) {
   return (
     <div className="hidden md:flex w-[32%] min-w-[320px] max-w-[480px] border-r border-border flex-col bg-card text-foreground relative shadow-2xl min-h-0 h-full overflow-hidden">
@@ -49,6 +55,8 @@ export const ChatPanel = memo(function ChatPanel({
         statusMessages={statusMessages}
         chatHistoryLength={chatHistory.length}
         onClearChat={onClearChat}
+        isChatMode={isChatMode}
+        onChatModeChange={onChatModeChange}
       />
       
       <ChatMessages

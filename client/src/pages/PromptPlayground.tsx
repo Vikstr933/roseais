@@ -34,7 +34,6 @@ import { CreateProjectDialog } from "../components/CreateProjectDialog";
 import { Badge } from "../components/ui/badge";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useToast } from "../hooks/use-toast";
-import { ComponentLibrary } from "../components/ComponentLibrary";
 import { ProjectSharing } from "../components/ProjectSharing";
 import { ProductionDeployment } from "../components/ProductionDeployment";
 import { AdvancedPreview } from "../components/AdvancedPreview";
@@ -121,6 +120,49 @@ export default function PromptPlayground() {
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [chatSheetOpen, setChatSheetOpen] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [isChatMode, setIsChatMode] = useState(false); // Chat mode toggle
+  const [showPublishingPolicyDialog, setShowPublishingPolicyDialog] = useState(false);
+  const [publishingPolicy, setPublishingPolicy] = useState<{ allowExternalPublishing: boolean; allowedRoles: string[] } | null>(null);
+
+  // Load publishing policy when project changes or dialog opens
+  useEffect(() => {
+    if (showPublishingPolicyDialog && currentProject?.id && sessionToken) {
+      const loadPublishingPolicy = async () => {
+        try {
+          // Try to get workspace to see current policy
+          const response = await apiFetch(`/api/workspaces/${currentProject.id}`, {
+            method: 'GET',
+            headers: getAuthHeaders(sessionToken),
+          });
+          
+          if (response.ok) {
+            const workspace = await response.json();
+            if (workspace.publishingPolicy) {
+              const policy = typeof workspace.publishingPolicy === 'string' 
+                ? JSON.parse(workspace.publishingPolicy)
+                : workspace.publishingPolicy;
+              setPublishingPolicy(policy);
+            } else {
+              // Default policy
+              setPublishingPolicy({
+                allowExternalPublishing: true,
+                allowedRoles: ['admin', 'owner']
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load publishing policy:', error);
+          // Default policy on error
+          setPublishingPolicy({
+            allowExternalPublishing: true,
+            allowedRoles: ['admin', 'owner']
+          });
+        }
+      };
+      
+      loadPublishingPolicy();
+    }
+  }, [showPublishingPolicyDialog, currentProject?.id, sessionToken]);
   
   // Track processed prompts to prevent duplicate processing
   const processedPromptRef = useRef<string | null>(null);
@@ -1958,6 +2000,7 @@ export default function PromptPlayground() {
           message: data.userPrompt,
           projectId: currentProject?.id || null,
           sessionId: currentSessionId || undefined,
+          chatMode: isChatMode, // Tell backend we're in chat mode
         }),
       });
 
@@ -3201,52 +3244,20 @@ export default function PromptPlayground() {
               >
                 <Edit2 className="h-4 w-4" />
               </Button>
+              {isSuperAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPublishingPolicyDialog(true)}
+                  className="flex items-center gap-2"
+                  title="Publishing Policy"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           )}
 
-          <ComponentLibrary
-            onSelectComponent={(component) => {
-              // Add component code to current file or create new file
-              const componentFile = createGeneratedFile(
-                `src/components/${component.name}.tsx`,
-                component.code
-              );
-
-              const updatedFiles = response?.files?.length ? [...response.files, componentFile] : [componentFile];
-
-              setResponse(prev => ({
-                ...(prev || {}),
-                type: 'component',
-                text: prev?.text || `Added ${component.name} component`,
-                files: updatedFiles,
-              }));
-
-              updateGeneratedFiles(updatedFiles);
-
-              toast({
-                title: "Component Added!",
-                description: `${component.name} has been added to your project.`,
-              });
-            }}
-            onSelectTemplate={(template) => {
-              const templateFiles: GeneratedFile[] = (template.files || []).map((file: any) =>
-                createGeneratedFile(file.path, file.content)
-              );
-
-              setResponse({
-                type: 'component',
-                text: `Loaded ${template.name} template`,
-                files: templateFiles
-              });
-
-              updateGeneratedFiles(templateFiles);
-
-              toast({
-                title: "Template Loaded!",
-                description: `${template.name} template has been loaded.`,
-              });
-            }}
-          />
 
           {(() => {
             // Get files from response or existing project files
@@ -3349,6 +3360,8 @@ export default function PromptPlayground() {
             onSubmit={(data) => generateMutation.mutate(data)}
             onClearChat={clearChat}
             chatMessagesRef={chatMessagesRef}
+            isChatMode={isChatMode}
+            onChatModeChange={setIsChatMode}
           />
 
         {/* Workspace Panel - Right Side (70%) - Full width on mobile */}
@@ -3593,6 +3606,117 @@ export default function PromptPlayground() {
             });
           }}
         />
+      )}
+
+      {/* Publishing Policy Dialog */}
+      {showPublishingPolicyDialog && currentProject && (
+        <Dialog open={showPublishingPolicyDialog} onOpenChange={setShowPublishingPolicyDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Publishing Policy</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">Allow External Publishing</label>
+                  <p className="text-xs text-muted-foreground">
+                    Control who can deploy this project to external platforms (e.g., Vercel)
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={publishingPolicy?.allowExternalPublishing ?? true}
+                  onChange={(e) => {
+                    setPublishingPolicy(prev => ({
+                      ...prev,
+                      allowExternalPublishing: e.target.checked,
+                      allowedRoles: prev?.allowedRoles || ['admin', 'owner']
+                    }));
+                  }}
+                  className="h-4 w-4"
+                />
+              </div>
+              
+              {publishingPolicy?.allowExternalPublishing && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Allowed Roles</label>
+                  <div className="space-y-2">
+                    {['admin', 'owner', 'superadmin'].map((role) => (
+                      <label key={role} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={publishingPolicy?.allowedRoles?.includes(role) ?? false}
+                          onChange={(e) => {
+                            const currentRoles = publishingPolicy?.allowedRoles || [];
+                            setPublishingPolicy(prev => ({
+                              ...prev,
+                              allowedRoles: e.target.checked
+                                ? [...currentRoles, role]
+                                : currentRoles.filter(r => r !== role)
+                            }));
+                          }}
+                          className="h-4 w-4"
+                        />
+                        <span className="text-sm capitalize">{role}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowPublishingPolicyDialog(false);
+                    setPublishingPolicy(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!currentProject || !sessionToken) return;
+                    
+                    try {
+                      const response = await apiFetch(`/api/workspaces/${currentProject.id}/publishing-policy`, {
+                        method: 'PUT',
+                        headers: {
+                          ...getAuthHeaders(sessionToken),
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          allowExternalPublishing: publishingPolicy?.allowExternalPublishing ?? true,
+                          allowedRoles: publishingPolicy?.allowedRoles || ['admin', 'owner'],
+                        }),
+                      });
+
+                      if (response.ok) {
+                        toast({
+                          title: 'Publishing Policy Updated',
+                          description: 'The publishing policy has been saved successfully.',
+                        });
+                        setShowPublishingPolicyDialog(false);
+                        setPublishingPolicy(null);
+                      } else {
+                        const errorData = await response.json().catch(() => ({ error: 'Failed to update policy' }));
+                        throw new Error(errorData.error || 'Failed to update publishing policy');
+                      }
+                    } catch (error: any) {
+                      toast({
+                        title: 'Error',
+                        description: error.message || 'Failed to update publishing policy',
+                        variant: 'destructive',
+                      });
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
       </ErrorBoundary>
     </div>

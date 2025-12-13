@@ -4,7 +4,7 @@
  */
 
 import { memo } from 'react';
-import { Brain, Trash2 } from 'lucide-react';
+import { Brain, Trash2, MessageSquare, Code } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { AgentStatusDropdown } from './AgentStatusDropdown';
 import { StatusMessagesDropdown } from './StatusMessagesDropdown';
@@ -15,6 +15,8 @@ interface ChatHeaderProps {
   statusMessages: StatusMessage[];
   chatHistoryLength: number;
   onClearChat: () => void;
+  isChatMode: boolean;
+  onChatModeChange: (enabled: boolean) => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -22,6 +24,8 @@ export const ChatHeader = memo(function ChatHeader({
   statusMessages,
   chatHistoryLength,
   onClearChat,
+  isChatMode,
+  onChatModeChange,
 }: ChatHeaderProps) {
   return (
     <div className="panel-padding border-b border-border flex-shrink-0 bg-card z-30 shadow-sm">
@@ -31,6 +35,25 @@ export const ChatHeader = memo(function ChatHeader({
           <span className="font-bold tracking-tight">Chap-ZPT Chat</span>
         </h2>
         <div className="flex items-center gap-2">
+          <Button
+            variant={isChatMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => onChatModeChange(!isChatMode)}
+            className="h-8 px-3 text-xs min-h-[32px] sm:min-h-0"
+            title={isChatMode ? "Chat mode: AI will only chat, not generate code" : "Code mode: AI will generate code when needed"}
+          >
+            {isChatMode ? (
+              <>
+                <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                Chat Mode
+              </>
+            ) : (
+              <>
+                <Code className="h-3.5 w-3.5 mr-1.5" />
+                Code Mode
+              </>
+            )}
+          </Button>
           <AgentStatusDropdown agentStatusMap={agentStatusMap} />
           <StatusMessagesDropdown statusMessages={statusMessages} />
           {chatHistoryLength > 0 && (
