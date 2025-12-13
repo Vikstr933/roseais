@@ -119,6 +119,7 @@ export class MonetizationService {
     estimatedTokens?: number
   ): Promise<APIKeyResult> {
     const user = await this.getUserWithTier(userId);
+    const userTier = user.tier ?? 'free';
 
     // Estimate tokens if not provided
     const tokensToCheck =
@@ -127,7 +128,7 @@ export class MonetizationService {
     // Check rate limits first
     const canMakeRequest = await this.checkRateLimit(
       userId,
-      user.tier,
+      userTier,
       requestType,
       tokensToCheck
     );
@@ -137,7 +138,7 @@ export class MonetizationService {
 
     // Enterprise users can use their own API keys
     if (
-      user.tier === 'enterprise' &&
+      userTier === 'enterprise' &&
       this.rateLimitConfig.enterprise.allowOwnAPIKeys
     ) {
       const userKey = await this.getUserAPIKey(userId, serviceName);
@@ -177,14 +178,16 @@ export class MonetizationService {
     const model = metadata?.model || undefined;
     const cost = this.calculateCost(serviceName, tokensUsed, model);
 
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().split('T')[0];
+
+    // Insert or update usage for today
     await db.insert(userUsage).values({
       userId,
-      serviceName,
-      requestType,
+      date: today,
       tokensUsed,
+      aiRequests: 1,
       cost,
-      sessionId,
-      metadata: JSON.stringify(metadata || {}),
     });
 
     // Update rate limit buckets
@@ -244,18 +247,20 @@ export class MonetizationService {
       .where(eq(userUsage.userId, userId));
 
     // Get this month's token usage
+    const monthStartStr = monthStart.toISOString().split('T')[0];
     const monthTokenUsage = await db
       .select({ tokensUsed: sum(userUsage.tokensUsed) })
       .from(userUsage)
       .where(
         and(
           eq(userUsage.userId, userId),
-          gte(userUsage.createdAt, monthStart.toISOString())
+          gte(userUsage.date, monthStartStr)
         )
       );
 
     const user = await this.getUserWithTier(userId);
-    const config = this.rateLimitConfig[user.tier as keyof RateLimitConfig];
+    const userTier = user.tier ?? 'free';
+    const config = this.rateLimitConfig[userTier as keyof RateLimitConfig];
     const tokensUsedThisMonth = Number(monthTokenUsage[0]?.tokensUsed) || 0;
     const monthlyTokenLimit = config.monthlyTokens;
     const remainingTokens =
@@ -408,6 +413,7 @@ export class MonetizationService {
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
+    const monthStartStr = monthStart.toISOString().split('T')[0];
 
     const result = await db
       .select({ tokensUsed: sum(userUsage.tokensUsed) })
@@ -415,7 +421,7 @@ export class MonetizationService {
       .where(
         and(
           eq(userUsage.userId, userId),
-          gte(userUsage.createdAt, monthStart.toISOString())
+          gte(userUsage.date, monthStartStr)
         )
       );
 
@@ -474,18 +480,16 @@ export class MonetizationService {
       await db
         .update(rateLimitBuckets)
         .set({
-          requestCount: existing[0].requestCount + 1,
-          lastReset: new Date().toISOString(),
+          currentCount: (existing[0].currentCount ?? 0) + 1,
+          resetAt: new Date(windowEnd),
         })
         .where(eq(rateLimitBuckets.id, existing[0].id));
     } else {
       await db.insert(rateLimitBuckets).values({
         userId,
         bucketType,
-        requestCount: 1,
-        windowStart,
-        windowEnd,
-        lastReset: new Date().toISOString(),
+        currentCount: 1,
+        resetAt: new Date(windowEnd),
       });
     }
   }
@@ -517,8 +521,8 @@ export class MonetizationService {
     return await db
       .select()
       .from(subscriptionPlans)
-      .where(eq(subscriptionPlans.isActive, 1))
-      .orderBy(subscriptionPlans.price);
+      .where(eq(subscriptionPlans.isActive, true))
+      .orderBy(subscriptionPlans.priceMonthly);
   }
 
   /**

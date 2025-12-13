@@ -100,7 +100,7 @@ export class AnalysisAgent {
         
         this.logger.info(`Emitted API_KEY_REQUIRED event for missing keys: ${missingKeysArray.join(', ')}`);
       } catch (error) {
-        this.logger.warn('Failed to emit API_KEY_REQUIRED event', error as Error);
+        this.logger.warn('Failed to emit API_KEY_REQUIRED event', error instanceof Error ? error : new Error(String(error)));
       }
     }
 
@@ -185,10 +185,11 @@ export class AnalysisAgent {
 
       // Filter agents based on prompt keywords and capabilities
       const relevantAgents = allAgents.filter(agent => {
-        const caps = agent.capabilities || {};
+        const caps = (agent.capabilities || {}) as Record<string, unknown>;
         // CRITICAL FIX: Ensure specialties and apiIntegrations are arrays
-        const specialties = Array.isArray(caps.specialties) ? caps.specialties : [];
-        const apiIntegrations = Array.isArray(caps.apiIntegrations) ? caps.apiIntegrations : [];
+        const specialties = Array.isArray(caps.specialties) ? caps.specialties as string[] : [];
+        const apiIntegrations = Array.isArray(caps.apiIntegrations) ? caps.apiIntegrations as string[] : [];
+        const canAccessAPIs = Boolean(caps.canAccessAPIs);
 
         // Check if prompt mentions agent's specialties
         const matchesSpecialty = specialties.some((spec: string) =>
@@ -212,8 +213,8 @@ export class AnalysisAgent {
           if (promptLower.includes(keyword)) {
             // Check if agent has related capabilities
             return matchesSpecialty || matchesAPI || 
-                   (caps.canAccessAPIs && keyword.includes('api')) ||
-                   (caps.specialties && JSON.stringify(caps.specialties).toLowerCase().includes(keyword));
+                   (canAccessAPIs && keyword.includes('api')) ||
+                   (specialties.length > 0 && JSON.stringify(specialties).toLowerCase().includes(keyword));
           }
           return false;
         });
@@ -221,9 +222,16 @@ export class AnalysisAgent {
         return matchesSpecialty || matchesAPI || matchesKeywords;
       });
 
-      return relevantAgents;
+      return relevantAgents.map(agent => ({
+        id: agent.id.toString(),
+        name: agent.name,
+        capabilities: agent.capabilities,
+        requiredApiKeys: Array.isArray(agent.requiredApiKeys) ? agent.requiredApiKeys : [],
+        apiEndpoint: agent.apiEndpoint ?? undefined,
+        apiConfig: agent.apiConfig,
+      }));
     } catch (error) {
-      this.logger.error('Failed to find relevant agents', error as Error);
+      this.logger.error('Failed to find relevant agents', error instanceof Error ? error : new Error(String(error)));
       return [];
     }
   }
@@ -232,9 +240,13 @@ export class AnalysisAgent {
    * Check if user has required API keys for agents
    */
   private async checkAgentAPIKeys(
-    agents: Array<{
+    agentList: Array<{
       id: string;
+      name: string;
+      capabilities: any;
       requiredApiKeys: any[];
+      apiEndpoint?: string;
+      apiConfig?: any;
     }>,
     userId?: string
   ): Promise<Array<{
@@ -249,7 +261,7 @@ export class AnalysisAgent {
   }>> {
     if (!userId) {
       // No user = only return agents that don't need API keys
-      return agents
+      return agentList
         .filter(agent => !agent.requiredApiKeys || agent.requiredApiKeys.length === 0)
         .map(agent => ({
           ...agent,
@@ -261,9 +273,18 @@ export class AnalysisAgent {
     try {
       const apiKeyServiceModule = await import('./APIKeyService');
       const apiKeyService = apiKeyServiceModule.apiKeyService || apiKeyServiceModule.default;
-      const results = [];
+      const results: Array<{
+        id: string;
+        name: string;
+        capabilities: any;
+        requiredApiKeys: any[];
+        apiEndpoint?: string;
+        apiConfig?: any;
+        hasAllKeys: boolean;
+        missingKeys: any[];
+      }> = [];
 
-      for (const agent of agents) {
+      for (const agent of agentList) {
         if (!agent.requiredApiKeys || agent.requiredApiKeys.length === 0) {
           // No API keys required
           results.push({
@@ -288,9 +309,9 @@ export class AnalysisAgent {
 
       return results;
     } catch (error) {
-      this.logger.error('Failed to check agent API keys', error as Error);
+      this.logger.error('Failed to check agent API keys', error instanceof Error ? error : new Error(String(error)));
       // Return agents without API key requirements
-      return agents
+      return agentList
         .filter(agent => !agent.requiredApiKeys || agent.requiredApiKeys.length === 0)
         .map(agent => ({
           ...agent,

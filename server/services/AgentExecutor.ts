@@ -106,7 +106,16 @@ export class AgentExecutor {
           break;
 
         case 'ui-designer':
-          agentResult = await this.uiDesignerAgent.executeTask(context.prompt);
+          const uiResult = await this.uiDesignerAgent.executeTask(context.prompt);
+          agentResult = {
+            success: true,
+            files: [],
+            content: JSON.stringify({
+              components: uiResult.components || [],
+              styles: uiResult.styles || '',
+              structure: uiResult.structure || '',
+            }),
+          };
           break;
 
         case 'style-generator':
@@ -117,14 +126,22 @@ export class AgentExecutor {
           break;
 
         case 'code-generator':
-          agentResult = await this.codeGeneratorAgent.executeTask({
+          const codeResult = await this.codeGeneratorAgent.executeTask({
             prompt: context.prompt,
             sharedMemory: context.sharedMemory,
           });
+          agentResult = {
+            success: true,
+            files: codeResult.files || [],
+          };
           break;
 
         case 'completion-agent':
-          agentResult = await this.completionAgent.executeTask(context.prompt);
+          await this.completionAgent.executeTask(context.prompt);
+          agentResult = {
+            success: true,
+            files: [],
+          };
           break;
 
         default:

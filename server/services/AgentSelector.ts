@@ -18,8 +18,8 @@ const logger = new SimpleLogger('AgentSelector');
 interface DatabaseAgent {
   id: string;
   name: string;
-  description: string;
-  role: string;
+  description: string | null;
+  role: string | null;
   capabilities: any; // JSONB - already parsed by Drizzle
   expertise: any; // JSONB - already parsed by Drizzle
 }
@@ -124,8 +124,12 @@ export class AgentSelector {
 
       // Convert to our interface format
       const result: DatabaseAgent[] = dbAgents.map(agent => ({
-        ...agent,
-        id: agent.id.toString()
+        id: agent.id.toString(),
+        name: agent.name,
+        description: agent.description,
+        role: agent.role,
+        capabilities: agent.capabilities,
+        expertise: agent.expertise,
       }));
 
       logger.info(`Loaded ${result.length} active agents from database`);
@@ -182,8 +186,8 @@ export class AgentSelector {
         ? expertise.join(', ')
         : (typeof expertise === 'object' ? Object.keys(expertise).join(', ') : String(expertise || ''));
       
-      return `- ${agent.id}: ${agent.description || agent.name}
-  Role: ${agent.role || 'assistant'}
+      return `- ${agent.id}: ${agent.description ?? agent.name}
+  Role: ${agent.role ?? 'assistant'}
   Capabilities: ${capabilitiesStr || 'None'}
   Expertise: ${expertiseStr || 'None'}`;
     }).join('\n\n');
@@ -265,8 +269,8 @@ Respond in JSON format:
         // Ensure at least one developer agent is included
         if (selectedAgents.length === 0) {
           const developer = availableAgents.find(a => 
-            a.role.toLowerCase().includes('developer') || 
-            a.role.toLowerCase().includes('code')
+            a.role?.toLowerCase().includes('developer') || 
+            a.role?.toLowerCase().includes('code')
           );
           if (developer) {
             selectedAgents.push(developer.id);
@@ -363,9 +367,9 @@ Respond in JSON format:
     const reasons: string[] = [];
 
     // Find agents by role (dynamic lookup from database)
-    const architect = availableAgents.find(a => a.role.toLowerCase().includes('architect'));
-    const developer = availableAgents.find(a => a.role.toLowerCase().includes('developer') || a.role.toLowerCase().includes('code'));
-    const qa = availableAgents.find(a => a.role.toLowerCase().includes('qa') || a.role.toLowerCase().includes('quality'));
+    const architect = availableAgents.find(a => a.role?.toLowerCase().includes('architect'));
+    const developer = availableAgents.find(a => a.role?.toLowerCase().includes('developer') || a.role?.toLowerCase().includes('code'));
+    const qa = availableAgents.find(a => a.role?.toLowerCase().includes('qa') || a.role?.toLowerCase().includes('quality'));
 
     // Select based on complexity
     if (complexity !== 'simple' && architect) {

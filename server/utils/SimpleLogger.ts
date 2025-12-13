@@ -5,16 +5,28 @@ export class SimpleLogger {
     this.name = name;
   }
 
-  info(message: string): void {
-    console.log(`[${this.name}] INFO: ${message}`);
+  info(message: string, metadata?: Record<string, unknown>): void {
+    if (metadata) {
+      console.log(`[${this.name}] INFO: ${message}`, metadata);
+    } else {
+      console.log(`[${this.name}] INFO: ${message}`);
+    }
   }
 
-  warn(message: string): void {
-    console.warn(`[${this.name}] WARN: ${message}`);
+  warn(message: string, error?: Error): void {
+    if (error) {
+      console.warn(`[${this.name}] WARN: ${message}`, error);
+    } else {
+      console.warn(`[${this.name}] WARN: ${message}`);
+    }
   }
 
   error(message: string, error?: Error): void {
-    console.error(`[${this.name}] ERROR: ${message}`, error);
+    if (error) {
+      console.error(`[${this.name}] ERROR: ${message}`, error);
+    } else {
+      console.error(`[${this.name}] ERROR: ${message}`);
+    }
   }
 
   debug(message: string): void {

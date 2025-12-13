@@ -20,11 +20,14 @@ interface StyleTask {
 }
 
 export class StyleGeneratorAgent extends BaseAgent {
-  private readonly logger = new SimpleLogger('StyleGeneratorAgent');
   private readonly aiGenerator = new AICodeGenerator();
 
   constructor() {
     super('style-generator');
+  }
+
+  protected async setup(): Promise<void> {
+    // No additional setup needed
   }
 
   async executeTask(task: StyleTask | string): Promise<AgentResult> {
@@ -55,6 +58,10 @@ export class StyleGeneratorAgent extends BaseAgent {
         files,
         metadata: {
           executionTime: Date.now() - start,
+          resourceUsage: {
+            memory: process.memoryUsage().heapUsed / 1024 / 1024,
+            cpu: 0,
+          },
         },
       };
     } catch (error) {

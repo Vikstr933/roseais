@@ -201,7 +201,7 @@ export class AISyntaxFixer {
         };
         logger.info(`✅ AI fixed ${filePath}`);
       } catch (error) {
-        logger.error(`Failed to fix ${filePath} with AI:`, error);
+        logger.error(`Failed to fix ${filePath} with AI:`, error instanceof Error ? error : new Error(String(error)));
         // Keep original file if AI fix fails
       }
     }
@@ -248,7 +248,7 @@ Return the COMPLETE fixed code that compiles without errors. Do not include mark
       systemPrompt,
       maxTokens: 16000, // Large enough for full file fixes
       temperature: 0.1, // Low temperature for precise fixes
-      useCase: 'code_fix',
+      useCase: 'code_generation', // Using code_generation for syntax fixes
       priority: 'quality',
       preferredModel: 'claude-opus-4-5-20251101' // Use Opus 4.5 for best quality fixes
     };
