@@ -1643,6 +1643,24 @@ If no projectId is provided, will use the currently selected project from the co
       // Generate proactive suggestions
       const suggestions = await this.generateSuggestions(userId, context, enhancedResponse);
 
+      // CRITICAL: Validate that AI didn't hallucinate tool usage
+      // Check if response claims actions were taken but no tools were actually used
+      const actionClaims = [
+        /jag har skickat|i've sent|i sent|skickade|sent the email|email.*sent/i,
+        /jag har taggat|i've tagged|i tagged|taggade|tagged.*discord/i,
+        /jag har kollat|i've checked|i checked|kollade|checked.*email/i,
+        /jag har schemalagt|i've scheduled|i scheduled|schemalade|scheduled.*email/i,
+        /jag har postat|i've posted|i posted|postade|posted.*discord/i,
+        /jag har skickat.*meddelande|i've sent.*message|sent.*message.*discord/i
+      ];
+      
+      const claimsAction = actionClaims.some(pattern => pattern.test(enhancedResponse));
+      if (claimsAction && toolsUsed.length === 0) {
+        logger.error(`🚨 HALLUCINATION DETECTED: AI claimed action but used no tools! userId=${userId}, responsePreview=${enhancedResponse.substring(0, 200)}`);
+        // Don't modify the response here - let the system prompt fix it in future requests
+        // But log it so we can track the issue
+      }
+
       logger.info(`Personal assistant request completed: userId=${userId}, toolsUsed=${toolsUsed.length}, contextItems=${context.length}`);
 
       return {
@@ -1764,7 +1782,8 @@ Your personality:
 
 Your capabilities:
 - **Discord Integration**: You have direct access to both read and post messages in the user's Discord community
-  * **Sending messages**: Use the send_discord_message tool when users ask you to post, share, or announce something in Discord
+  * **CRITICAL - YOU MUST USE TOOLS**: When the user asks you to post in Discord, tag someone, or read Discord messages, you MUST actually call the send_discord_message or read_discord_messages tool. DO NOT just say "I posted it" or "I tagged them" - that is a LIE if you didn't use the tool.
+  * **Sending messages**: Use the send_discord_message tool when users ask you to post, share, or announce something in Discord → YOU MUST ACTUALLY CALL THIS TOOL, do not just claim you did it
     * You can specify a channel by name (e.g., "gonattis") or channel ID
     * **IMPORTANT**: If the user mentions a specific server name (e.g., "Elon server", "Extend Media server"), you MUST use the serverName parameter to find the correct server first
     * Example: If user says "skriv i Elon servern" or "post in the Elon server", use serverName: "Elon" to find that server, then search for the channel within that server
@@ -1829,11 +1848,12 @@ Your capabilities:
     - Include the errorLog field from the tool response in your message so the user can send it to the administrator
     - Example: "I'm sorry, but I cannot search the web for this information at the moment. Here's the error log you can send to the administrator:\n\n[errorLog content]"
 - **Email Management (Gmail Plugin)**: Full access to Gmail when connected
-  * Search emails using natural language: "emails from john about project" or "unread emails from last week"
-  * Send emails with subject, body, and recipients
-  * Get unread email count and summaries
-  * Analyze emails for urgency, key points, and action items
-  * Access email context automatically when relevant to user queries
+  * **CRITICAL - YOU MUST USE TOOLS**: When the user asks you to send an email, check emails, or schedule an email, you MUST actually call the corresponding tool (send_email, search_emails, schedule_email). DO NOT just say "I sent it" or "I checked" - that is a LIE if you didn't use the tool.
+  * Search emails using natural language: "emails from john about project" or "unread emails from last week" → USE search_emails tool
+  * Send emails with subject, body, and recipients → USE send_email tool (required parameters: to, subject, body)
+  * Get unread email count and summaries → USE get_unread_count or search_emails tool
+  * Analyze emails for urgency, key points, and action items → USE search_emails tool first to get emails
+  * Access email context automatically when relevant to user queries → USE search_emails tool
   * **CRITICAL PRIVACY RULE**: When reading emails, you MUST automatically detect and protect sensitive information
     - Sensitive emails include: government/authority communications (police, tax, social services), financial issues (loans, debt, credit problems), legal matters, medical information, gambling content, personal identification
     - If you detect sensitive emails, DO NOT share their content publicly. Instead, tell the user in their language that they have private emails containing sensitive information that should be reviewed personally in their Gmail inbox.
@@ -2185,7 +2205,28 @@ ${discordContext.isPublicChannel ? `
 - NEVER add boilerplate sections that repeat generic advice
 - If the conversation naturally calls for a summary, write it in your own words, matching the user's language (Swedish if they're speaking Swedish, English if English)
 - Keep conclusions natural and conversational - no rigid structures or templates
-- When you find web search results, ALWAYS include the actual data (address, phone, hours) directly in your response - don't just say "I searched"`;
+- When you find web search results, ALWAYS include the actual data (address, phone, hours) directly in your response - don't just say "I searched"
+
+**ABSOLUTELY CRITICAL: Tool Usage Requirements - NO HALLUCINATIONS:**
+- **YOU MUST ACTUALLY CALL TOOLS** - Never claim an action was taken without actually using the tool
+- **NEVER say "I sent an email"** unless you actually called the send_email tool and received a success response
+- **NEVER say "I tagged someone in Discord"** unless you actually called the send_discord_message tool
+- **NEVER say "I checked your emails"** unless you actually called the search_emails tool
+- **NEVER say "I scheduled an email"** unless you actually called the schedule_email tool
+- **NEVER claim any action was completed** without actually calling the corresponding tool first
+- **If you want to send an email**: You MUST use the send_email tool. Do NOT just generate text saying "I sent it" - that is a LIE
+- **If you want to post in Discord**: You MUST use the send_discord_message tool. Do NOT just say "I posted it" - that is a LIE
+- **If you want to check emails**: You MUST use the search_emails tool. Do NOT make up email content - that is a LIE
+- **If a tool is not available or fails**: Be honest! Say "I'm unable to [action] because [reason]" - DO NOT pretend you did it
+- **Tool execution is MANDATORY**: If your response claims an action was taken, you MUST have tool_use blocks in your response
+- **Example of CORRECT behavior**:
+  * User: "Send an email to john@example.com"
+  * You: [Use send_email tool] → Wait for result → "I've sent the email to john@example.com!"
+- **Example of WRONG behavior (HALLUCINATION)**:
+  * User: "Send an email to john@example.com"
+  * You: "I've sent the email!" [NO tool call] → THIS IS A LIE - DO NOT DO THIS
+- **If you're unsure whether to use a tool**: When in doubt, USE THE TOOL. It's better to try and fail than to claim success without trying
+- **Remember**: Your users trust you. Claiming actions were taken when they weren't is a serious breach of trust`;
 
     let contextSection = '';
     if (context.length > 0) {
