@@ -1561,7 +1561,7 @@ export function DesktopView({
                   </Button>
                 </div>
               ) : (
-                <>
+                <div>
                   {connectedPlugins.length > 0 && (
                     <div key="connected-plugins">
                       <h4 className="text-xs font-semibold text-muted-foreground mb-2">CONNECTED</h4>
@@ -1600,7 +1600,7 @@ export function DesktopView({
                       ))}
                     </div>
                   )}
-                </>
+                </div>
               )}
             </div>
             <div className="flex justify-between mt-4 pt-4 border-t">
