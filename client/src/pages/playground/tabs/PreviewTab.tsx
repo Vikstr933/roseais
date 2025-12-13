@@ -81,8 +81,23 @@ export function PreviewTab({
     return detectPythonProjectType(response.files);
   }, [response?.files]);
 
+  // Auto-select Server tab for Python web frameworks (they can't run in browser)
+  const isPythonWebApp = pythonType && ['flask', 'django', 'fastapi', 'streamlit'].includes(pythonType);
+  
+  useEffect(() => {
+    // Auto-switch to Server mode for Python web apps
+    if (isPythonWebApp && forcePreviewType === 'auto') {
+      console.log('🐍 Auto-selecting Server preview for', pythonType);
+    }
+  }, [isPythonWebApp, pythonType, forcePreviewType]);
+
   // Determine which preview to show
-  const activePreviewType = forcePreviewType === 'auto' ? projectType : forcePreviewType;
+  // For Python web apps, default to server mode even when 'auto'
+  const activePreviewType = useMemo(() => {
+    if (forcePreviewType !== 'auto') return forcePreviewType;
+    if (isPythonWebApp) return 'python-server'; // Auto-select server for web frameworks
+    return projectType;
+  }, [forcePreviewType, isPythonWebApp, projectType]);
 
   // Debug logging
   useEffect(() => {
@@ -103,7 +118,9 @@ export function PreviewTab({
     response.files.length > 0;
 
   const hasPythonFiles = response?.files?.some(f => f.path.endsWith('.py'));
-  const isPythonWebApp = pythonType && ['flask', 'django', 'fastapi', 'streamlit'].includes(pythonType);
+
+  // Check if Browser tab is usable for this project
+  const canRunInBrowser = !isPythonWebApp; // Web frameworks can't run in browser
 
   return (
     <div className="h-full flex flex-col">
@@ -122,24 +139,28 @@ export function PreviewTab({
           <Button
             variant={activePreviewType === 'python-script' ? 'default' : 'outline'}
             size="sm"
-            className="h-6 text-xs"
+            className={`h-6 text-xs ${!canRunInBrowser ? 'opacity-50' : ''}`}
             onClick={() => setForcePreviewType(activePreviewType === 'python-script' ? 'auto' : 'python-script')}
-            title="Run Python in browser (Pyodide) - for simple scripts"
+            title={canRunInBrowser 
+              ? "Run Python in browser (Pyodide) - for simple scripts" 
+              : `⚠️ ${pythonType} can't run in browser - use Server tab`}
           >
             🐍 Browser
+            {!canRunInBrowser && <span className="ml-1 text-yellow-500">⚠️</span>}
           </Button>
-          {isPythonWebApp && (
-            <Button
-              variant={activePreviewType === 'python-server' ? 'default' : 'outline'}
-              size="sm"
-              className="h-6 text-xs"
-              onClick={() => setForcePreviewType(activePreviewType === 'python-server' ? 'auto' : 'python-server')}
-              title="Run Python on server - for Flask/Django/FastAPI"
-            >
-              <Server className="w-3 h-3 mr-1" />
-              Server
-            </Button>
-          )}
+          <Button
+            variant={activePreviewType === 'python-server' ? 'default' : 'outline'}
+            size="sm"
+            className={`h-6 text-xs ${isPythonWebApp ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+            onClick={() => setForcePreviewType(activePreviewType === 'python-server' ? 'auto' : 'python-server')}
+            title={isPythonWebApp 
+              ? `✅ Recommended for ${pythonType} - runs real Python server`
+              : "Run Python on server - for Flask/Django/FastAPI/Streamlit"}
+          >
+            <Server className="w-3 h-3 mr-1" />
+            Server
+            {isPythonWebApp && <span className="ml-1">✅</span>}
+          </Button>
           <Badge variant="outline" className="ml-auto text-xs">
             {pythonType === 'flask' ? '🌶️ Flask' :
              pythonType === 'fastapi' ? '⚡ FastAPI' :

@@ -17,6 +17,21 @@ interface PythonPreviewProps {
   onOutput?: (output: string) => void;
 }
 
+// Detect if this is a web framework that can't run in browser
+type PythonFramework = 'flask' | 'django' | 'fastapi' | 'streamlit' | null;
+
+function detectPythonFramework(files: Array<{ path: string; content: string }>): PythonFramework {
+  for (const file of files) {
+    if (!file.path.endsWith('.py')) continue;
+    const content = file.content.toLowerCase();
+    if (content.includes('from flask import') || content.includes('import flask')) return 'flask';
+    if (content.includes('from django') || content.includes('import django')) return 'django';
+    if (content.includes('from fastapi import') || content.includes('import fastapi')) return 'fastapi';
+    if (content.includes('import streamlit') || content.includes('from streamlit')) return 'streamlit';
+  }
+  return null;
+}
+
 export function PythonPreview({ files, onOutput }: PythonPreviewProps) {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -26,6 +41,10 @@ export function PythonPreview({ files, onOutput }: PythonPreviewProps) {
   const [executionTime, setExecutionTime] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [installedPackages, setInstalledPackages] = useState<string[]>([]);
+
+  // Detect web frameworks that can't run in browser
+  const detectedFramework = detectPythonFramework(files);
+  const isWebFramework = detectedFramework !== null;
 
   // Find main Python file
   const mainFile = files.find(f => 
@@ -132,15 +151,39 @@ export function PythonPreview({ files, onOutput }: PythonPreviewProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Warning banner for web frameworks */}
+      {isWebFramework && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/30 p-3">
+          <div className="flex items-start gap-2 text-yellow-700 dark:text-yellow-400">
+            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium">
+                ⚠️ {detectedFramework?.charAt(0).toUpperCase()}{detectedFramework?.slice(1)} apps can't run in the browser
+              </p>
+              <p className="text-xs mt-1 text-yellow-600 dark:text-yellow-500">
+                Web frameworks like {detectedFramework} require a real Python server. 
+                Switch to the <strong>Server</strong> tab for full functionality.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b bg-muted/30">
         <div className="flex items-center gap-2">
           <span className="text-lg">🐍</span>
           <span className="font-medium">Python Preview</span>
-          {isReady && (
+          {isReady && !isWebFramework && (
             <Badge variant="outline" className="text-green-600 border-green-600">
               <CheckCircle className="w-3 h-3 mr-1" />
               Ready
+            </Badge>
+          )}
+          {isReady && isWebFramework && (
+            <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+              <AlertCircle className="w-3 h-3 mr-1" />
+              Limited
             </Badge>
           )}
           {isInitializing && (
@@ -163,7 +206,8 @@ export function PythonPreview({ files, onOutput }: PythonPreviewProps) {
           <Button
             size="sm"
             onClick={runCode}
-            disabled={!isReady || isRunning || !mainFile}
+            disabled={!isReady || isRunning || !mainFile || isWebFramework}
+            title={isWebFramework ? `${detectedFramework} can't run in browser - use Server tab` : undefined}
           >
             {isRunning ? (
               <>
