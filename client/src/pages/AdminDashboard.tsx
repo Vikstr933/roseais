@@ -91,7 +91,7 @@ export default function AdminDashboard() {
   const { user, isLoading, sessionToken } = useAuth();
   const [, setLocation] = useLocation();
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'agents' | 'workspaces' | 'insights'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'agents' | 'workspaces' | 'insights' | 'publishing'>('stats');
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -224,7 +224,8 @@ export default function AdminDashboard() {
               { key: 'insights', label: 'Data Insights', icon: '🔍' },
               { key: 'users', label: 'Users', icon: '👥' },
               { key: 'agents', label: 'Agents', icon: '🤖' },
-              { key: 'workspaces', label: 'Workspaces', icon: '📁' }
+              { key: 'workspaces', label: 'Workspaces', icon: '📁' },
+              { key: 'publishing', label: 'Publishing', icon: '🚀' }
             ].map(tab => (
               <button
                 key={tab.key}

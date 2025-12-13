@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
+import { ChatBeforeBuildDialog } from './ChatBeforeBuildDialog';
 import {
   Dialog,
   DialogContent,
@@ -87,6 +88,8 @@ export function CreateProjectDialog({
   isLoading,
 }: CreateProjectDialogProps) {
   const [selectedType, setSelectedType] = useState<string>('');
+  const [showChatDialog, setShowChatDialog] = useState(false);
+  const [refinedDescription, setRefinedDescription] = useState<string>('');
 
   const form = useForm<ProjectFormValues>({
     resolver: zodResolver(projectFormSchema),
@@ -97,9 +100,16 @@ export function CreateProjectDialog({
     },
   });
 
+  const handleChatComplete = (description: string) => {
+    setRefinedDescription(description);
+    form.setValue('description', description);
+    setShowChatDialog(false);
+  };
+
   const onSubmit = (values: ProjectFormValues) => {
     onCreateProject({
       ...values,
+      description: refinedDescription || values.description,
       agentConfig: {
         model: 'claude-sonnet-4-5-20250929',
         temperature: 0.7,
@@ -189,12 +199,31 @@ export function CreateProjectDialog({
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description</FormLabel>
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Description</FormLabel>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowChatDialog(true);
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                          Chat to Refine
+                        </Button>
+                      </div>
                       <FormControl>
                         <Textarea
-                          placeholder="Describe what you're building..."
+                          placeholder="Describe what you're building... (or use Chat to Refine for AI assistance)"
                           className="min-h-[80px]"
                           {...field}
+                          value={refinedDescription || field.value}
+                          onChange={e => {
+                            field.onChange(e);
+                            setRefinedDescription(e.target.value);
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -249,6 +278,14 @@ export function CreateProjectDialog({
             </DialogFooter>
           </form>
         </Form>
+
+        <ChatBeforeBuildDialog
+          open={showChatDialog}
+          onOpenChange={setShowChatDialog}
+          projectType={form.watch('projectType')}
+          initialIdea={form.watch('description')}
+          onComplete={handleChatComplete}
+        />
       </DialogContent>
     </Dialog>
   );

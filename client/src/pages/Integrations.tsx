@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus, AlertTriangle, Code, Shield, Key, ExternalLink, MessageSquare } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus, AlertTriangle, Code, Shield, Key, ExternalLink, MessageSquare, User } from 'lucide-react';
+import { ToolPermissionsDialog } from '@/components/ToolPermissionsDialog';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from '@/components/ui/pagination';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
@@ -28,6 +29,8 @@ interface Plugin {
   capabilities: string[];
   isUserGenerated?: boolean;
   credentialsRequired?: Record<string, any>;
+  isShared?: boolean; // Workspace-level connector
+  isPersonal?: boolean; // User-level connector
 }
 
 interface PluginStatus {
@@ -118,6 +121,8 @@ export default function Integrations() {
   const [credentialsRequired, setCredentialsRequired] = useState<Record<string, any>>({});
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
+  const [showPermissionsDialog, setShowPermissionsDialog] = useState(false);
+  const [selectedPluginForPermissions, setSelectedPluginForPermissions] = useState<{ id: string; name: string; tools: any[] } | null>(null);
   const getPluginById = (pluginId: string) => availablePlugins.find(p => p.id === pluginId);
   const isCustomPlugin = (plugin?: Plugin) =>
     !!plugin && (plugin.isUserGenerated || plugin.category === 'custom' || plugin.id.startsWith('plugin_'));
@@ -1317,6 +1322,8 @@ export default function Integrations() {
       <Tabs defaultValue="all" className="w-full">
         <TabsList>
           <TabsTrigger value="all">All Skills</TabsTrigger>
+          <TabsTrigger value="shared">Shared</TabsTrigger>
+          <TabsTrigger value="personal">Personal</TabsTrigger>
           <TabsTrigger value="connected">Connected</TabsTrigger>
           <TabsTrigger value="available">Available</TabsTrigger>
         </TabsList>
@@ -1483,6 +1490,29 @@ export default function Integrations() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // Get tools for this plugin
+                          const pluginTools = plugin.capabilities?.map((cap: string, idx: number) => ({
+                            id: cap.toLowerCase().replace(/\s+/g, '_'),
+                            name: cap,
+                            description: `Tool: ${cap}`,
+                          })) || [];
+                          setSelectedPluginForPermissions({
+                            id: plugin.id,
+                            name: plugin.name,
+                            tools: pluginTools,
+                          });
+                          setShowPermissionsDialog(true);
+                        }}
+                        className="h-8"
+                        title="Manage tool permissions"
+                      >
+                        <Settings className="w-3 h-3 mr-1" />
+                        Permissions
+                      </Button>
                       {customPlugin ? (
                         <Button
                           variant="outline"
@@ -1599,6 +1629,203 @@ export default function Integrations() {
             {availablePlugins.filter(p => !isPluginEnabled(p.id)).length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
                 All available skills are already connected!
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="shared" className="mt-6">
+          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-blue-600" />
+              Shared Connectors
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Configured once by admins, available to everyone in your workspace. Examples: Vercel, Stripe, Shopify.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {availablePlugins
+              .filter(plugin => {
+                const sharedIds = ['vercel', 'stripe', 'shopify', 'lovable-cloud'];
+                return sharedIds.includes(plugin.id.toLowerCase()) || plugin.isShared === true;
+              })
+              .map((plugin) => {
+                const status = getPluginStatus(plugin.id);
+                const isConnected = isPluginEnabled(plugin.id);
+                return (
+                  <div key={plugin.id} className={`flex items-center justify-between p-3 rounded-lg border ${isConnected ? 'border-primary bg-primary/5' : 'border-border bg-card'}`}>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex-shrink-0">
+                        {getPluginIcon(plugin.icon, plugin.category)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm truncate">{plugin.name}</p>
+                          {isConnected && (
+                            <Badge className="bg-green-500 hover:bg-green-600 text-xs px-1.5 py-0">
+                              <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                              Connected
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-xs px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200">
+                            Shared
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-1">{plugin.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      {isConnected ? (
+                        <>
+                          {isAdmin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDisconnectPlugin(plugin.id)}
+                              className="h-8"
+                            >
+                              Disconnect
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {isAdmin && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleConnectPlugin(plugin.id)}
+                              disabled={connecting.has(plugin.id)}
+                              className="h-8"
+                            >
+                              {connecting.has(plugin.id) ? (
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              ) : null}
+                              Configure
+                            </Button>
+                          )}
+                          {!isAdmin && (
+                            <span className="text-xs text-muted-foreground">Admin only</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            {availablePlugins.filter(p => {
+              const sharedIds = ['vercel', 'stripe', 'shopify', 'lovable-cloud'];
+              return sharedIds.includes(p.id.toLowerCase()) || p.isShared === true;
+            }).length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                No shared connectors available
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="personal" className="mt-6">
+          <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
+            <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
+              <User className="h-4 w-4 text-purple-600" />
+              Personal Connectors
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Connect your personal tool accounts to provide context while building. Only you can access your connections. Examples: Gmail, Notion, Linear, Miro.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {availablePlugins
+              .filter(plugin => {
+                const personalIds = ['gmail', 'calendar', 'notion', 'linear', 'miro', 'discord', 'slack', 'github'];
+                return personalIds.includes(plugin.id.toLowerCase()) || plugin.isPersonal === true || (!plugin.isShared && plugin.id !== 'vercel' && plugin.id !== 'stripe' && plugin.id !== 'shopify');
+              })
+              .map((plugin) => {
+                const status = getPluginStatus(plugin.id);
+                const isConnected = isPluginEnabled(plugin.id);
+                const customPlugin = isCustomPlugin(plugin);
+                return (
+                  <div key={plugin.id} className={`flex items-center justify-between p-3 rounded-lg border ${isConnected ? 'border-primary bg-primary/5' : 'border-border bg-card'}`}>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex-shrink-0">
+                        {getPluginIcon(plugin.icon, plugin.category)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm truncate">{plugin.name}</p>
+                          {isConnected && (
+                            <Badge className="bg-green-500 hover:bg-green-600 text-xs px-1.5 py-0">
+                              <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                              Connected
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-xs px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-200">
+                            Personal
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-1">{plugin.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      {isConnected ? (
+                        <>
+                          {customPlugin ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openCredentialDialogForPlugin(plugin)}
+                              className="h-8"
+                            >
+                              <Key className="w-3 h-3 mr-1" />
+                              Credentials
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSyncPlugin(plugin.id)}
+                              disabled={syncing.has(plugin.id) || status?.status.syncInProgress}
+                              className="h-8"
+                            >
+                              {syncing.has(plugin.id) || status?.status.syncInProgress ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3 h-3" />
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDisconnectPlugin(plugin.id)}
+                            className="h-8"
+                          >
+                            Disconnect
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleConnectPlugin(plugin.id)}
+                          disabled={connecting.has(plugin.id)}
+                          className="h-8"
+                        >
+                          {connecting.has(plugin.id) ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : null}
+                          Connect
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            {availablePlugins.filter(p => {
+              const personalIds = ['gmail', 'calendar', 'notion', 'linear', 'miro', 'discord', 'slack', 'github'];
+              return personalIds.includes(p.id.toLowerCase()) || p.isPersonal === true || (!p.isShared && p.id !== 'vercel' && p.id !== 'stripe' && p.id !== 'shopify');
+            }).length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                No personal connectors available
               </div>
             )}
           </div>
@@ -2026,6 +2253,17 @@ export default function Integrations() {
       </Dialog>
 
       {/* Credential Management Dialog */}
+      {/* Tool Permissions Dialog */}
+      {selectedPluginForPermissions && (
+        <ToolPermissionsDialog
+          open={showPermissionsDialog}
+          onOpenChange={setShowPermissionsDialog}
+          pluginId={selectedPluginForPermissions.id}
+          pluginName={selectedPluginForPermissions.name}
+          tools={selectedPluginForPermissions.tools}
+        />
+      )}
+
       <Dialog open={credentialDialogOpen} onOpenChange={setCredentialDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>

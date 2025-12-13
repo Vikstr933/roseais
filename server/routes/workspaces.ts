@@ -310,6 +310,75 @@ router.post('/:id/export', authenticateUser, async (req, res) => {
   }
 });
 
+// PUT /api/workspaces/:id/publishing-policy - Update workspace publishing policy (admin/owner only)
+router.put('/:id/publishing-policy', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const workspaceId = parseInt(req.params.id);
+    const { allowExternalPublishing, allowedRoles } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const [workspace] = await db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if user is admin or owner
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+    const isOwner = workspace.ownerId === userId;
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: 'Only admins and project owners can update publishing policy' });
+    }
+
+    // Validate allowedRoles
+    if (allowedRoles && !Array.isArray(allowedRoles)) {
+      return res.status(400).json({ error: 'allowedRoles must be an array' });
+    }
+
+    const validRoles = ['admin', 'owner', 'superadmin'];
+    if (allowedRoles && allowedRoles.some((role: string) => !validRoles.includes(role))) {
+      return res.status(400).json({ error: `Invalid role. Allowed roles: ${validRoles.join(', ')}` });
+    }
+
+    // Update publishing policy
+    const publishingPolicy = {
+      allowExternalPublishing: allowExternalPublishing !== undefined ? allowExternalPublishing : true,
+      allowedRoles: allowedRoles || ['admin', 'owner'],
+    };
+
+    await db
+      .update(workspaces)
+      .set({
+        publishingPolicy: JSON.stringify(publishingPolicy),
+        updatedAt: new Date(),
+      })
+      .where(eq(workspaces.id, workspaceId));
+
+    res.json({
+      success: true,
+      publishingPolicy,
+    });
+  } catch (error: any) {
+    console.error('Error updating publishing policy:', error);
+    res.status(500).json({ error: 'Failed to update publishing policy' });
+  }
+});
+
 // PUT /api/workspaces/:id - Update workspace
 router.put('/:id', authenticateUser, async (req, res) => {
   try {

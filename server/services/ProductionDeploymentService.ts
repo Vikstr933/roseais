@@ -476,6 +476,43 @@ MIT License - feel free to use this project as you wish!
       throw new Error('Vercel token not configured. Please set VERCEL_TOKEN environment variable.');
     }
 
+    // Check publishing policy if projectId is provided
+    if (projectId) {
+      const { db } = await import('../../db');
+      const { workspaces } = await import('../../db/schema-pg');
+      const { eq } = await import('drizzle-orm');
+      
+      const [project] = await db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.id, projectId))
+        .limit(1);
+
+      if (project?.publishingPolicy) {
+        const policy = typeof project.publishingPolicy === 'string' 
+          ? JSON.parse(project.publishingPolicy) 
+          : project.publishingPolicy;
+        
+        if (policy.allowExternalPublishing === false) {
+          throw new Error('External publishing is disabled for this project');
+        }
+
+        // Check if user role is allowed
+        if (policy.allowedRoles && userId) {
+          const { users } = await import('../../db/schema-pg');
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+
+          if (user && !policy.allowedRoles.includes(user.role)) {
+            throw new Error(`Your role (${user.role}) is not allowed to publish externally. Allowed roles: ${policy.allowedRoles.join(', ')}`);
+          }
+        }
+      }
+    }
+
     // Detect monorepo structure
     const hasClientPackageJson = files?.some(f => f.path === 'client/package.json') || false;
     const hasServerPackageJson = files?.some(f => f.path === 'server/package.json') || false;

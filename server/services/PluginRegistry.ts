@@ -380,6 +380,24 @@ export class PluginRegistry extends EventEmitter {
             .map(tool => ({
               ...tool,
               execute: async (params: Record<string, any>) => {
+                // Check tool permission before execution
+                const permission = await this.checkToolPermission(userId, pluginId, tool.name);
+                
+                if (permission === 'deny') {
+                  throw new Error(`Permission denied: Tool "${tool.name}" is not allowed for plugin "${pluginId}"`);
+                }
+                
+                if (permission === 'ask') {
+                  // In a real implementation, this would trigger a user prompt
+                  // For now, we'll log and allow (can be enhanced with user confirmation)
+                  logger.info('Tool requires user confirmation', {
+                    userId,
+                    pluginId,
+                    toolName: tool.name,
+                  });
+                  // TODO: Implement user confirmation flow
+                }
+                
                 // Check if plugin has executeAction method for user-specific execution
                 if (typeof (plugin as any).executeAction === 'function') {
                   logger.info('Executing plugin action with userId', {
@@ -1253,6 +1271,46 @@ function execute(userId, params, credentials) {
     this.plugins.clear();
     this.userPlugins.clear();
     this.removeAllListeners();
+  }
+
+  /**
+   * Check tool permission for a user
+   * Returns 'allow', 'ask', or 'deny'
+   * Default is 'ask' if no permission is set
+   */
+  private async checkToolPermission(
+    userId: string,
+    pluginId: string,
+    toolId: string
+  ): Promise<'allow' | 'ask' | 'deny'> {
+    try {
+      const [permission] = await db
+        .select()
+        .from(toolPermissions)
+        .where(
+          and(
+            eq(toolPermissions.userId, userId),
+            eq(toolPermissions.pluginId, pluginId),
+            eq(toolPermissions.toolId, toolId)
+          )
+        )
+        .limit(1);
+
+      if (permission) {
+        return permission.permission as 'allow' | 'ask' | 'deny';
+      }
+
+      // Default: ask
+      return 'ask';
+    } catch (error) {
+      logger.error('Error checking tool permission', error as Error, {
+        userId,
+        pluginId,
+        toolId,
+      });
+      // On error, default to 'ask' for safety
+      return 'ask';
+    }
   }
 }
 
