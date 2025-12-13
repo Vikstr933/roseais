@@ -292,17 +292,21 @@ export function PythonServerPreview({ files, onServerReady }: PythonServerPrevie
       <div className="flex-1 flex flex-col min-h-0">
         {/* Preview iframe (when running) */}
         {isRunning && sandbox?.url && (
-          <div className="flex-1 min-h-0 border-b relative">
+          <div className="flex-1 min-h-0 border-b relative bg-white">
+            {/* E2B/Streamlit apps may block iframe embedding - show both iframe and open button */}
             <iframe
               src={sandbox.url.startsWith('http') ? sandbox.url : `https://${sandbox.url}`}
               className="w-full h-full border-0"
               title="Python Server Preview"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation allow-top-navigation-by-user-activation"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              style={{ minHeight: '400px' }}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation allow-top-navigation-by-user-activation allow-presentation"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; display-capture"
               referrerPolicy="no-referrer-when-downgrade"
+              loading="eager"
+              onError={() => console.log('Iframe failed to load')}
             />
-            {/* Fallback message if iframe fails to load */}
-            <div className="absolute bottom-2 right-2 bg-yellow-100 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700 rounded p-2 text-xs">
+            {/* Fallback message - E2B/Streamlit may block iframe embedding */}
+            <div className="absolute bottom-2 right-2 bg-yellow-100 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700 rounded p-2 text-xs max-w-xs">
               <p className="text-yellow-800 dark:text-yellow-200">
                 If preview doesn't load, click "Open" button to view in new tab
               </p>
@@ -310,7 +314,7 @@ export function PythonServerPreview({ files, onServerReady }: PythonServerPrevie
           </div>
         )}
 
-        {/* No preview placeholder */}
+        {/* No preview placeholder OR iframe blocked state */}
         {!isRunning && (
           <div className="flex-1 flex items-center justify-center bg-muted/20">
             <div className="text-center text-muted-foreground">
@@ -332,6 +336,27 @@ export function PythonServerPreview({ files, onServerReady }: PythonServerPrevie
                 </Button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Running but iframe may be blocked - show prominent open button */}
+        {isRunning && sandbox?.url && (
+          <div className="p-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-sm text-green-700 dark:text-green-300">
+                Server ready at <code className="bg-white/50 dark:bg-black/30 px-1.5 py-0.5 rounded text-xs">{sandbox.url}</code>
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="default"
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => window.open(sandbox.url, '_blank')}
+            >
+              <ExternalLink className="w-4 h-4 mr-1" />
+              Open App
+            </Button>
           </div>
         )}
 

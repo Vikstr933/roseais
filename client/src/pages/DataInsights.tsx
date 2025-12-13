@@ -423,35 +423,89 @@ export default function DataInsights() {
                         </p>
                       </div>
 
+                      {/* Data Quality Warning (if applicable) */}
+                      {hypothesis.data?.dataQualityWarnings && hypothesis.data.dataQualityWarnings.length > 0 && (
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border-l-4 border-red-400">
+                          <h4 className="text-xs font-semibold text-red-800 dark:text-red-300 mb-2 uppercase tracking-wide flex items-center gap-2">
+                            ⚠️ Datakvalitetsvarning
+                          </h4>
+                          <ul className="space-y-1">
+                            {hypothesis.data.dataQualityWarnings.map((warning: string, idx: number) => (
+                              <li key={idx} className="text-sm text-red-700 dark:text-red-400 flex items-start gap-2">
+                                <span className="text-red-500 mt-0.5">•</span>
+                                <span>{warning}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          {hypothesis.data?.recommendation && (
+                            <p className="mt-2 text-sm font-medium text-red-800 dark:text-red-300">
+                              💡 {hypothesis.data.recommendation}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       {/* Statistical Significance */}
                       {hypothesis.statisticalSignificance && (
-                        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                          <h4 className="text-xs font-semibold text-blue-900 mb-2 uppercase tracking-wide">
+                        <div className={`mb-4 p-3 rounded-lg ${
+                          hypothesis.statisticalSignificance.pValue >= 0.05 || hypothesis.statisticalSignificance.confidence < 50
+                            ? 'bg-orange-50 dark:bg-orange-950/30 border-l-4 border-orange-400'
+                            : 'bg-blue-50 dark:bg-blue-950/30'
+                        }`}>
+                          <h4 className={`text-xs font-semibold mb-2 uppercase tracking-wide ${
+                            hypothesis.statisticalSignificance.pValue >= 0.05 || hypothesis.statisticalSignificance.confidence < 50
+                              ? 'text-orange-900 dark:text-orange-300'
+                              : 'text-blue-900 dark:text-blue-300'
+                          }`}>
                             Statistisk Signifikans
+                            {hypothesis.statisticalSignificance.pValue >= 0.05 && (
+                              <span className="ml-2 text-orange-600 dark:text-orange-400 normal-case">
+                                (⚠️ Inte signifikant)
+                              </span>
+                            )}
                           </h4>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                             <div>
                               <span className="text-muted-foreground">Korrelation:</span>
-                              <span className="ml-1 font-semibold text-blue-900">
+                              <span className={`ml-1 font-semibold ${
+                                Math.abs(hypothesis.statisticalSignificance.correlation) < 0.1
+                                  ? 'text-orange-700 dark:text-orange-400'
+                                  : 'text-blue-900 dark:text-blue-300'
+                              }`}>
                                 {hypothesis.statisticalSignificance.correlation.toFixed(3)}
+                                {Math.abs(hypothesis.statisticalSignificance.correlation) < 0.1 && ' (ingen)'}
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">P-värde:</span>
-                              <span className="ml-1 font-semibold text-blue-900">
+                              <span className={`ml-1 font-semibold ${
+                                hypothesis.statisticalSignificance.pValue >= 0.05
+                                  ? 'text-orange-700 dark:text-orange-400'
+                                  : 'text-blue-900 dark:text-blue-300'
+                              }`}>
                                 {hypothesis.statisticalSignificance.pValue.toFixed(4)}
+                                {hypothesis.statisticalSignificance.pValue >= 0.05 && ' (ns)'}
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Konfidens:</span>
-                              <span className="ml-1 font-semibold text-blue-900">
+                              <span className={`ml-1 font-semibold ${
+                                hypothesis.statisticalSignificance.confidence < 50
+                                  ? 'text-orange-700 dark:text-orange-400'
+                                  : 'text-blue-900 dark:text-blue-300'
+                              }`}>
                                 {Math.round(hypothesis.statisticalSignificance.confidence)}%
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Sample:</span>
-                              <span className="ml-1 font-semibold text-blue-900">
+                              <span className={`ml-1 font-semibold ${
+                                hypothesis.statisticalSignificance.sampleSize < 30
+                                  ? 'text-orange-700 dark:text-orange-400'
+                                  : 'text-blue-900 dark:text-blue-300'
+                              }`}>
                                 {hypothesis.statisticalSignificance.sampleSize}
+                                {hypothesis.statisticalSignificance.sampleSize < 30 && ' (lågt)'}
                               </span>
                             </div>
                           </div>

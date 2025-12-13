@@ -374,33 +374,84 @@ class HypothesisGenerator {
         s.status === 'completed' && (s.generatedCode?.length || 0) > 100 ? 1 : 0
       );
 
-      const stats = StatisticalAnalyzer.calculateCorrelation(promptLengths, successIndicators);
-      
-      if (stats.sampleSize >= 10) {
-        const avgLength = promptLengths.reduce((a, b) => a + b, 0) / promptLengths.length;
-        const optimalMin = Math.max(50, avgLength * 0.7);
-        const optimalMax = Math.min(2000, avgLength * 1.3);
+      // Calculate variance in prompt lengths to check data quality
+      const avgLength = promptLengths.reduce((a, b) => a + b, 0) / promptLengths.length;
+      const variance = promptLengths.reduce((sum, len) => sum + Math.pow(len - avgLength, 2), 0) / promptLengths.length;
+      const standardDeviation = Math.sqrt(variance);
+      const coefficientOfVariation = avgLength > 0 ? standardDeviation / avgLength : 0;
 
-        hypotheses.push({
-          id: 'optimal-prompt-length',
-          title: 'Optimal Prompt Längd för Framgång',
-          description: `Analys av ${stats.sampleSize} sessioner visar en ${stats.correlation > 0 ? 'positiv' : 'negativ'} korrelation mellan prompt-längd och framgångsrate`,
-          hypothesis: `Prompts mellan ${Math.round(optimalMin)} och ${Math.round(optimalMax)} tecken har högst sannolikhet för framgång`,
-          confidence: stats.confidence > 70 ? 'high' : stats.confidence > 40 ? 'medium' : 'low',
-          statisticalSignificance: stats,
-          actionableInsights: [
-            'Skriv prompts med tydliga instruktioner mellan 100-500 tecken',
-            'Undvik alltför korta prompts som saknar kontext',
-            'Bryt ned komplexa uppgifter i mindre delar'
-          ],
-          validationMethod: 'A/B-testning med kontrollerade prompt-längder',
-          data: {
-            avgPromptLength: Math.round(avgLength),
-            successRate: (successIndicators.filter(s => s === 1).length / successIndicators.length) * 100,
-            lengthDistribution: this.calculateDistribution(promptLengths)
-          }
-        });
+      const stats = StatisticalAnalyzer.calculateCorrelation(promptLengths, successIndicators);
+      const successRate = (successIndicators.filter(s => s === 1).length / successIndicators.length) * 100;
+      const distribution = this.calculateDistribution(promptLengths);
+
+      // Check data quality - need variance to calculate meaningful correlation
+      const hasEnoughVariance = coefficientOfVariation > 0.1; // At least 10% variation
+      const hasEnoughSamples = stats.sampleSize >= 30; // Need 30+ for statistical significance
+      const hasStatisticalSignificance = stats.pValue < 0.05;
+      const dataQuality = hasEnoughVariance && hasEnoughSamples && hasStatisticalSignificance ? 'high' : 
+                          hasEnoughVariance && stats.sampleSize >= 10 ? 'medium' : 'low';
+
+      // Build data quality warnings
+      const dataQualityWarnings: string[] = [];
+      if (!hasEnoughVariance) {
+        dataQualityWarnings.push(`Otillräcklig variation i data (alla prompts är ~${Math.round(avgLength)} tecken)`);
       }
+      if (!hasEnoughSamples) {
+        dataQualityWarnings.push(`Otillräckligt urval (${stats.sampleSize} sessioner, behöver 30+)`);
+      }
+      if (!hasStatisticalSignificance && stats.sampleSize >= 10) {
+        dataQualityWarnings.push(`Ingen statistisk signifikans (p=${stats.pValue.toFixed(2)})`);
+      }
+
+      // Only show meaningful recommendations if data quality is good
+      let actionableInsights: string[];
+      let hypothesisText: string;
+      let description: string;
+
+      if (dataQuality === 'high' || (dataQuality === 'medium' && hasEnoughVariance)) {
+        const optimalMin = Math.max(50, distribution.q1);
+        const optimalMax = Math.min(2000, distribution.q3);
+        hypothesisText = `Prompts mellan ${Math.round(optimalMin)} och ${Math.round(optimalMax)} tecken har högst sannolikhet för framgång`;
+        description = `Analys av ${stats.sampleSize} sessioner visar en ${Math.abs(stats.correlation) > 0.3 ? 'signifikant' : 'svag'} ${stats.correlation > 0 ? 'positiv' : 'negativ'} korrelation mellan prompt-längd och framgångsrate`;
+        actionableInsights = [
+          `Testa prompts mellan ${Math.round(optimalMin)}-${Math.round(optimalMax)} tecken`,
+          'Undvik alltför korta prompts som saknar kontext',
+          'Bryt ned komplexa uppgifter i mindre delar'
+        ];
+      } else {
+        hypothesisText = '⚠️ Otillräcklig data för att dra slutsatser om optimal prompt-längd';
+        description = `Analys av ${stats.sampleSize} sessioner - ${dataQualityWarnings.join('. ')}`;
+        actionableInsights = [
+          '🔬 Samla mer data med varierande prompt-längder (minst 30 sessioner)',
+          '📊 Testa prompts från 50 till 500+ tecken för att se mönster',
+          '❌ Nuvarande rekommendationer är INTE statistiskt stödda'
+        ];
+      }
+
+      hypotheses.push({
+        id: 'optimal-prompt-length',
+        title: 'Optimal Prompt Längd för Framgång',
+        description,
+        hypothesis: hypothesisText,
+        confidence: dataQuality,
+        statisticalSignificance: stats,
+        actionableInsights,
+        validationMethod: dataQuality === 'low' 
+          ? '⚠️ Samla mer varierad data först innan validering'
+          : 'A/B-testning med kontrollerade prompt-längder',
+        data: {
+          avgPromptLength: Math.round(avgLength),
+          standardDeviation: Math.round(standardDeviation),
+          coefficientOfVariation: (coefficientOfVariation * 100).toFixed(1) + '%',
+          successRate: successRate.toFixed(1),
+          lengthDistribution: distribution,
+          dataQuality,
+          dataQualityWarnings,
+          recommendation: dataQuality === 'low' 
+            ? 'Samla minst 30 sessioner med varierande prompt-längder (50-500+ tecken)' 
+            : null
+        }
+      });
 
       // Hypothesis 2: Agent specialization
       const agentSessions = await db

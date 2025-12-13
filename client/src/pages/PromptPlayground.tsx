@@ -2865,7 +2865,7 @@ export default function PromptPlayground() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] overflow-hidden bg-background mt-14 sm:mt-16">
+    <div className="flex flex-col h-screen overflow-hidden bg-background pt-14 sm:pt-16">
       <ErrorBoundary
         onError={(error, errorInfo) => {
           console.error('Playground error:', error, errorInfo);
