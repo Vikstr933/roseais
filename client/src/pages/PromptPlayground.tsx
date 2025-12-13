@@ -87,7 +87,7 @@ import { RenameProjectDialog } from "./playground/dialogs";
 // This reduces file size and improves maintainability
 
 export default function PromptPlayground() {
-  const { user, sessionToken, isSuperAdmin, isLoading: authIsLoading } = useAuth();
+  const { user, sessionToken, isSuperAdmin, isAdmin, isLoading: authIsLoading } = useAuth();
   const {
     currentSession,
     sessions,

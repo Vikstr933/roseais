@@ -34,7 +34,20 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // Log detailed error info for debugging
+    console.error('🚨 ErrorBoundary caught an error:');
+    console.error('Error:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Component stack:', errorInfo.componentStack);
+    
+    // Log current URL for context
+    console.error('Current URL:', window.location.href);
+    
+    // Log any auth state if available
+    const sessionToken = localStorage.getItem('sessionToken') || sessionStorage.getItem('sessionToken');
+    console.error('Has session token:', !!sessionToken);
+    
     this.setState({
       error,
       errorInfo,
