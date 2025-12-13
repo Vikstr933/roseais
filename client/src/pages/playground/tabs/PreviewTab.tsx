@@ -1,7 +1,8 @@
-import { Eye, ChevronUp } from "lucide-react";
+import { Eye, ChevronUp, Server } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { AdvancedPreview } from "../../../components/AdvancedPreview";
 import { PythonPreview } from "../../../components/PythonPreview";
+import { PythonServerPreview } from "../../../components/PythonServerPreview";
 import { Badge } from "../../../components/ui/badge";
 import type { GeneratedFile } from "../types";
 import { useEffect, useMemo, useState } from "react";
@@ -14,17 +15,45 @@ interface PreviewTabProps {
   setPreviewModalOpen: (open: boolean) => void;
 }
 
+// Detailed Python project type detection
+type PythonProjectType = 'flask' | 'django' | 'fastapi' | 'streamlit' | 'script';
+
+function detectPythonProjectType(files: GeneratedFile[]): PythonProjectType | null {
+  for (const file of files) {
+    if (!file.path.endsWith('.py')) continue;
+    const content = file.content.toLowerCase();
+    
+    if (content.includes('from flask import') || content.includes('import flask')) return 'flask';
+    if (content.includes('from django') || content.includes('import django')) return 'django';
+    if (content.includes('from fastapi import') || content.includes('import fastapi')) return 'fastapi';
+    if (content.includes('import streamlit') || content.includes('from streamlit')) return 'streamlit';
+  }
+  
+  // Check if any .py files exist
+  if (files.some(f => f.path.endsWith('.py'))) return 'script';
+  return null;
+}
+
 // Detect project type from files
-function detectProjectType(files: GeneratedFile[]): 'web' | 'python' | 'node' | 'unknown' {
-  const hasPythonFiles = files.some(f => f.path.endsWith('.py'));
+function detectProjectType(files: GeneratedFile[]): 'web' | 'python-script' | 'python-server' | 'node' | 'unknown' {
+  const pythonType = detectPythonProjectType(files);
+  
+  // Python web frameworks need server-side preview
+  if (pythonType && ['flask', 'django', 'fastapi', 'streamlit'].includes(pythonType)) {
+    return 'python-server';
+  }
+  
+  // Simple Python scripts can run in browser via Pyodide
+  if (pythonType === 'script') {
+    return 'python-script';
+  }
+  
   const hasReactFiles = files.some(f => 
     f.path.endsWith('.tsx') || f.path.endsWith('.jsx') ||
     (f.path === 'package.json' && f.content.includes('react'))
   );
   const hasPackageJson = files.some(f => f.path === 'package.json');
   
-  // Python takes priority if .py files exist
-  if (hasPythonFiles && !hasReactFiles) return 'python';
   if (hasReactFiles) return 'web';
   if (hasPackageJson) return 'node';
   
@@ -38,12 +67,18 @@ export function PreviewTab({
   isLoading,
   setPreviewModalOpen,
 }: PreviewTabProps) {
-  const [forcePreviewType, setForcePreviewType] = useState<'auto' | 'web' | 'python'>('auto');
+  const [forcePreviewType, setForcePreviewType] = useState<'auto' | 'web' | 'python-script' | 'python-server'>('auto');
   
   // Detect project type from files
   const projectType = useMemo(() => {
     if (!response?.files || response.files.length === 0) return 'unknown';
     return detectProjectType(response.files);
+  }, [response?.files]);
+
+  // Get detailed Python type for display
+  const pythonType = useMemo(() => {
+    if (!response?.files) return null;
+    return detectPythonProjectType(response.files);
   }, [response?.files]);
 
   // Determine which preview to show
@@ -56,21 +91,25 @@ export function PreviewTab({
       console.log('📺 PreviewTab: Files count:', response?.files?.length || 0);
       console.log('📺 PreviewTab: Component name:', currentComponentName);
       console.log('📺 PreviewTab: Project type:', projectType);
+      console.log('📺 PreviewTab: Python type:', pythonType);
     } else {
       console.log('📺 PreviewTab: No preview URL yet');
     }
-  }, [livePreviewUrl, response?.files?.length, currentComponentName, projectType]);
+  }, [livePreviewUrl, response?.files?.length, currentComponentName, projectType, pythonType]);
 
   const hasFiles = typeof response === 'object' &&
     response?.type === 'component' &&
     response.files &&
     response.files.length > 0;
 
+  const hasPythonFiles = response?.files?.some(f => f.path.endsWith('.py'));
+  const isPythonWebApp = pythonType && ['flask', 'django', 'fastapi', 'streamlit'].includes(pythonType);
+
   return (
     <div className="h-full flex flex-col">
-      {/* Preview Type Selector (when we have mixed files) */}
-      {hasFiles && (projectType === 'python' || response?.files?.some(f => f.path.endsWith('.py'))) && (
-        <div className="p-2 border-b bg-muted/30 flex items-center gap-2">
+      {/* Preview Type Selector (when we have Python files) */}
+      {hasFiles && hasPythonFiles && (
+        <div className="p-2 border-b bg-muted/30 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">Preview:</span>
           <Button
             variant={activePreviewType === 'web' ? 'default' : 'outline'}
@@ -81,17 +120,34 @@ export function PreviewTab({
             🌐 Web
           </Button>
           <Button
-            variant={activePreviewType === 'python' ? 'default' : 'outline'}
+            variant={activePreviewType === 'python-script' ? 'default' : 'outline'}
             size="sm"
             className="h-6 text-xs"
-            onClick={() => setForcePreviewType(activePreviewType === 'python' ? 'auto' : 'python')}
+            onClick={() => setForcePreviewType(activePreviewType === 'python-script' ? 'auto' : 'python-script')}
+            title="Run Python in browser (Pyodide) - for simple scripts"
           >
-            🐍 Python
+            🐍 Browser
           </Button>
+          {isPythonWebApp && (
+            <Button
+              variant={activePreviewType === 'python-server' ? 'default' : 'outline'}
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => setForcePreviewType(activePreviewType === 'python-server' ? 'auto' : 'python-server')}
+              title="Run Python on server - for Flask/Django/FastAPI"
+            >
+              <Server className="w-3 h-3 mr-1" />
+              Server
+            </Button>
+          )}
           <Badge variant="outline" className="ml-auto text-xs">
-            {projectType === 'python' ? '🐍 Python Project' : 
+            {pythonType === 'flask' ? '🌶️ Flask' :
+             pythonType === 'fastapi' ? '⚡ FastAPI' :
+             pythonType === 'django' ? '🎸 Django' :
+             pythonType === 'streamlit' ? '📊 Streamlit' :
+             pythonType === 'script' ? '🐍 Python Script' :
              projectType === 'web' ? '🌐 Web Project' : 
-             '📦 Node Project'}
+             '📦 Project'}
           </Badge>
         </div>
       )}
@@ -113,8 +169,10 @@ export function PreviewTab({
             </Button>
           </div>
           <div className="flex-1 min-h-0">
-            {activePreviewType === 'python' ? (
+            {activePreviewType === 'python-script' ? (
               <PythonPreview files={response!.files!} />
+            ) : activePreviewType === 'python-server' ? (
+              <PythonServerPreview files={response!.files!} />
             ) : (
               <AdvancedPreview
                 files={response!.files!}
@@ -130,9 +188,11 @@ export function PreviewTab({
             <Eye className="h-16 w-16 mx-auto mb-4 opacity-50" />
             <p className="text-lg">{isLoading ? "Generating code..." : "Preview will appear here"}</p>
             <p className="text-sm mt-2">{isLoading ? "Files are being generated in real-time..." : "Generate a component to see the preview"}</p>
-            <div className="mt-4 flex items-center justify-center gap-2 text-xs">
-              <Badge variant="outline">🌐 Web apps (React)</Badge>
-              <Badge variant="outline">🐍 Python scripts</Badge>
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs flex-wrap">
+              <Badge variant="outline">🌐 React/Web</Badge>
+              <Badge variant="outline">🐍 Python Scripts</Badge>
+              <Badge variant="outline">🌶️ Flask</Badge>
+              <Badge variant="outline">⚡ FastAPI</Badge>
             </div>
           </div>
         </div>

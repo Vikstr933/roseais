@@ -1,9 +1,15 @@
 # Python Preview Architecture
 
+## ✅ IMPLEMENTED
+
+Both preview methods are now fully implemented:
+1. **Pyodide (Browser)** - For simple Python scripts
+2. **Server-Side Sandbox** - For Flask/Django/FastAPI/Streamlit
+
 ## Current State
-- WebContainer only supports JavaScript/Node.js
-- React/Vite apps get instant preview in browser
-- Python apps have no preview capability
+- WebContainer supports JavaScript/Node.js (React/Vite)
+- **NEW:** Pyodide supports Python scripts in browser
+- **NEW:** Server-side sandbox supports Python web apps
 
 ## Solution Options
 
