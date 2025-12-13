@@ -23,11 +23,17 @@ export function getApiUrl(path: string): string {
 
 /**
  * Enhanced fetch wrapper that automatically uses the correct API URL and includes authentication
+ * With retry logic for backend wake-up scenarios (Render free tier)
  * @param path - API endpoint path
  * @param options - Fetch options
+ * @param retries - Number of retries (default: 3)
  * @returns Fetch promise
  */
-export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+export async function apiFetch(
+  path: string, 
+  options?: RequestInit,
+  retries = 3
+): Promise<Response> {
   const url = getApiUrl(path);
 
   // Get auth token from localStorage
@@ -45,11 +51,59 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<Res
     ...options?.headers,
   };
 
-  return fetch(url, {
-    ...options,
-    headers,
-    credentials: 'include', // Important for CORS with cookies
-  });
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include', // Important for CORS with cookies
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      
+      // If we get a response (even error), return it
+      if (response.status !== 0) {
+        return response;
+      }
+      
+      throw new Error('Network request failed with status 0');
+    } catch (error: any) {
+      lastError = error;
+      
+      // If it's the last attempt, throw the error
+      if (attempt === retries) {
+        console.error(`[API] Request failed after ${retries + 1} attempts:`, error);
+        throw error;
+      }
+      
+      // If it's a network error (CORS, timeout, connection refused), retry
+      const isNetworkError = 
+        error.name === 'TypeError' || 
+        error.message.includes('Failed to fetch') ||
+        error.message.includes('NetworkError') ||
+        error.name === 'AbortError';
+        
+      if (isNetworkError) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, attempt) * 1000;
+        console.warn(`[API] Request failed (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms...`, error.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      // For other errors, throw immediately
+      throw error;
+    }
+  }
+  
+  // Should never reach here, but TypeScript needs it
+  throw lastError || new Error('Request failed');
 }
 
 /**

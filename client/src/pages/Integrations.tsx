@@ -548,6 +548,7 @@ export default function Integrations() {
 
   const loadPlugins = async (page: number = currentPage) => {
     try {
+      setLoading(true);
       const response = await apiFetch(`/api/plugins?page=${page}&limit=${pluginsPerPage}`, {
         cache: 'no-store', // Always fetch fresh plugin list
       } as RequestInit);
@@ -567,7 +568,25 @@ export default function Integrations() {
       }
     } catch (err) {
       console.error('Failed to load plugins:', err);
-      setError('Failed to load available plugins');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      // Check if it's a backend wake-up scenario
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        toast({
+          title: 'Backend Starting',
+          description: 'The server is waking up. This may take 30-60 seconds on first load. Retrying...',
+          duration: 5000,
+        });
+      } else {
+        setError('Failed to load available plugins');
+        toast({
+          title: 'Error',
+          description: 'Failed to load available plugins',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
