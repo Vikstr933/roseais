@@ -524,7 +524,39 @@ BACKEND PHASES (Add these after base phase):
 - Environment variables MUST be set up correctly in both frontend and backend
 ` : ''}
 
-Respond with a JSON object in this format:
+**LANGUAGE DETECTION - CRITICAL:**
+First, detect what language/framework the user wants:
+- **Python keywords**: python, flask, django, fastapi, streamlit, .py, pandas, numpy, övertid (overtime)
+- **React/TypeScript keywords**: react, component, ui, frontend, website, web app
+
+**FOR PYTHON PROJECTS** (use agentId: "python-developer"):
+{
+  "appName": "Overtime Calculator",
+  "appType": "calculator",
+  "techStack": {
+    "framework": "Streamlit",
+    "buildTool": "pip",
+    "language": "Python"
+  },
+  "phases": [
+    {
+      "phase": "base",
+      "description": "Python project foundation",
+      "files": ["requirements.txt", "README.md"],
+      "dependencies": [],
+      "agentId": "python-developer"
+    },
+    {
+      "phase": "core",
+      "description": "Main Python application",
+      "files": ["app.py", "utils.py", "models.py"],
+      "dependencies": ["base"],
+      "agentId": "python-developer"
+    }
+  ]
+}
+
+**FOR REACT/TYPESCRIPT PROJECTS** (use agentId: "component-developer"):
 {
   "appName": "Snake Game",
   "appType": "game",
@@ -551,6 +583,11 @@ Respond with a JSON object in this format:
   ]
 }
 
+IMPORTANT - AGENT SELECTION:
+- **Python projects**: Use "python-developer" as agentId - this agent knows Python, Flask, Streamlit, etc.
+- **React/TypeScript projects**: Use "component-developer" as agentId - this agent knows React, TypeScript, etc.
+- **NEVER use component-developer for Python projects!** It will generate React code instead.
+
 IMPORTANT - SEQUENTIAL DEPENDENCIES:
 - Keep phases small and focused (one concern per phase)
 - **CRITICAL: Each phase MUST depend on the PREVIOUS phase, not just "base"**
@@ -562,8 +599,7 @@ IMPORTANT - SEQUENTIAL DEPENDENCIES:
   - types: ["base"] (types only need config files)
   - hooks: ["types"] (hooks import types, so depends on types)
   - core: ["hooks"] (App.tsx imports hooks and types, depends on hooks which chains to types)
-- Include all necessary files
-- Use "component-developer" as agentId for code generation phases`;
+- Include all necessary files`;
   }
 
   /**
@@ -605,14 +641,21 @@ IMPORTANT - SEQUENTIAL DEPENDENCIES:
     // Extract app name from prompt or use default
     const appName = planData.appName || this.extractAppName(userPrompt) || 'GeneratedApp';
     const appType = planData.appType || this.detectAppType(userPrompt) || 'app';
+    
+    // Detect project language/framework to select correct agent
+    const projectConfig = this.detectProjectLanguage(userPrompt);
+    const defaultAgentId = projectConfig.agentId;
+    
+    this.logger.info(`Project language detected: ${projectConfig.language}, using agent: ${defaultAgentId}`);
 
-    // Normalize phases
+    // Normalize phases - use correct agent based on project language
     let phases: GenerationPhase[] = (planData.phases || []).map((p: any, index: number) => ({
       phase: p.phase || `phase-${index + 1}`,
       description: p.description || `Phase ${index + 1}`,
       files: Array.isArray(p.files) ? p.files : [],
       dependencies: Array.isArray(p.dependencies) ? p.dependencies : [],
-      agentId: p.agentId || 'component-developer'
+      // Use the detected agent, not hardcoded component-developer
+      agentId: p.agentId || defaultAgentId
     }));
 
     // Ensure we have at least base and core phases
@@ -704,7 +747,47 @@ IMPORTANT - SEQUENTIAL DEPENDENCIES:
   private createDefaultPlan(userPrompt: string): GenerationPlan {
     const appName = this.extractAppName(userPrompt) || 'GeneratedApp';
     const appType = this.detectAppType(userPrompt) || 'app';
+    
+    // Detect project language to use correct agent and tech stack
+    const projectConfig = this.detectProjectLanguage(userPrompt);
+    
+    this.logger.info(`Creating default plan for ${projectConfig.language} project, agent: ${projectConfig.agentId}`);
+    
+    // Python projects have different structure
+    if (projectConfig.language === 'python') {
+      return {
+        appName,
+        appType,
+        techStack: {
+          framework: projectConfig.framework,
+          buildTool: 'pip',
+          language: 'Python'
+        },
+        phases: [
+          {
+            phase: 'base',
+            description: 'Python project foundation',
+            files: ['requirements.txt', 'README.md'],
+            dependencies: [],
+            agentId: 'python-developer'
+          },
+          {
+            phase: 'core',
+            description: 'Main Python application',
+            files: projectConfig.framework === 'Streamlit' 
+              ? ['app.py', 'utils.py']
+              : projectConfig.framework === 'Flask'
+              ? ['app.py', 'routes.py', 'models.py']
+              : ['main.py', 'utils.py'],
+            dependencies: ['base'],
+            agentId: 'python-developer'
+          }
+        ],
+        totalPhases: 2
+      };
+    }
 
+    // Default React/TypeScript plan
     return {
       appName,
       appType,
@@ -770,6 +853,55 @@ IMPORTANT - SEQUENTIAL DEPENDENCIES:
     if (lowerPrompt.includes('ecommerce') || lowerPrompt.includes('shop')) return 'ecommerce';
 
     return 'app';
+  }
+
+  /**
+   * Detect project language/framework from prompt
+   * Returns the appropriate tech stack and agent ID
+   */
+  private detectProjectLanguage(prompt: string): {
+    language: 'python' | 'typescript';
+    framework: string;
+    buildTool: string;
+    agentId: string;
+  } {
+    const lowerPrompt = prompt.toLowerCase();
+    
+    // Python detection - check for Python keywords
+    const pythonKeywords = [
+      'python', 'flask', 'django', 'fastapi', 'streamlit',
+      '.py', 'pandas', 'numpy', 'scipy', 'matplotlib',
+      'pip', 'requirements.txt', 'pyodide', 'jupyter',
+      'övertid', 'overtime', // Swedish overtime calculator context
+    ];
+    
+    const isPython = pythonKeywords.some(keyword => lowerPrompt.includes(keyword));
+    
+    if (isPython) {
+      // Detect specific Python framework
+      let framework = 'Python Script';
+      if (lowerPrompt.includes('streamlit')) framework = 'Streamlit';
+      else if (lowerPrompt.includes('flask')) framework = 'Flask';
+      else if (lowerPrompt.includes('django')) framework = 'Django';
+      else if (lowerPrompt.includes('fastapi')) framework = 'FastAPI';
+      
+      this.logger.info(`Detected Python project - framework: ${framework}`);
+      
+      return {
+        language: 'python',
+        framework,
+        buildTool: 'pip',
+        agentId: 'python-developer' // Use Python agent!
+      };
+    }
+    
+    // Default to TypeScript/React
+    return {
+      language: 'typescript',
+      framework: 'React',
+      buildTool: 'Vite',
+      agentId: 'component-developer'
+    };
   }
 
   /**
