@@ -2016,19 +2016,20 @@ export default function PromptPlayground() {
       const hasExistingFiles = existingFiles.length > 0;
       const intentResult = await detectIntent(data.userPrompt, hasExistingFiles, existingFiles.length);
       const { intent, shouldGenerateCode, requiresProjectFiles } = intentResult;
-      
-      // Add user message to chat history
+
+      // If intent is conversational, use Chap-ZPT chat instead
+      // Note: playgroundChatMutation will add the user message, so we don't add it here
+      if (intent === 'conversational') {
+        // Use playground chat mutation for conversational requests
+        return playgroundChatMutation.mutateAsync(data);
+      }
+
+      // Add user message to chat history (only for non-conversational intents)
       addChatMessage({
         role: 'user',
         content: data.userPrompt,
         timestamp: Date.now()
       });
-
-      // If intent is conversational, use Chap-ZPT chat instead
-      if (intent === 'conversational') {
-        // Use playground chat mutation for conversational requests
-        return playgroundChatMutation.mutateAsync(data);
-      }
 
       // If intent is to describe, analyze project and return description without generation
       if (intent === 'describe' && hasExistingFiles) {
