@@ -132,7 +132,7 @@ export function inputValidation() {
           if (typeof value === 'string') {
             // Check for common injection patterns
             if (containsSQLInjection(value) || containsXSS(value)) {
-              logger.warn('Suspicious input detected in URL params', { key, value: value.substring(0, 50) });
+              logger.warn(`Suspicious input detected in URL params: key=${key}, value=${value.substring(0, 50)}`);
               // CRITICAL: Ensure CORS headers are set before returning error
               ensureCORSHeaders(req, res);
               return res.status(400).json({
@@ -149,7 +149,7 @@ export function inputValidation() {
         for (const [key, value] of Object.entries(req.query)) {
           if (typeof value === 'string') {
             if (containsSQLInjection(value) || containsXSS(value)) {
-              logger.warn('Suspicious input detected in query params', { key, value: value.substring(0, 50) });
+              logger.warn(`Suspicious input detected in query params: key=${key}, value=${value.substring(0, 50)}`);
               // CRITICAL: Ensure CORS headers are set before returning error
               ensureCORSHeaders(req, res);
               return res.status(400).json({
@@ -164,7 +164,7 @@ export function inputValidation() {
       // Validate request body size
       const contentLength = req.get('content-length');
       if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) { // 10MB limit
-        logger.warn('Request body too large', { contentLength });
+        logger.warn(`Request body too large: ${contentLength}`);
         // CRITICAL: Ensure CORS headers are set before returning error
         ensureCORSHeaders(req, res);
         return res.status(413).json({
@@ -227,7 +227,7 @@ export function apiRateLimit() {
 
     // Check rate limit
     if (clientData.count >= maxRequests) {
-      logger.warn('Rate limit exceeded', { clientId, count: clientData.count, endpoint: req.path, maxRequests });
+      logger.warn(`Rate limit exceeded: clientId=${clientId}, count=${clientData.count}, endpoint=${req.path}, maxRequests=${maxRequests}`);
 
       // CRITICAL: Ensure CORS headers are set before returning error
       ensureCORSHeaders(req, res);
@@ -263,46 +263,22 @@ export function requestMonitoring() {
     const clientId = getClientIdentifier(req);
 
     // Log request
-    logger.info('Request received', {
-      method: req.method,
-      url: req.url,
-      clientId,
-      userAgent: req.get('User-Agent')?.substring(0, 100),
-      contentType: req.get('Content-Type'),
-      timestamp: new Date().toISOString()
-    });
+    logger.info(`Request received: ${req.method} ${req.url} from ${clientId}`);
 
     // Monitor response
     const originalSend = res.send;
     res.send = function(body: any) {
       const duration = Date.now() - startTime;
 
-      logger.info('Request completed', {
-        method: req.method,
-        url: req.url,
-        statusCode: res.statusCode,
-        duration,
-        clientId,
-        responseSize: body ? Buffer.byteLength(body) : 0
-      });
+      logger.info(`Request completed: ${req.method} ${req.url} - ${res.statusCode} in ${duration}ms`);
 
       // Alert on suspicious activity
       if (res.statusCode >= 400) {
-        logger.warn('Client error response', {
-          method: req.method,
-          url: req.url,
-          statusCode: res.statusCode,
-          clientId
-        });
+        logger.warn(`Client error response: ${req.method} ${req.url} - ${res.statusCode} from ${clientId}`);
       }
 
       if (duration > 5000) { // 5 second threshold
-        logger.warn('Slow request detected', {
-          method: req.method,
-          url: req.url,
-          duration,
-          clientId
-        });
+        logger.warn(`Slow request detected: ${req.method} ${req.url} took ${duration}ms from ${clientId}`);
       }
 
       return originalSend.call(this, body);

@@ -3401,7 +3401,7 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
       this.selectedProjects.set(sessionId, {
         projectId: platformProject.id.toString(),
         projectName: platformProject.name,
-        projectDescription: platformProject.description,
+        projectDescription: platformProject.description ?? undefined,
         isGitHubRepo: false
       });
 

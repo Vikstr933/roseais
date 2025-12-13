@@ -32,11 +32,14 @@ interface ArchitectTask {
 }
 
 export class ComponentArchitectAgent extends BaseAgent {
-  private readonly logger = new SimpleLogger('ComponentArchitectAgent');
   private readonly aiGenerator = new AICodeGenerator();
 
   constructor() {
     super('component-architect');
+  }
+
+  protected async setup(): Promise<void> {
+    // No additional setup needed
   }
 
   async executeTask(task: ArchitectTask | string): Promise<AgentResult> {
@@ -71,6 +74,10 @@ export class ComponentArchitectAgent extends BaseAgent {
         content: JSON.stringify(architecture, null, 2),
         metadata: {
           executionTime: Date.now() - start,
+          resourceUsage: {
+            memory: process.memoryUsage().heapUsed / 1024 / 1024,
+            cpu: 0,
+          },
         },
       };
     } catch (error) {

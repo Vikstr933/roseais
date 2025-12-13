@@ -116,6 +116,16 @@ export class PluginGeneratorAgent extends BaseAgent {
     this.securityAnalyzer = new PluginSecurityAnalyzer();
   }
 
+  protected async setup(): Promise<void> {
+    logger.info('PluginGeneratorAgent initialized');
+  }
+
+  async executeTask(task: string): Promise<any> {
+    // This agent is primarily used via generatePlugin method
+    logger.info(`Executing task: ${task}`);
+    return { success: true, message: 'Use generatePlugin method for plugin generation' };
+  }
+
   private buildGenerationUserPrompt(
     params: { prompt: string; capabilities: string[]; serviceName: string; complexity: 'simple' | 'medium' | 'complex' },
     template: string,
@@ -201,9 +211,7 @@ Requirements:
 
     let credentialsRequired = this.detectCredentialRequirements(sanitizedCode, params.serviceName);
     if (requiresAuth && Object.keys(credentialsRequired).length === 0) {
-      logger.warn('Plugin requires auth but no credentials detected, adding default field', {
-        serviceName: params.serviceName
-      });
+      logger.warn(`Plugin requires auth but no credentials detected for ${params.serviceName}, adding default field`);
       credentialsRequired = {
         apiKey: {
           label: `${params.serviceName.charAt(0).toUpperCase() + params.serviceName.slice(1)} API Key`,
@@ -275,10 +283,7 @@ Requirements:
                 }
               } catch (e6) {
                 // All strategies failed
-                logger.error('JSON parsing failed after all strategies', {
-                  originalText: text.substring(0, 200),
-                  error: e6 instanceof Error ? e6.message : 'Unknown error'
-                });
+                logger.error(`JSON parsing failed after all strategies: ${text.substring(0, 200)}`, e6 instanceof Error ? e6 : new Error(String(e6)));
                 throw new Error(`Failed to parse JSON response. Last error: ${e6 instanceof Error ? e6.message : 'Unknown'}`);
               }
             }
@@ -295,7 +300,7 @@ Requirements:
    */
   async generatePlugin(request: PluginGenerationRequest): Promise<PluginGenerationResult> {
     const startTime = Date.now();
-    logger.info('Starting plugin generation', { userId: request.userId, serviceName: request.serviceName });
+    logger.info(`Starting plugin generation for user ${request.userId}, service: ${request.serviceName}`);
 
     try {
       // Step 1: Analyze intent and validate safety
@@ -306,9 +311,7 @@ Requirements:
       
       if (isSuperAdmin) {
         // Superadmins automatically pass safety check
-        logger.info('Superadmin bypassing intent analysis - automatically safe', { 
-          userId: request.userId 
-        });
+        logger.info(`Superadmin ${request.userId} bypassing intent analysis - automatically safe`);
         intentAnalysis = {
           safe: true,
           intent: 'admin_approved',
@@ -323,7 +326,7 @@ Requirements:
         intentAnalysis = await this.analyzeIntent(request.prompt);
 
         if (!intentAnalysis.safe) {
-          logger.warn('Blocked unsafe intent', { userId: request.userId, intent: intentAnalysis.intent });
+          logger.warn(`Blocked unsafe intent for user ${request.userId}: ${intentAnalysis.intent}`);
           return {
             pluginId: '',
             status: 'blocked',
@@ -338,6 +341,7 @@ Requirements:
               description: '',
               capabilities: [],
               requiresAuth: false,
+              credentialsRequired: {},
             },
           };
         }
@@ -382,13 +386,7 @@ Requirements:
       const pluginId = `plugin_${nanoid(16)}`;
       const generationTime = Date.now() - startTime;
 
-      logger.info('Plugin generation complete', {
-        pluginId,
-        status,
-        securityScore,
-        reviewRequired,
-        generationTime,
-      });
+      logger.info(`Plugin generation complete: pluginId=${pluginId}, status=${status}, securityScore=${securityScore}, reviewRequired=${reviewRequired}, generationTime=${generationTime}ms`);
 
       return {
         pluginId,
@@ -409,7 +407,7 @@ Requirements:
         },
       };
     } catch (error) {
-      logger.error('Plugin generation failed', error);
+      logger.error('Plugin generation failed', error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
   }
@@ -493,7 +491,7 @@ Requirements:
 
       return analysis;
     } catch (error) {
-      logger.error('Intent analysis failed', error);
+      logger.error('Intent analysis failed', error instanceof Error ? error : new Error(String(error)));
       // Fail safe: reject if we can't analyze
       return {
         safe: false,
@@ -595,7 +593,7 @@ Respond in JSON format (no markdown code blocks):
     credentialsRequired: Record<string, any>;
     tokensUsed: number;
   }> {
-    logger.info('Generating plugin code', { serviceName: params.serviceName });
+    logger.info(`Generating plugin code for ${params.serviceName}`);
 
     const startTime = Date.now();
     const template = this.getPluginTemplate(params.serviceName);
@@ -648,11 +646,7 @@ Respond in JSON format (no markdown code blocks):
       } catch (error) {
         if (error instanceof PluginValidationError) {
           validationHint = error.message;
-          logger.warn('Generated code failed validation', {
-            attempt,
-            serviceName: params.serviceName,
-            error: error.message
-          });
+          logger.warn(`Generated code failed validation: attempt=${attempt}, serviceName=${params.serviceName}, error=${error.message}`);
           continue;
         }
 
@@ -684,6 +678,7 @@ Respond in JSON format (no markdown code blocks):
     capabilities: string[];
     requiresAuth: boolean;
     authType?: string;
+    credentialsRequired: Record<string, any>;
     tokensUsed: number;
   }> {
     const systemPrompt = `You are an expert plugin developer. Generate a secure, production-ready plugin based on the BaseProductivityPlugin class.
@@ -766,9 +761,7 @@ Requirements:
     
     // If requiresAuth is true but no credentials were detected, provide a default
     if (requiresAuth && Object.keys(credentialsRequired).length === 0) {
-      logger.warn('Plugin requires auth but no credentials detected, adding default field', {
-        serviceName: params.serviceName
-      });
+      logger.warn(`Plugin requires auth but no credentials detected for ${params.serviceName}, adding default field`);
       credentialsRequired = {
         apiKey: {
           label: `${params.serviceName.charAt(0).toUpperCase() + params.serviceName.slice(1)} API Key`,

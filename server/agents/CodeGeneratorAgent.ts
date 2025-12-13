@@ -90,7 +90,7 @@ export class CodeGeneratorAgent extends BaseAgent {
         });
       } else {
         // Fallback to template if AI fails
-        this.logger.warn('AI generation failed, using fallback template', { error: aiResponse.error });
+        this.logger.warn(`AI generation failed, using fallback template: ${aiResponse.error}`);
         const fallbackComponent = await this.generateMainComponent(prompt, null);
         const file = {
           path: `src/App.tsx`,

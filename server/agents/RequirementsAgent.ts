@@ -22,11 +22,14 @@ export interface RequirementsTask {
 }
 
 export class RequirementsAgent extends BaseAgent {
-  private readonly logger = new SimpleLogger('RequirementsAgent');
   private readonly aiGenerator = new AICodeGenerator();
 
   constructor() {
     super('requirements-agent');
+  }
+
+  protected async setup(): Promise<void> {
+    // No additional setup needed
   }
 
   async executeTask(task: RequirementsTask | string): Promise<AgentResult> {
@@ -76,6 +79,10 @@ export class RequirementsAgent extends BaseAgent {
         content: JSON.stringify(analysis, null, 2),
         metadata: {
           executionTime: Date.now() - start,
+          resourceUsage: {
+            memory: process.memoryUsage().heapUsed / 1024 / 1024,
+            cpu: 0,
+          },
         },
       };
     } catch (error) {

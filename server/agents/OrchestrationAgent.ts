@@ -215,7 +215,7 @@ export class OrchestrationAgent extends BaseAgent {
 
         const phaseResults = await Promise.all(
           phase.nodes.map(node =>
-            this.runAgentNode(node.id, {
+            this.runAgentNode(node.id as 'requirements' | 'ui-designer' | 'component-architect' | 'style-generator' | 'code-generator' | 'completion', {
               task: orchestrationTask,
               sharedMemory,
               result,
@@ -276,10 +276,7 @@ export class OrchestrationAgent extends BaseAgent {
 
       const conflicts = fileOrchestrator?.getConflicts() ?? [];
       conflicts.forEach(conflict =>
-        this.logger.warn('Detected file assignment conflict', {
-          path: conflict.path,
-          owner: conflict.owner,
-        })
+        this.logger.warn(`Detected file assignment conflict: path=${conflict.path}, owner=${conflict.owner}`)
       );
 
       result.success = true;
@@ -364,7 +361,12 @@ export class OrchestrationAgent extends BaseAgent {
         }
         case 'ui-designer': {
           task.progressCallback?.(['🎨 Designing UI components...']);
-          agentResult = await this.uiDesignerAgent.executeTask(task.prompt);
+          const uiResult = await this.uiDesignerAgent.executeTask(task.prompt);
+          agentResult = {
+            success: true,
+            content: JSON.stringify(uiResult),
+            files: [],
+          };
           result.agentsUsed.push('UIDesignerAgent');
           break;
         }
@@ -388,21 +390,29 @@ export class OrchestrationAgent extends BaseAgent {
         }
         case 'code-generator': {
           task.progressCallback?.(['⚡ Generating intelligent code...']);
-          agentResult = await this.codeGeneratorAgent.executeTask({
+          const codeResult = await this.codeGeneratorAgent.executeTask({
             prompt: task.prompt,
             sharedMemory,
           });
+          agentResult = {
+            success: true,
+            files: codeResult.files,
+          };
           result.agentsUsed.push('CodeGeneratorAgent');
           break;
         }
         case 'completion': {
           task.progressCallback?.(['🔍 Validating and optimizing code...']);
-          agentResult = await this.completionAgent.executeTask(task.prompt);
+          await this.completionAgent.executeTask(task.prompt);
+          agentResult = {
+            success: true,
+            files: [],
+          };
           result.agentsUsed.push('CompletionAgent');
           break;
         }
         default: {
-          this.logger.warn('Unknown agent node, skipping', { agentId });
+          this.logger.warn(`Unknown agent node, skipping: ${agentId}`);
           return undefined;
         }
       }
@@ -442,11 +452,7 @@ export class OrchestrationAgent extends BaseAgent {
         `❌ Agent ${agentId} failed: ${errorMessage}`,
       ]);
       result.errors.push(`Agent ${agentId} failed: ${errorMessage}`);
-      this.logger.error('Agent execution failed', error as Error, {
-        agentId,
-        workflowId,
-        phase,
-      });
+      this.logger.error(`Agent execution failed: agentId=${agentId}, workflowId=${workflowId}, phase=${phase}`, error as Error);
       const errorEvent = {
         type: 'AGENT_ERROR',
         agent: agentId,
