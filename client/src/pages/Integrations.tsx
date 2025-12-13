@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus, AlertTriangle, Code, Shield, Key, ExternalLink, MessageSquare, User } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus, AlertTriangle, Code, Shield, Key, ExternalLink, MessageSquare, User, HelpCircle, Info } from 'lucide-react';
 import { ToolPermissionsDialog } from '@/components/ToolPermissionsDialog';
 import { ConnectorConfigDialog } from '@/components/ConnectorConfigDialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from '@/components/ui/pagination';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
@@ -129,6 +130,8 @@ export default function Integrations() {
   const [loadingSharedConnectors, setLoadingSharedConnectors] = useState(false);
   const [connectorConfigDialogOpen, setConnectorConfigDialogOpen] = useState(false);
   const [selectedConnector, setSelectedConnector] = useState<any>(null);
+  const [connectorConfigMode, setConnectorConfigMode] = useState<'create' | 'edit'>('create');
+  const [connectorConfigId, setConnectorConfigId] = useState<string | undefined>(undefined);
   const getPluginById = (pluginId: string) => availablePlugins.find(p => p.id === pluginId);
   const isCustomPlugin = (plugin?: Plugin) =>
     !!plugin && (plugin.isUserGenerated || plugin.category === 'custom' || plugin.id.startsWith('plugin_'));
@@ -1662,93 +1665,243 @@ export default function Integrations() {
         </TabsContent>
 
         <TabsContent value="shared" className="mt-6">
-          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
-              <Shield className="h-4 w-4 text-blue-600" />
-              Shared Connectors
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Configured once by admins, available to everyone in your workspace. Examples: Vercel, Stripe, Shopify.
-            </p>
-          </div>
-          <div className="space-y-2">
-            {availablePlugins
-              .filter(plugin => {
-                const sharedIds = ['vercel', 'stripe', 'shopify', 'lovable-cloud'];
-                return sharedIds.includes(plugin.id.toLowerCase()) || plugin.isShared === true;
-              })
-              .map((plugin) => {
-                const status = getPluginStatus(plugin.id);
-                const isConnected = isPluginEnabled(plugin.id);
-                return (
-                  <div key={plugin.id} className={`flex items-center justify-between p-3 rounded-lg border ${isConnected ? 'border-primary bg-primary/5' : 'border-border bg-card'}`}>
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex-shrink-0">
-                        {getPluginIcon(plugin.icon, plugin.category)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm truncate">{plugin.name}</p>
-                          {isConnected && (
-                            <Badge className="bg-green-500 hover:bg-green-600 text-xs px-1.5 py-0">
-                              <CheckCircle2 className="w-3 h-3 mr-0.5" />
-                              Connected
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className="text-xs px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200">
-                            Shared
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate mt-1">{plugin.description}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                      {isConnected ? (
-                        <>
-                          {isAdmin && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDisconnectPlugin(plugin.id)}
-                              className="h-8"
-                            >
-                              Disconnect
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {isAdmin && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleConnectPlugin(plugin.id)}
-                              disabled={connecting.has(plugin.id)}
-                              className="h-8"
-                            >
-                              {connecting.has(plugin.id) ? (
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                              ) : null}
-                              Configure
-                            </Button>
-                          )}
-                          {!isAdmin && (
-                            <span className="text-xs text-muted-foreground">Admin only</span>
-                          )}
-                        </>
-                      )}
+          <TooltipProvider>
+            <div className="mb-6 space-y-4">
+              {/* Help Section */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-blue-600" />
+                      Shared Connectors
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-xs">
+                            Shared connectors are workspace-wide API keys and environment variables configured by admins. 
+                            Once set up, all users in your workspace can use them automatically when generating apps.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Configured once by admins, available to everyone in your workspace. These connectors provide API keys and environment variables that are automatically injected into your generated apps.
+                    </p>
+                    
+                    {/* Examples */}
+                    <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border border-blue-100 dark:border-blue-900">
+                      <p className="text-xs font-medium mb-2 text-blue-900 dark:text-blue-100">How it works:</p>
+                      <ul className="text-xs text-muted-foreground space-y-1.5">
+                        <li className="flex items-start gap-2">
+                          <span className="text-blue-600 mt-0.5">•</span>
+                          <span><strong>Stripe:</strong> When you generate a payment app, Stripe API keys are automatically available as environment variables</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-blue-600 mt-0.5">•</span>
+                          <span><strong>Vercel:</strong> Your deployments automatically use the configured Vercel token for publishing</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-blue-600 mt-0.5">•</span>
+                          <span><strong>GitHub:</strong> Repository operations use the shared GitHub token automatically</span>
+                        </li>
+                      </ul>
                     </div>
                   </div>
-                );
-              })}
-            {availablePlugins.filter(p => {
-              const sharedIds = ['vercel', 'stripe', 'shopify', 'lovable-cloud'];
-              return sharedIds.includes(p.id.toLowerCase()) || p.isShared === true;
-            }).length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                No shared connectors available
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Connectors List */}
+              {loadingSharedConnectors ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Show configured shared connectors */}
+                  {sharedConnectors.map((connector: any) => {
+                    const preBuilt = availablePreBuiltConnectors.find(c => c.id === connector.serviceName?.toLowerCase());
+                    const connectorData = preBuilt || {
+                      id: connector.serviceName,
+                      name: connector.name || connector.serviceName,
+                      description: connector.description || `Shared connector for ${connector.serviceName}`,
+                      icon: '🔌',
+                      category: 'other',
+                    };
+                    
+                    return (
+                      <div key={connector.id} className="flex items-center justify-between p-4 rounded-lg border border-primary bg-primary/5">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="flex-shrink-0 text-2xl">{connectorData.icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm">{connectorData.name}</p>
+                              <Badge className="bg-green-500 hover:bg-green-600 text-xs px-1.5 py-0">
+                                <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                                Configured
+                              </Badge>
+                              <Badge variant="outline" className="text-xs px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200">
+                                Shared
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">{connectorData.description}</p>
+                            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                              <span>Configured by: {connector.configuredBy || 'Admin'}</span>
+                              {connector.lastUsed && (
+                                <span>• Last used: {new Date(connector.lastUsed).toLocaleDateString()}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          {isAdmin && (
+                            <>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const preBuiltConnector = availablePreBuiltConnectors.find(c => c.id === connector.serviceName?.toLowerCase());
+                                      if (preBuiltConnector) {
+                                        setSelectedConnector({
+                                          ...preBuiltConnector,
+                                          isConfigured: true,
+                                          existingConfig: {
+                                            id: connector.id,
+                                            envVariables: connector.envVariables || {},
+                                          },
+                                        });
+                                        setConnectorConfigMode('edit');
+                                        setConnectorConfigId(connector.id);
+                                        setConnectorConfigDialogOpen(true);
+                                      }
+                                    }}
+                                    className="h-8"
+                                  >
+                                    <Settings className="w-3 h-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">Update API keys and environment variables</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={async () => {
+                                  try {
+                                    const response = await apiFetch(`/api/shared-connectors/${connector.id}`, {
+                                      method: 'DELETE',
+                                      headers: getAuthHeaders(sessionToken),
+                                    });
+                                    if (response.ok) {
+                                      toast({
+                                        title: 'Success',
+                                        description: 'Shared connector removed',
+                                      });
+                                      loadSharedConnectors();
+                                    }
+                                  } catch (error) {
+                                    toast({
+                                      title: 'Error',
+                                      description: 'Failed to remove connector',
+                                      variant: 'destructive',
+                                    });
+                                  }
+                                }}
+                                className="h-8"
+                              >
+                                Remove
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Show available pre-built connectors that aren't configured yet */}
+                  {availablePreBuiltConnectors
+                    .filter(c => !c.isConfigured)
+                    .map((connector: any) => (
+                      <div key={connector.id} className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="flex-shrink-0 text-2xl">{connector.icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm">{connector.name}</p>
+                              <Badge variant="outline" className="text-xs px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200">
+                                Available
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">{connector.description}</p>
+                            {connector.documentationUrl && (
+                              <a
+                                href={connector.documentationUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:underline mt-1 inline-flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                Documentation
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          {isAdmin ? (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedConnector({
+                                  ...connector,
+                                  isConfigured: false,
+                                });
+                                setConnectorConfigMode('create');
+                                setConnectorConfigId(undefined);
+                                setConnectorConfigDialogOpen(true);
+                              }}
+                              disabled={connecting.has(connector.id)}
+                              className="h-8"
+                            >
+                              {connecting.has(connector.id) ? (
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              ) : (
+                                <Plus className="w-3 h-3 mr-1" />
+                              )}
+                              Configure
+                            </Button>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs text-muted-foreground">Admin only</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">Only admins can configure shared connectors</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                  {sharedConnectors.length === 0 && availablePreBuiltConnectors.filter(c => !c.isConfigured).length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No shared connectors available</p>
+                      {isAdmin && (
+                        <p className="text-xs mt-1">Configure a connector above to get started</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </TooltipProvider>
         </TabsContent>
 
         <TabsContent value="personal" className="mt-6">
@@ -2373,13 +2526,19 @@ export default function Integrations() {
       {selectedConnector && (
         <ConnectorConfigDialog
           open={connectorConfigDialogOpen}
-          onOpenChange={setConnectorConfigDialogOpen}
+          onOpenChange={(open) => {
+            setConnectorConfigDialogOpen(open);
+            if (!open) {
+              setSelectedConnector(null);
+            }
+          }}
           connector={selectedConnector}
-          isConfigured={selectedConnector.isConfigured}
-          existingConfig={selectedConnector.existingConfig}
+          isConfigured={selectedConnector?.isConfigured || false}
+          existingConfig={selectedConnector?.existingConfig}
           onSuccess={() => {
             loadSharedConnectors();
             setSelectedConnector(null);
+            setConnectorConfigDialogOpen(false);
           }}
         />
       )}

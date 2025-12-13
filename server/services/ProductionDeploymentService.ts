@@ -89,10 +89,18 @@ export class ProductionDeploymentService {
           .limit(1);
 
         if (sharedKey) {
-          // Decrypt and return (would need to implement decryption)
-          // For now, return null to fall back to env var
           this.logger.info('ProductionDeploymentService', `Found shared ${serviceName} connector for workspace ${workspaceId}`);
-          // TODO: Implement decryption of stored keys
+          // Decrypt and return the API key
+          try {
+            const { apiKeyService } = await import('./APIKeyService');
+            const decrypted = await apiKeyService.getAPIKey(sharedKey.id.toString(), userId);
+            if (decrypted) {
+              return decrypted.keyValue;
+            }
+          } catch (error) {
+            this.logger.error('ProductionDeploymentService', `Failed to decrypt shared ${serviceName} connector`, error as Error);
+            // Fall through to next option
+          }
         }
       }
 
@@ -113,7 +121,17 @@ export class ProductionDeploymentService {
 
       if (personalKey) {
         this.logger.info('ProductionDeploymentService', `Found personal ${serviceName} connector for user ${userId}`);
-        // TODO: Implement decryption of stored keys
+        // Decrypt and return the API key
+        try {
+          const { apiKeyService } = await import('./APIKeyService');
+          const decrypted = await apiKeyService.getAPIKey(personalKey.id.toString(), userId);
+          if (decrypted) {
+            return decrypted.keyValue;
+          }
+        } catch (error) {
+          this.logger.error('ProductionDeploymentService', `Failed to decrypt personal ${serviceName} connector`, error as Error);
+          // Fall through to next option
+        }
       }
 
       // 3. Fallback to environment variable (for backward compatibility)
@@ -689,6 +707,33 @@ MIT License - feel free to use this project as you wish!
       } catch (error) {
         // Non-fatal: log but continue deployment
         this.logger.warning('ProductionDeploymentService', 'Failed to add database connection string to Vercel', error as Error);
+      }
+    }
+
+    // Add connector environment variables (from shared/personal connectors)
+    if (userId && config.workspaceId) {
+      try {
+        const { ConnectorService } = await import('./ConnectorService');
+        const connectors = await ConnectorService.getWorkspaceConnectors(userId, config.workspaceId);
+        
+        // Add env vars from connectors to Vercel
+        for (const [key, value] of Object.entries(connectors.envVarsForCode)) {
+          // Only add if not already present (don't override existing env vars)
+          if (!environmentVariables.some(ev => ev.key === key)) {
+            environmentVariables.push({
+              key,
+              value,
+              target: ['production', 'preview', 'development'] as ('production' | 'preview' | 'development')[],
+            });
+            this.logger.info('ProductionDeploymentService', `Added connector env var ${key} to Vercel`, {
+              workspaceId: config.workspaceId,
+              connectorCount: connectors.availableConnectors.length,
+            });
+          }
+        }
+      } catch (error) {
+        // Non-fatal: log but continue deployment
+        this.logger.warning('ProductionDeploymentService', 'Failed to add connector env vars to Vercel', error as Error);
       }
     }
 

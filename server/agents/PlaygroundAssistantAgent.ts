@@ -283,6 +283,7 @@ export class PlaygroundAssistantAgent {
       // Determine project context
       const projectId = options?.projectId || (this.selectedProjects.get(sessionId)?.projectId);
       const hasProjectContext = !!projectId;
+      const isChatMode = options?.chatMode || false;
 
       // Build available tools
       const tools: Tool[] = [
@@ -306,8 +307,33 @@ export class PlaygroundAssistantAgent {
         );
       }
 
+      // Get connector context if we have a project
+      let connectorContext = '';
+      if (projectId) {
+        try {
+          const { ConnectorService } = await import('../services/ConnectorService');
+          const { db } = await import('../../db');
+          const { workspaces } = await import('../../db/schema-pg');
+          const { eq } = await import('drizzle-orm');
+          
+          // Get workspace ID from project
+          const [workspace] = await db
+            .select({ id: workspaces.id })
+            .from(workspaces)
+            .where(eq(workspaces.id, parseInt(projectId)))
+            .limit(1);
+          
+          if (workspace) {
+            const connectors = await ConnectorService.getWorkspaceConnectors(userId, workspace.id);
+            connectorContext = ConnectorService.buildConnectorContextString(connectors.availableConnectors);
+          }
+        } catch (error) {
+          logger.warn('Failed to load connector context:', error);
+        }
+      }
+
       // Build system prompt
-      const systemPrompt = this.buildSystemPrompt(hasProjectContext, projectId, options?.existingFiles, isChatMode);
+      const systemPrompt = this.buildSystemPrompt(hasProjectContext, projectId, options?.existingFiles, isChatMode, connectorContext);
 
       // Build user message
       const enhancedMessage = this.buildEnhancedMessage(userMessage, options?.existingFiles);
@@ -510,7 +536,8 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
     hasProjectContext: boolean,
     projectId?: string,
     existingFiles?: Array<{ path: string; content: string }>,
-    isChatMode?: boolean
+    isChatMode?: boolean,
+    connectorContext?: string
   ): string {
     const chatModeNote = isChatMode 
       ? `\n\n**CHAT MODE ACTIVE**: You are currently in chat-only mode. This means:\n- You should NOT generate code or use code generation tools\n- You can discuss code, answer questions, provide explanations, and help with planning\n- You can read and analyze existing code, but should not create or modify files\n- Focus on conversation, guidance, and answering questions about the project\n- If the user wants to generate code, they should switch to Code Mode\n`
@@ -597,7 +624,7 @@ ${hasProjectContext
 - Be proactive in suggesting improvements
 - Focus on production-ready, maintainable code
 - Help users build amazing applications
-- Understand and explain the roles of other AI agents in the system when asked`;
+- Understand and explain the roles of other AI agents in the system when asked${connectorContext || ''}`;
 
     return basePrompt;
   }

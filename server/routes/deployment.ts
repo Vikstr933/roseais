@@ -93,6 +93,58 @@ router.post('/deploy', authenticateUser, async (req, res) => {
 });
 
 /**
+ * GET /api/deploy/credentials-info
+ * Get information about which credentials will be used for deployment
+ */
+router.get('/credentials-info', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const workspaceId = req.query.workspaceId ? parseInt(req.query.workspaceId as string) : undefined;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { ConnectorService } = await import('../services/ConnectorService');
+    const connectors = await ConnectorService.getWorkspaceConnectors(userId, workspaceId);
+
+    // Determine which credentials will be used
+    const credentialsInfo = {
+      vercel: {
+        source: connectors.deploymentCredentials.vercel 
+          ? (connectors.availableConnectors.find(c => c.serviceName?.toLowerCase() === 'vercel')?.isShared ? 'shared' : 'personal')
+          : 'platform',
+        hasConnector: !!connectors.deploymentCredentials.vercel,
+        accountType: connectors.deploymentCredentials.vercel ? 'workspace' : 'platform',
+      },
+      github: {
+        source: connectors.deploymentCredentials.github
+          ? (connectors.availableConnectors.find(c => c.serviceName?.toLowerCase() === 'github')?.isShared ? 'shared' : 'personal')
+          : 'platform',
+        hasConnector: !!connectors.deploymentCredentials.github,
+        accountType: connectors.deploymentCredentials.github ? 'workspace' : 'platform',
+      },
+      availableConnectors: connectors.availableConnectors.map(c => ({
+        name: c.name,
+        icon: c.icon,
+        isShared: c.isShared,
+      })),
+    };
+
+    res.json({
+      success: true,
+      credentials: credentialsInfo,
+    });
+  } catch (error: any) {
+    console.error('Error getting credentials info:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get credentials info',
+    });
+  }
+});
+
+/**
  * Get deployment status
  */
 router.get('/deployment/:deploymentId/status', authenticateUser, async (req, res) => {

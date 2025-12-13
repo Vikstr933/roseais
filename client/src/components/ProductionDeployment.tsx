@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
@@ -9,12 +9,13 @@ import { Switch } from './ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { Alert, AlertDescription } from './ui/alert';
-import { Loader2, Rocket, Github, Globe, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, Rocket, Github, Globe, ExternalLink, CheckCircle, XCircle, Info } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 
 interface ProductionDeploymentProps {
   files: Array<{ path: string; content: string }>;
   projectName: string;
+  workspaceId?: number;
   onDeployment?: (result: DeploymentResult) => void;
 }
 
@@ -35,10 +36,15 @@ interface DeploymentConfig {
   envVars: Record<string, string>;
 }
 
-export function ProductionDeployment({ files, projectName, onDeployment }: ProductionDeploymentProps) {
+export function ProductionDeployment({ files, projectName, workspaceId, onDeployment }: ProductionDeploymentProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [deploymentResult, setDeploymentResult] = useState<DeploymentResult | null>(null);
+  const [credentialsInfo, setCredentialsInfo] = useState<{
+    vercel: { source: 'shared' | 'personal' | 'platform'; accountType: 'workspace' | 'platform' };
+    github: { source: 'shared' | 'personal' | 'platform'; accountType: 'workspace' | 'platform' };
+    availableConnectors: Array<{ name: string; icon: string; isShared: boolean }>;
+  } | null>(null);
   const [config, setConfig] = useState<DeploymentConfig>({
     projectName: projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
     repoName: `${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${Date.now()}`,
@@ -49,6 +55,22 @@ export function ProductionDeployment({ files, projectName, onDeployment }: Produ
   });
   const [envVarInput, setEnvVarInput] = useState({ key: '', value: '' });
   const { toast } = useToast();
+
+  // Fetch credentials info when dialog opens
+  useEffect(() => {
+    if (isOpen && workspaceId) {
+      apiFetch(`/api/deploy/credentials-info?workspaceId=${workspaceId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setCredentialsInfo(data.credentials);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to fetch credentials info:', err);
+        });
+    }
+  }, [isOpen, workspaceId]);
 
   const handleDeploy = async () => {
     setIsDeploying(true);
@@ -234,6 +256,43 @@ export function ProductionDeployment({ files, projectName, onDeployment }: Produ
                 </div>
               )}
             </div>
+
+            {/* Credentials Info */}
+            {credentialsInfo && (
+              <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription>
+                  <div className="space-y-2">
+                    <p className="font-semibold text-sm text-blue-900 dark:text-blue-100">Deployment Credentials:</p>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Vercel:</span>
+                        <Badge variant={credentialsInfo.vercel.source === 'platform' ? 'outline' : 'default'} className="text-xs">
+                          {credentialsInfo.vercel.source === 'shared' && '🔷 Workspace Account'}
+                          {credentialsInfo.vercel.source === 'personal' && '👤 Your Account'}
+                          {credentialsInfo.vercel.source === 'platform' && '⚙️ Platform Account'}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">GitHub:</span>
+                        <Badge variant={credentialsInfo.github.source === 'platform' ? 'outline' : 'default'} className="text-xs">
+                          {credentialsInfo.github.source === 'shared' && '🔷 Workspace Account'}
+                          {credentialsInfo.github.source === 'personal' && '👤 Your Account'}
+                          {credentialsInfo.github.source === 'platform' && '⚙️ Platform Account'}
+                        </Badge>
+                      </div>
+                      {credentialsInfo.availableConnectors.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-blue-200">
+                          <p className="text-xs text-blue-700 dark:text-blue-300">
+                            Available connectors: {credentialsInfo.availableConnectors.map(c => `${c.icon} ${c.name}`).join(', ')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* Deployment Info */}
             <Alert>

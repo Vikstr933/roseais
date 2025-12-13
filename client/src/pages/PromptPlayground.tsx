@@ -1644,130 +1644,8 @@ export default function PromptPlayground() {
     }
   }, [sessionToken, addChatMessage]);
 
-  // Show Desktop as landing page when no project is selected
-  // Desktop users get the full desktop experience, mobile users get a simple list
-  if (!hasProjectRoute) {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-    
-    // Mobile: Simple project list
-    if (isMobile) {
-      return (
-        <>
-          {createProjectDialog}
-          <div className="min-h-screen bg-background flex flex-col">
-            {/* Header */}
-            <div className="h-14 border-b bg-card flex items-center justify-between px-4 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-primary" />
-                <span className="font-bold">Chap-ZPT</span>
-              </div>
-              <Button size="sm" onClick={() => setShowCreateProjectDialog(true)}>
-                <Plus className="h-4 w-4 mr-1" />
-                New
-              </Button>
-            </div>
-            
-            {/* Project List */}
-            <div className="flex-1 p-4">
-              <h2 className="text-lg font-semibold mb-4">Your Apps</h2>
-              {isLoadingProjects ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              ) : (userProjects?.length || 0) > 0 ? (
-                <div className="space-y-3">
-                  {userProjects?.map((project) => (
-                    <button
-                      key={project.id}
-                      onClick={() => setLocation(`/playground/${project.id}`)}
-                      className="w-full p-4 bg-card rounded-xl border border-border text-left hover:bg-accent transition-colors"
-                    >
-                      <h3 className="font-medium">{project.name}</h3>
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                        {project.description || 'No description'}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Folder className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground mb-4">No apps yet</p>
-                  <Button onClick={() => setShowCreateProjectDialog(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Your First App
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      );
-    }
-    
-    // Desktop: Full desktop experience
-    return (
-      <>
-        {createProjectDialog}
-        <div className="h-screen flex flex-col bg-background">
-          {/* Navigation Header */}
-          <div className="h-14 sm:h-16 border-b bg-card/80 backdrop-blur flex items-center justify-between px-4 flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <Brain className="h-6 w-6 text-primary" />
-              <span className="font-bold text-lg">Chap-ZPT</span>
-              <Badge variant="secondary" className="text-[10px]">Desktop</Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowCreateProjectDialog(true)}
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                New App
-              </Button>
-            </div>
-          </div>
-          
-          {/* Desktop View - Constrained but fills screen */}
-          <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-gradient-to-br from-purple-50 via-pink-50 to-cyan-50 overflow-auto">
-            {isLoadingProjects ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
-                  <p className="text-muted-foreground">Loading your workspace...</p>
-                </div>
-              </div>
-            ) : (
-              <div 
-                className="relative overflow-hidden rounded-lg shadow-xl"
-                style={{
-                  width: 'min(1200px, calc(100vw - 2rem))',
-                  height: 'min(750px, calc(100vh - 8rem))',
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                }}
-              >
-                <DesktopView
-                  projects={userProjects || []}
-                  currentProjectId={undefined}
-                  onSelectProject={(projectId) => {
-                    setLocation(`/playground/${projectId}`);
-                  }}
-                  onCreateProject={() => setShowCreateProjectDialog(true)}
-                  onEditProject={(projectId) => {
-                    setLocation(`/playground/${projectId}`);
-                  }}
-                  webContainerService={webContainerService}
-                  isWebContainerReady={webContainerReady}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </>
-    );
-  }
+  // CRITICAL: All hooks must be defined before any conditional returns
+  // The early return for desktop view is now at the end, after all hooks
 
   // 🚀 Deploy to WebContainer or fallback to server-side
   async function deployToRuntime(files: Array<{ path: string; content: string }>, componentName: string) {
@@ -2914,6 +2792,128 @@ export default function PromptPlayground() {
     return unsubscribe;
   }, [hasProjectRoute, registerPlaygroundActionListener, form, generateMutation]);
 
+  // Early return for desktop view when no project route - moved to conditional rendering
+  if (!hasProjectRoute) {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    
+    if (isMobile) {
+      return (
+        <>
+          {createProjectDialog}
+          <div className="min-h-screen bg-background flex flex-col">
+            {/* Header */}
+            <div className="h-14 border-b bg-card flex items-center justify-between px-4 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-primary" />
+                <span className="font-bold">Chap-ZPT</span>
+              </div>
+              <Button size="sm" onClick={() => setShowCreateProjectDialog(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                New
+              </Button>
+            </div>
+            
+            {/* Project List */}
+            <div className="flex-1 p-4">
+              <h2 className="text-lg font-semibold mb-4">Your Apps</h2>
+              {isLoadingProjects ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : (userProjects?.length || 0) > 0 ? (
+                <div className="space-y-3">
+                  {userProjects?.map((project) => (
+                    <button
+                      key={project.id}
+                      onClick={() => setLocation(`/playground/${project.id}`)}
+                      className="w-full p-4 bg-card rounded-xl border border-border text-left hover:bg-accent transition-colors"
+                    >
+                      <h3 className="font-medium">{project.name}</h3>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {project.description || 'No description'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Folder className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground mb-4">No apps yet</p>
+                  <Button onClick={() => setShowCreateProjectDialog(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Your First App
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      );
+    }
+    
+    return (
+      <>
+        {createProjectDialog}
+        <div className="h-screen flex flex-col bg-background">
+          {/* Navigation Header */}
+          <div className="h-14 sm:h-16 border-b bg-card/80 backdrop-blur flex items-center justify-between px-4 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <Brain className="h-6 w-6 text-primary" />
+              <span className="font-bold text-lg">Chap-ZPT</span>
+              <Badge variant="secondary" className="text-[10px]">Desktop</Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowCreateProjectDialog(true)}
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                New App
+              </Button>
+            </div>
+          </div>
+          
+          {/* Desktop View - Constrained but fills screen */}
+          <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-gradient-to-br from-purple-50 via-pink-50 to-cyan-50 overflow-auto">
+            {isLoadingProjects ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
+                  <p className="text-muted-foreground">Loading your workspace...</p>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="relative overflow-hidden rounded-lg shadow-xl"
+                style={{
+                  width: 'min(1200px, calc(100vw - 2rem))',
+                  height: 'min(750px, calc(100vh - 8rem))',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                }}
+              >
+                <DesktopView
+                  projects={userProjects || []}
+                  currentProjectId={undefined}
+                  onSelectProject={(projectId) => {
+                    setLocation(`/playground/${projectId}`);
+                  }}
+                  onCreateProject={() => setShowCreateProjectDialog(true)}
+                  onEditProject={(projectId) => {
+                    setLocation(`/playground/${projectId}`);
+                  }}
+                  webContainerService={webContainerService}
+                  isWebContainerReady={webContainerReady}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] overflow-hidden bg-background mt-14 sm:mt-16">
       <ErrorBoundary
@@ -3296,6 +3296,7 @@ export default function PromptPlayground() {
               <ProductionDeployment
                 files={files}
                 projectName={currentProject?.name || currentComponentName || 'My App'}
+                workspaceId={currentProject?.id}
                 onDeployment={(result) => {
                   if (result.success) {
                     addChatMessage({

@@ -1,132 +1,180 @@
-# Shared Connectors Architecture
+# Shared Connectors Architecture & Integration Guide
 
-## Problem
-Användare behöver ange API-nycklar (t.ex. Vercel, Stripe) när de genererar appar. Dessa API-nycklar borde hanteras som "Shared Connectors" (workspace-wide) eller "Personal Connectors" (user-specific).
+## 🎯 Purpose of Shared Connectors
 
-## Nuvarande Situation
+Shared connectors serve **TWO main purposes**:
 
-### API Keys System
-- Sparas i `apiKeys` tabellen
-- Kan vara user-wide (`projectId = null`) eller project-specific (`projectId = number`)
-- Hanteras via `/api/api-keys` endpoints
-- Används av `APIKeyService`
+1. **Deployment Credentials**: Allow workspaces to deploy to their own Vercel/GitHub accounts (instead of platform's)
+2. **Environment Variables for Generated Apps**: Provide API keys and env vars that are automatically injected into generated code
 
-### Connectors/Plugins System
-- Sparas i `pluginConfigs` tabellen
-- OAuth-baserade tjänster (Gmail, Notion, etc.)
-- Hanteras via `/api/plugins` endpoints
-- Används av `PluginRegistry`
+---
 
-## Lösning: Integrera API Keys med Connectors Hub
+## Current State & Confusion
 
-### 1. Shared Connectors (Workspace-wide API Keys)
-- **Vercel API Token**: Konfigureras av admin, används av alla i workspace
-- **Stripe API Key**: Konfigureras av admin, används av alla i workspace
-- **GitHub Token**: Konfigureras av admin, används av alla i workspace
-- Sparas i `apiKeys` tabellen med `projectId = null` och markerade som `isShared = true`
-- Visas i "Shared Connectors" tab i Integrations
+### The Problem
+There's confusion about how shared connectors relate to:
+1. **Platform deployment credentials** (your backend's `GITHUB_TOKEN`, `VERCEL_TOKEN`)
+2. **User/workspace deployment** (when users click "Deploy to Production")
+3. **Code generation context** (how agents use connector info)
 
-### 2. Personal Connectors (User-specific API Keys)
-- **User's Vercel Token**: Om användaren vill använda sin egen Vercel account
-- **User's Stripe Key**: Om användaren vill använda sin egen Stripe account
-- Sparas i `apiKeys` tabellen med `projectId = null` och `isShared = false`
-- Visas i "Personal Connectors" tab i Integrations
+### Current Implementation
 
-### 3. Flow när API Key behövs
+#### 1. Platform Deployment (Backend Env Vars)
+- **Location**: `process.env.GITHUB_TOKEN`, `process.env.VERCEL_TOKEN`
+- **Purpose**: YOUR platform's credentials for deploying user projects
+- **Used by**: `ProductionDeploymentService.ts`
+- **Scope**: All deployments use these credentials by default
 
-1. **System detekterar att API key saknas** (t.ex. vid deployment till Vercel)
-2. **Kollar först Shared Connectors** (workspace-wide)
-   - Om finns → använd den
-   - Om inte finns → gå till steg 3
-3. **Kollar Personal Connectors** (user-specific)
-   - Om finns → använd den
-   - Om inte finns → gå till steg 4
-4. **Visa dialog för att ange API key**
-   - Fråga: "Workspace-wide (Shared) eller Personal?"
-   - Om Shared → kräv admin-rättigheter
-   - Om Personal → spara som user-specific
-5. **Spara API key** i `apiKeys` tabellen med rätt flaggor
+#### 2. Shared Connectors (Database)
+- **Location**: `api_keys` table with `is_shared = true`
+- **Purpose**: Workspace-level API keys configured by admins
+- **Current Status**: ✅ **NOW IMPLEMENTED** - Decryption working
+- **Used by**: `ProductionDeploymentService.getServiceAPIKey()` with priority over env vars
 
-### 4. Database Schema Ändringar
+#### 3. The Resolution
+✅ **FIXED**: Decryption is now implemented. The system:
+- Checks for shared connectors FIRST (workspace-level)
+- Falls back to personal connectors (user-level)
+- Falls back to platform env vars (backward compatibility)
 
-```sql
--- Lägg till kolumner i apiKeys tabellen
-ALTER TABLE api_keys ADD COLUMN is_shared BOOLEAN DEFAULT false;
-ALTER TABLE api_keys ADD COLUMN workspace_id TEXT; -- För shared connectors
-ALTER TABLE api_keys ADD COLUMN configured_by TEXT; -- User ID som konfigurerade
+---
+
+## How It Works Now
+
+### Deployment Credential Priority
+
+When deploying, the system checks in this order:
+
+1. **Shared Connector** (workspace-level)
+   - If admin configured Vercel/GitHub connector → use it
+   - Deploys to **workspace's account**
+   - All users in workspace benefit
+
+2. **Personal Connector** (user-level)
+   - If user has personal Vercel/GitHub connector → use it
+   - Deploys to **user's account**
+   - Only that user benefits
+
+3. **Platform Credentials** (fallback)
+   - If no connectors found → use `process.env.*`
+   - Deploys to **platform's account**
+   - Platform manages everything
+
+### Example Scenarios
+
+#### Scenario 1: No Connectors Configured
+```
+User clicks "Deploy to Production"
+→ System checks: No shared connector
+→ System checks: No personal connector
+→ System uses: process.env.VERCEL_TOKEN (platform's)
+→ Result: Deploys to platform's Vercel account
 ```
 
-### 5. UI Integration
-
-**Integrations Page:**
-- **Shared Connectors Tab**: Visar workspace-wide API keys (Vercel, Stripe, GitHub)
-  - Admin kan konfigurera/uppdatera
-  - Andra användare ser status men kan inte ändra
-- **Personal Connectors Tab**: Visar user-specific API keys
-  - Användaren kan konfigurera sina egna
-
-**API Key Dialog:**
-- När API key behövs, visa dialog med val:
-  - "Use workspace API key (if available)"
-  - "Configure workspace API key (admin only)"
-  - "Use my personal API key"
-  - "Configure my personal API key"
-
-### 6. Backend Logic
-
-**ProductionDeploymentService:**
-```typescript
-async getVercelToken(userId: string, workspaceId?: string): Promise<string | null> {
-  // 1. Kolla workspace-wide (shared)
-  if (workspaceId) {
-    const sharedKey = await db.select()
-      .from(apiKeys)
-      .where(and(
-        eq(apiKeys.serviceName, 'vercel'),
-        eq(apiKeys.isShared, true),
-        eq(apiKeys.workspaceId, workspaceId)
-      ))
-      .limit(1);
-    
-    if (sharedKey[0]) {
-      return decryptKey(sharedKey[0].encryptedKey);
-    }
-  }
-  
-  // 2. Kolla user-specific (personal)
-  const personalKey = await db.select()
-    .from(apiKeys)
-    .where(and(
-      eq(apiKeys.serviceName, 'vercel'),
-      eq(apiKeys.userId, userId),
-      eq(apiKeys.isShared, false)
-    ))
-    .limit(1);
-  
-  if (personalKey[0]) {
-    return decryptKey(personalKey[0].encryptedKey);
-  }
-  
-  // 3. Fallback till environment variable (för backward compatibility)
-  return process.env.VERCEL_TOKEN || null;
-}
+#### Scenario 2: Shared Connector Configured
+```
+Admin configures workspace Vercel connector
+User clicks "Deploy to Production"
+→ System checks: ✅ Found shared Vercel connector
+→ System uses: Workspace's Vercel token
+→ Result: Deploys to workspace's Vercel account
 ```
 
-## Implementation Steps
+#### Scenario 3: Personal Connector Configured
+```
+User configures personal Vercel connector
+User clicks "Deploy to Production"
+→ System checks: No shared connector
+→ System checks: ✅ Found personal Vercel connector
+→ System uses: User's Vercel token
+→ Result: Deploys to user's Vercel account
+```
 
-1. ✅ Uppdatera database schema för `apiKeys`
-2. ✅ Skapa migration för nya kolumner
-3. ✅ Uppdatera `APIKeyService` för att hantera shared/personal
-4. ✅ Uppdatera `Integrations` page för att visa API keys som connectors
-5. ✅ Uppdatera `ProductionDeploymentService` för att kolla shared/personal keys
-6. ✅ Uppdatera API key dialogs för att fråga om shared/personal
-7. ✅ Lägg till admin-kontroller för shared connectors
+---
 
-## Benefits
+## How Shared Connectors Work for Code Generation
 
-- **Konsekvent UX**: API keys och OAuth connectors hanteras på samma sätt
-- **Workspace Efficiency**: En admin konfigurerar Vercel en gång, alla använder
-- **Flexibilitet**: Användare kan fortfarande använda sina egna API keys
-- **Säkerhet**: Shared connectors kräver admin-rättigheter
-- **Transparency**: Tydligt vad som är workspace-wide vs personal
+### Environment Variables Injection (Future Enhancement)
 
+Shared connectors should provide **env vars** to generated apps:
+
+#### Example: Stripe Connector
+
+**When configured:**
+- Admin adds Stripe connector with `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY`
+
+**During code generation:**
+- Agent knows: "This workspace has Stripe configured"
+- Agent can: Generate payment forms, checkout flows, subscription logic
+- Generated code includes: `process.env.STRIPE_SECRET_KEY` references
+
+**During deployment:**
+- System automatically adds `STRIPE_SECRET_KEY` to Vercel env vars
+- Generated app works immediately without manual setup
+
+#### Example: Vercel Connector
+
+**When configured:**
+- Admin adds Vercel connector with `VERCEL_TOKEN`
+
+**During code generation:**
+- Agent knows: "This workspace can deploy to Vercel"
+- Agent can: Generate Vercel-optimized configs, add deployment scripts
+
+**During deployment:**
+- System uses workspace's Vercel token (not platform's)
+- Deploys to workspace's Vercel account
+
+---
+
+## Implementation Status
+
+### ✅ Completed
+- [x] Shared connectors database schema
+- [x] Connector configuration UI
+- [x] Decryption in `ProductionDeploymentService`
+- [x] Priority system (shared → personal → platform)
+
+### ⏳ To Do
+- [ ] Inject connector env vars into generated code
+- [ ] Add connector context to agent prompts
+- [ ] Show which credentials are being used in UI
+- [ ] Add option to choose "my account" vs "platform account"
+
+---
+
+## Questions & Answers
+
+### Q: Does this conflict with platform deployment?
+**A**: No! It's a priority system:
+- If workspace has connectors → use them (deploy to workspace account)
+- If not → use platform credentials (deploy to platform account)
+- Both work, connectors just take priority
+
+### Q: Should shared connectors be used as context for agents?
+**A**: Yes! (Not yet implemented)
+- Agents should know what connectors are available
+- This allows smarter code generation
+- Example: "I see you have Stripe, I'll add payment features"
+
+### Q: What about environment variables?
+**A**: This is the main value proposition (Not yet implemented)
+- Generated apps should automatically have access to configured services
+- No manual env var setup required
+- Example: Stripe connector → `process.env.STRIPE_SECRET_KEY` works automatically
+
+### Q: Personal vs Shared connectors?
+**A**: 
+- **Shared**: Workspace-wide, configured by admin, all users benefit
+- **Personal**: User-specific, configured by user, only that user benefits
+- Both work the same way, just different scope
+
+---
+
+## Next Steps
+
+1. ✅ **DONE**: Implement decryption in `getServiceAPIKey()`
+2. ⏳ **TODO**: Add connector context to agent prompts
+3. ⏳ **TODO**: Inject connector env vars into generated code
+4. ⏳ **TODO**: Update UI to show which credentials are being used
+5. ⏳ **TODO**: Add option to choose "my account" vs "platform account"
