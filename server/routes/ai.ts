@@ -27,7 +27,7 @@ router.post('/generate', authenticateUser, async (req, res) => {
       maxTokens,
       temperature,
       preferredModel: model,
-      useCase: 'general',
+      useCase: 'code_generation',
       priority: 'quality',
     });
 

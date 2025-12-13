@@ -22,7 +22,7 @@ export class ChatCleanupService {
    */
   start() {
     if (this.cleanupInterval) {
-      this.logger.warning('Cleanup service already running');
+      this.logger.warn('Cleanup service already running');
       return;
     }
 

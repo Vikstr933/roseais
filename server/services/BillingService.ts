@@ -131,11 +131,11 @@ export class BillingService {
     return {
       id: user[0].id,
       email: user[0].email,
-      name: user[0].displayName,
-      tier: user[0].tier,
+      name: user[0].displayName || '',
+      tier: user[0].tier || 'free',
       subscriptionStatus: user[0].subscriptionStatus || 'inactive',
-      subscriptionId: user[0].subscriptionId,
-      stripeCustomerId: user[0].stripeCustomerId,
+      subscriptionId: user[0].subscriptionId || undefined,
+      stripeCustomerId: user[0].stripeCustomerId || undefined,
     };
   }
 
@@ -293,8 +293,8 @@ export class BillingService {
     return await db
       .select()
       .from(subscriptionPlans)
-      .where(eq(subscriptionPlans.isActive, 1))
-      .orderBy(subscriptionPlans.price);
+      .where(eq(subscriptionPlans.isActive, true))
+      .orderBy(subscriptionPlans.priceMonthly);
   }
 }
 

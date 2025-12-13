@@ -1,7 +1,7 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { db } from '../../db';
 import { projectDatabases } from '../../db/schema-pg';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 const logger = new SimpleLogger('DatabaseProvisioningService');
 
@@ -184,7 +184,7 @@ export class DatabaseProvisioningService {
 
       return result;
     } catch (error) {
-      logger.error('Failed to provision database', error as Error, { userId, projectId });
+      logger.error(`Failed to provision database for project ${projectId}`, error as Error);
       return {
         success: false,
         provider: 'manual',
@@ -419,8 +419,8 @@ export class DatabaseProvisioningService {
       // Encrypt connection string before storing
       const { CredentialVault } = await import('./CredentialVault');
       const credentialVault = new CredentialVault();
-      const encryptCredential = (data: string) => credentialVault.encrypt(data);
-      const encryptedConnectionString = await encryptCredential(connectionString);
+      const encryptCredential = (data: string) => credentialVault.encrypt({ value: data });
+      const encryptedConnectionString = encryptCredential(connectionString);
 
       await db.insert(projectDatabases).values({
         userId,
@@ -445,7 +445,7 @@ export class DatabaseProvisioningService {
 
       logger.info('Database config saved', { projectId, provider });
     } catch (error) {
-      logger.error('Failed to save database config', error as Error, { projectId });
+      logger.error(`Failed to save database config for project ${projectId}`, error as Error);
       throw error;
     }
   }
@@ -470,9 +470,10 @@ export class DatabaseProvisioningService {
       // Decrypt connection string
       const { CredentialVault } = await import('./CredentialVault');
       const credentialVault = new CredentialVault();
-      return credentialVault.decrypt(dbConfig.connectionString) as string;
+      const decrypted = credentialVault.decrypt(dbConfig.connectionString);
+      return decrypted.value as string;
     } catch (error) {
-      logger.error('Failed to get database connection', error as Error, { projectId });
+      logger.error(`Failed to get database connection for project ${projectId}`, error as Error);
       return null;
     }
   }
@@ -510,7 +511,7 @@ export class DatabaseProvisioningService {
       
       logger.info('Saved pending provisioning request', { projectId, missingKeys });
     } catch (error) {
-      logger.error('Failed to save pending provisioning request', error as Error, { projectId });
+      logger.error(`Failed to save pending provisioning request for project ${projectId}`, error as Error);
     }
   }
 
@@ -525,7 +526,7 @@ export class DatabaseProvisioningService {
       
       logger.info('Cleared pending provisioning request', { projectId });
     } catch (error) {
-      logger.error('Failed to clear pending provisioning request', error as Error, { projectId });
+      logger.error(`Failed to clear pending provisioning request for project ${projectId}`, error as Error);
     }
   }
 
@@ -585,7 +586,7 @@ export class DatabaseProvisioningService {
 
       return result;
     } catch (error) {
-      logger.error('Failed to retry database provisioning', error as Error, { projectId });
+      logger.error(`Failed to retry database provisioning for project ${projectId}`, error as Error);
       return {
         success: false,
         provider: 'manual',
@@ -621,7 +622,7 @@ export class DatabaseProvisioningService {
         };
       });
     } catch (error) {
-      logger.error('Failed to get pending requests', error as Error, { userId });
+      logger.error(`Failed to get pending requests for user ${userId}`, error as Error);
       return [];
     }
   }

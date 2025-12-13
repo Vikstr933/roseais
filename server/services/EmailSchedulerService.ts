@@ -32,7 +32,7 @@ export class EmailSchedulerService {
    */
   public start(): void {
     if (this.checkInterval) {
-      logger.warning('Email scheduler already running');
+      logger.warn('Email scheduler already running');
       return;
     }
 

@@ -109,9 +109,10 @@ export class ConversationMemoryService {
 ${conversationText}
 
 Summary:`,
-        model: 'claude-sonnet-4-5-20250929',
+        preferredModel: 'claude-sonnet-4-5-20250929',
         temperature: 0.3,
         maxTokens: 150,
+        useCase: 'explanation',
       });
 
       return response.content.trim();
@@ -134,9 +135,10 @@ Conversation:
 ${conversationText}
 
 Key points (JSON array):`,
-        model: 'claude-sonnet-4-5-20250929',
+        preferredModel: 'claude-sonnet-4-5-20250929',
         temperature: 0.3,
         maxTokens: 300,
+        useCase: 'explanation',
       });
 
       const content = response.content.trim();

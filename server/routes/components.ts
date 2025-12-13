@@ -625,7 +625,7 @@ router.post('/components/generate/smart', authenticateUser, async (req, res) => 
     const userId = req.user?.id;
 
     // Get user tier (if available)
-    const userTier = req.user?.tier || 'free';
+    const userTier = (req.user?.tier || 'free') as 'free' | 'pro' | 'team' | 'enterprise';
 
     // Optional: Apply constraints based on user tier
     const constraints: { maxCost?: number; maxDuration?: number } = {};

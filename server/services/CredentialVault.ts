@@ -30,7 +30,7 @@ export class CredentialVault {
   encrypt(credentials: Record<string, any>): string {
     try {
       const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv(this.algorithm, this.encryptionKey, iv);
+      const cipher = crypto.createCipheriv(this.algorithm, this.encryptionKey, iv) as crypto.CipherGCM;
 
       const jsonString = JSON.stringify(credentials);
       let encrypted = cipher.update(jsonString, 'utf8', 'hex');
@@ -41,7 +41,7 @@ export class CredentialVault {
       // Return format: iv:authTag:encryptedData
       return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
     } catch (error) {
-      logger.error('Encryption failed', error);
+      logger.error('Encryption failed', error as Error);
       throw new Error('Failed to encrypt credentials');
     }
   }
@@ -65,7 +65,7 @@ export class CredentialVault {
       const iv = Buffer.from(ivHex, 'hex');
       const authTag = Buffer.from(authTagHex, 'hex');
 
-      const decipher = crypto.createDecipheriv(this.algorithm, this.encryptionKey, iv);
+      const decipher = crypto.createDecipheriv(this.algorithm, this.encryptionKey, iv) as crypto.DecipherGCM;
       decipher.setAuthTag(authTag);
 
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
@@ -73,7 +73,7 @@ export class CredentialVault {
 
       return JSON.parse(decrypted);
     } catch (error) {
-      logger.error('Decryption failed', error);
+      logger.error('Decryption failed', error as Error);
       throw new Error('Failed to decrypt credentials');
     }
   }

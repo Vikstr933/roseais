@@ -1,6 +1,9 @@
 import { personalAssistantAgent } from '../agents/PersonalAssistantAgent';
-import { orchestrationAgent } from '../agents/OrchestrationAgent';
+import { OrchestrationAgent } from '../agents/OrchestrationAgent';
 import { SimpleLogger } from '../utils/SimpleLogger';
+
+// Create instance for use in this service
+const orchestrationAgent = new OrchestrationAgent();
 import { pluginRegistry } from './PluginRegistry';
 import { Tool } from '../plugins/BaseProductivityPlugin';
 

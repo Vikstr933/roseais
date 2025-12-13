@@ -12,7 +12,7 @@ const logger = new SimpleLogger('AdminRoutes');
 
 // All admin routes require admin authentication
 router.use(authenticateUser);
-router.use(requireAdmin);
+router.use(requireAdmin as any);
 
 /**
  * POST /api/admin/cleanup/orphaned
@@ -214,11 +214,11 @@ router.get('/stats', async (req, res) => {
       users: {
         total: Number(usersCount.count),
         byRole: usersByRole.reduce((acc, { role, count }) => {
-          acc[role] = Number(count);
+          acc[role || 'unknown'] = Number(count);
           return acc;
         }, {} as Record<string, number>),
         byTier: usersByTier.reduce((acc, { tier, count }) => {
-          acc[tier] = Number(count);
+          acc[tier || 'unknown'] = Number(count);
           return acc;
         }, {} as Record<string, number>)
       },
@@ -405,10 +405,10 @@ router.get('/agents', async (req, res) => {
         typeof agent.bestPractices === 'string'
           ? JSON.parse(agent.bestPractices)
           : agent.bestPractices,
-      customInstructions: agent.customInstructions
-        ? typeof agent.customInstructions === 'string'
-          ? JSON.parse(agent.customInstructions)
-          : agent.customInstructions
+      customInstructions: (agent as any).customInstructions
+        ? typeof (agent as any).customInstructions === 'string'
+          ? JSON.parse((agent as any).customInstructions)
+          : (agent as any).customInstructions
         : null,
       enabledPlugins:
         typeof agent.enabledPlugins === 'string'

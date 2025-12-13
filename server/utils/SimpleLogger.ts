@@ -13,9 +13,9 @@ export class SimpleLogger {
     }
   }
 
-  warn(message: string, error?: Error): void {
-    if (error) {
-      console.warn(`[${this.name}] WARN: ${message}`, error);
+  warn(message: string, errorOrMetadata?: Error | Record<string, unknown>): void {
+    if (errorOrMetadata) {
+      console.warn(`[${this.name}] WARN: ${message}`, errorOrMetadata);
     } else {
       console.warn(`[${this.name}] WARN: ${message}`);
     }

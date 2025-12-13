@@ -282,10 +282,10 @@ router.get('/agents', optionalAuth, checkAdminStatus, async (req, res) => {
         typeof agent.bestPractices === 'string'
           ? JSON.parse(agent.bestPractices)
           : agent.bestPractices,
-      customInstructions: agent.customInstructions
-        ? typeof agent.customInstructions === 'string'
-          ? JSON.parse(agent.customInstructions)
-          : agent.customInstructions
+      customInstructions: (agent as any).customInstructions
+        ? typeof (agent as any).customInstructions === 'string'
+          ? JSON.parse((agent as any).customInstructions)
+          : (agent as any).customInstructions
         : null,
       enabledPlugins:
         typeof agent.enabledPlugins === 'string'
@@ -499,7 +499,7 @@ router.post('/agents', authenticateUser, checkAdminStatus, async (req, res) => {
       enabledPlugins: Array.isArray(enabledPlugins) ? enabledPlugins : (enabledPlugins ? [enabledPlugins] : []),
       userId: agentUserId,       // Set owner
       isSystem: agentIsSystem,   // 0 = user agent, 1 = system agent
-      isActive: 1,
+      isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -651,7 +651,7 @@ router.put('/agents/:id', authenticateUser, checkAdminStatus, async (req, res) =
     }
     if (temperature !== undefined) updateData.temperature = temperature;
     if (customInstructions !== undefined)
-      updateData.customInstructions = customInstructions;
+      (updateData as any).customInstructions = customInstructions;
 
     // Transform Record fields to ensure correct format
     if (capabilities !== undefined) {
@@ -680,7 +680,7 @@ router.put('/agents/:id', authenticateUser, checkAdminStatus, async (req, res) =
           : [];
     }
     if (isActive !== undefined) {
-      updateData.isActive = isActive ? 1 : 0;
+      updateData.isActive = Boolean(isActive);
       console.log(`Setting isActive to ${updateData.isActive} for agent ${id}`);
     }
 
@@ -810,10 +810,10 @@ router.get('/admin/agents/all', authenticateUser, requireAdmin, async (req, res)
         typeof agent.bestPractices === 'string'
           ? JSON.parse(agent.bestPractices)
           : agent.bestPractices,
-      customInstructions: agent.customInstructions
-        ? typeof agent.customInstructions === 'string'
-          ? JSON.parse(agent.customInstructions)
-          : agent.customInstructions
+      customInstructions: (agent as any).customInstructions
+        ? typeof (agent as any).customInstructions === 'string'
+          ? JSON.parse((agent as any).customInstructions)
+          : (agent as any).customInstructions
         : null,
       enabledPlugins:
         typeof agent.enabledPlugins === 'string'
