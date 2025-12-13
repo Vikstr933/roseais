@@ -867,12 +867,14 @@ IMPORTANT - SEQUENTIAL DEPENDENCIES:
   } {
     const lowerPrompt = prompt.toLowerCase();
     
-    // Python detection - check for Python keywords
+    // Python detection - check for Python keywords (including Swedish)
     const pythonKeywords = [
       'python', 'flask', 'django', 'fastapi', 'streamlit',
       '.py', 'pandas', 'numpy', 'scipy', 'matplotlib',
       'pip', 'requirements.txt', 'pyodide', 'jupyter',
-      'övertid', 'overtime', // Swedish overtime calculator context
+      'övertid', 'övertimmar', 'overtime', // Swedish overtime calculator context
+      '[python project]', // Explicit marker from PlaygroundAssistantAgent
+      'dataanalys', 'datavetenskap', 'maskinlärning', // Swedish data science keywords
     ];
     
     const isPython = pythonKeywords.some(keyword => lowerPrompt.includes(keyword));

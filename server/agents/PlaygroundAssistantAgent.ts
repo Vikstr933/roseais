@@ -499,12 +499,20 @@ export class PlaygroundAssistantAgent {
       // Detect project type from existing files or prompt
       const projectType = this.detectProjectType(originalPrompt, existingFiles);
       
+      // CRITICAL: Determine the language prefix to ensure AnalysisAgent gets the right signal
+      const languagePrefix = projectType === 'python' 
+        ? '[PYTHON PROJECT] '
+        : projectType === 'node'
+          ? '[NODE.JS PROJECT] '
+          : '[REACT/TYPESCRIPT PROJECT] ';
+      
       const improvementPrompt = `You are an expert at improving code generation prompts. Your task is to take a user's request and transform it into a detailed, comprehensive prompt that will result in high-quality, production-ready code.
 
 **Original User Request:**
 ${originalPrompt}
 
 **Detected Project Type:** ${projectType}
+${projectType === 'python' ? '\n**CRITICAL: This is a PYTHON project. The improved prompt MUST explicitly mention "Python" and the framework (Flask/Streamlit/FastAPI) so the correct agent is used.**' : ''}
 
 **Existing Project Files (if any):**
 ${existingFiles.length > 0 
@@ -514,9 +522,9 @@ ${existingFiles.length > 0
 
 **Your Task:**
 Transform the user's request into a detailed, comprehensive prompt that includes:
-1. Clear feature requirements
+1. ${projectType === 'python' ? 'MUST START WITH: "Build a Python [framework] application..."' : 'Clear feature requirements'}
 2. Technical specifications appropriate for ${projectType}
-3. ${projectType === 'web/react' ? 'UI/UX considerations (responsive, accessible, modern design)' : 'Appropriate architecture and patterns for the project type'}
+3. ${projectType === 'web/react' ? 'UI/UX considerations (responsive, accessible, modern design)' : projectType === 'python' ? 'Python best practices (type hints, proper structure, requirements.txt)' : 'Appropriate architecture and patterns for the project type'}
 4. Code quality requirements (clean, maintainable, well-structured)
 5. Any missing but important details (error handling, edge cases, etc.)
 
@@ -549,9 +557,16 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
         ]
       });
 
-      const improved = response.content[0]?.type === 'text' 
+      let improved = response.content[0]?.type === 'text' 
         ? response.content[0].text.trim()
         : originalPrompt;
+
+      // CRITICAL: Ensure Python projects ALWAYS have Python keyword in improved prompt
+      // This ensures AnalysisAgent.detectProjectLanguage() selects the right agent
+      if (projectType === 'python' && improved && !improved.toLowerCase().includes('python')) {
+        logger.info('Adding Python prefix to improved prompt to ensure correct agent selection');
+        improved = `[PYTHON PROJECT] ${improved}`;
+      }
 
       return improved || originalPrompt;
     } catch (error) {
@@ -570,8 +585,15 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
   ): string {
     const promptLower = prompt.toLowerCase();
     
-    // Check prompt keywords
-    if (promptLower.includes('python') || promptLower.includes('.py') || promptLower.includes('flask') || promptLower.includes('django') || promptLower.includes('fastapi')) {
+    // Check prompt keywords - Python detection with Swedish keywords
+    const pythonKeywords = [
+      'python', '.py', 'flask', 'django', 'fastapi', 'streamlit',
+      'pandas', 'numpy', 'scipy', 'matplotlib', 'pip', 'requirements.txt',
+      // Swedish keywords that often indicate Python projects
+      'övertid', 'övertimmar', 'dataanalys', 'maskinlärning', 'datavetenskap'
+    ];
+    
+    if (pythonKeywords.some(keyword => promptLower.includes(keyword))) {
       return 'python';
     }
     
