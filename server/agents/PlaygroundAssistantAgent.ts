@@ -333,7 +333,7 @@ export class PlaygroundAssistantAgent {
             connectorContext = ConnectorService.buildConnectorContextString(connectors.availableConnectors);
           }
         } catch (error) {
-          logger.warn('Failed to load connector context:', error);
+          logger.warn(`Failed to load connector context: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
@@ -442,7 +442,7 @@ export class PlaygroundAssistantAgent {
       }
 
       // Extract final response
-      const textContent = currentResponse.content.find((item: any) => item.type === 'text');
+      const textContent = currentResponse.content.find((item: any) => item.type === 'text') as { type: 'text'; text: string } | undefined;
       finalResponse = textContent?.text || 'I apologize, but I encountered an issue processing your request.';
 
       // Update conversation history
@@ -541,7 +541,7 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
 
       return improved || originalPrompt;
     } catch (error) {
-      logger.warn('Failed to improve prompt, using original', error as Error);
+      logger.warn(`Failed to improve prompt, using original: ${error instanceof Error ? error.message : String(error)}`);
       return originalPrompt;
     }
   }
@@ -799,7 +799,7 @@ ${hasProjectContext
       this.selectedProjects.set(sessionId, {
         projectId: selectedProject.id.toString(),
         projectName: selectedProject.name,
-        projectDescription: selectedProject.description
+        projectDescription: selectedProject.description ?? undefined
       });
 
       return {
@@ -807,7 +807,7 @@ ${hasProjectContext
         project: {
           id: selectedProject.id.toString(),
           name: selectedProject.name,
-          description: selectedProject.description
+          description: selectedProject.description ?? undefined
         }
       };
     } catch (error) {
