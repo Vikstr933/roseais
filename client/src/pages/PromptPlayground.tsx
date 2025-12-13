@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { Eye, Code, Brain, MessageSquare, Settings, Laptop, Trash2, User, Users, Plus, RefreshCw, X, PowerOff, Edit2, Loader2, Folder, LayoutGrid } from "lucide-react";
+import { Eye, Code, Brain, MessageSquare, Settings, Laptop, User, Users, Plus, RefreshCw, X, PowerOff, Loader2, Folder, LayoutGrid } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
