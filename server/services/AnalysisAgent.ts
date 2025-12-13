@@ -30,17 +30,22 @@ export class AnalysisAgent {
     knowledgeContext: string = '',
     existingFiles: { path: string; content: string }[] = [],
     userId?: string,
-    projectId?: number | null // Optional: for project-specific API key checks
+    projectId?: number | null, // Optional: for project-specific API key checks
+    chatHistory: { role: string; content: string }[] = [] // Chat history for context awareness
   ): Promise<GenerationPlan> {
-    this.logger.info(`Analyzing requirements and creating generation plan - promptLength: ${userPrompt.length}, hasKnowledgeContext: ${!!knowledgeContext}, existingFilesCount: ${existingFiles.length}, userId: ${userId || 'none'}`);
+    this.logger.info(`Analyzing requirements and creating generation plan - promptLength: ${userPrompt.length}, hasKnowledgeContext: ${!!knowledgeContext}, existingFilesCount: ${existingFiles.length}, userId: ${userId || 'none'}, chatHistoryLength: ${chatHistory.length}`);
+    
+    // IMPORTANT: Extract context from chat history for short prompts
+    // This ensures "kör igång" (go ahead) remembers the Python context from earlier discussion
+    const enrichedPrompt = this.enrichPromptWithChatHistory(userPrompt, chatHistory);
 
-    // Step 1: Detect if fullstack app is needed
+    // Step 1: Detect if fullstack app is needed (use enrichedPrompt for better detection)
     const { fullstackIntegrationService } = await import('./FullstackIntegrationService');
-    const fullstackConfig = await fullstackIntegrationService.detectFullstackNeeds(userPrompt, existingFiles);
+    const fullstackConfig = await fullstackIntegrationService.detectFullstackNeeds(enrichedPrompt, existingFiles);
     this.logger.info(`Fullstack detection: needsBackend=${fullstackConfig.needsBackend}, backendType=${fullstackConfig.backendType}, endpoints=${fullstackConfig.apiEndpoints.length}, requiredApiKeys=${fullstackConfig.requiredApiKeys?.join(',') || 'none'}`);
 
-    // Step 2: Find relevant agents (system + user-created)
-    const relevantAgents = await this.findRelevantAgents(userPrompt, userId);
+    // Step 2: Find relevant agents (system + user-created) - use enrichedPrompt for better matching
+    const relevantAgents = await this.findRelevantAgents(enrichedPrompt, userId);
     this.logger.info(`Found ${relevantAgents.length} relevant agents for this prompt`);
 
     // Step 3: Check API key requirements for user-created agents
@@ -99,8 +104,8 @@ export class AnalysisAgent {
       }
     }
 
-    // Step 4: Build analysis prompt with agent information and fullstack config
-    const analysisPrompt = this.buildAnalysisPrompt(userPrompt, knowledgeContext, existingFiles, agentsWithKeys, fullstackConfig);
+    // Step 4: Build analysis prompt with agent information and fullstack config (use enrichedPrompt)
+    const analysisPrompt = this.buildAnalysisPrompt(enrichedPrompt, knowledgeContext, existingFiles, agentsWithKeys, fullstackConfig);
 
     try {
       // Get agent configuration from database (system prompt, model, temperature)
@@ -854,6 +859,80 @@ IMPORTANT - SEQUENTIAL DEPENDENCIES:
     if (lowerPrompt.includes('ecommerce') || lowerPrompt.includes('shop')) return 'ecommerce';
 
     return 'app';
+  }
+
+  /**
+   * Enrich a short prompt with context from chat history
+   * This ensures "kör igång" or "go ahead" remembers the Python app discussed earlier
+   */
+  private enrichPromptWithChatHistory(
+    userPrompt: string,
+    chatHistory: { role: string; content: string }[] = []
+  ): string {
+    // If the prompt is short (likely a confirmation like "go ahead", "kör igång", "build it")
+    // we should look at chat history for the actual requirements
+    const shortPromptKeywords = [
+      'kör igång', 'kör', 'go ahead', 'build it', 'create it', 'make it',
+      'yes', 'ja', 'ok', 'okay', 'sure', 'do it', 'start', 'börja',
+      'bygg', 'skapa', 'gör det', 'build that', 'create that',
+      'den där', 'det där', 'make that', 'perfect', 'perfekt', 'sounds good'
+    ];
+    
+    const isShortPrompt = userPrompt.length < 100 && 
+      shortPromptKeywords.some(kw => userPrompt.toLowerCase().includes(kw));
+    
+    if (!isShortPrompt || chatHistory.length === 0) {
+      return userPrompt;
+    }
+    
+    // Look for Python/technology context in recent chat history
+    const pythonKeywords = [
+      'python', 'flask', 'django', 'fastapi', 'streamlit',
+      'pandas', 'numpy', '.py', 'pip', 'pyodide',
+      '[python project]'
+    ];
+    
+    // Find the most recent assistant message that describes what to build
+    let contextDescription = '';
+    let detectedTechnology = '';
+    
+    for (let i = chatHistory.length - 1; i >= 0; i--) {
+      const msg = chatHistory[i];
+      const content = msg.content.toLowerCase();
+      
+      // Check for Python keywords
+      for (const keyword of pythonKeywords) {
+        if (content.includes(keyword)) {
+          detectedTechnology = 'python';
+          break;
+        }
+      }
+      
+      // Check if this is a detailed description (user request or assistant explanation)
+      if (msg.content.length > 100 && msg.role === 'user') {
+        contextDescription = msg.content;
+        break;
+      }
+    }
+    
+    if (detectedTechnology || contextDescription) {
+      this.logger.info(`Enriching short prompt "${userPrompt}" with chat history context - detectedTech: ${detectedTechnology}, hasDescription: ${!!contextDescription}`);
+      
+      // Build enriched prompt
+      let enrichedPrompt = userPrompt;
+      
+      if (detectedTechnology === 'python') {
+        enrichedPrompt = `[python project] ${enrichedPrompt}`;
+      }
+      
+      if (contextDescription) {
+        enrichedPrompt = `${contextDescription}\n\n(User confirmed: ${userPrompt})`;
+      }
+      
+      return enrichedPrompt;
+    }
+    
+    return userPrompt;
   }
 
   /**

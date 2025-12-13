@@ -2076,34 +2076,8 @@ export default function PromptPlayground() {
         timestamp: Date.now()
       });
 
-      // Add progressive analysis updates with more personality
-      setTimeout(() => {
-        addChatMessage({
-          role: 'assistant',
-          content: isExistingProject
-            ? `Let me check out your current project first... ðŸ“‚`
-            : `Thinking about what you need... ðŸ¤”`,
-          timestamp: Date.now()
-        });
-      }, 500);
-
-      setTimeout(() => {
-        addChatMessage({
-          role: 'assistant',
-          content: isExistingProject
-            ? `Figuring out what to change and what to keep... ðŸ”„`
-            : `Breaking this down into features and components... ðŸ’¡`,
-          timestamp: Date.now()
-        });
-      }, 1200);
-
-      setTimeout(() => {
-        addChatMessage({
-          role: 'assistant',
-          content: `Getting the specialized agents ready to help... ðŸŽ¨`,
-          timestamp: Date.now()
-        });
-      }, 1800);
+      // Status messages removed - SSE stream shows real progress instead
+      // The SSE stream shows real progress via PLAN_CREATED and PHASE_PROGRESS events
 
       // Reset progress tracking
       setOrchestrationSteps([]);
@@ -2111,6 +2085,12 @@ export default function PromptPlayground() {
       setOverallProgress(0);
 
       // Prepare request body with project context
+      // Include chat history so the AI can understand context from previous messages
+      // (e.g., if user discussed a Python app, then says "go ahead", we know it's Python)
+      const recentChatHistory = chatHistory
+        .slice(-10) // Last 10 messages for context
+        .map(msg => ({ role: msg.role, content: msg.content }));
+      
       const requestBody: any = {
         ...data,
         systemPrompt: SYSTEM_PROMPT,
@@ -2119,6 +2099,7 @@ export default function PromptPlayground() {
         sessionId: currentSessionId,
         projectId: currentProject?.id, // Pass project ID if working in a project context
         projectType: data.projectType,
+        chatHistory: recentChatHistory, // Pass chat history for context awareness
       };
 
       // If we have existing files and it requires project context, pass them directly

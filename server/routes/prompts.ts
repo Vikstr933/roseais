@@ -745,6 +745,7 @@ router.post(
         selectedKnowledge = null, // New parameter for manual knowledge selection
         userId = 'anonymous', // User ID for API key management
         projectId = null, // Project ID for context continuation
+        chatHistory = [], // Chat history for context awareness (e.g., Python context from earlier messages)
       } = req.body;
 
       // 🔥 SET UP SSE HEADERS FIRST - This enables real-time file streaming
@@ -922,7 +923,8 @@ router.post(
         userPrompt,
         knowledgeContext,
         existingProjectFiles,
-        workflowId
+        workflowId,
+        chatHistory // Pass chat history for context awareness
       );
 
       // NOTE: Old orchestration code removed - incremental generation is always used
@@ -1804,7 +1806,8 @@ async function handleIncrementalGeneration(
   userPrompt: string,
   knowledgeContext: any,
   existingProjectFiles: { path: string; content: string }[],
-  workflowId: string
+  workflowId: string,
+  chatHistory: { role: string; content: string }[] = [] // Chat history for context awareness
 ) {
   try {
     sendSSEUpdate(req, 'INCREMENTAL_GENERATION_START', {
@@ -1838,7 +1841,8 @@ async function handleIncrementalGeneration(
       formatKnowledgeContext(knowledgeContext),
       existingProjectFiles,
       userId, // Pass userId for smart agent selection
-      projectId // Pass projectId for project-specific API key checks
+      projectId, // Pass projectId for project-specific API key checks
+      chatHistory // Pass chat history for context awareness (e.g., Python from earlier discussion)
     );
 
     sendSSEUpdate(req, 'PLAN_CREATED', {
