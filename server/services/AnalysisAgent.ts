@@ -181,17 +181,18 @@ export class AnalysisAgent {
       // Filter agents based on prompt keywords and capabilities
       const relevantAgents = allAgents.filter(agent => {
         const caps = agent.capabilities || {};
-        const specialties = caps.specialties || [];
-        const apiIntegrations = caps.apiIntegrations || [];
+        // CRITICAL FIX: Ensure specialties and apiIntegrations are arrays
+        const specialties = Array.isArray(caps.specialties) ? caps.specialties : [];
+        const apiIntegrations = Array.isArray(caps.apiIntegrations) ? caps.apiIntegrations : [];
 
         // Check if prompt mentions agent's specialties
         const matchesSpecialty = specialties.some((spec: string) =>
-          promptLower.includes(spec.toLowerCase())
+          typeof spec === 'string' && promptLower.includes(spec.toLowerCase())
         );
 
         // Check if prompt mentions API integrations
         const matchesAPI = apiIntegrations.some((api: string) =>
-          promptLower.includes(api.toLowerCase().replace(/-/g, ' '))
+          typeof api === 'string' && promptLower.includes(api.toLowerCase().replace(/-/g, ' '))
         );
 
         // Check keywords

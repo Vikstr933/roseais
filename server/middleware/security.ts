@@ -14,6 +14,40 @@ import { SimpleLogger } from '../utils/SimpleLogger';
 
 const logger = new SimpleLogger('SecurityMiddleware');
 
+/**
+ * Helper: Ensure CORS headers are set on response
+ * CRITICAL: This must be called before returning any error response
+ */
+function ensureCORSHeaders(req: Request, res: Response): void {
+  const origin = req.headers.origin;
+  
+  // Only set if not already set
+  if (res.getHeader('Access-Control-Allow-Origin')) {
+    return;
+  }
+  
+  // Allow localhost in development
+  if (origin && origin.includes('localhost')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  // Allow Vercel
+  else if (origin && origin.includes('vercel.app')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  // Allow Render
+  else if (origin && origin.includes('onrender.com')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  // Fallback - allow origin if present
+  else if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+}
+
 export interface SecurityConfig {
   enableCSP: boolean;
   enableHSTS: boolean;
@@ -99,6 +133,8 @@ export function inputValidation() {
             // Check for common injection patterns
             if (containsSQLInjection(value) || containsXSS(value)) {
               logger.warn('Suspicious input detected in URL params', { key, value: value.substring(0, 50) });
+              // CRITICAL: Ensure CORS headers are set before returning error
+              ensureCORSHeaders(req, res);
               return res.status(400).json({
                 error: 'Invalid input detected',
                 code: 'INVALID_INPUT'
@@ -114,6 +150,8 @@ export function inputValidation() {
           if (typeof value === 'string') {
             if (containsSQLInjection(value) || containsXSS(value)) {
               logger.warn('Suspicious input detected in query params', { key, value: value.substring(0, 50) });
+              // CRITICAL: Ensure CORS headers are set before returning error
+              ensureCORSHeaders(req, res);
               return res.status(400).json({
                 error: 'Invalid input detected',
                 code: 'INVALID_INPUT'
@@ -127,6 +165,8 @@ export function inputValidation() {
       const contentLength = req.get('content-length');
       if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) { // 10MB limit
         logger.warn('Request body too large', { contentLength });
+        // CRITICAL: Ensure CORS headers are set before returning error
+        ensureCORSHeaders(req, res);
         return res.status(413).json({
           error: 'Request body too large',
           code: 'PAYLOAD_TOO_LARGE'
@@ -136,6 +176,8 @@ export function inputValidation() {
       next();
     } catch (error) {
       logger.error('Input validation error', error as Error);
+      // CRITICAL: Ensure CORS headers are set before returning error
+      ensureCORSHeaders(req, res);
       res.status(500).json({
         error: 'Internal server error',
         code: 'VALIDATION_ERROR'
@@ -187,6 +229,8 @@ export function apiRateLimit() {
     if (clientData.count >= maxRequests) {
       logger.warn('Rate limit exceeded', { clientId, count: clientData.count, endpoint: req.path, maxRequests });
 
+      // CRITICAL: Ensure CORS headers are set before returning error
+      ensureCORSHeaders(req, res);
       res.setHeader('X-RateLimit-Limit', maxRequests.toString());
       res.setHeader('X-RateLimit-Remaining', '0');
       res.setHeader('X-RateLimit-Reset', clientData.resetTime.toString());

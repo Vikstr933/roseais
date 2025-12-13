@@ -632,7 +632,7 @@ const initializeApp = async () => {
     app.use(sentryErrorHandler());
     app.use(errorLogger);
 
-    // Error handling
+    // Error handling - CRITICAL: Always include CORS headers on error responses
     app.use(async (err: any, req: any, res: any, next: any) => {
       const error = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
@@ -653,6 +653,17 @@ const initializeApp = async () => {
         ip: req.ip || req.connection.remoteAddress,
         timestamp: new Date().toISOString(),
       });
+
+      // CRITICAL: Ensure CORS headers are set on error responses
+      // This prevents CORS errors from masking the actual error
+      const origin = req.headers.origin;
+      if (origin) {
+        // Allow all common frontend origins
+        if (origin.includes('localhost') || origin.includes('vercel.app') || origin.includes('onrender.com')) {
+          res.setHeader('Access-Control-Allow-Origin', origin);
+          res.setHeader('Access-Control-Allow-Credentials', 'true');
+        }
+      }
 
       res.status(500).json({
         error: 'Internal server error',
