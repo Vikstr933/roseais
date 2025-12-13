@@ -6,6 +6,7 @@
 INSERT INTO agents (
   id,
   name,
+  type,
   description,
   role,
   model,
@@ -25,6 +26,7 @@ INSERT INTO agents (
 SELECT 
   'python-developer',
   'Python Developer',
+  'code_generator',
   'Expert Python developer specializing in scripts, web applications (Flask, Django, FastAPI), data processing, and automation. Can generate Python code that runs in browser (Pyodide) or server sandbox.',
   'code_generator',
   'claude-sonnet-4-5-20250929',
@@ -74,6 +76,7 @@ WHERE NOT EXISTS (
 INSERT INTO agents (
   id,
   name,
+  type,
   description,
   role,
   model,
@@ -93,6 +96,7 @@ INSERT INTO agents (
 SELECT 
   'data-scientist',
   'Data Scientist',
+  'analysis',
   'Specializes in data analysis, visualization, machine learning, and statistical modeling. Creates Jupyter-style notebooks and data pipelines.',
   'code_generator',
   'claude-sonnet-4-5-20250929',
