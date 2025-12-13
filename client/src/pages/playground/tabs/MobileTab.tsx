@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "../../../components/ui/sheet";
 import type { WebContainerService } from "../../../services/WebContainerService";
 import { 
   Smartphone, 
@@ -18,6 +26,7 @@ import {
   FolderClosed,
   Plug
 } from "lucide-react";
+import { SecretsVault, APIPlayground, AgentMonitor, VersionTimeline, AIPromptLab } from '../../../components/desktop-apps';
 
 interface MobileTabProps {
   projects: Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>;
@@ -61,8 +70,57 @@ export function MobileTab({
   webContainerService,
   isWebContainerReady,
 }: MobileTabProps) {
+  const [openApp, setOpenApp] = useState<string | null>(null);
+  
+  const handleOpenSystemApp = (appId: string) => {
+    setOpenApp(appId);
+  };
+  
+  const renderSystemAppContent = (appId: string) => {
+    switch (appId) {
+      case 'secrets-vault':
+        return <SecretsVault />;
+      case 'api-playground':
+        return <APIPlayground currentProjectId={currentProjectId} />;
+      case 'agent-monitor':
+        return <AgentMonitor />;
+      case 'version-timeline':
+        return <VersionTimeline currentProjectId={currentProjectId} />;
+      case 'prompt-lab':
+        return <AIPromptLab />;
+      case 'notes':
+        return (
+          <div className="p-4">
+            <textarea 
+              placeholder="Write your notes here..." 
+              className="w-full h-[300px] p-3 rounded-lg border bg-background resize-none"
+            />
+          </div>
+        );
+      case 'terminal':
+        return (
+          <div className="p-4 text-center text-muted-foreground">
+            <Terminal className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Terminal is only available on desktop</p>
+          </div>
+        );
+      default:
+        return (
+          <div className="p-4 text-center text-muted-foreground">
+            <p className="text-sm">Coming soon!</p>
+          </div>
+        );
+    }
+  };
+  
+  const getAppTitle = (appId: string) => {
+    const app = SYSTEM_APPS.find(a => a.id === appId);
+    return app?.name || 'System Tool';
+  };
+  
   return (
-    <div className="h-full w-full overflow-auto bg-gradient-to-b from-background to-muted/20">
+    <>
+      <div className="h-full w-full overflow-auto bg-gradient-to-b from-background to-muted/20">
       <div className="container mx-auto px-4 py-6 max-w-2xl">
         {/* Header */}
         <div className="mb-6">
@@ -147,11 +205,8 @@ export function MobileTab({
               return (
                 <button
                   key={app.id}
-                  className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-accent transition-colors"
-                  onClick={() => {
-                    // Open system app in a dialog or navigate
-                    // For now just show a toast
-                  }}
+                  className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-accent transition-colors active:scale-95"
+                  onClick={() => handleOpenSystemApp(app.id)}
                 >
                   <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${app.color} flex items-center justify-center shadow-md`}>
                     <IconComponent className="h-6 w-6 text-white" />
@@ -179,6 +234,28 @@ export function MobileTab({
         </Card>
       </div>
     </div>
+    
+    {/* System App Sheet */}
+    <Sheet open={openApp !== null} onOpenChange={(open) => !open && setOpenApp(null)}>
+      <SheetContent side="bottom" className="h-[80vh]">
+        <SheetHeader>
+          <SheetTitle>{getAppTitle(openApp || '')}</SheetTitle>
+          <SheetDescription>
+            {openApp === 'terminal' && 'Terminal is only available on desktop'}
+            {openApp === 'notes' && 'Quick notes for your project'}
+            {openApp === 'secrets-vault' && 'Manage your API keys and secrets'}
+            {openApp === 'api-playground' && 'Test API endpoints'}
+            {openApp === 'agent-monitor' && 'Monitor your AI agents'}
+            {openApp === 'version-timeline' && 'View project version history'}
+            {openApp === 'prompt-lab' && 'Test and compare prompts'}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-4 h-[calc(80vh-120px)] overflow-auto">
+          {openApp && renderSystemAppContent(openApp)}
+        </div>
+      </SheetContent>
+    </Sheet>
+  </>
   );
 }
 
