@@ -1,72 +1,36 @@
 import { Router } from 'express';
-import { db } from '../../db';
-import { eq, and } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
+import { apiKeyService } from '../services/APIKeyService';
+import { db } from '../../db';
+import { apiKeys } from '../../db/schema-pg';
+import { eq, and, isNull } from 'drizzle-orm';
 import crypto from 'crypto';
 
 const router = Router();
 
-// Simple encryption for secrets (in production, use a proper KMS)
-const ENCRYPTION_KEY = process.env.SECRETS_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex').slice(0, 32);
-const IV_LENGTH = 16;
-
-function encrypt(text: string): string {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
-  let encrypted = cipher.update(text);
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-  return iv.toString('hex') + ':' + encrypted.toString('hex');
-}
-
-function decrypt(text: string): string {
-  try {
-    const parts = text.split(':');
-    const iv = Buffer.from(parts.shift()!, 'hex');
-    const encryptedText = Buffer.from(parts.join(':'), 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
-    let decrypted = decipher.update(encryptedText);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    return decrypted.toString();
-  } catch (error) {
-    console.error('Decryption failed:', error);
-    return '';
-  }
-}
-
-// In-memory store (for production, use a database table)
-interface UserSecret {
-  id: string;
-  name: string;
-  key: string;
-  encryptedValue: string;
-  type: string;
-  service?: string;
-  createdAt: Date;
-  lastUsed?: Date;
-}
-
-const userSecrets = new Map<string, UserSecret[]>();
-
 /**
  * GET /api/secrets - Get all secrets for user (values are masked)
+ * Now uses api_keys table via APIKeyService
  */
 router.get('/', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
-    const secrets = userSecrets.get(userId) || [];
     
-    // Return secrets with masked values
-    const maskedSecrets = secrets.map(s => ({
-      id: s.id,
-      name: s.name,
-      key: s.key,
+    // Get all API keys for user (user-wide only for secrets vault)
+    const apiKeys = await apiKeyService.getapiKeys(userId, null);
+    
+    // Map to SecretsVault format
+    const secrets = apiKeys.map(key => ({
+      id: key.id.toString(),
+      name: key.serviceName || key.keyName,
+      key: key.keyName,
       value: '••••••••', // Masked
-      type: s.type,
-      service: s.service,
-      lastUsed: s.lastUsed,
+      type: key.keyType || 'api_key',
+      service: key.serviceName?.toLowerCase() || 'custom',
+      lastUsed: key.lastUsed ? new Date(key.lastUsed) : undefined,
     }));
     
-    res.json({ secrets: maskedSecrets });
+    res.json({ secrets });
   } catch (error) {
     console.error('Error fetching secrets:', error);
     res.status(500).json({ error: 'Failed to fetch secrets' });
@@ -75,30 +39,79 @@ router.get('/', authenticateUser, async (req, res) => {
 
 /**
  * GET /api/secrets/:id - Get a specific secret (with actual value)
+ * Now uses api_keys table via APIKeyService
  */
 router.get('/:id', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
     const secretId = req.params.id;
     
-    const secrets = userSecrets.get(userId) || [];
-    const secret = secrets.find(s => s.id === secretId);
+    // Get API key directly from database
+    const result = await db
+      .select({
+        id: apiKeys.id,
+        encryptedKey: apiKeys.encryptedKey,
+        serviceName: apiKeys.serviceName,
+        name: apiKeys.name,
+        keyType: apiKeys.keyType,
+      })
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.id, secretId),
+          eq(apiKeys.userId, userId),
+          eq(apiKeys.isActive, true),
+          isNull(apiKeys.projectId) // Only user-wide secrets
+        )
+      )
+      .limit(1);
     
-    if (!secret) {
+    if (result.length === 0 || !result[0].encryptedKey) {
       return res.status(404).json({ error: 'Secret not found' });
     }
     
-    // Update last used
-    secret.lastUsed = new Date();
+    const apiKey = result[0];
     
-    // Decrypt and return
+    // Decrypt the value using same method as APIKeyService
+    const encryptionKey = process.env.API_KEY_ENCRYPTION_KEY || 'default-encryption-key-change-in-production';
+    const algorithm = 'aes-256-cbc';
+    const keyHash = crypto.createHash('sha256').update(encryptionKey).digest();
+    
+    let decryptedValue: string;
+    try {
+      if (apiKey.encryptedKey.includes(':')) {
+        const parts = apiKey.encryptedKey.split(':');
+        const iv = Buffer.from(parts[0], 'hex');
+        const encrypted = parts[1];
+        const decipher = crypto.createDecipheriv(algorithm, keyHash, iv);
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        decryptedValue = decrypted;
+      } else {
+        // Fallback for old format
+        const decipher = crypto.createDecipher(algorithm, encryptionKey);
+        let decrypted = decipher.update(apiKey.encryptedKey, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        decryptedValue = decrypted;
+      }
+    } catch (error) {
+      console.error('Decryption failed:', error);
+      return res.status(500).json({ error: 'Failed to decrypt secret' });
+    }
+    
+    // Update lastUsed
+    await db
+      .update(apiKeys)
+      .set({ lastUsed: new Date() })
+      .where(eq(apiKeys.id, secretId));
+    
     res.json({
-      id: secret.id,
-      name: secret.name,
-      key: secret.key,
-      value: decrypt(secret.encryptedValue),
-      type: secret.type,
-      service: secret.service,
+      id: apiKey.id,
+      name: apiKey.serviceName || apiKey.name,
+      key: apiKey.name,
+      value: decryptedValue,
+      type: apiKey.keyType || 'api_key',
+      service: apiKey.serviceName?.toLowerCase() || 'custom',
     });
   } catch (error) {
     console.error('Error fetching secret:', error);
@@ -108,38 +121,35 @@ router.get('/:id', authenticateUser, async (req, res) => {
 
 /**
  * POST /api/secrets - Create a new secret
+ * Now uses api_keys table via APIKeyService
  */
 router.post('/', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
-    const { id, name, key, value, type, service } = req.body;
+    const { name, key, value, type, service } = req.body;
     
     if (!name || !key || !value) {
       return res.status(400).json({ error: 'Name, key, and value are required' });
     }
     
-    const newSecret: UserSecret = {
-      id: id || `secret-${Date.now()}`,
-      name,
-      key,
-      encryptedValue: encrypt(value),
-      type: type || 'api_key',
-      service,
-      createdAt: new Date(),
-    };
-    
-    if (!userSecrets.has(userId)) {
-      userSecrets.set(userId, []);
-    }
-    
-    userSecrets.get(userId)!.push(newSecret);
+    // Store using APIKeyService
+    const apiKey = await apiKeyService.storeAPIKey(
+      userId,
+      service || name, // serviceName
+      key, // keyName
+      value, // keyValue
+      (type || 'api_key') as 'api_key' | 'secret' | 'token' | 'password',
+      undefined, // description
+      undefined, // website
+      null // projectId (null = user-wide)
+    );
     
     res.status(201).json({
-      id: newSecret.id,
-      name: newSecret.name,
-      key: newSecret.key,
-      type: newSecret.type,
-      service: newSecret.service,
+      id: apiKey.id.toString(),
+      name: apiKey.serviceName || name,
+      key: apiKey.keyName,
+      type: apiKey.keyType,
+      service: apiKey.serviceName?.toLowerCase() || service || 'custom',
       message: 'Secret stored securely',
     });
   } catch (error) {
@@ -150,20 +160,23 @@ router.post('/', authenticateUser, async (req, res) => {
 
 /**
  * DELETE /api/secrets/:id - Delete a secret
+ * Now uses api_keys table via APIKeyService
  */
 router.delete('/:id', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
     const secretId = req.params.id;
     
-    const secrets = userSecrets.get(userId) || [];
-    const index = secrets.findIndex(s => s.id === secretId);
+    // Get all user's API keys to find the one with matching ID
+    const apiKeys = await apiKeyService.getapiKeys(userId, null);
+    const apiKey = apiKeys.find(k => k.id.toString() === secretId);
     
-    if (index === -1) {
+    if (!apiKey) {
       return res.status(404).json({ error: 'Secret not found' });
     }
     
-    secrets.splice(index, 1);
+    // Delete using APIKeyService
+    await apiKeyService.deleteAPIKey(userId, secretId);
     
     res.json({ message: 'Secret deleted' });
   } catch (error) {
@@ -174,24 +187,73 @@ router.delete('/:id', authenticateUser, async (req, res) => {
 
 /**
  * POST /api/secrets/use/:id - Get secret value for use (increments usage counter)
+ * Now uses api_keys table via APIKeyService
  */
 router.post('/use/:id', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
     const secretId = req.params.id;
     
-    const secrets = userSecrets.get(userId) || [];
-    const secret = secrets.find(s => s.id === secretId);
+    // Get API key directly from database
+    const result = await db
+      .select({
+        id: apiKeys.id,
+        encryptedKey: apiKeys.encryptedKey,
+        name: apiKeys.name,
+      })
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.id, secretId),
+          eq(apiKeys.userId, userId),
+          eq(apiKeys.isActive, true),
+          isNull(apiKeys.projectId) // Only user-wide secrets
+        )
+      )
+      .limit(1);
     
-    if (!secret) {
+    if (result.length === 0 || !result[0].encryptedKey) {
       return res.status(404).json({ error: 'Secret not found' });
     }
     
-    secret.lastUsed = new Date();
+    const apiKey = result[0];
+    
+    // Decrypt the value using same method as APIKeyService
+    const encryptionKey = process.env.API_KEY_ENCRYPTION_KEY || 'default-encryption-key-change-in-production';
+    const algorithm = 'aes-256-cbc';
+    const keyHash = crypto.createHash('sha256').update(encryptionKey).digest();
+    
+    let decryptedValue: string;
+    try {
+      if (apiKey.encryptedKey.includes(':')) {
+        const parts = apiKey.encryptedKey.split(':');
+        const iv = Buffer.from(parts[0], 'hex');
+        const encrypted = parts[1];
+        const decipher = crypto.createDecipheriv(algorithm, keyHash, iv);
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        decryptedValue = decrypted;
+      } else {
+        // Fallback for old format
+        const decipher = crypto.createDecipher(algorithm, encryptionKey);
+        let decrypted = decipher.update(apiKey.encryptedKey, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        decryptedValue = decrypted;
+      }
+    } catch (error) {
+      console.error('Decryption failed:', error);
+      return res.status(500).json({ error: 'Failed to decrypt secret' });
+    }
+    
+    // Update lastUsed
+    await db
+      .update(apiKeys)
+      .set({ lastUsed: new Date() })
+      .where(eq(apiKeys.id, secretId));
     
     res.json({
-      key: secret.key,
-      value: decrypt(secret.encryptedValue),
+      key: apiKey.name,
+      value: decryptedValue,
     });
   } catch (error) {
     console.error('Error using secret:', error);

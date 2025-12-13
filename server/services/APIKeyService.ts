@@ -398,6 +398,8 @@ export class APIKeyService {
         userId: apiKeys.userId,
         projectId: apiKeys.projectId,
         name: apiKeys.name,
+        serviceName: apiKeys.serviceName,
+        keyType: apiKeys.keyType,
         isActive: apiKeys.isActive,
         createdAt: apiKeys.createdAt,
         lastUsed: apiKeys.lastUsed,
@@ -411,9 +413,9 @@ export class APIKeyService {
       id: parseInt(key.id) || 0, // Convert text id to number if possible
       userId: key.userId,
       projectId: key.projectId || undefined, // Include projectId if set
-      serviceName: key.name || 'unknown', // Use name as serviceName
+      serviceName: key.serviceName || key.name || 'unknown', // Use serviceName if available, otherwise name
       keyName: key.name || 'default', // Use name as keyName
-      keyType: 'api_key' as const,
+      keyType: (key.keyType as 'api_key' | 'secret' | 'token' | 'password') || 'api_key',
       description: null,
       website: null,
       isActive: key.isActive ? 1 : 0, // Convert boolean to number
@@ -497,7 +499,10 @@ export class APIKeyService {
           userId,
           projectId: projectId || null, // null = user-wide, number = project-specific
           keyHash,
+          encryptedKey: encryptedKey, // Store encrypted value for retrieval
           name,
+          serviceName: serviceName, // Store service name
+          keyType: keyType, // Store key type
           isActive: true,
         })
         .returning();
@@ -508,9 +513,9 @@ export class APIKeyService {
       return {
         id: parseInt(apiKey.id) || 0, // Convert text id to number for compatibility
         userId: apiKey.userId,
-        serviceName: apiKey.name || serviceName,
+        serviceName: apiKey.serviceName || serviceName,
         keyName: apiKey.name || keyName,
-        encryptedKey: '', // Cannot store encrypted key in current schema
+        encryptedKey: apiKey.encryptedKey || '', // Now we store encrypted key
         keyType: keyType || 'api_key',
         description: description || null,
         website: website || null,
@@ -532,33 +537,47 @@ export class APIKeyService {
   async getAPIKey(
     userId: string,
     serviceName: string,
-    keyName: string
+    keyName?: string
   ): Promise<string | null> {
     try {
-      // Note: apiKeys table doesn't have serviceName/keyName/encryptedKey fields
-      // It has: id, userId, keyHash, name
-      // For now, match by name field
+      const conditions = [
+        eq(apiKeys.userId, userId),
+        eq(apiKeys.isActive, true)
+      ];
+
+      // Match by serviceName if available, otherwise by name
+      if (serviceName) {
+        conditions.push(eq(apiKeys.serviceName, serviceName));
+      }
+      if (keyName) {
+        conditions.push(eq(apiKeys.name, keyName));
+      }
+
       const result = await db
-        .select()
+        .select({
+          id: apiKeys.id,
+          encryptedKey: apiKeys.encryptedKey,
+        })
         .from(apiKeys)
-        .where(
-          and(
-            eq(apiKeys.userId, userId),
-            eq(apiKeys.name, serviceName), // Use name field to match serviceName
-            eq(apiKeys.isActive, true)
-          )
-        )
+        .where(and(...conditions))
         .limit(1);
 
-      if (result.length === 0) {
+      if (result.length === 0 || !result[0].encryptedKey) {
         return null;
       }
 
-      // The apiKeys table stores keyHash, not encryptedKey
-      // We can't decrypt it without the original key value
-      // Return null for now - this needs to be refactored to use the correct table
-      console.warn(`getAPIKey: apiKeys table structure doesn't support decryption. serviceName: ${serviceName}, keyName: ${keyName}`);
-      return null;
+      // Decrypt the key
+      const decrypted = this.decryptKey(result[0].encryptedKey);
+
+      // Update lastUsed
+      await db
+        .update(apiKeys)
+        .set({
+          lastUsed: new Date(),
+        })
+        .where(eq(apiKeys.id, result[0].id));
+
+      return decrypted;
     } catch (error) {
       console.error('Error getting API key:', error);
       return null;

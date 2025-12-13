@@ -252,6 +252,7 @@ export const apiKeys = pgTable('api_keys', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   projectId: integer('project_id').references(() => workspaces.id, { onDelete: 'cascade' }), // null = user-wide, set = project-specific
   keyHash: text('key_hash').notNull().unique(),
+  encryptedKey: text('encrypted_key'), // Encrypted API key value (can be decrypted)
   name: text('name').notNull(),
   lastUsed: timestamp('last_used'),
   createdAt: timestamp('created_at').defaultNow(),
