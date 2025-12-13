@@ -73,7 +73,7 @@ export class ExecutionGraph {
 
     if (indegreeCopy.size > 0) {
       const remaining = Array.from(indegreeCopy.keys()).join(', ');
-      this.logger.error('ExecutionGraph contains cycles', { remaining });
+      this.logger.error(`ExecutionGraph contains cycles: ${remaining}`);
       throw new Error(`ExecutionGraph contains cyclic dependencies: ${remaining}`);
     }
 

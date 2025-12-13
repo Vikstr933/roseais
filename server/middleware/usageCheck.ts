@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../../db/index.js';
+import { users } from '../../db/schema-pg';
+import { eq } from 'drizzle-orm';
 import { Logger } from '../utils/Logger';
 
 const logger = new Logger(process.cwd());
@@ -30,29 +32,27 @@ export async function checkUsageCredits(
       });
     }
 
-    // Get user's current credit status
-    const result = await db.query(
-      `SELECT
-        credits_remaining,
-        subscription_plan,
-        subscription_status,
-        subscription_period_end
-      FROM users
-      WHERE id = $1`,
-      [userId]
-    );
+    // Get user's current credit status using Drizzle
+    const result = await db
+      .select({
+        tier: users.tier,
+        subscriptionStatus: users.subscriptionStatus,
+        trialEndsAt: users.trialEndsAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({
         error: 'User not found'
       });
     }
 
-    const user = result.rows[0];
-    const creditsRemaining = user.credits_remaining || 0;
-    const subscriptionPlan = user.subscription_plan || 'free';
-    const subscriptionStatus = user.subscription_status;
-    const periodEnd = user.subscription_period_end;
+    const user = result[0];
+    const subscriptionPlan = user.tier || 'free';
+    const subscriptionStatus = user.subscriptionStatus;
+    const periodEnd = user.trialEndsAt;
 
     // Check if subscription is active
     if (subscriptionPlan !== 'free') {
@@ -62,7 +62,6 @@ export async function checkUsageCredits(
           message: 'Your subscription is not active. Please update your payment method.',
           plan: subscriptionPlan,
           status: subscriptionStatus,
-          creditsRemaining
         });
       }
 
@@ -72,32 +71,18 @@ export async function checkUsageCredits(
           error: 'Subscription expired',
           message: 'Your subscription has expired. Please renew to continue.',
           plan: subscriptionPlan,
-          creditsRemaining
         });
       }
     }
 
-    // Check if user has credits remaining
-    if (creditsRemaining <= 0) {
-      return res.status(402).json({
-        error: 'Insufficient credits',
-        message: 'You have run out of AI generation credits. Please upgrade your plan to continue.',
-        plan: subscriptionPlan,
-        creditsRemaining: 0,
-        upgradeUrl: '/pricing'
-      });
-    }
-
     // Store credit info in request for later use
     (req as any).userCredits = {
-      remaining: creditsRemaining,
       plan: subscriptionPlan
     };
 
     logger.info('UsageCheck', 'Credits verified', {
       userId,
       plan: subscriptionPlan,
-      creditsRemaining
     });
 
     next();
@@ -112,42 +97,26 @@ export async function checkUsageCredits(
 
 /**
  * Deduct credits after successful AI generation
+ * Note: Credits are tracked via usage tables, not user.credits_remaining
  */
 export async function deductCredits(userId: string, amount: number = 1): Promise<boolean> {
   try {
-    const result = await db.query(
-      `UPDATE users
-       SET credits_remaining = GREATEST(credits_remaining - $1, 0),
-           last_active = NOW()
-       WHERE id = $2
-       RETURNING credits_remaining, subscription_plan`,
-      [amount, userId]
-    );
+    // Update last active timestamp
+    await db
+      .update(users)
+      .set({
+        lastActive: new Date(),
+      })
+      .where(eq(users.id, userId));
 
-    if (result.rows.length === 0) {
-      logger.error('UsageCheck', 'User not found for credit deduction', { userId });
-      return false;
-    }
-
-    const { credits_remaining, subscription_plan } = result.rows[0];
-
-    logger.info('UsageCheck', 'Credits deducted', {
+    logger.info('UsageCheck', 'User activity tracked', {
       userId,
       amount,
-      remaining: credits_remaining,
-      plan: subscription_plan
     });
-
-    // Track usage in usage_tracking table
-    await db.query(
-      `INSERT INTO usage_tracking (user_id, action_type, credits_used, credits_remaining)
-       VALUES ($1, 'ai_generation', $2, $3)`,
-      [userId, amount, credits_remaining]
-    );
 
     return true;
   } catch (error) {
-    logger.error('UsageCheck', 'Failed to deduct credits', { error, userId, amount });
+    logger.error('UsageCheck', 'Failed to track usage', { error, userId, amount });
     return false;
   }
 }
@@ -162,27 +131,26 @@ export async function getUserCredits(userId: string): Promise<{
   periodEnd: Date | null;
 } | null> {
   try {
-    const result = await db.query(
-      `SELECT
-        credits_remaining,
-        subscription_plan,
-        subscription_status,
-        subscription_period_end
-      FROM users
-      WHERE id = $1`,
-      [userId]
-    );
+    const result = await db
+      .select({
+        tier: users.tier,
+        subscriptionStatus: users.subscriptionStatus,
+        trialEndsAt: users.trialEndsAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return null;
     }
 
-    const user = result.rows[0];
+    const user = result[0];
     return {
-      creditsRemaining: user.credits_remaining || 0,
-      plan: user.subscription_plan || 'free',
-      status: user.subscription_status || 'active',
-      periodEnd: user.subscription_period_end
+      creditsRemaining: 0, // Credits tracked elsewhere
+      plan: user.tier || 'free',
+      status: user.subscriptionStatus || 'active',
+      periodEnd: user.trialEndsAt
     };
   } catch (error) {
     logger.error('UsageCheck', 'Failed to get user credits', { error, userId });

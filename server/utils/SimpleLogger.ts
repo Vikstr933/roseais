@@ -29,7 +29,11 @@ export class SimpleLogger {
     }
   }
 
-  debug(message: string): void {
-    console.debug(`[${this.name}] DEBUG: ${message}`);
+  debug(message: string, metadata?: Record<string, unknown>): void {
+    if (metadata) {
+      console.debug(`[${this.name}] DEBUG: ${message}`, metadata);
+    } else {
+      console.debug(`[${this.name}] DEBUG: ${message}`);
+    }
   }
 }

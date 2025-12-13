@@ -171,14 +171,17 @@ export async function sanitizeAIResponse(
 export function validateFileUpload(maxSize = 10 * 1024 * 1024) {
   // 10MB default
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.file) {
+    // req.file comes from multer middleware
+    const file = (req as any).file as { size: number; originalname: string } | undefined;
+    
+    if (!file) {
       return next();
     }
     
     const { isAllowedFileExtension } = require('../validation/schemas');
     
     // Check file size
-    if (req.file.size > maxSize) {
+    if (file.size > maxSize) {
       return res.status(400).json({
         error: 'File too large',
         maxSize: `${maxSize / 1024 / 1024}MB`,
@@ -186,7 +189,7 @@ export function validateFileUpload(maxSize = 10 * 1024 * 1024) {
     }
     
     // Check file extension
-    if (!isAllowedFileExtension(req.file.originalname)) {
+    if (!isAllowedFileExtension(file.originalname)) {
       return res.status(400).json({
         error: 'File type not allowed',
         allowed: ['.ts', '.tsx', '.js', '.jsx', '.css', '.json'],
