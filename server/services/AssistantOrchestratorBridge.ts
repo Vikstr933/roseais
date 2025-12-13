@@ -151,28 +151,32 @@ export class AssistantOrchestratorBridge {
         // Use orchestration for high-quality multi-agent generation
         const workflowId = `assistant-gen-${Date.now()}`;
 
-        const result = await orchestrationAgent.orchestrate({
-          workflowId,
-          userPrompt: params.prompt,
-          enabledAgents: [
-            'requirements',
-            'component-architect',
-            'ui-designer',
-            'code-generator',
-            'style-generator'
-          ],
+        const result = await orchestrationAgent.executeTask({
+          id: workflowId,
+          type: 'code_generation',
+          prompt: params.prompt,
           context: {
             source: 'assistant',
             userId,
-            projectType: params.projectType || 'react'
+            projectType: params.projectType || 'react',
+            enabledAgents: [
+              'requirements',
+              'component-architect',
+              'ui-designer',
+              'code-generator',
+              'style-generator'
+            ]
           }
         });
 
         return {
-          success: true,
-          workspaceId: result.workspaceId,
-          filesGenerated: result.filesGenerated,
-          message: `Successfully generated application with ${result.filesGenerated} files using multi-agent orchestration. The app is ready to preview!`
+          success: result.success,
+          componentName: result.componentName,
+          filesGenerated: result.files.length,
+          files: result.files,
+          message: result.success 
+            ? `Successfully generated ${result.componentName} with ${result.files.length} files using multi-agent orchestration.`
+            : `Generation failed: ${result.errors.join(', ')}`
         };
       } else {
         // Direct generation without orchestration (faster but simpler)
@@ -183,7 +187,7 @@ export class AssistantOrchestratorBridge {
         };
       }
     } catch (error) {
-      logger.error('Failed to generate application from assistant', error as Error, { userId });
+      logger.error(`Failed to generate application from assistant for user ${userId}`, error as Error);
       return {
         success: false,
         message: `Failed to generate application: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -224,7 +228,7 @@ export class AssistantOrchestratorBridge {
         }
       };
     } catch (error) {
-      logger.error('Failed to explain code', error as Error, { userId });
+      logger.error(`Failed to explain code for user ${userId}`, error as Error);
       return {
         success: false
       };
@@ -298,7 +302,7 @@ export class AssistantOrchestratorBridge {
         suggestions
       };
     } catch (error) {
-      logger.error('Failed to suggest improvements', error as Error, { userId });
+      logger.error(`Failed to suggest improvements for user ${userId}`, error as Error);
       return {
         success: false
       };
@@ -336,7 +340,7 @@ export class AssistantOrchestratorBridge {
         filesModified: 3
       };
     } catch (error) {
-      logger.error('Failed to add feature', error as Error, { userId });
+      logger.error(`Failed to add feature for user ${userId}`, error as Error);
       return {
         success: false,
         message: `Failed to add feature: ${error instanceof Error ? error.message : 'Unknown error'}`

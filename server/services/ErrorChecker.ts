@@ -375,12 +375,12 @@ Provide fix suggestions for each error. Format as JSON array:
           return suggestions.slice(0, errors.length);
         }
       } catch (e) {
-        logger.warning('Failed to parse AI suggestions', { error: e });
+        logger.warn('Failed to parse AI suggestions', e as Error);
       }
 
       return errors.map(() => ({ suggestion: 'See error details above', fixable: false }));
     } catch (error) {
-      logger.error('Failed to get AI suggestions', { error });
+      logger.error('Failed to get AI suggestions', error as Error);
       return errors.map(() => ({ suggestion: 'Error analysis unavailable', fixable: false }));
     }
   }

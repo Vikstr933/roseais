@@ -98,7 +98,7 @@ export class EmailSchedulerService {
 
       return scheduledEmailId;
     } catch (error) {
-      logger.error('Failed to schedule email', error as Error, { userId, to });
+      logger.error(`Failed to schedule email for user ${userId} to ${to}`, error as Error);
       throw error;
     }
   }
@@ -131,10 +131,7 @@ export class EmailSchedulerService {
         try {
           await this.sendScheduledEmail(email);
         } catch (error) {
-          logger.error('Failed to send scheduled email', error as Error, {
-            scheduledEmailId: email.id,
-            userId: email.userId
-          });
+          logger.error(`Failed to send scheduled email ${email.id} for user ${email.userId}`, error as Error);
 
           // Update error in database
           await db
@@ -187,9 +184,7 @@ export class EmailSchedulerService {
         userId: email.userId
       });
     } catch (error) {
-      logger.error('Failed to send scheduled email via Gmail plugin', error as Error, {
-        scheduledEmailId: email.id
-      });
+      logger.error(`Failed to send scheduled email ${email.id} via Gmail plugin`, error as Error);
       throw error;
     }
   }
@@ -210,7 +205,7 @@ export class EmailSchedulerService {
         .where(and(...conditions))
         .orderBy(scheduledEmails.scheduledFor);
     } catch (error) {
-      logger.error('Failed to get scheduled emails', error as Error, { userId });
+      logger.error(`Failed to get scheduled emails for user ${userId}`, error as Error);
       return [];
     }
   }
@@ -233,7 +228,7 @@ export class EmailSchedulerService {
       logger.info('Scheduled email cancelled', { scheduledEmailId, userId });
       return true;
     } catch (error) {
-      logger.error('Failed to cancel scheduled email', error as Error, { scheduledEmailId, userId });
+      logger.error(`Failed to cancel scheduled email ${scheduledEmailId} for user ${userId}`, error as Error);
       return false;
     }
   }

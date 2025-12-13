@@ -552,10 +552,10 @@ Generate ONLY the status message, nothing else.`
           repoAnalysis = await repoAnalysisService.analyzeRepository(repoUrl.owner, repoUrl.repo);
           
           // Send status about languages detected
-          const languagesList = Object.entries(repoAnalysis.languages)
-            .sort(([, a], [, b]) => b - a)
+          const languagesList = Object.entries(repoAnalysis.languages as Record<string, number>)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
             .slice(0, 3)
-            .map(([lang, pct]) => `${lang} (${pct.toFixed(1)}%)`)
+            .map(([lang, pct]) => `${lang} (${(pct as number).toFixed(1)}%)`)
             .join(', ');
           
           const languageStatus = await this.generateNaturalStatusMessage(
@@ -607,7 +607,7 @@ Generate ONLY the status message, nothing else.`
       let enhancedMessage = userMessage;
       if (repoAnalysis && matchedAgents.length > 0) {
         const agentNames = matchedAgents.slice(0, 3).map(a => a.name).join(', ');
-        enhancedMessage = `${userMessage}\n\n[Context: GitHub repo ${repoAnalysis.owner}/${repoAnalysis.repo} uses ${repoAnalysis.primaryLanguage} (${Object.entries(repoAnalysis.languages).slice(0, 3).map(([l, p]) => `${l} ${p.toFixed(1)}%`).join(', ')}). Using specialized agents: ${agentNames} for best results.]`;
+        enhancedMessage = `${userMessage}\n\n[Context: GitHub repo ${repoAnalysis.owner}/${repoAnalysis.repo} uses ${repoAnalysis.primaryLanguage} (${Object.entries(repoAnalysis.languages as Record<string, number>).slice(0, 3).map(([l, p]) => `${l} ${(p as number).toFixed(1)}%`).join(', ')}). Using specialized agents: ${agentNames} for best results.]`;
       } else if (repoAnalysis && matchedAgents.length === 0) {
         // Add context that no specific agents were found but we can still help
         enhancedMessage = `${userMessage}\n\n[Context: GitHub repo ${repoAnalysis.owner}/${repoAnalysis.repo} uses ${repoAnalysis.primaryLanguage}. No specific agents found in database, but I can still help. Recommend creating a custom agent for best results.]`;
@@ -632,20 +632,7 @@ Generate ONLY the status message, nothing else.`
             serverName: message.guild?.name,
             discordUserId: discordUserId,
             discordUsername: discordUsername,
-            repoAnalysis: repoAnalysis ? {
-              owner: repoAnalysis.owner,
-              repo: repoAnalysis.repo,
-              primaryLanguage: repoAnalysis.primaryLanguage,
-              languages: repoAnalysis.languages,
-              framework: repoAnalysis.framework,
-              matchedAgents: matchedAgents.map(a => ({
-                id: a.id,
-                name: a.name,
-                matchScore: a.matchScore,
-                matchReasons: a.matchReasons
-              }))
-            } : undefined
-          }
+          } as any
         }
       );
 
