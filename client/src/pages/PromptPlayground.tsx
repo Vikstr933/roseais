@@ -3168,69 +3168,17 @@ export default function PromptPlayground() {
             </div>
           )}
 
-          {/* Project Actions Menu */}
-          {currentProject && (
-            <div className="flex items-center gap-1">
-              <AlertDialog open={showDeleteProjectDialog} onOpenChange={setShowDeleteProjectDialog}>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex items-center gap-2 text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Project?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will permanently delete "{currentProject.name}" and all its files, chat history, and settings.
-                      <span className="block mt-2 font-semibold text-destructive">
-                        This action cannot be undone.
-                      </span>
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={async () => {
-                        if (currentProject) {
-                          const success = await deleteProjectHook(currentProject.id);
-                          if (success) {
-                            setShowDeleteProjectDialog(false);
-                          }
-                        }
-                      }}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      disabled={isDeleting}
-                    >
-                      {isDeleting ? 'Deleting...' : 'Delete Project'}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowRenameProjectDialog(true)}
-                className="flex items-center gap-2"
-              >
-                <Edit2 className="h-4 w-4" />
-              </Button>
-              {(isSuperAdmin || isAdmin) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowProjectSettings(true)}
-                  className="flex items-center gap-2"
-                  title="Project Settings"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+          {/* Project Settings Button - Only for admins */}
+          {currentProject && (isSuperAdmin || isAdmin) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowProjectSettings(true)}
+              className="flex items-center gap-2"
+              title="Project Settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
           )}
 
 
