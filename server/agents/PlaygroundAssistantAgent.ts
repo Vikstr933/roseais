@@ -8,14 +8,15 @@ const logger = new SimpleLogger('PlaygroundAssistantAgent');
 /**
  * Playground Assistant Agent (Chap-ZPT)
  * 
- * Dedicated agent for the AI Code Playground, focused on:
- * - Code generation and modification
- * - Automatic prompt improvement
- * - Project file management
- * - Code analysis and deployment
+ * The intelligent ORCHESTRATOR for the AI Code Playground, responsible for:
+ * - Receiving user requests and understanding intent
+ * - Automatically improving prompts before delegating to code generation
+ * - Coordinating the IncrementalOrchestrator for actual code generation
+ * - Managing project files and deployment
  * 
- * This agent is specialized for playground interactions and provides
- * a stable, focused experience for code generation tasks.
+ * IMPORTANT: Chap-ZPT does NOT generate code directly - it delegates to
+ * specialized agents (via IncrementalOrchestrator) which do the actual work.
+ * This agent is the "brains" that decides what to do, not the "hands" that write code.
  */
 export class PlaygroundAssistantAgent {
   private anthropic: Anthropic;
@@ -81,17 +82,21 @@ export class PlaygroundAssistantAgent {
     // Initialize code generation tool
     this.generateCodeTool = {
       name: 'generate_code',
-      description: 'Generate code for a React application in the playground. Use this when the user asks you to create an app, build a feature, generate code, or make changes to their project. This will trigger the code generation system to create or modify files. ALWAYS improve the prompt automatically before generating code to ensure high-quality results.',
+      description: 'Trigger code generation by delegating to the IncrementalOrchestrator and specialized agents. Use this when the user asks you to create an app, build a feature, generate code, or make changes to their project. The system supports multiple languages (React/TypeScript, Python, Node.js, etc.) but live preview only works for web apps. ALWAYS improve the prompt automatically before triggering generation.',
       parameters: {
         type: 'object',
         properties: {
           prompt: {
             type: 'string',
-            description: 'Detailed description of what code to generate. This prompt will be automatically improved before generation.'
+            description: 'Detailed description of what code to generate. This prompt will be automatically improved before delegation to code generation agents.'
           },
           projectId: {
             type: 'string',
             description: 'Optional project ID. If not provided, uses the currently selected project.'
+          },
+          language: {
+            type: 'string',
+            description: 'Optional: The target language/framework (react, python, node, etc.). If not specified, defaults to React/TypeScript for web preview compatibility.'
           }
         },
         required: ['prompt']
@@ -470,16 +475,22 @@ export class PlaygroundAssistantAgent {
   /**
    * Improve a prompt automatically before code generation
    * This is a key feature of Chap-ZPT - automatic prompt enhancement
+   * Detects project type and tailors improvements accordingly
    */
   private async improvePrompt(
     originalPrompt: string,
     existingFiles: Array<{ path: string; content: string }>
   ): Promise<string> {
     try {
+      // Detect project type from existing files or prompt
+      const projectType = this.detectProjectType(originalPrompt, existingFiles);
+      
       const improvementPrompt = `You are an expert at improving code generation prompts. Your task is to take a user's request and transform it into a detailed, comprehensive prompt that will result in high-quality, production-ready code.
 
 **Original User Request:**
 ${originalPrompt}
+
+**Detected Project Type:** ${projectType}
 
 **Existing Project Files (if any):**
 ${existingFiles.length > 0 
@@ -490,16 +501,22 @@ ${existingFiles.length > 0
 **Your Task:**
 Transform the user's request into a detailed, comprehensive prompt that includes:
 1. Clear feature requirements
-2. Technical specifications (React, TypeScript, modern patterns)
-3. UI/UX considerations (responsive, accessible, modern design)
+2. Technical specifications appropriate for ${projectType}
+3. ${projectType === 'web/react' ? 'UI/UX considerations (responsive, accessible, modern design)' : 'Appropriate architecture and patterns for the project type'}
 4. Code quality requirements (clean, maintainable, well-structured)
 5. Any missing but important details (error handling, edge cases, etc.)
 
 **Guidelines:**
 - Keep the user's original intent and requirements
 - Add technical details that ensure production-ready code
-- Specify React patterns (hooks, functional components, TypeScript)
-- Include modern UI/UX best practices
+${projectType === 'web/react' 
+  ? '- Specify React patterns (hooks, functional components, TypeScript)\n- Include modern UI/UX best practices'
+  : projectType === 'python'
+    ? '- Specify Python best practices (type hints, clean code, proper structure)\n- Include appropriate libraries and patterns'
+    : projectType === 'node'
+      ? '- Specify Node.js best practices (async/await, error handling, proper structure)\n- Include appropriate packages and patterns'
+      : '- Specify appropriate patterns and best practices for the detected technology'
+}
 - Add error handling and edge case considerations
 - Make it comprehensive but not overly verbose
 
@@ -527,6 +544,50 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
       logger.warn('Failed to improve prompt, using original', error as Error);
       return originalPrompt;
     }
+  }
+
+  /**
+   * Detect project type from prompt and existing files
+   * Returns: 'web/react' | 'python' | 'node' | 'general'
+   */
+  private detectProjectType(
+    prompt: string,
+    existingFiles: Array<{ path: string; content: string }>
+  ): string {
+    const promptLower = prompt.toLowerCase();
+    
+    // Check prompt keywords
+    if (promptLower.includes('python') || promptLower.includes('.py') || promptLower.includes('flask') || promptLower.includes('django') || promptLower.includes('fastapi')) {
+      return 'python';
+    }
+    
+    if (promptLower.includes('node') || promptLower.includes('express') || promptLower.includes('backend') || promptLower.includes('api server')) {
+      return 'node';
+    }
+    
+    // Check existing files
+    if (existingFiles.length > 0) {
+      const hasPythonFiles = existingFiles.some(f => f.path.endsWith('.py'));
+      const hasReactFiles = existingFiles.some(f => 
+        f.path.endsWith('.tsx') || f.path.endsWith('.jsx') || 
+        f.path.includes('package.json') && f.content.includes('react')
+      );
+      const hasNodeFiles = existingFiles.some(f => 
+        f.path.includes('package.json') && !f.content.includes('react')
+      );
+      
+      if (hasPythonFiles) return 'python';
+      if (hasReactFiles) return 'web/react';
+      if (hasNodeFiles) return 'node';
+    }
+    
+    // Default to web/react for preview compatibility
+    if (promptLower.includes('app') || promptLower.includes('website') || promptLower.includes('web') || 
+        promptLower.includes('ui') || promptLower.includes('frontend') || promptLower.includes('react')) {
+      return 'web/react';
+    }
+    
+    return 'general';
   }
 
   /**
@@ -624,11 +685,11 @@ ${hasProjectContext
 
 **Available Tools:**
 ${hasProjectContext 
-  ? `- generate_code: Generate code (you will automatically improve the prompt first)
+  ? `- generate_code: Trigger code generation (YOU improve the prompt, then delegate to IncrementalOrchestrator)
 - read_file, write_file, edit_file, delete_file: File operations
 - create_directory: Create folders
 - analyze_code, check_types, find_errors, suggest_improvements: Code analysis
-- deploy_to_vercel: Deploy to production`
+- deploy_to_vercel: Deploy web projects to production`
   : `- list_projects: List available projects
 - select_project: Select a project to work on`
 }
@@ -959,7 +1020,7 @@ ${hasProjectContext
 
       return {
         success: true,
-        message: 'Code generation started! I\'ve improved your prompt and the code is being generated. You\'ll see the files appear in real-time.',
+        message: 'Code generation delegated! I\'ve improved your prompt and handed it off to the IncrementalOrchestrator with specialized agents. You\'ll see the files appear in real-time as they work.',
         workflowId
       };
     } catch (error) {
