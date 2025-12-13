@@ -10,6 +10,9 @@ export interface AuthenticatedRequest extends Request {
     username: string;
     displayName: string;
   };
+  generationLock?: {
+    id: string;
+  };
 }
 
 /**
@@ -175,20 +178,22 @@ export const handleGenerationLockCleanup = (
 ) => {
   const originalEnd = res.end;
 
-  res.end = function (chunk?: any, encoding?: any) {
+  // Override end to clean up locks
+  const customEnd = function(this: Response, chunk?: any, encoding?: BufferEncoding, cb?: () => void): Response {
     // Release lock when response ends
-    if (req.generationLock) {
+    if ((req as any).generationLock) {
       const status =
         res.statusCode >= 200 && res.statusCode < 300 ? 'completed' : 'failed';
       generationLockService
-        .releaseLock(req.generationLock.id, status)
-        .catch(error => {
+        .releaseLock((req as any).generationLock.id, status)
+        .catch((error: Error) => {
           console.error('Error releasing lock on response end:', error);
         });
     }
 
-    originalEnd.call(this, chunk, encoding);
+    return originalEnd.call(this, chunk, encoding, cb) as Response;
   };
+  res.end = customEnd as typeof res.end;
 
   next();
 };

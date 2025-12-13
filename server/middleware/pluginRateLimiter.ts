@@ -112,13 +112,7 @@ export class PluginRateLimiter {
       const remaining = Math.max(0, limit - count);
 
       if (count >= limit) {
-        logger.warn('Rate limit exceeded', {
-          userId,
-          pluginId,
-          window,
-          count,
-          limit,
-        });
+        logger.warn(`Rate limit exceeded: userId=${userId}, pluginId=${pluginId}, window=${window}, count=${count}, limit=${limit}`);
 
         return {
           allowed: false,
@@ -136,7 +130,7 @@ export class PluginRateLimiter {
         resetAt,
       };
     } catch (error) {
-      logger.error('Rate limit check failed', error);
+      logger.error('Rate limit check failed', error instanceof Error ? error : new Error(String(error)));
       // Fail safe: allow execution but log error
       return { allowed: true };
     }

@@ -111,7 +111,7 @@ export const PRE_BUILT_CONNECTORS: PreBuiltConnector[] = [
         name: 'VERCEL_TEAM_ID',
         label: 'Team ID (Optional)',
         description: 'Your Vercel team ID if using team account',
-        type: 'text',
+        type: 'secret',
         required: false,
         placeholder: 'team_...',
         helpUrl: 'https://vercel.com/docs/teams',

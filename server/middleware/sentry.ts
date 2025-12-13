@@ -2,26 +2,27 @@ import { Request, Response, NextFunction } from 'express';
 import * as Sentry from '@sentry/node';
 import { sentryService } from '../services/SentryService';
 
+// Note: Sentry Handlers API was removed in v8. Using manual instrumentation instead.
+
 /**
  * Sentry request handler middleware
  * Must be added BEFORE all routes
  */
 export const sentryRequestHandler = () => {
-  // Only enable if Sentry is configured and Handlers are available
-  if (!process.env.SENTRY_DSN || !Sentry.Handlers) {
-    return (req: Request, res: Response, next: NextFunction) => next();
-  }
-  
-  try {
-    return Sentry.Handlers.requestHandler({
-      user: ['id', 'username', 'email'],
-      ip: true,
-      transaction: 'methodPath',
-    });
-  } catch (error) {
-    console.warn('⚠️ Sentry request handler unavailable:', error);
-    return (req: Request, res: Response, next: NextFunction) => next();
-  }
+  // Modern Sentry SDK uses automatic instrumentation
+  // This middleware adds request context manually
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (process.env.SENTRY_DSN) {
+      Sentry.setContext('request', {
+        method: req.method,
+        url: req.url,
+        headers: {
+          'user-agent': req.get('user-agent'),
+        },
+      });
+    }
+    next();
+  };
 };
 
 /**
@@ -29,17 +30,8 @@ export const sentryRequestHandler = () => {
  * Adds performance monitoring
  */
 export const sentryTracingHandler = () => {
-  // Only enable if Sentry is configured and Handlers are available
-  if (!process.env.SENTRY_DSN || !Sentry.Handlers) {
-    return (req: Request, res: Response, next: NextFunction) => next();
-  }
-  
-  try {
-    return Sentry.Handlers.tracingHandler();
-  } catch (error) {
-    console.warn('⚠️ Sentry tracing handler unavailable:', error);
-    return (req: Request, res: Response, next: NextFunction) => next();
-  }
+  // Modern Sentry uses automatic instrumentation for tracing
+  return (req: Request, res: Response, next: NextFunction) => next();
 };
 
 /**
@@ -47,22 +39,12 @@ export const sentryTracingHandler = () => {
  * Must be added AFTER all routes but BEFORE error handlers
  */
 export const sentryErrorHandler = () => {
-  // Only enable if Sentry is configured and Handlers are available
-  if (!process.env.SENTRY_DSN || !Sentry.Handlers) {
-    return (err: Error, req: Request, res: Response, next: NextFunction) => next(err);
-  }
-  
-  try {
-    return Sentry.Handlers.errorHandler({
-      shouldHandleError(error) {
-        // Capture all errors with status >= 500
-        return true;
-      },
-    });
-  } catch (error) {
-    console.warn('⚠️ Sentry error handler unavailable:', error);
-    return (err: Error, req: Request, res: Response, next: NextFunction) => next(err);
-  }
+  return (err: Error, req: Request, res: Response, next: NextFunction) => {
+    if (process.env.SENTRY_DSN) {
+      Sentry.captureException(err);
+    }
+    next(err);
+  };
 };
 
 /**
