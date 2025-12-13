@@ -564,6 +564,25 @@ export default function Integrations() {
     }
   };
 
+  // Load shared connectors (workspace-wide API keys)
+  const loadSharedConnectors = async () => {
+    if (!sessionToken) return;
+    setLoadingSharedConnectors(true);
+    try {
+      const response = await apiFetch('/api/shared-connectors', {
+        headers: getAuthHeaders(sessionToken),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSharedConnectors(data.connectors || []);
+      }
+    } catch (error) {
+      console.error('Error loading shared connectors:', error);
+    } finally {
+      setLoadingSharedConnectors(false);
+    }
+  };
+
   const installCustomPlugin = async (
     plugin: Plugin,
     credentials: Record<string, string> = {},
