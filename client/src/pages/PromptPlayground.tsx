@@ -121,8 +121,7 @@ export default function PromptPlayground() {
   const [chatSheetOpen, setChatSheetOpen] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [isChatMode, setIsChatMode] = useState(false); // Chat mode toggle
-  const [showPublishingPolicyDialog, setShowPublishingPolicyDialog] = useState(false);
-  const [publishingPolicy, setPublishingPolicy] = useState<{ allowExternalPublishing: boolean; allowedRoles: string[] } | null>(null);
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
 
   // Track processed prompts to prevent duplicate processing
   const processedPromptRef = useRef<string | null>(null);
