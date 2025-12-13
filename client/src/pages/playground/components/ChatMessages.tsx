@@ -6,22 +6,30 @@
 
 import { memo, forwardRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, Sparkles, Code2, Zap, Wand2 } from 'lucide-react';
+import { Brain, Sparkles, Code2, Zap, Wand2, MessageCircle, Loader2 } from 'lucide-react';
 import { ChatMessage } from '../../../components/ChatMessage';
 import type { WorkspaceChatMessage } from '../types';
 
 interface ChatMessagesProps {
   chatHistory: WorkspaceChatMessage[];
   isLoading: boolean;
+  isChatMode?: boolean;
 }
 
-// Rotating loading messages to feel more alive
-const LOADING_MESSAGES = [
+// Rotating loading messages for CODE mode
+const CODE_LOADING_MESSAGES = [
   { text: "Analyzing your request...", icon: Brain, duration: 2000 },
   { text: "Crafting the perfect solution...", icon: Wand2, duration: 3000 },
   { text: "Generating code structure...", icon: Code2, duration: 4000 },
   { text: "Optimizing components...", icon: Zap, duration: 3000 },
   { text: "Almost there...", icon: Sparkles, duration: 2000 },
+];
+
+// Rotating loading messages for CHAT mode
+const CHAT_LOADING_MESSAGES = [
+  { text: "Thinking...", icon: Brain, duration: 2000 },
+  { text: "Processing your question...", icon: MessageCircle, duration: 3000 },
+  { text: "Preparing response...", icon: Sparkles, duration: 2000 },
 ];
 
 // Typing indicator dots
@@ -48,15 +56,15 @@ function TypingDots() {
   );
 }
 
-// Enhanced loading component
-function LoadingIndicator() {
+// Enhanced loading component for CODE mode
+function CodeLoadingIndicator() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   
   useEffect(() => {
     // Rotate through messages
     const messageInterval = setInterval(() => {
-      setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+      setMessageIndex((prev) => (prev + 1) % CODE_LOADING_MESSAGES.length);
     }, 3000);
     
     // Animate progress bar
@@ -73,7 +81,7 @@ function LoadingIndicator() {
     };
   }, []);
   
-  const CurrentIcon = LOADING_MESSAGES[messageIndex].icon;
+  const CurrentIcon = CODE_LOADING_MESSAGES[messageIndex].icon;
   
   return (
     <motion.div
@@ -120,7 +128,7 @@ function LoadingIndicator() {
               >
                 <CurrentIcon className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium text-foreground">
-                  {LOADING_MESSAGES[messageIndex].text}
+                  {CODE_LOADING_MESSAGES[messageIndex].text}
                 </span>
               </motion.div>
             </div>
@@ -154,9 +162,70 @@ function LoadingIndicator() {
   );
 }
 
+// Simple loading component for CHAT mode
+function ChatLoadingIndicator() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  
+  useEffect(() => {
+    // Rotate through messages
+    const messageInterval = setInterval(() => {
+      setMessageIndex((prev) => (prev + 1) % CHAT_LOADING_MESSAGES.length);
+    }, 2000);
+    
+    return () => {
+      clearInterval(messageInterval);
+    };
+  }, []);
+  
+  const CurrentIcon = CHAT_LOADING_MESSAGES[messageIndex].icon;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="flex gap-4"
+    >
+      {/* Simple animated avatar for chat */}
+      <motion.div 
+        className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0 shadow-md"
+        animate={{
+          scale: [1, 1.05, 1],
+        }}
+        transition={{
+          duration: 2,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      >
+        <MessageCircle className="h-5 w-5 text-white" />
+      </motion.div>
+
+      {/* Simple message content */}
+      <div className="rounded-xl px-4 py-3 bg-muted/50 border border-border/30 max-w-[85%] flex-1">
+        <div className="flex items-center justify-between">
+          <motion.div
+            key={messageIndex}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex items-center gap-2"
+          >
+            <CurrentIcon className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-foreground">
+              {CHAT_LOADING_MESSAGES[messageIndex].text}
+            </span>
+          </motion.div>
+          <TypingDots />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export const ChatMessages = memo(
   forwardRef<HTMLDivElement, ChatMessagesProps>(function ChatMessages(
-    { chatHistory, isLoading },
+    { chatHistory, isLoading, isChatMode = false },
     ref
   ) {
     return (
@@ -180,20 +249,34 @@ export const ChatMessages = memo(
                   </div>
                   <div className="space-y-2">
                     <p className="text-foreground font-medium">
-                      Ready to build something amazing?
+                      {isChatMode 
+                        ? "Ready to chat and help you plan?" 
+                        : "Ready to build something amazing?"}
                     </p>
                     <p className="text-sm">
-                      Start by describing what you want to create. I'll help you build it step by step.
+                      {isChatMode
+                        ? "Ask me anything about your project, or let's brainstorm ideas together."
+                        : "Start by describing what you want to create. I'll help you build it step by step."}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-3">
-                      {["Build a dashboard", "Create a landing page", "Make a form"].map((suggestion) => (
-                        <span 
-                          key={suggestion}
-                          className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 cursor-default"
-                        >
-                          {suggestion}
-                        </span>
-                      ))}
+                      {isChatMode 
+                        ? ["What can you help with?", "Explain this feature", "Best practices?"].map((suggestion) => (
+                            <span 
+                              key={suggestion}
+                              className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 cursor-default"
+                            >
+                              {suggestion}
+                            </span>
+                          ))
+                        : ["Build a dashboard", "Create a landing page", "Make a form"].map((suggestion) => (
+                            <span 
+                              key={suggestion}
+                              className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 cursor-default"
+                            >
+                              {suggestion}
+                            </span>
+                          ))
+                      }
                     </div>
                   </div>
                 </div>
@@ -225,9 +308,9 @@ export const ChatMessages = memo(
             </motion.div>
           ))}
 
-          {/* Enhanced loading indicator */}
+          {/* Conditional loading indicator based on mode */}
           <AnimatePresence mode="wait">
-            {isLoading && <LoadingIndicator />}
+            {isLoading && (isChatMode ? <ChatLoadingIndicator /> : <CodeLoadingIndicator />)}
           </AnimatePresence>
         </div>
       </div>
