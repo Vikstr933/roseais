@@ -3641,11 +3641,10 @@ export default function PromptPlayground() {
                   type="checkbox"
                   checked={publishingPolicy?.allowExternalPublishing ?? true}
                   onChange={(e) => {
-                    setPublishingPolicy(prev => ({
-                      ...prev,
+                    setPublishingPolicy({
                       allowExternalPublishing: e.target.checked,
-                      allowedRoles: prev?.allowedRoles || ['admin', 'owner']
-                    }));
+                      allowedRoles: publishingPolicy?.allowedRoles || ['admin', 'owner']
+                    });
                   }}
                   className="h-4 w-4"
                 />
@@ -3663,7 +3662,7 @@ export default function PromptPlayground() {
                           onChange={(e) => {
                             const currentRoles = publishingPolicy?.allowedRoles || [];
                             setPublishingPolicy(prev => ({
-                              ...prev,
+                              allowExternalPublishing: prev?.allowExternalPublishing ?? true,
                               allowedRoles: e.target.checked
                                 ? [...currentRoles, role]
                                 : currentRoles.filter(r => r !== role)
