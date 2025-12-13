@@ -123,6 +123,8 @@ export default function Integrations() {
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false);
   const [selectedPluginForPermissions, setSelectedPluginForPermissions] = useState<{ id: string; name: string; tools: any[] } | null>(null);
+  const [sharedConnectors, setSharedConnectors] = useState<any[]>([]);
+  const [loadingSharedConnectors, setLoadingSharedConnectors] = useState(false);
   const getPluginById = (pluginId: string) => availablePlugins.find(p => p.id === pluginId);
   const isCustomPlugin = (plugin?: Plugin) =>
     !!plugin && (plugin.isUserGenerated || plugin.category === 'custom' || plugin.id.startsWith('plugin_'));

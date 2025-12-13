@@ -56,6 +56,7 @@ import publicProjectsRouter from './routes/public-projects';
 import screenshotsRouter from './routes/screenshots';
 import dataInsightsRouter from './routes/data-insights';
 import toolPermissionsRouter from './routes/tool-permissions';
+import sharedConnectorsRouter from './routes/shared-connectors';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -485,6 +486,7 @@ const initializeApp = async () => {
     app.use('/api/screenshots', screenshotsRouter); // Screenshot capture service
     app.use('/api/data-insights', dataInsightsRouter); // Data insights and analytics
     app.use('/api/tool-permissions', toolPermissionsRouter); // Tool Permissions Management
+    app.use('/api/shared-connectors', sharedConnectorsRouter); // Shared Connectors (workspace-wide API keys)
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
 
     app.get('/api/sse/agent-activity', (req, res) => {

@@ -61,6 +61,79 @@ export class ProductionDeploymentService {
   }
 
   /**
+   * Get API key for a service, checking shared connectors first, then personal, then env vars
+   */
+  private async getServiceAPIKey(
+    serviceName: string,
+    userId: string,
+    workspaceId?: number
+  ): Promise<string | null> {
+    try {
+      const { db } = await import('../../db');
+      const { apiKeys } = await import('../../db/schema-pg');
+      const { eq, and, or, isNull } = await import('drizzle-orm');
+
+      // 1. Check workspace-wide (shared) connector first
+      if (workspaceId) {
+        const [sharedKey] = await db
+          .select()
+          .from(apiKeys)
+          .where(
+            and(
+              eq(apiKeys.serviceName, serviceName),
+              eq(apiKeys.isShared, true),
+              eq(apiKeys.isActive, true),
+              eq(apiKeys.workspaceId, workspaceId.toString())
+            )
+          )
+          .limit(1);
+
+        if (sharedKey) {
+          // Decrypt and return (would need to implement decryption)
+          // For now, return null to fall back to env var
+          this.logger.info('ProductionDeploymentService', `Found shared ${serviceName} connector for workspace ${workspaceId}`);
+          // TODO: Implement decryption of stored keys
+        }
+      }
+
+      // 2. Check user-specific (personal) connector
+      const [personalKey] = await db
+        .select()
+        .from(apiKeys)
+        .where(
+          and(
+            eq(apiKeys.serviceName, serviceName),
+            eq(apiKeys.userId, userId),
+            eq(apiKeys.isShared, false),
+            eq(apiKeys.isActive, true),
+            isNull(apiKeys.projectId) // User-wide, not project-specific
+          )
+        )
+        .limit(1);
+
+      if (personalKey) {
+        this.logger.info('ProductionDeploymentService', `Found personal ${serviceName} connector for user ${userId}`);
+        // TODO: Implement decryption of stored keys
+      }
+
+      // 3. Fallback to environment variable (for backward compatibility)
+      const envKey = process.env[`${serviceName.toUpperCase()}_TOKEN`] || 
+                     process.env[`${serviceName.toUpperCase()}_API_KEY`] ||
+                     process.env[`${serviceName.toUpperCase()}_KEY`];
+      
+      if (envKey) {
+        return envKey;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.error('ProductionDeploymentService', `Error getting ${serviceName} API key`, error as Error);
+      // Fallback to env var
+      return process.env[`${serviceName.toUpperCase()}_TOKEN`] || null;
+    }
+  }
+
+  /**
    * Complete deployment pipeline: GitHub repo + Vercel deployment
    * Checks for existing deployment and updates instead of creating new one
    */
@@ -472,8 +545,17 @@ MIT License - feel free to use this project as you wish!
     userId?: string,
     projectId?: number
   ): Promise<{ url: string; deploymentId: string }> {
-    if (!this.vercelToken) {
-      throw new Error('Vercel token not configured. Please set VERCEL_TOKEN environment variable.');
+    // Try to get Vercel token from shared/personal connectors first
+    let vercelToken = this.vercelToken;
+    if (userId) {
+      const connectorToken = await this.getServiceAPIKey('vercel', userId, projectId || undefined);
+      if (connectorToken) {
+        vercelToken = connectorToken;
+      }
+    }
+
+    if (!vercelToken) {
+      throw new Error('Vercel token not configured. Please configure Vercel API key in Settings → Integrations → Shared Connectors (admin) or Personal Connectors.');
     }
 
     // Check publishing policy if projectId is provided

@@ -257,6 +257,12 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at').defaultNow(),
   expiresAt: timestamp('expires_at'),
   isActive: boolean('is_active').default(true),
+  // Shared Connectors support
+  isShared: boolean('is_shared').default(false), // If true, workspace-wide connector
+  workspaceId: text('workspace_id'), // Workspace ID for shared connectors
+  configuredBy: text('configured_by').references(() => users.id, { onDelete: 'set null' }), // Admin who configured it
+  serviceName: text('service_name'), // Service name (e.g., 'vercel', 'stripe', 'github')
+  keyType: text('key_type').default('api_key'), // 'api_key', 'secret', 'token', 'password'
 });
 
 export const rateLimits = pgTable('rate_limits', {
