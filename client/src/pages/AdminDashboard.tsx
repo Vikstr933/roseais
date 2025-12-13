@@ -657,6 +657,36 @@ export default function AdminDashboard() {
                 )}
               </div>
             )}
+
+            {/* Publishing Policy Tab */}
+            {activeTab === 'publishing' && (
+              <div className="space-y-6">
+                <div className="bg-white/95 backdrop-blur-sm border border-purple-200/50 rounded-lg p-6 shadow-lg">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">External Publishing Controls</h2>
+                  <p className="text-gray-600 mb-6">
+                    Control who can publish projects externally (e.g., to Vercel). You can set policies per project or globally.
+                  </p>
+                  
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="font-semibold text-sm mb-2">How it works:</h3>
+                      <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                        <li>Project owners can set publishing policy for their projects</li>
+                        <li>Admins can override any project's publishing policy</li>
+                        <li>Allowed roles: <code className="bg-white px-1 rounded">admin</code>, <code className="bg-white px-1 rounded">owner</code>, <code className="bg-white px-1 rounded">superadmin</code></li>
+                        <li>Default: All admins and owners can publish</li>
+                      </ul>
+                    </div>
+
+                    <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <p className="text-sm text-yellow-800">
+                        <strong>Note:</strong> To update publishing policy for a specific project, go to the Workspaces tab and click on a project.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
