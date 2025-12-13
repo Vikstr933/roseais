@@ -128,6 +128,7 @@ export function CredentialsAndKeysSettings() {
       }
     } catch (error) {
       console.error('Error fetching shared connectors:', error);
+      setSharedConnectors([]); // Set empty array on error
     }
   };
 
@@ -151,6 +152,7 @@ export function CredentialsAndKeysSettings() {
       }
     } catch (error) {
       console.error('Error fetching personal connectors:', error);
+      setPersonalConnectors([]); // Set empty array on error
     }
   };
 
@@ -160,9 +162,13 @@ export function CredentialsAndKeysSettings() {
         headers: getAuthHeaders(sessionToken)
       });
       
-      if (!projectsRes.ok) return;
+      if (!projectsRes.ok) {
+        setProjectAPIKeys([]);
+        return;
+      }
 
-      const projects = await projectsRes.json();
+      const projectsData = await projectsRes.json();
+      const projects = Array.isArray(projectsData) ? projectsData : [];
       const allKeys: ProjectAPIKey[] = [];
 
       for (const project of projects) {
@@ -172,7 +178,8 @@ export function CredentialsAndKeysSettings() {
           });
           
           if (keysRes.ok) {
-            const keys = await keysRes.json();
+            const keysData = await keysRes.json();
+            const keys = Array.isArray(keysData) ? keysData : [];
             const projectKeys = keys.map((key: any) => ({
               id: key.id,
               projectId: project.id,
@@ -193,6 +200,7 @@ export function CredentialsAndKeysSettings() {
       setProjectAPIKeys(allKeys);
     } catch (error) {
       console.error('Error fetching project API keys:', error);
+      setProjectAPIKeys([]); // Set empty array on error
     }
   };
 
@@ -202,11 +210,14 @@ export function CredentialsAndKeysSettings() {
         headers: getAuthHeaders(sessionToken)
       });
       if (res.ok) {
-        const secrets = await res.json();
-        setPersonalSecrets(secrets || []);
+        const data = await res.json();
+        // Ensure we always have an array
+        const secrets = Array.isArray(data) ? data : (data.secrets || []);
+        setPersonalSecrets(secrets);
       }
     } catch (error) {
       console.error('Error fetching personal secrets:', error);
+      setPersonalSecrets([]); // Set empty array on error
     }
   };
 
