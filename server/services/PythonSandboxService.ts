@@ -135,9 +135,15 @@ class PythonSandboxService {
         await fs.writeFile(filePath, file.content, 'utf-8');
       }
 
-      // Generate requirements.txt if not provided
-      const hasRequirements = files.some(f => f.path === 'requirements.txt');
-      if (!hasRequirements) {
+      // Generate or sanitize requirements.txt
+      const existingRequirements = files.find(f => f.path === 'requirements.txt');
+      if (existingRequirements) {
+        // Sanitize user/AI-provided requirements.txt to remove local module names
+        const sanitizedRequirements = this.sanitizeRequirements(existingRequirements.content, files);
+        await fs.writeFile(path.join(tempDir, 'requirements.txt'), sanitizedRequirements, 'utf-8');
+        logger.info(`Sanitized existing requirements.txt for sandbox ${sandboxId}`);
+      } else {
+        // Generate requirements.txt from scratch
         const requirements = this.generateRequirements(files, projectType);
         await fs.writeFile(path.join(tempDir, 'requirements.txt'), requirements, 'utf-8');
       }
@@ -276,6 +282,71 @@ class PythonSandboxService {
     }
 
     return Array.from(requirements).join('\n');
+  }
+
+  /**
+   * Sanitize user/AI-provided requirements.txt to remove local module names
+   * This prevents errors like trying to install "models" when models.py exists locally
+   */
+  private sanitizeRequirements(requirementsContent: string, files: PythonFile[]): string {
+    // Get list of local module names (from .py files in the project)
+    const localModules = new Set<string>();
+    for (const file of files) {
+      const fileName = file.path.replace(/\\/g, '/');
+      const baseName = fileName.split('/')[0];
+      const moduleName = baseName.replace('.py', '').toLowerCase();
+      if (moduleName && !moduleName.includes('.')) {
+        localModules.add(moduleName);
+      }
+    }
+    
+    // Common problematic packages that share names with local files
+    const problematicPackages = new Set([
+      'models', 'utils', 'helpers', 'config', 'settings', 'app', 'main',
+      'test', 'tests', 'data', 'lib', 'src', 'core', 'base', 'common',
+      'api', 'db', 'database', 'server', 'client', 'views', 'routes',
+      'controllers', 'services', 'handlers', 'middleware', 'auth',
+      'user', 'users', 'admin', 'static', 'templates', 'forms'
+    ]);
+    
+    const lines = requirementsContent.split('\n');
+    const sanitizedLines: string[] = [];
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // Skip empty lines and comments
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
+        sanitizedLines.push(line);
+        continue;
+      }
+      
+      // Extract package name (handle version specifiers like flask>=2.0.0)
+      const packageMatch = trimmedLine.match(/^([a-zA-Z0-9_-]+)/);
+      if (!packageMatch) {
+        sanitizedLines.push(line);
+        continue;
+      }
+      
+      const packageName = packageMatch[1].toLowerCase();
+      
+      // Skip if it matches a local module name
+      if (localModules.has(packageName)) {
+        logger.warn(`Removing local module from requirements: ${packageName}`);
+        continue;
+      }
+      
+      // Skip if it's a known problematic package name that's likely a local file
+      if (problematicPackages.has(packageName)) {
+        logger.warn(`Removing potentially local module from requirements: ${packageName}`);
+        continue;
+      }
+      
+      sanitizedLines.push(line);
+    }
+    
+    logger.info(`Sanitized requirements: removed ${lines.length - sanitizedLines.length} local modules`);
+    return sanitizedLines.join('\n');
   }
 
   /**
