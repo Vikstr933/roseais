@@ -98,17 +98,15 @@ const initializeApp = async () => {
     app.use(sentryRequestHandler());
     app.use(sentryTracingHandler());
 
-    // Log ALL incoming requests BEFORE CORS (for debugging)
-    app.use((req, res, next) => {
-      const origin = req.headers.origin;
-      console.log(`[REQUEST] ${req.method} ${req.path} - Origin: ${origin || 'none'}`);
-      console.log(`[REQUEST] Headers:`, JSON.stringify({
-        'user-agent': req.get('User-Agent'),
-        'content-type': req.get('Content-Type'),
-        origin: origin,
-      }, null, 2));
-      next();
-    });
+    // Log incoming requests ONLY in development (production-safe)
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    if (isDevelopment) {
+      app.use((req, res, next) => {
+        const origin = req.headers.origin;
+        console.log(`[REQUEST] ${req.method} ${req.path} - Origin: ${origin || 'none'}`);
+        next();
+      });
+    }
 
     // Build allowed origins from environment variables FIRST (before CORS)
     // Render automatically sets RENDER_EXTERNAL_URL, but we can also use BACKEND_URL
@@ -148,11 +146,15 @@ const initializeApp = async () => {
     // This ensures CORS preflight requests are handled immediately
     app.options('*', (req, res, next) => {
       const origin = req.headers.origin;
-      console.log(`[CORS Preflight] OPTIONS request from origin: ${origin || 'none'}`);
+      if (isDevelopment) {
+        console.log(`[CORS Preflight] OPTIONS request from origin: ${origin || 'none'}`);
+      }
       
       // Always allow requests from backend to itself
       if (!origin || origin === backendUrl || origin.includes('onrender.com')) {
-        console.log(`[CORS Preflight] ✅ Allowing backend/onrender origin: ${origin || 'none'}`);
+        if (isDevelopment) {
+          console.log(`[CORS Preflight] ✅ Allowing backend/onrender origin: ${origin || 'none'}`);
+        }
         res.setHeader('Access-Control-Allow-Origin', origin || '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
@@ -163,7 +165,9 @@ const initializeApp = async () => {
       
       // In production, always allow Vercel and Render origins as fallback (check this FIRST)
       if (origin && origin.includes('vercel.app')) {
-        console.log(`[CORS Preflight] ✅ Allowing Vercel origin: ${origin}`);
+        if (isDevelopment) {
+          console.log(`[CORS Preflight] ✅ Allowing Vercel origin: ${origin}`);
+        }
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
@@ -172,7 +176,9 @@ const initializeApp = async () => {
         return res.status(204).send();
       }
       if (origin && origin.includes('onrender.com')) {
-        console.log(`[CORS Preflight] ✅ Allowing Render origin: ${origin}`);
+        if (isDevelopment) {
+          console.log(`[CORS Preflight] ✅ Allowing Render origin: ${origin}`);
+        }
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
@@ -344,7 +350,7 @@ const initializeApp = async () => {
       express.json({ limit: '10mb' })(req, res, next);
     });
 
-    // Add enhanced logging middleware
+    // Add enhanced logging middleware (production-safe)
     app.use(async (req, res, next) => {
       const startTime = Date.now();
       const requestId = Math.random().toString(36).substr(2, 9);
@@ -357,55 +363,70 @@ const initializeApp = async () => {
       else if (req.path.startsWith('/api/sse')) category = 'SSE';
       else if (req.path.startsWith('/api/')) category = 'API';
 
-      // Log incoming request with detailed information
-      await logger.info(category, `[${requestId}] ${req.method} ${req.url}`, {
-        requestId,
-        method: req.method,
-        url: req.url,
-        path: req.path,
-        query: Object.keys(req.query).length > 0 ? req.query : undefined,
-        headers: {
-          'user-agent': req.get('User-Agent'),
-          'content-type': req.get('Content-Type'),
-          'content-length': req.get('Content-Length'),
-          authorization: req.get('Authorization') ? '[REDACTED]' : undefined,
-          'x-forwarded-for': req.get('X-Forwarded-For'),
-          'x-real-ip': req.get('X-Real-IP'),
-        },
-        ip: req.ip || req.connection.remoteAddress,
-        body:
-          req.method !== 'GET' && req.body
+      // Only log detailed request info in development or for important endpoints
+      const shouldLogDetails = isDevelopment || 
+        req.path.startsWith('/api/auth') || 
+        req.path.startsWith('/api/agents') ||
+        req.method !== 'GET';
+
+      if (shouldLogDetails) {
+        // Log incoming request with detailed information (only in dev or for important endpoints)
+        await logger.info(category, `[${requestId}] ${req.method} ${req.url}`, {
+          requestId,
+          method: req.method,
+          url: req.url,
+          path: req.path,
+          query: Object.keys(req.query).length > 0 ? req.query : undefined,
+          headers: isDevelopment ? {
+            'user-agent': req.get('User-Agent'),
+            'content-type': req.get('Content-Type'),
+            'content-length': req.get('Content-Length'),
+            authorization: req.get('Authorization') ? '[REDACTED]' : undefined,
+            'x-forwarded-for': req.get('X-Forwarded-For'),
+            'x-real-ip': req.get('X-Real-IP'),
+          } : undefined,
+          ip: req.ip || req.connection.remoteAddress,
+          body: isDevelopment && req.method !== 'GET' && req.body
             ? req.body.password || req.body.token
               ? '[REDACTED]'
               : req.body
             : undefined,
-        timestamp: new Date().toISOString(),
-      });
+          timestamp: new Date().toISOString(),
+        });
+      }
 
-      // Override res.end to log response details
+      // Override res.end to log response details and record metrics
       const originalEnd = res.end;
       res.end = function (chunk?: any, encoding?: any, cb?: any) {
         const duration = Date.now() - startTime;
         const responseSize =
           res.get('Content-Length') || (chunk ? chunk.length : 0);
 
-        // Record performance metrics
+        // Always record performance metrics (lightweight operation)
         performanceService.recordResponseTime(req.path, duration);
 
-        // Log response details
-        logger
-          .info(category, `[${requestId}] Response ${res.statusCode}`, {
-            requestId,
-            statusCode: res.statusCode,
-            duration: `${duration}ms`,
-            responseSize: responseSize ? `${responseSize} bytes` : undefined,
-            headers: {
-              'content-type': res.get('Content-Type'),
-              'content-length': res.get('Content-Length'),
-            },
-            timestamp: new Date().toISOString(),
-          })
-          .catch(console.error);
+        // Only log response details in development or for errors/important endpoints
+        const shouldLogResponse = isDevelopment || 
+          res.statusCode >= 400 || 
+          req.path.startsWith('/api/auth') || 
+          req.path.startsWith('/api/agents') ||
+          duration > 1000; // Log slow requests (>1s) even in production
+
+        if (shouldLogResponse) {
+          logger
+            .info(category, `[${requestId}] Response ${res.statusCode}`, {
+              requestId,
+              statusCode: res.statusCode,
+              duration: `${duration}ms`,
+              responseSize: responseSize ? `${responseSize} bytes` : undefined,
+              headers: isDevelopment ? {
+                'content-type': res.get('Content-Type'),
+                'content-length': res.get('Content-Length'),
+              } : undefined,
+              timestamp: new Date().toISOString(),
+            })
+            .catch(console.error);
+        }
 
         // Call original end method with proper return
         return originalEnd.call(this, chunk, encoding, cb);

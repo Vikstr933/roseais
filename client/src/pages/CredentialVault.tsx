@@ -240,9 +240,9 @@ export default function CredentialVault() {
         <Card>
           <CardContent className="py-12 text-center">
             <Key className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Credentials Yet</h3>
+            <h3 className="text-lg font-semibold mb-2">No OAuth Credentials Yet</h3>
             <p className="text-muted-foreground mb-4">
-              Add your first credential to start using plugins
+              Add OAuth credentials for plugins that require them. For API keys and connectors, go to <a href="/integrations" className="text-primary hover:underline">Integrations</a>.
             </p>
             <Button onClick={() => setIsAddDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />

@@ -124,46 +124,6 @@ export default function PromptPlayground() {
   const [showPublishingPolicyDialog, setShowPublishingPolicyDialog] = useState(false);
   const [publishingPolicy, setPublishingPolicy] = useState<{ allowExternalPublishing: boolean; allowedRoles: string[] } | null>(null);
 
-  // Load publishing policy when project changes or dialog opens
-  useEffect(() => {
-    if (showPublishingPolicyDialog && currentProject?.id && sessionToken) {
-      const loadPublishingPolicy = async () => {
-        try {
-          // Try to get workspace to see current policy
-          const response = await apiFetch(`/api/workspaces/${currentProject.id}`, {
-            method: 'GET',
-            headers: getAuthHeaders(sessionToken),
-          });
-          
-          if (response.ok) {
-            const workspace = await response.json();
-            if (workspace.publishingPolicy) {
-              const policy = typeof workspace.publishingPolicy === 'string' 
-                ? JSON.parse(workspace.publishingPolicy)
-                : workspace.publishingPolicy;
-              setPublishingPolicy(policy);
-            } else {
-              // Default policy
-              setPublishingPolicy({
-                allowExternalPublishing: true,
-                allowedRoles: ['admin', 'owner']
-              });
-            }
-          }
-        } catch (error) {
-          console.error('Failed to load publishing policy:', error);
-          // Default policy on error
-          setPublishingPolicy({
-            allowExternalPublishing: true,
-            allowedRoles: ['admin', 'owner']
-          });
-        }
-      };
-      
-      loadPublishingPolicy();
-    }
-  }, [showPublishingPolicyDialog, currentProject?.id, sessionToken]);
-  
   // Track processed prompts to prevent duplicate processing
   const processedPromptRef = useRef<string | null>(null);
   // Track if welcome message has been added for current project
@@ -275,6 +235,46 @@ export default function PromptPlayground() {
       ));
     },
   });
+
+  // Load publishing policy when project changes or dialog opens
+  useEffect(() => {
+    if (showPublishingPolicyDialog && currentProject?.id && sessionToken) {
+      const loadPublishingPolicy = async () => {
+        try {
+          // Try to get workspace to see current policy
+          const response = await apiFetch(`/api/workspaces/${currentProject.id}`, {
+            method: 'GET',
+            headers: getAuthHeaders(sessionToken),
+          });
+          
+          if (response.ok) {
+            const workspace = await response.json();
+            if (workspace.publishingPolicy) {
+              const policy = typeof workspace.publishingPolicy === 'string' 
+                ? JSON.parse(workspace.publishingPolicy)
+                : workspace.publishingPolicy;
+              setPublishingPolicy(policy);
+            } else {
+              // Default policy
+              setPublishingPolicy({
+                allowExternalPublishing: true,
+                allowedRoles: ['admin', 'owner']
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load publishing policy:', error);
+          // Default policy on error
+          setPublishingPolicy({
+            allowExternalPublishing: true,
+            allowedRoles: ['admin', 'owner']
+          });
+        }
+      };
+      
+      loadPublishingPolicy();
+    }
+  }, [showPublishingPolicyDialog, currentProject?.id, sessionToken]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1980,12 +1980,8 @@ export default function PromptPlayground() {
     mutationFn: async (data: PromptForm) => {
       setError(null);
       
-      // Add user message to chat history
-      addChatMessage({
-        role: 'user',
-        content: data.userPrompt,
-        timestamp: Date.now()
-      });
+      // Note: User message is added optimistically in handleSubmit before mutation starts
+      // So we don't add it here to avoid duplicates
 
       setIsLoading(true);
 
@@ -2061,18 +2057,14 @@ export default function PromptPlayground() {
       const { intent, shouldGenerateCode, requiresProjectFiles } = intentResult;
 
       // If intent is conversational, use Chap-ZPT chat instead
-      // Note: playgroundChatMutation will add the user message, so we don't add it here
+      // Note: User message is added optimistically in handleSubmit before mutation starts
       if (intent === 'conversational') {
         // Use playground chat mutation for conversational requests
         return playgroundChatMutation.mutateAsync(data);
       }
 
-      // Add user message to chat history (only for non-conversational intents)
-      addChatMessage({
-        role: 'user',
-        content: data.userPrompt,
-        timestamp: Date.now()
-      });
+      // Note: User message is added optimistically in handleSubmit before mutation starts
+      // So we don't add it here to avoid duplicates
 
       // If intent is to describe, analyze project and return description without generation
       if (intent === 'describe' && hasExistingFiles) {
@@ -2853,6 +2845,27 @@ export default function PromptPlayground() {
     },
   });
 
+  // Optimistic submit handler - adds user message instantly before mutation
+  const handleSubmit = useCallback((data: PromptForm) => {
+    // Add user message optimistically for instant UI feedback
+    addChatMessage({
+      role: 'user',
+      content: data.userPrompt,
+      timestamp: Date.now()
+    });
+    
+    // Clear input immediately for better UX
+    form.reset({
+      userPrompt: "",
+      model: form.getValues('model'),
+      temperature: form.getValues('temperature'),
+      projectType: form.getValues('projectType')
+    });
+    
+    // Then trigger the mutation
+    generateMutation.mutate(data);
+  }, [addChatMessage, generateMutation, form]);
+
   // Handle prompt from URL (from homepage) and OmniAssistant prompts
   useEffect(() => {
     if (!hasProjectRoute) return; // Only process prompts when we have a project route
@@ -3357,7 +3370,7 @@ export default function PromptPlayground() {
             agentStatusMap={agentStatusMap}
             isLoading={isLoading}
             form={form}
-            onSubmit={(data) => generateMutation.mutate(data)}
+            onSubmit={handleSubmit}
             onClearChat={clearChat}
             chatMessagesRef={chatMessagesRef}
             isChatMode={isChatMode}
@@ -3491,7 +3504,7 @@ export default function PromptPlayground() {
         chatHistory={chatHistory}
         isLoading={isLoading}
         form={form}
-        onSubmit={(data) => generateMutation.mutate(data)}
+        onSubmit={handleSubmit}
         clearChat={clearChat}
       />
 
