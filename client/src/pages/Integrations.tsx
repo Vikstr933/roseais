@@ -318,6 +318,7 @@ export default function Integrations() {
   useEffect(() => {
     loadPlugins(1);
     loadUserStatus();
+    loadSharedConnectors();
     loadDiscordStatus();
     loadDiscordBotStatus();
 
