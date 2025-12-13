@@ -446,21 +446,43 @@ export class IncrementalOrchestrator {
         throw new Error(`Failed to generate files for phase ${phase.phase}: ${response.error || 'Unknown error'}`);
       }
 
-      // CRITICAL: Essential config files that MUST always be included for the app to work
-      const essentialConfigPatterns = [
-        'package.json',
-        'tsconfig.json',
-        'tsconfig.node.json',
-        'vite.config.ts',
-        'vite.config.js',
-        'postcss.config.js',
-        'postcss.config.cjs',
-        'tailwind.config.js',
-        'tailwind.config.ts',
-        'index.html',
-        '.env',
-        '.env.example',
-      ];
+      // CRITICAL: Essential config files - DIFFERENT for Python vs React projects!
+      const isPythonProject = plan.techStack.language?.toLowerCase() === 'python' ||
+        plan.techStack.framework?.toLowerCase().includes('flask') ||
+        plan.techStack.framework?.toLowerCase().includes('django') ||
+        plan.techStack.framework?.toLowerCase().includes('fastapi') ||
+        plan.techStack.framework?.toLowerCase().includes('streamlit') ||
+        response.files.some(f => f.path.endsWith('.py'));
+
+      // Choose essential files based on project type
+      const essentialConfigPatterns = isPythonProject 
+        ? [
+            // Python project essentials
+            'requirements.txt',
+            'README.md',
+            '.env',
+            '.env.example',
+            'app.py',
+            'main.py',
+            'config.py',
+          ]
+        : [
+            // React/TypeScript project essentials
+            'package.json',
+            'tsconfig.json',
+            'tsconfig.node.json',
+            'vite.config.ts',
+            'vite.config.js',
+            'postcss.config.js',
+            'postcss.config.cjs',
+            'tailwind.config.js',
+            'tailwind.config.ts',
+            'index.html',
+            '.env',
+            '.env.example',
+          ];
+
+      this.logger.info(`Project type: ${isPythonProject ? 'Python' : 'React/TypeScript'}, using ${essentialConfigPatterns.length} essential patterns`);
 
       // Filter files to only include those specified in the phase
       const phaseFiles = response.files.filter(file => 
@@ -1185,11 +1207,16 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
         return true;
       }
 
-      // Include config files (package.json, tsconfig.json, etc.)
-      if (file.path.includes('package.json') || 
+      // Include config files based on project type
+      // Python: requirements.txt, .env
+      // React: package.json, tsconfig.json, vite.config
+      const isPythonFile = file.path.endsWith('.py') || file.path === 'requirements.txt';
+      const isReactConfig = file.path.includes('package.json') || 
           file.path.includes('tsconfig.json') || 
-          file.path.includes('vite.config') ||
-          file.path.includes('.env')) {
+          file.path.includes('vite.config');
+      const isEnvFile = file.path.includes('.env');
+      
+      if (isPythonFile || isReactConfig || isEnvFile) {
         return true;
       }
 
