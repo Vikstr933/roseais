@@ -30,7 +30,6 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import { PublishingPolicyDialog } from './PublishingPolicyDialog';
 
 interface ProjectSettingsProps {
   open: boolean;
@@ -88,7 +87,6 @@ export function ProjectSettingsDialog({
   const [members, setMembers] = useState<Member[]>([]);
   
   // Publishing tab
-  const [showPublishingDialog, setShowPublishingDialog] = useState(false);
   const [publishingPolicy, setPublishingPolicy] = useState({
     allowExternalPublishing: true,
     allowedRoles: ['admin', 'owner']
@@ -311,25 +309,89 @@ export function ProjectSettingsDialog({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
-                      <div>
-                        <p className="font-medium">Allow External Publishing</p>
-                        <p className="text-sm text-muted-foreground">
-                          {publishingPolicy.allowExternalPublishing ? 'Enabled' : 'Disabled'}
-                        </p>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 rounded-lg border">
+                        <div className="space-y-0.5">
+                          <Label className="text-sm font-medium">Allow External Publishing</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Enable deployment to external platforms
+                          </p>
+                        </div>
+                        <Switch
+                          checked={publishingPolicy.allowExternalPublishing}
+                          onCheckedChange={(checked) => {
+                            setPublishingPolicy(prev => ({
+                              ...prev,
+                              allowExternalPublishing: checked
+                            }));
+                          }}
+                        />
                       </div>
-                      <Badge variant={publishingPolicy.allowExternalPublishing ? 'default' : 'secondary'}>
-                        {publishingPolicy.allowExternalPublishing ? 'Enabled' : 'Disabled'}
-                      </Badge>
+
+                      {publishingPolicy.allowExternalPublishing && (
+                        <div className="space-y-2 p-4 rounded-lg border">
+                          <Label className="text-sm font-medium">Allowed Roles</Label>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            Select which roles can deploy this project
+                          </p>
+                          <div className="space-y-2">
+                            {['admin', 'owner', 'superadmin'].map((role) => (
+                              <div key={role} className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  id={`role-${role}`}
+                                  checked={publishingPolicy.allowedRoles.includes(role)}
+                                  onChange={(e) => {
+                                    const currentRoles = publishingPolicy.allowedRoles;
+                                    setPublishingPolicy(prev => ({
+                                      ...prev,
+                                      allowedRoles: e.target.checked
+                                        ? [...currentRoles, role]
+                                        : currentRoles.filter(r => r !== role)
+                                    }));
+                                  }}
+                                  className="h-4 w-4 rounded border-gray-300"
+                                />
+                                <Label htmlFor={`role-${role}`} className="text-sm font-normal capitalize cursor-pointer">
+                                  {role}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <Button 
+                        onClick={async () => {
+                          try {
+                            const res = await apiFetch(`/api/workspaces/${projectId}/publishing-policy`, {
+                              method: 'PUT',
+                              headers: getAuthHeaders(sessionToken),
+                              body: JSON.stringify(publishingPolicy)
+                            });
+
+                            if (res.ok) {
+                              toast({
+                                title: 'Success',
+                                description: 'Publishing policy updated'
+                              });
+                            } else {
+                              throw new Error('Failed to update policy');
+                            }
+                          } catch (error) {
+                            toast({
+                              title: 'Error',
+                              description: 'Failed to update publishing policy',
+                              variant: 'destructive'
+                            });
+                          }
+                        }}
+                        className="w-full"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Publishing Policy
+                      </Button>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setShowPublishingDialog(true)}
-                      className="w-full"
-                    >
-                      <Rocket className="h-4 w-4 mr-2" />
-                      Configure Publishing Policy
-                    </Button>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -546,21 +608,6 @@ export function ProjectSettingsDialog({
           </Tabs>
         </DialogContent>
       </Dialog>
-
-      {/* Publishing Policy Dialog */}
-      {showPublishingDialog && (
-        <PublishingPolicyDialog
-          open={showPublishingDialog}
-          onOpenChange={setShowPublishingDialog}
-          projectId={projectId}
-          projectName={projectName}
-          currentPolicy={publishingPolicy}
-          onPolicyUpdate={(newPolicy) => {
-            setPublishingPolicy(newPolicy);
-            fetchProjectData();
-          }}
-        />
-      )}
     </>
   );
 }
