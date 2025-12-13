@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, XCircle, RefreshCw, Mail, Calendar, ListTodo, Settings, Sparkles, Plus, AlertTriangle, Code, Shield, Key, ExternalLink, MessageSquare, User } from 'lucide-react';
 import { ToolPermissionsDialog } from '@/components/ToolPermissionsDialog';
+import { ConnectorConfigDialog } from '@/components/ConnectorConfigDialog';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from '@/components/ui/pagination';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
@@ -124,7 +125,10 @@ export default function Integrations() {
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false);
   const [selectedPluginForPermissions, setSelectedPluginForPermissions] = useState<{ id: string; name: string; tools: any[] } | null>(null);
   const [sharedConnectors, setSharedConnectors] = useState<any[]>([]);
+  const [availablePreBuiltConnectors, setAvailablePreBuiltConnectors] = useState<any[]>([]);
   const [loadingSharedConnectors, setLoadingSharedConnectors] = useState(false);
+  const [connectorConfigDialogOpen, setConnectorConfigDialogOpen] = useState(false);
+  const [selectedConnector, setSelectedConnector] = useState<any>(null);
   const getPluginById = (pluginId: string) => availablePlugins.find(p => p.id === pluginId);
   const isCustomPlugin = (plugin?: Plugin) =>
     !!plugin && (plugin.isUserGenerated || plugin.category === 'custom' || plugin.id.startsWith('plugin_'));
@@ -575,6 +579,7 @@ export default function Integrations() {
       if (response.ok) {
         const data = await response.json();
         setSharedConnectors(data.connectors || []);
+        setAvailablePreBuiltConnectors(data.availableConnectors || []);
       }
     } catch (error) {
       console.error('Error loading shared connectors:', error);
@@ -2363,6 +2368,21 @@ export default function Integrations() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Connector Configuration Dialog */}
+      {selectedConnector && (
+        <ConnectorConfigDialog
+          open={connectorConfigDialogOpen}
+          onOpenChange={setConnectorConfigDialogOpen}
+          connector={selectedConnector}
+          isConfigured={selectedConnector.isConfigured}
+          existingConfig={selectedConnector.existingConfig}
+          onSuccess={() => {
+            loadSharedConnectors();
+            setSelectedConnector(null);
+          }}
+        />
+      )}
     </div>
   );
 }

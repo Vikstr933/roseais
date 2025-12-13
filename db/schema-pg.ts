@@ -264,6 +264,8 @@ export const apiKeys = pgTable('api_keys', {
   configuredBy: text('configured_by').references(() => users.id, { onDelete: 'set null' }), // Admin who configured it
   serviceName: text('service_name'), // Service name (e.g., 'vercel', 'stripe', 'github')
   keyType: text('key_type').default('api_key'), // 'api_key', 'secret', 'token', 'password'
+  connectorId: text('connector_id'), // Optional: Links this API key to a specific connector configuration
+  metadata: jsonb('metadata').default({}), // JSONB field for storing env variables and other metadata
 });
 
 export const rateLimits = pgTable('rate_limits', {

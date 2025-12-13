@@ -4,6 +4,7 @@ import { apiKeys, users, workspaces } from '../../db/schema-pg';
 import { eq, and, or, isNull } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
+import { getAllPreBuiltConnectors, getPreBuiltConnector } from '../data/pre-built-connectors';
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.get('/', async (req, res) => {
         configuredBy: apiKeys.configuredBy,
         createdAt: apiKeys.createdAt,
         lastUsed: apiKeys.lastUsed,
+        metadata: apiKeys.metadata,
         configuredByUser: {
           id: users.id,
           username: users.username,
@@ -49,18 +51,49 @@ router.get('/', async (req, res) => {
       )
       .orderBy(apiKeys.createdAt);
 
+    // Get pre-built connector definitions
+    const preBuiltConnectors = getAllPreBuiltConnectors();
+    
     res.json({
       success: true,
-      connectors: sharedConnectors.map(connector => ({
-        id: connector.id,
-        serviceName: connector.serviceName || 'unknown',
-        name: connector.name,
-        keyType: connector.keyType || 'api_key',
-        isActive: connector.isActive,
-        configuredBy: connector.configuredByUser?.displayName || 'Unknown',
-        createdAt: connector.createdAt,
-        lastUsed: connector.lastUsed,
-      })),
+      connectors: sharedConnectors.map(connector => {
+        const preBuilt = preBuiltConnectors.find(p => p.id === connector.serviceName?.toLowerCase());
+        const connectorMetadata = (connector.metadata as any) || {};
+        return {
+          id: connector.id,
+          serviceName: connector.serviceName || 'unknown',
+          name: connector.name,
+          keyType: connector.keyType || 'api_key',
+          isActive: connector.isActive,
+          configuredBy: connector.configuredByUser?.displayName || 'Unknown',
+          createdAt: connector.createdAt,
+          lastUsed: connector.lastUsed,
+          envVariables: connectorMetadata.envVariables || {}, // Env variables from metadata
+          // Include pre-built connector metadata if available
+          metadata: preBuilt ? {
+            icon: preBuilt.icon,
+            description: preBuilt.description,
+            category: preBuilt.category,
+            apiKeys: preBuilt.apiKeys,
+            envVariables: preBuilt.envVariables,
+            documentationUrl: preBuilt.documentationUrl,
+          } : undefined,
+        };
+      }),
+      // Also include available pre-built connectors that aren't configured yet
+      availableConnectors: preBuiltConnectors
+        .filter(p => p.isShared)
+        .map(connector => ({
+          id: connector.id,
+          name: connector.name,
+          description: connector.description,
+          icon: connector.icon,
+          category: connector.category,
+          apiKeys: connector.apiKeys,
+          envVariables: connector.envVariables,
+          documentationUrl: connector.documentationUrl,
+          isConfigured: sharedConnectors.some(c => c.serviceName?.toLowerCase() === connector.id),
+        })),
     });
   } catch (error: any) {
     console.error('Error fetching shared connectors:', error);
@@ -75,7 +108,7 @@ router.get('/', async (req, res) => {
 router.post('/', requireAdmin, async (req, res) => {
   try {
     const userId = (req as any).user?.id;
-    const { serviceName, keyValue, keyType, description } = req.body;
+    const { serviceName, keyValue, keyType, description, envVariables } = req.body;
 
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -85,6 +118,15 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'serviceName and keyValue are required',
+      });
+    }
+
+    // Validate against pre-built connector if it exists
+    const preBuilt = getPreBuiltConnector(serviceName.toLowerCase());
+    if (preBuilt && !preBuilt.isShared) {
+      return res.status(400).json({
+        success: false,
+        error: `${serviceName} is a personal connector, not a shared connector`,
       });
     }
 
@@ -123,7 +165,12 @@ router.post('/', requireAdmin, async (req, res) => {
       null // projectId = null for workspace-wide
     );
 
-    // Update to mark as shared
+    // Update to mark as shared and store env variables in metadata
+    const metadata: any = {};
+    if (envVariables && typeof envVariables === 'object') {
+      metadata.envVariables = envVariables;
+    }
+    
     await db
       .update(apiKeys)
       .set({
@@ -131,6 +178,7 @@ router.post('/', requireAdmin, async (req, res) => {
         configuredBy: userId,
         serviceName: serviceName,
         keyType: keyType || 'api_key',
+        metadata: metadata, // Store env variables in metadata JSONB field
       })
       .where(eq(apiKeys.id, apiKey.id.toString()));
 
@@ -165,7 +213,11 @@ router.put('/:id', requireAdmin, async (req, res) => {
 
     // Verify this is a shared connector
     const [connector] = await db
-      .select()
+      .select({
+        id: apiKeys.id,
+        keyType: apiKeys.keyType,
+        metadata: apiKeys.metadata,
+      })
       .from(apiKeys)
       .where(
         and(
@@ -185,20 +237,33 @@ router.put('/:id', requireAdmin, async (req, res) => {
     // Import APIKeyService to use encryption
     const { apiKeyService } = await import('../services/APIKeyService');
     
+    const updateData: any = {
+      keyType: keyType || connector.keyType || 'api_key',
+      configuredBy: userId,
+    };
+    
     if (keyValue) {
       // Update the key value (re-encrypt)
       const encryptedKey = (apiKeyService as any).encryptKey(keyValue);
       const keyHash = require('crypto').createHash('sha256').update(keyValue).digest('hex');
-      
-      await db
-        .update(apiKeys)
-        .set({
-          keyHash: keyHash,
-          keyType: keyType || connector.keyType || 'api_key',
-          configuredBy: userId,
-        })
-        .where(eq(apiKeys.id, id));
+      updateData.keyHash = keyHash;
+      updateData.encryptedKey = encryptedKey;
     }
+    
+    // Update env variables if provided
+    const { envVariables } = req.body;
+    if (envVariables && typeof envVariables === 'object') {
+      const currentMetadata = (connector.metadata as any) || {};
+      updateData.metadata = {
+        ...currentMetadata,
+        envVariables: envVariables,
+      };
+    }
+    
+    await db
+      .update(apiKeys)
+      .set(updateData)
+      .where(eq(apiKeys.id, id));
 
     res.json({
       success: true,

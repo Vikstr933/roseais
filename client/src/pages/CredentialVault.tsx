@@ -42,6 +42,7 @@ interface Credential {
   createdAt: string;
 }
 
+// Only OAuth services - API keys should be managed in Integrations page
 const SERVICE_CONFIGS = {
   discord: {
     name: 'Discord',
@@ -64,25 +65,6 @@ const SERVICE_CONFIGS = {
     ],
     docsUrl: 'https://api.slack.com/apps',
   },
-  trello: {
-    name: 'Trello',
-    icon: '📋',
-    type: 'api_key',
-    fields: [
-      { name: 'apiKey', label: 'API Key', type: 'text', required: true },
-      { name: 'apiToken', label: 'API Token', type: 'password', required: true },
-    ],
-    docsUrl: 'https://trello.com/app-key',
-  },
-  notion: {
-    name: 'Notion',
-    icon: '📝',
-    type: 'api_key',
-    fields: [
-      { name: 'apiKey', label: 'Integration Token', type: 'password', required: true },
-    ],
-    docsUrl: 'https://www.notion.so/my-integrations',
-  },
   github: {
     name: 'GitHub',
     icon: '🐙',
@@ -101,15 +83,6 @@ const SERVICE_CONFIGS = {
     ],
     docsUrl: 'https://gitlab.com/-/profile/personal_access_tokens',
   },
-  linear: {
-    name: 'Linear',
-    icon: '📐',
-    type: 'api_key',
-    fields: [
-      { name: 'apiKey', label: 'API Key', type: 'password', required: true },
-    ],
-    docsUrl: 'https://linear.app/settings/api',
-  },
 };
 
 export default function CredentialVault() {
@@ -119,13 +92,23 @@ export default function CredentialVault() {
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
 
-  // Fetch credentials
+  // Fetch credentials - only OAuth credentials
   const { data: credentials, isLoading } = useQuery<{ credentials: Credential[] }>({
     queryKey: ['credentials'],
     queryFn: async () => {
       const res = await apiFetch('/api/credentials');
       if (!res.ok) throw new Error('Failed to fetch credentials');
-      return res.json();
+      const data = await res.json();
+      // Filter to only show OAuth credentials (oauth2, personal_access_token for OAuth services)
+      const oauthServices = ['discord', 'slack', 'gmail', 'calendar', 'github', 'gitlab'];
+      const filtered = {
+        ...data,
+        credentials: data.credentials.filter((cred: Credential) => 
+          cred.credentialType === 'oauth2' || 
+          (cred.credentialType === 'personal_access_token' && oauthServices.includes(cred.serviceName.toLowerCase()))
+        ),
+      };
+      return filtered;
     },
   });
 
@@ -238,10 +221,10 @@ export default function CredentialVault() {
         <div>
           <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
             <Key className="w-8 h-8 text-blue-500" />
-            Credential Vault
+            OAuth Credentials
           </h1>
           <p className="text-muted-foreground">
-            Manage your API keys and service credentials securely
+            Manage your OAuth credentials for plugins. For API keys and connectors, go to <a href="/integrations" className="text-primary hover:underline">Integrations</a>.
           </p>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)}>
