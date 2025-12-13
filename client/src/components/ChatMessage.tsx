@@ -224,13 +224,20 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
                     </code>
                   );
                 },
+                // Text formatting - **bold** and *italic*
+                strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                // Paragraphs and lists
                 p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                 ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                 ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
                 li: ({ children }) => <li className="text-sm">{children}</li>,
+                // Headings
                 h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
                 h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
                 h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                h4: ({ children }) => <h4 className="text-sm font-semibold mb-1">{children}</h4>,
+                // Other elements
                 blockquote: ({ children }) => (
                   <blockquote className="border-l-4 border-violet-500 pl-4 italic my-2">{children}</blockquote>
                 ),
@@ -239,6 +246,8 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
                     {children}
                   </a>
                 ),
+                // Horizontal rule
+                hr: () => <hr className="my-4 border-border" />,
               }}
             >
               {cleanedContent}
