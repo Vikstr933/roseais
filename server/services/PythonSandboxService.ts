@@ -232,16 +232,32 @@ class PythonSandboxService {
 
     try {
       // Check if Python is available
-      const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+      const isWindows = process.platform === 'win32';
+      const pythonCmd = isWindows ? 'python' : 'python3';
       
-      // Install dependencies
+      // Create virtual environment (required on modern Debian/Ubuntu systems - PEP 668)
+      const venvDir = path.join(workDir, 'venv');
+      addLog('Creating virtual environment...');
+      await this.runCommand(pythonCmd, ['-m', 'venv', venvDir], workDir);
+      addLog('Virtual environment created');
+      
+      // Get paths to venv python and pip
+      const venvPython = isWindows 
+        ? path.join(venvDir, 'Scripts', 'python.exe')
+        : path.join(venvDir, 'bin', 'python');
+      const venvPip = isWindows 
+        ? path.join(venvDir, 'Scripts', 'pip.exe')
+        : path.join(venvDir, 'bin', 'pip');
+      
+      // Install dependencies using venv pip
       addLog('Installing dependencies...');
-      await this.runCommand(pythonCmd, ['-m', 'pip', 'install', '-r', 'requirements.txt', '--quiet'], workDir);
+      await this.runCommand(venvPip, ['install', '-r', 'requirements.txt', '--quiet'], workDir);
       addLog('Dependencies installed');
 
       // Start the appropriate server
       let args: string[];
       let startupMessage: string;
+      let flaskApp: string | undefined;
 
       switch (projectType) {
         case 'flask':
@@ -250,7 +266,7 @@ class PythonSandboxService {
           args = ['-m', 'flask', 'run', '--host=0.0.0.0', `--port=${port}`];
           startupMessage = `Flask server starting on port ${port}`;
           // Set FLASK_APP environment variable
-          process.env.FLASK_APP = flaskFile;
+          flaskApp = flaskFile;
           break;
 
         case 'fastapi':
@@ -267,7 +283,7 @@ class PythonSandboxService {
 
         case 'streamlit':
           const streamlitFile = await this.findMainFile(workDir, ['app.py', 'main.py', 'streamlit_app.py']);
-          args = ['-m', 'streamlit', 'run', streamlitFile, '--server.port', String(port), '--server.address', '0.0.0.0'];
+          args = ['-m', 'streamlit', 'run', streamlitFile, '--server.port', String(port), '--server.address', '0.0.0.0', '--server.headless', 'true'];
           startupMessage = `Streamlit server starting on port ${port}`;
           break;
 
@@ -281,13 +297,18 @@ class PythonSandboxService {
 
       addLog(startupMessage);
 
-      // Spawn the process
-      const proc = spawn(pythonCmd, args, {
+      // Spawn the process using venv Python (not system Python)
+      const proc = spawn(venvPython, args, {
         cwd: workDir,
         env: {
           ...process.env,
           PYTHONUNBUFFERED: '1',
           PORT: String(port),
+          FLASK_APP: flaskApp, // Set FLASK_APP if Flask project
+          // Ensure venv is in PATH
+          PATH: `${path.dirname(venvPython)}${path.delimiter}${process.env.PATH}`,
+          // Set VIRTUAL_ENV for proper venv activation
+          VIRTUAL_ENV: venvDir,
         },
       });
 
