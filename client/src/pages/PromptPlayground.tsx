@@ -1889,6 +1889,13 @@ export default function PromptPlayground() {
     mutationFn: async (data: PromptForm) => {
       setError(null);
       
+      // **CHAT MODE CHECK - CRITICAL**
+      // If Chat Mode is active, ALWAYS use chat endpoint, no intent detection needed
+      if (isChatMode) {
+        console.log('🔵 Chat Mode active - routing directly to Chap-ZPT chat (no code generation)');
+        return playgroundChatMutation.mutateAsync(data);
+      }
+      
       // Check if we have existing files
       const existingFiles = response?.files?.length ? response.files : currentSession?.generatedFiles || [];
       

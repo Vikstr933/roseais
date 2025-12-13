@@ -297,19 +297,33 @@ export class PlaygroundAssistantAgent {
       ];
 
       if (hasProjectContext) {
-        tools.push(
-          this.generateCodeTool,
-          this.readFileTool,
-          this.writeFileTool,
-          this.editFileTool,
-          this.deleteFileTool,
-          this.createDirectoryTool,
-          this.analyzeCodeTool,
-          this.checkTypesTool,
-          this.findErrorsTool,
-          this.suggestImprovementsTool,
-          this.deployToVercelTool
-        );
+        // In Chat Mode: Only add READ/ANALYZE tools, NO code generation or modification
+        if (isChatMode) {
+          tools.push(
+            this.readFileTool,
+            this.analyzeCodeTool,
+            this.checkTypesTool,
+            this.findErrorsTool,
+            this.suggestImprovementsTool
+            // NO generate_code, write_file, edit_file, delete_file, create_directory, deploy
+          );
+          logger.info(`Chat Mode active - code generation tools DISABLED`);
+        } else {
+          // Code Mode: All tools available
+          tools.push(
+            this.generateCodeTool,
+            this.readFileTool,
+            this.writeFileTool,
+            this.editFileTool,
+            this.deleteFileTool,
+            this.createDirectoryTool,
+            this.analyzeCodeTool,
+            this.checkTypesTool,
+            this.findErrorsTool,
+            this.suggestImprovementsTool,
+            this.deployToVercelTool
+          );
+        }
       }
 
       // Get connector context if we have a project
@@ -601,7 +615,39 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
     connectorContext?: string
   ): string {
     const chatModeNote = isChatMode 
-      ? `\n\n**CHAT MODE ACTIVE**: You are currently in chat-only mode. This means:\n- You should NOT generate code or use code generation tools\n- You can discuss code, answer questions, provide explanations, and help with planning\n- You can read and analyze existing code, but should not create or modify files\n- Focus on conversation, guidance, and answering questions about the project\n- If the user wants to generate code, they should switch to Code Mode\n`
+      ? `\n\n**🔵 CHAT MODE ACTIVE - IMPORTANT:**
+You are currently in CHAT-ONLY mode. This is critical:
+
+1. **DO NOT generate code** - The generate_code tool is DISABLED
+2. **DO NOT create/modify/delete files** - Those tools are DISABLED  
+3. **INSTEAD: Have a conversation** - Answer questions, discuss ideas, help plan
+
+**What you SHOULD do in Chat Mode:**
+- Answer the user's questions directly and thoroughly
+- Discuss architecture, design patterns, best practices
+- Help them think through their project requirements
+- Explain how you would approach building something
+- Provide code examples IN YOUR TEXT RESPONSE (not via tools)
+- Analyze existing code if they have any (read_file is available)
+- Help them plan before they switch to Code Mode to build
+
+**Example interaction in Chat Mode:**
+User: "Build a python app for overtime calculation"
+YOU: "Great idea! Here's what an overtime calculator should include:
+
+1. **Employee data management**: Track employees, their hourly rates, and schedules
+2. **Time entry**: Allow input of worked hours per day/week
+3. **Overtime rules**:
+   - Standard overtime (e.g., 1.5x after 40 hours/week)
+   - Weekend/holiday rates (e.g., 2x)
+   - Different rules for different employee types
+4. **Calculation engine**: Apply the rules to time entries
+5. **Reporting**: Show overtime hours and calculated pay
+
+Would you like me to elaborate on any of these components? When you're ready to build, switch to Code Mode and I'll generate the app!"
+
+NEVER try to call generate_code - it's not available to you in Chat Mode.
+`
       : '';
 
     const basePrompt = `You are Chap-ZPT, the intelligent orchestrator for the AI Code Playground. You receive user requests, understand their intent, improve their prompts, and coordinate specialized AI agents to build applications.
