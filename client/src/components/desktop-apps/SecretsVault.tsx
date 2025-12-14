@@ -126,17 +126,43 @@ export function SecretsVault() {
   const deleteSecret = async (id: string) => {
     try {
       if (sessionToken) {
-        await fetch(`${API_BASE}/api/secrets/${id}`, {
+        const response = await fetch(`${API_BASE}/api/secrets/${id}`, {
           method: 'DELETE',
           headers: getAuthHeaders(sessionToken),
         });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to delete secret');
+        }
+
+        // Optimistically update UI
+        setSecrets(prev => prev.filter(s => s.id !== id));
+        
+        // Refetch to ensure we have the latest data (in case of cache issues)
+        const refreshResponse = await fetch(`${API_BASE}/api/secrets`, {
+          headers: getAuthHeaders(sessionToken),
+        });
+        
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          setSecrets(data.secrets || []);
+        }
+        
+        toast({ title: 'Secret Deleted', description: 'Secret has been removed' });
+      } else {
+        // Local-only deletion
+        setSecrets(prev => prev.filter(s => s.id !== id));
+        toast({ title: 'Secret Deleted', description: 'Secret has been removed' });
       }
     } catch (error) {
-      console.error('Failed to delete from server:', error);
+      console.error('Failed to delete secret:', error);
+      toast({ 
+        title: 'Error', 
+        description: error instanceof Error ? error.message : 'Failed to delete secret',
+        variant: 'destructive' 
+      });
     }
-    
-    setSecrets(prev => prev.filter(s => s.id !== id));
-    toast({ title: 'Secret Deleted', description: 'Secret has been removed' });
   };
 
   const copyToClipboard = async (value: string, id: string) => {

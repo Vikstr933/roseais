@@ -5,8 +5,17 @@ import { db } from '../../db';
 import { apiKeys } from '../../db/schema-pg';
 import { eq, and, isNull } from 'drizzle-orm';
 import crypto from 'crypto';
+import { performanceService } from '../services/PerformanceService';
 
 const router = Router();
+
+// Helper to invalidate secrets cache
+function invalidateSecretsCache(userId?: string) {
+  const cache = performanceService.getCache();
+  // Delete all cache entries containing /api/secrets
+  const deleted = cache.deletePattern('/api/secrets');
+  console.log(`[Cache] Invalidated ${deleted} secrets cache entries`);
+}
 
 /**
  * GET /api/secrets - Get all secrets for user (values are masked)
@@ -176,7 +185,14 @@ router.delete('/:id', authenticateUser, async (req, res) => {
     }
     
     // Delete using APIKeyService
-    await apiKeyService.deleteAPIKey(userId, secretId);
+    const deleted = await apiKeyService.deleteAPIKey(userId, secretId);
+    
+    if (!deleted) {
+      return res.status(404).json({ error: 'Secret not found or could not be deleted' });
+    }
+    
+    // Invalidate secrets cache so GET requests return fresh data
+    invalidateSecretsCache(userId);
     
     res.json({ message: 'Secret deleted' });
   } catch (error) {
