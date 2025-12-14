@@ -176,11 +176,24 @@ router.delete('/:id', authenticateUser, async (req, res) => {
     const userId = req.user!.id;
     const secretId = req.params.id;
     
-    // Get all user's API keys to find the one with matching ID
-    const apiKeys = await apiKeyService.getapiKeys(userId, null);
-    const apiKey = apiKeys.find(k => k.id.toString() === secretId);
+    // First verify the secret exists and belongs to the user (user-wide only)
+    const result = await db
+      .select({
+        id: apiKeys.id,
+      })
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.id, secretId),
+          eq(apiKeys.userId, userId),
+          eq(apiKeys.isActive, true),
+          isNull(apiKeys.projectId) // Only user-wide secrets
+        )
+      )
+      .limit(1);
     
-    if (!apiKey) {
+    if (result.length === 0) {
+      console.log(`[Secrets] Secret ${secretId} not found for user ${userId}`);
       return res.status(404).json({ error: 'Secret not found' });
     }
     
@@ -188,12 +201,14 @@ router.delete('/:id', authenticateUser, async (req, res) => {
     const deleted = await apiKeyService.deleteAPIKey(userId, secretId);
     
     if (!deleted) {
+      console.log(`[Secrets] Failed to delete secret ${secretId} for user ${userId}`);
       return res.status(404).json({ error: 'Secret not found or could not be deleted' });
     }
     
     // Invalidate secrets cache so GET requests return fresh data
     invalidateSecretsCache(userId);
     
+    console.log(`[Secrets] Successfully deleted secret ${secretId} for user ${userId}`);
     res.json({ message: 'Secret deleted' });
   } catch (error) {
     console.error('Error deleting secret:', error);
