@@ -12,7 +12,7 @@ import {
 } from './BaseProductivityPlugin';
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { db } from '../../db';
-import { pluginKnowledge, pluginSyncLogs } from '../../db/schema-pg';
+import { pluginKnowledge, pluginSyncLogs, pluginConfigs } from '../../db/schema-pg';
 import { eq, and, gte, desc } from 'drizzle-orm';
 import { emailSchedulerService } from '../services/EmailSchedulerService';
 
@@ -1202,6 +1202,36 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
       logger.error(`Credential validation failed: userId=${userId}`, error as Error);
       return false;
     }
+  }
+
+  /**
+   * Disable the plugin for a user
+   * Clears user state and credentials
+   */
+  public async disable(userId: string): Promise<void> {
+    // Clear user state from memory
+    this.userStates.delete(userId);
+    
+    // Clear credentials from database
+    try {
+      await db.update(pluginConfigs)
+        .set({
+          credentials: null,
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(pluginConfigs.userId, userId),
+          eq(pluginConfigs.pluginId, 'gmail')
+        ));
+    } catch (error) {
+      logger.error(`Failed to clear credentials from database: userId=${userId}`, error as Error);
+      // Don't throw - we still want to disable the plugin even if DB update fails
+    }
+    
+    // Call parent disable to update status
+    await super.disable(userId);
+    
+    logger.info('Gmail plugin disabled and credentials cleared', { userId });
   }
 }
 

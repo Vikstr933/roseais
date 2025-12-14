@@ -68,15 +68,18 @@ interface ProjectCardProps {
   };
   onDelete?: () => void;
   onStar?: (projectId: number, isStarred: boolean) => void;
+  variant?: 'grid' | 'list';
 }
 
-export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
+export function ProjectCard({ project, onDelete, onStar, variant = 'grid' }: ProjectCardProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isHovered, setIsHovered] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [isStarred, setIsStarred] = useState(project.isStarred || false);
+  
+  const isList = variant === 'list';
 
   const handleStar = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -154,6 +157,103 @@ export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
     }
   };
 
+  if (isList) {
+    return (
+      <motion.div
+        whileHover={{ scale: 1.01 }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <Card className="backdrop-blur-sm bg-card/80 border border-border hover:border-primary/30 transition-all duration-200">
+          <div className="flex items-center gap-3 p-3">
+            <span className="text-lg flex-shrink-0">
+              {getProjectTypeIcon(project.projectType)}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <h3 className="text-sm font-semibold truncate">{project.name}</h3>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={handleStar}
+                    title={isStarred ? 'Unstar project' : 'Star project'}
+                  >
+                    <Star
+                      className={`h-3.5 w-3.5 ${
+                        isStarred
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'text-muted-foreground hover:text-yellow-400'
+                      }`}
+                    />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={openProject}>
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open Project
+                      </DropdownMenuItem>
+                      {project.inviteCode && (
+                        <DropdownMenuItem onClick={copyInviteCode}>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy Invite Code
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setShowDeleteDialog(true)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Workspace
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs text-muted-foreground line-clamp-1 flex-1 min-w-0">
+                  {project.description || 'No description'}
+                </p>
+                <Badge
+                  className={`text-[10px] px-1.5 py-0 ${getProjectTypeColor(project.projectType)}`}
+                >
+                  {project.projectType.replace('_', ' ')}
+                </Badge>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                  {project.projectStatus}
+                </Badge>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    <span>{project.members.length}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <FileText className="h-3 w-3" />
+                    <span>{project.fileCount}</span>
+                  </div>
+                  <span className="text-[10px]">
+                    {formatDate(project.updatedAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <Button onClick={openProject} size="sm" className="flex-shrink-0 h-7 px-3">
+              <Code2 className="h-3.5 w-3.5 mr-1.5" />
+              Open
+            </Button>
+          </div>
+        </Card>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       whileHover={{ scale: 1.02 }}
@@ -161,25 +261,25 @@ export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <Card className="h-full backdrop-blur-sm bg-card/80 border border-primary/20 shadow-lg hover:shadow-primary/10 transition-all duration-200">
-        <CardHeader>
+      <Card className="h-full backdrop-blur-sm bg-card/80 border border-primary/20 shadow-md hover:shadow-lg transition-all duration-200">
+        <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xl flex-shrink-0">
                 {getProjectTypeIcon(project.projectType)}
               </span>
-              <h3 className="text-xl font-semibold truncate">{project.name}</h3>
+              <h3 className="text-base font-semibold truncate">{project.name}</h3>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0"
+                className="h-7 w-7 p-0"
                 onClick={handleStar}
                 title={isStarred ? 'Unstar project' : 'Star project'}
               >
                 <Star
-                  className={`h-4 w-4 ${
+                  className={`h-3.5 w-3.5 ${
                     isStarred
                       ? 'fill-yellow-400 text-yellow-400'
                       : 'text-muted-foreground hover:text-yellow-400'
@@ -188,8 +288,8 @@ export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
               </Button>
               <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <MoreHorizontal className="h-4 w-4" />
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -216,39 +316,39 @@ export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-1.5">
               <Badge
-                className={`text-xs ${getProjectTypeColor(project.projectType)}`}
+                className={`text-[10px] px-1.5 py-0 ${getProjectTypeColor(project.projectType)}`}
               >
                 {project.projectType.replace('_', ' ')}
               </Badge>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                 {project.projectStatus}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Updated {formatDate(project.updatedAt)}
+            <p className="text-[10px] text-muted-foreground">
+              {formatDate(project.updatedAt)}
             </p>
           </div>
         </CardHeader>
 
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground line-clamp-2">
-            {project.description}
+        <CardContent className="pt-0 pb-3">
+          <p className="mb-3 text-xs text-muted-foreground line-clamp-2">
+            {project.description || 'No description'}
           </p>
 
           {/* Project Stats */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Users className="h-4 w-4 text-muted-foreground" />
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="flex items-center gap-1.5 text-xs">
+              <Users className="h-3.5 w-3.5 text-muted-foreground" />
               <span>
                 {project.members.length} member
                 {project.members.length !== 1 ? 's' : ''}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <FileText className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-1.5 text-xs">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
               <span>
                 {project.fileCount} file{project.fileCount !== 1 ? 's' : ''}
               </span>
@@ -256,36 +356,34 @@ export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
           </div>
 
           {/* Recent Activity */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <Activity className="h-4 w-4" />
-              <span>Recent Activity</span>
+          {project.recentActivity.length > 0 && (
+            <div className="mb-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                <Activity className="h-3 w-3" />
+                <span>Activity</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground line-clamp-1">
+                {getLastActivity()}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              {getLastActivity()}
-            </p>
-          </div>
+          )}
 
           {/* Team Members Preview */}
           {project.members.length > 0 && (
-            <div className="mb-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                <Users className="h-4 w-4" />
-                <span>Team</span>
-              </div>
-              <div className="flex -space-x-2">
-                {project.members.slice(0, 3).map(member => (
+            <div className="mb-3">
+              <div className="flex -space-x-1.5">
+                {project.members.slice(0, 4).map(member => (
                   <div
                     key={member.id}
-                    className="w-8 h-8 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-xs font-medium"
+                    className="w-6 h-6 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-[10px] font-medium"
                     title={`${member.user.displayName} (${member.role})`}
                   >
                     {member.user.displayName.charAt(0).toUpperCase()}
                   </div>
                 ))}
-                {project.members.length > 3 && (
-                  <div className="w-8 h-8 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs font-medium">
-                    +{project.members.length - 3}
+                {project.members.length > 4 && (
+                  <div className="w-6 h-6 rounded-full bg-muted border-2 border-background flex items-center justify-center text-[10px] font-medium">
+                    +{project.members.length - 4}
                   </div>
                 )}
               </div>
@@ -294,18 +392,18 @@ export function ProjectCard({ project, onDelete, onStar }: ProjectCardProps) {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
-            <Button onClick={openProject} size="sm" className="flex-1">
-              <Code2 className="h-4 w-4 mr-2" />
-              Open Project
+            <Button onClick={openProject} size="sm" className="flex-1 h-7 text-xs">
+              <Code2 className="h-3.5 w-3.5 mr-1.5" />
+              Open
             </Button>
             {project.inviteCode && (
               <Button
                 onClick={copyInviteCode}
                 variant="outline"
                 size="sm"
-                className="px-3"
+                className="h-7 w-7 p-0"
               >
-                <Copy className="h-4 w-4" />
+                <Copy className="h-3.5 w-3.5" />
               </Button>
             )}
           </div>

@@ -288,23 +288,51 @@ router.get('/status', authenticateUser, async (req, res) => {
         )
       );
     
+    // Also get ALL plugin configs (enabled and disabled) to check if plugin exists in DB
+    const allConfigs = await database
+      .select()
+      .from(pluginConfigs)
+      .where(eq(pluginConfigs.userId, userId));
+    
     // Build status array from in-memory status
-    const systemStatusArray = Array.from(status.entries()).map((entry: [string, any]) => {
-      const [pluginId, data] = entry;
+    const systemStatusArray = Array.from(status.entries()).map((entry) => {
+      const [pluginId, data] = entry as [string, any];
       return {
         pluginId,
         ...data
       };
     });
     
+    // Create sets for quick lookup
+    const enabledPluginIds = new Set(enabledConfigs.map(c => c.pluginId));
+    const allPluginIds = new Set(allConfigs.map(c => c.pluginId));
+    
+    // Filter out plugins that are disabled in the database
+    // Only keep plugins that are either:
+    // 1. Enabled in the database, OR
+    // 2. Not in the database at all (new plugins that haven't been configured yet)
+    const filteredSystemStatus = systemStatusArray.filter(statusItem => {
+      // If plugin is enabled in DB, keep it
+      if (enabledPluginIds.has(statusItem.pluginId)) {
+        return true;
+      }
+      // If plugin exists in DB but is disabled, exclude it
+      if (allPluginIds.has(statusItem.pluginId)) {
+        return false; // Plugin is disabled in DB, exclude it
+      }
+      // Plugin not in DB at all, check in-memory status
+      // Only include if it's actually enabled and authenticated in memory
+      return statusItem.status?.enabled === true && statusItem.status?.authenticated === true;
+    });
+    
     // Ensure all enabled plugins from database are included
     for (const config of enabledConfigs) {
-      const existingStatus = systemStatusArray.find(s => s.pluginId === config.pluginId);
+      const existingStatus = filteredSystemStatus.find(s => s.pluginId === config.pluginId);
       if (!existingStatus) {
         // Plugin is enabled in DB but not in memory - add it
         const plugin = pluginRegistry.getPlugin(config.pluginId);
         if (plugin) {
-          systemStatusArray.push({
+          filteredSystemStatus.push({
             pluginId: config.pluginId,
             metadata: plugin.getMetadata(),
             status: {
@@ -378,7 +406,7 @@ router.get('/status', authenticateUser, async (req, res) => {
     const validUserPluginStatus = userPluginStatus.filter((status): status is NonNullable<typeof status> => status !== null);
 
     // Combine system and user plugin status
-    const allStatus = [...systemStatusArray, ...validUserPluginStatus];
+    const allStatus = [...filteredSystemStatus, ...validUserPluginStatus];
 
     res.json({
       success: true,
@@ -557,7 +585,7 @@ router.get('/gmail/callback', async (req, res) => {
 
     // Verify we got a refresh token
     if (!tokens.refresh_token) {
-      logger.error('No refresh token received from Google', { userId });
+      logger.error(`No refresh token received from Google: userId=${userId}`);
       throw new Error('Failed to obtain refresh token. Please try reconnecting.');
     }
 
