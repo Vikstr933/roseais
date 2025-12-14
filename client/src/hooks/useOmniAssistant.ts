@@ -132,10 +132,16 @@ export function useOmniAssistant() {
         };
         setMessages(prev => [...prev, userMessage]);
 
-        // Call API
-        const response = await apiFetch('/api/omniassistant/chat', {
+        // Use streaming for better UX
+        const API_BASE = import.meta.env.VITE_API_URL || '';
+        const sessionToken = localStorage.getItem('sessionToken');
+
+        const response = await fetch(`${API_BASE}/api/omniassistant/chat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
             message,
             sessionId: options?.sessionId,
@@ -143,6 +149,7 @@ export function useOmniAssistant() {
             workspaceId: options?.workspaceId,
             playgroundContext: options?.playgroundContext,
             features: options?.customFeatures || features,
+            stream: true, // Enable streaming
           }),
         });
 
@@ -150,25 +157,94 @@ export function useOmniAssistant() {
           throw new Error('Failed to send message');
         }
 
-        const data = await response.json();
-
-        // Add assistant message to local state
+        // Create placeholder assistant message for streaming
         const assistantMessage: OmniAssistantMessage = {
           role: 'assistant',
-          content: data.response,
+          content: '',
           timestamp: new Date(),
-          toolsUsed: data.toolsUsed,
-          suggestions: data.suggestions,
-          conversationId: data.conversationId,
+          toolsUsed: [],
+          suggestions: [],
         };
+
         setMessages(prev => [...prev, assistantMessage]);
 
-        // Update insights if returned
-        if (data.insights && data.insights.length > 0) {
-          setInsights(data.insights);
+        // Read streaming response
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        if (!reader) {
+          throw new Error('No response body');
         }
 
-        return assistantMessage;
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.type === 'chunk') {
+                  // Append text chunk
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const lastMessage = updated[updated.length - 1];
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      lastMessage.content += data.text || '';
+                    }
+                    return updated;
+                  });
+                } else if (data.type === 'tools_used') {
+                  // Update tools used
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const lastMessage = updated[updated.length - 1];
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      lastMessage.toolsUsed = data.tools || [];
+                    }
+                    return updated;
+                  });
+                } else if (data.type === 'complete') {
+                  // Final message with all metadata
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const lastMessage = updated[updated.length - 1];
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      lastMessage.content = data.response || lastMessage.content;
+                      lastMessage.toolsUsed = data.toolsUsed || [];
+                      lastMessage.suggestions = data.suggestions || [];
+                      lastMessage.conversationId = data.conversationId;
+                    }
+                    return updated;
+                  });
+                } else if (data.type === 'error') {
+                  throw new Error(data.message || 'Streaming error');
+                }
+              } catch (parseError) {
+                console.error('Failed to parse SSE data:', parseError);
+              }
+            }
+          }
+        }
+
+        // Get final message
+        const finalMessage = assistantMessage;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'assistant') {
+            return prev;
+          }
+          return prev;
+        });
+
+        return finalMessage;
       } catch (error) {
         console.error('Error sending message:', error);
         toast({

@@ -35,7 +35,7 @@ const omniAssistant = new OmniAssistantService(
 router.post('/chat', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
-    const { message, sessionId, currentPage, workspaceId, features, playgroundContext } = req.body;
+    const { message, sessionId, currentPage, workspaceId, features, playgroundContext, stream } = req.body;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({
@@ -58,16 +58,45 @@ router.post('/chat', authenticateUser, async (req, res) => {
       currentPage,
       workspaceId,
       hasPlaygroundContext: !!playgroundContext,
+      stream: stream || false,
     });
 
-    // Process request with OmniAssistant
+    // If streaming is requested, use streaming endpoint
+    if (stream) {
+      return handleOmniAssistantStreaming(req, res, userId, message, {
+        sessionId,
+        currentPage,
+        workspaceId,
+        playgroundContext,
+        ...featureFlags,
+      });
+    }
+
+    // Non-streaming: Process request with OmniAssistant
+    // Make insights generation async so it doesn't block the response
     const result = await omniAssistant.processRequest(userId, message, {
       sessionId,
       currentPage,
       workspaceId,
-      playgroundContext, // Pass playground context
+      playgroundContext,
       ...featureFlags,
+      generateInsights: false, // Disable blocking insights for now
     });
+
+    // Generate insights asynchronously in background (don't wait)
+    if (featureFlags.generateInsights) {
+      omniAssistant.processRequest(userId, message, {
+        sessionId,
+        currentPage,
+        workspaceId,
+        playgroundContext,
+        generateInsights: true,
+        persistConversation: featureFlags.persistConversation,
+        useContextEngine: featureFlags.useContextEngine,
+      }).catch(error => {
+        console.error('⚠️ OmniAssistant: Background insights generation failed', error);
+      });
+    }
 
     res.json({
       success: true,
@@ -76,8 +105,8 @@ router.post('/chat', authenticateUser, async (req, res) => {
       contextUsed: result.contextUsed,
       suggestions: result.suggestions,
       conversationId: result.conversationId,
-      insights: result.insights,
-      features: featureFlags, // Echo back which features were enabled
+      insights: [], // Will be fetched separately if needed
+      features: featureFlags,
     });
   } catch (error) {
     console.error('❌ OmniAssistant: Chat error', error);
@@ -88,6 +117,103 @@ router.post('/chat', authenticateUser, async (req, res) => {
     });
   }
 });
+
+/**
+ * Handle streaming chat with Server-Sent Events (SSE)
+ */
+async function handleOmniAssistantStreaming(
+  req: any,
+  res: any,
+  userId: string,
+  message: string,
+  options: {
+    sessionId?: string;
+    currentPage?: string;
+    workspaceId?: number;
+    playgroundContext?: any;
+    persistConversation?: boolean;
+    generateInsights?: boolean;
+    useContextEngine?: boolean;
+  }
+) {
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const sendSSE = (type: string, data: any) => {
+    try {
+      res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+    } catch (error) {
+      // Client disconnected
+      console.warn('SSE write failed, client likely disconnected');
+    }
+  };
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    res.end();
+  });
+
+  try {
+    sendSSE('connected', { message: 'Streaming started' });
+
+    // Process request WITHOUT blocking insights
+    const result = await omniAssistant.processRequest(userId, message, {
+      ...options,
+      generateInsights: false, // Don't block on insights
+    });
+
+    // Stream the response word-by-word
+    const response = result.response;
+    const words = response.split(/(\s+)/);
+    let currentText = '';
+
+    // Send tools used immediately
+    if (result.toolsUsed && result.toolsUsed.length > 0) {
+      sendSSE('tools_used', { tools: result.toolsUsed });
+    }
+
+    // Stream words
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      currentText += word;
+      sendSSE('chunk', { text: word });
+      
+      if (i % 3 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }
+
+    // Send completion
+    sendSSE('complete', {
+      response: result.response,
+      toolsUsed: result.toolsUsed || [],
+      contextUsed: result.contextUsed || [],
+      suggestions: result.suggestions || [],
+      conversationId: result.conversationId,
+    });
+
+    // Generate insights in background (don't wait)
+    if (options.generateInsights) {
+      omniAssistant.processRequest(userId, message, {
+        ...options,
+        generateInsights: true,
+      }).catch(error => {
+        console.error('⚠️ OmniAssistant: Background insights failed', error);
+      });
+    }
+
+    res.end();
+  } catch (error) {
+    console.error('Streaming chat error', error);
+    sendSSE('error', {
+      message: error instanceof Error ? error.message : 'Failed to process message'
+    });
+    res.end();
+  }
+}
 
 /**
  * GET /api/omniassistant/history
