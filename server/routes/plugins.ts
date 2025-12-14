@@ -11,6 +11,20 @@ let personalAssistantAgent: any;
 let google: any;
 let pluginsInitialized = false;
 
+/**
+ * Get frontend URL, handling cases where FRONTEND_URL might contain multiple values
+ */
+const getFrontendUrl = (): string => {
+  let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  // Take only the first URL if multiple are provided (comma-separated)
+  if (frontendUrl.includes(',')) {
+    frontendUrl = frontendUrl.split(',')[0].trim();
+  }
+  // Ensure URL doesn't have trailing slash
+  frontendUrl = frontendUrl.replace(/\/+$/, '');
+  return frontendUrl;
+};
+
 // Initialize plugins with error handling
 const initializePlugins = async () => {
   try {
@@ -606,7 +620,7 @@ router.get('/gmail/callback', async (req, res) => {
     });
 
     // Send HTML that closes the popup and notifies the parent window
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -631,7 +645,7 @@ router.get('/gmail/callback', async (req, res) => {
     `);
   } catch (error) {
     logger.error('Gmail OAuth callback failed', error as Error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -775,7 +789,7 @@ router.get('/slack/callback', async (req, res) => {
       scope: tokenData.authed_user.scope?.split(',') || []
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -798,7 +812,7 @@ router.get('/slack/callback', async (req, res) => {
     `);
   } catch (error) {
     logger.error('Slack OAuth callback failed', error as Error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -898,7 +912,7 @@ router.get('/google-calendar/callback', async (req, res) => {
       scope: tokens.scope ? [tokens.scope] : []
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -921,7 +935,7 @@ router.get('/google-calendar/callback', async (req, res) => {
     `);
   } catch (error) {
     logger.error('Calendar OAuth callback failed', error as Error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -1107,7 +1121,7 @@ router.get('/github/callback', async (req, res) => {
     });
 
     // Send HTML that closes the popup and notifies the parent window
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -1132,7 +1146,7 @@ router.get('/github/callback', async (req, res) => {
     `);
   } catch (error) {
     logger.error('GitHub OAuth callback failed', error as Error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = getFrontendUrl();
     res.send(`
       <!DOCTYPE html>
       <html>

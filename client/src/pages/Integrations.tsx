@@ -399,10 +399,46 @@ export default function Integrations() {
           };
           const pluginName = pluginNames[event.data.type];
           setSuccess(`${pluginName} connected successfully!`);
-          // Reload status to show updated connection
-          loadUserStatus();
-          // Clear connecting state
+          // Clear connecting state first
           setConnecting(new Set());
+          
+          // Reload status with retry logic to ensure we get the updated connection
+          const reloadStatusWithRetry = async (attempts = 0) => {
+            try {
+              const response = await apiFetch('/api/plugins/status', {
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`
+                }
+              });
+              const data = await response.json();
+              
+              if (data.success) {
+                setUserPluginStatus(data.plugins);
+                
+                // Check if plugin is now connected
+                const pluginId = event.data.type.replace('-connected', '');
+                const isConnected = data.plugins.some(
+                  (p: any) => p.pluginId === pluginId && p.status?.authenticated === true
+                );
+                
+                // If not connected yet and haven't exceeded max attempts, try again
+                if (!isConnected && attempts < 3) {
+                  setTimeout(() => reloadStatusWithRetry(attempts + 1), 1000);
+                }
+              }
+            } catch (err) {
+              console.error('Failed to reload plugin status:', err);
+              // Retry on error if we haven't exceeded max attempts
+              if (attempts < 3) {
+                setTimeout(() => reloadStatusWithRetry(attempts + 1), 1000);
+              }
+            }
+          };
+          
+          // Small delay to ensure backend has processed the connection
+          setTimeout(() => {
+            reloadStatusWithRetry();
+          }, 500);
         } else {
           const pluginNames: Record<string, string> = {
             'gmail-connected': 'Gmail',
