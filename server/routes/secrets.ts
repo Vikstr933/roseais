@@ -3,7 +3,7 @@ import { authenticateUser } from '../middleware/auth';
 import { apiKeyService } from '../services/APIKeyService';
 import { db } from '../../db';
 import { apiKeys } from '../../db/schema-pg';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, desc } from 'drizzle-orm';
 import crypto from 'crypto';
 import { performanceService } from '../services/PerformanceService';
 
@@ -25,14 +25,30 @@ router.get('/', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
     
-    // Get all API keys for user (user-wide only for secrets vault)
-    const apiKeys = await apiKeyService.getapiKeys(userId, null);
+    // Query database directly to get original text IDs (not converted to numbers)
+    const result = await db
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        serviceName: apiKeys.serviceName,
+        keyType: apiKeys.keyType,
+        lastUsed: apiKeys.lastUsed,
+      })
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.userId, userId),
+          eq(apiKeys.isActive, true),
+          isNull(apiKeys.projectId) // Only user-wide secrets
+        )
+      )
+      .orderBy(desc(apiKeys.createdAt));
     
     // Map to SecretsVault format
-    const secrets = apiKeys.map(key => ({
-      id: key.id.toString(),
-      name: key.serviceName || key.keyName,
-      key: key.keyName,
+    const secrets = result.map(key => ({
+      id: key.id, // Keep original text ID
+      name: key.serviceName || key.name,
+      key: key.name, // Use name as keyName
       value: '••••••••', // Masked
       type: key.keyType || 'api_key',
       service: key.serviceName?.toLowerCase() || 'custom',
