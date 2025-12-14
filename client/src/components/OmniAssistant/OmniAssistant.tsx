@@ -209,6 +209,30 @@ export function OmniAssistant() {
     }
   }, [messages.length]);
 
+  // Mark all existing/old messages as displayed when they're loaded (no typewriter effect for old messages)
+  useEffect(() => {
+    const now = Date.now();
+    messages.forEach((message) => {
+      if (message.role === 'assistant' && message.content && message.content.trim().length > 0) {
+        // Create unique message ID based on content and timestamp
+        const messageId = `${message.role}-${message.timestamp?.getTime()}-${message.content.substring(0, 50)}`;
+        
+        // If message is older than 2 seconds (loaded from history/localStorage), mark as displayed
+        // This prevents typewriter effect for old messages while allowing new streaming messages
+        const messageAge = message.timestamp ? now - message.timestamp.getTime() : Infinity;
+        
+        // Only mark as displayed if:
+        // 1. Message is older than 2 seconds (definitely from history)
+        // 2. OR message is not already being tracked (newly loaded from history)
+        // This ensures new streaming messages (age < 2s) still get typewriter effect
+        if (messageAge > 2000) {
+          // Old message from history - mark as displayed immediately
+          displayedMessagesRef.current.add(messageId);
+        }
+      }
+    });
+  }, [messages]); // Run whenever messages change (when history is loaded)
+
   // Build playground context - works both on playground page and with selected project
   const buildPlaygroundContext = () => {
     const currentPage = window.location.pathname;
