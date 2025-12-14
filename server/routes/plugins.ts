@@ -1350,7 +1350,8 @@ const assistantMessageSchema = z.object({
   message: z.string(),
   sessionId: z.string().optional(),
   includeContext: z.boolean().optional(),
-  maxContextItems: z.number().optional()
+  maxContextItems: z.number().optional(),
+  stream: z.boolean().optional() // New: enable streaming
 });
 
 router.post('/assistant/chat', authenticateUser, async (req, res) => {
@@ -1372,6 +1373,12 @@ router.post('/assistant/chat', authenticateUser, async (req, res) => {
       });
     }
 
+    // If streaming is requested, use streaming endpoint
+    if (data.stream) {
+      return handleStreamingChat(req, res, userId, data);
+    }
+
+    // Non-streaming (original behavior)
     const result = await personalAssistantAgent.processRequest(userId, data.message, {
       sessionId: data.sessionId,
       includeContext: data.includeContext,
@@ -1399,6 +1406,89 @@ router.post('/assistant/chat', authenticateUser, async (req, res) => {
     });
   }
 });
+
+/**
+ * Handle streaming chat with Server-Sent Events (SSE)
+ * Streams the response word-by-word for live user experience
+ */
+async function handleStreamingChat(
+  req: any,
+  res: any,
+  userId: string,
+  data: { message: string; sessionId?: string; includeContext?: boolean; maxContextItems?: number }
+) {
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+  const sendSSE = (type: string, data: any) => {
+    try {
+      res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+    } catch (error) {
+      // Client disconnected
+      logger.warn('SSE write failed, client likely disconnected');
+    }
+  };
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    res.end();
+  });
+
+  try {
+    // Send initial connection message
+    sendSSE('connected', { message: 'Streaming started' });
+
+    // Process request with agent (this handles all the complex logic)
+    const result = await personalAssistantAgent.processRequest(userId, data.message, {
+      sessionId: data.sessionId,
+      includeContext: data.includeContext,
+      maxContextItems: data.maxContextItems
+    });
+
+    // Stream the response word-by-word for live effect
+    const response = result.response;
+    const words = response.split(/(\s+)/); // Split by whitespace but keep it
+    let currentText = '';
+
+    // Send tools used immediately
+    if (result.toolsUsed && result.toolsUsed.length > 0) {
+      sendSSE('tools_used', { tools: result.toolsUsed });
+    }
+
+    // Stream words with a small delay for natural reading speed
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      currentText += word;
+      
+      // Send chunk (every word or every few words for better performance)
+      sendSSE('chunk', { text: word });
+      
+      // Small delay to simulate typing (adjust for faster/slower)
+      if (i % 3 === 0) { // Every 3 words, add a tiny delay
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }
+
+    // Send completion with full response and metadata
+    sendSSE('complete', {
+      response: result.response,
+      toolsUsed: result.toolsUsed || [],
+      contextUsed: result.contextUsed || [],
+      suggestions: result.suggestions || []
+    });
+
+    res.end();
+  } catch (error) {
+    logger.error('Streaming chat error', error as Error);
+    sendSSE('error', {
+      message: error instanceof Error ? error.message : 'Failed to process message'
+    });
+    res.end();
+  }
+}
 
 /**
  * Get daily summary

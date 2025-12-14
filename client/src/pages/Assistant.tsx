@@ -76,44 +76,111 @@ export default function Assistant() {
       timestamp: new Date()
     };
 
+    const userInput = input;
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
+    // Create placeholder assistant message for streaming
+    const assistantMessageId = Date.now();
+    const assistantMessage: Message = {
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      toolsUsed: [],
+      contextUsed: [],
+      suggestions: []
+    };
+
+    setMessages(prev => [...prev, assistantMessage]);
+
     try {
-      const response = await apiFetch('/api/plugins/assistant/chat', {
+      const API_BASE = import.meta.env.VITE_API_URL || '';
+      const sessionToken = localStorage.getItem('sessionToken');
+
+      // Use streaming endpoint
+      const response = await fetch(`${API_BASE}/api/plugins/assistant/chat`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('sessionToken')}`,
+          'Authorization': `Bearer ${sessionToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          message: input,
+          message: userInput,
           includeContext: true,
-          maxContextItems: 10
+          maxContextItems: 10,
+          stream: true // Enable streaming
         })
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
 
-      if (data.success) {
-        const assistantMessage: Message = {
-          role: 'assistant',
-          content: data.response,
-          timestamp: new Date(),
-          toolsUsed: data.toolsUsed,
-          contextUsed: data.contextUsed,
-          suggestions: data.suggestions
-        };
+      // Read streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-        setMessages(prev => [...prev, assistantMessage]);
-      } else {
-        const errorMessage: Message = {
-          role: 'assistant',
-          content: 'Sorry, I encountered an error processing your request.',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'chunk') {
+                // Append text chunk to message
+                setMessages(prev => {
+                  const updated = [...prev];
+                  const lastMessage = updated[updated.length - 1];
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    lastMessage.content += data.text || '';
+                  }
+                  return updated;
+                });
+              } else if (data.type === 'tools_used') {
+                // Update tools used
+                setMessages(prev => {
+                  const updated = [...prev];
+                  const lastMessage = updated[updated.length - 1];
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    lastMessage.toolsUsed = data.tools || [];
+                  }
+                  return updated;
+                });
+              } else if (data.type === 'complete') {
+                // Final message with all metadata
+                setMessages(prev => {
+                  const updated = [...prev];
+                  const lastMessage = updated[updated.length - 1];
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    lastMessage.content = data.response || lastMessage.content;
+                    lastMessage.toolsUsed = data.toolsUsed || [];
+                    lastMessage.contextUsed = data.contextUsed || [];
+                    lastMessage.suggestions = data.suggestions || [];
+                  }
+                  return updated;
+                });
+              } else if (data.type === 'error') {
+                throw new Error(data.message || 'Streaming error');
+              }
+            } catch (parseError) {
+              console.error('Failed to parse SSE data:', parseError);
+            }
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -122,7 +189,12 @@ export default function Assistant() {
         content: 'Sorry, I encountered a network error. Please try again.',
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => {
+        // Replace the empty streaming message with error
+        const updated = [...prev];
+        updated[updated.length - 1] = errorMessage;
+        return updated;
+      });
     } finally {
       setLoading(false);
     }
