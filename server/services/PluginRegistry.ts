@@ -11,7 +11,7 @@ import {
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { CredentialVault } from './CredentialVault';
 import { db } from '../../db';
-import { pluginConfigs, pluginKnowledge, pluginInstallations, userGeneratedPlugins } from '../../db/schema-pg';
+import { pluginConfigs, pluginKnowledge, pluginInstallations, userGeneratedPlugins, toolPermissions } from '../../db/schema-pg';
 import { eq, and } from 'drizzle-orm';
 
 const logger = new SimpleLogger('PluginRegistry');
@@ -60,17 +60,13 @@ export class PluginRegistry extends EventEmitter {
     });
 
     plugin.on('error', (error) => {
-      logger.error('Plugin error', new Error(error.error), {
-        pluginId: metadata.id,
-        userId: error.userId
-      });
+      logger.error(`Plugin error: pluginId=${metadata.id}, userId=${error.userId}`, new Error(error.error));
       this.emit('plugin_error', { pluginId: metadata.id, ...error });
     });
 
     plugin.on('info', (info) => {
-      logger.info('Plugin info', info.message, {
-        pluginId: metadata.id,
-        userId: info.userId
+      logger.info(`Plugin info: pluginId=${metadata.id}, userId=${info.userId}`, {
+        message: info.message
       });
     });
 
@@ -185,10 +181,10 @@ export class PluginRegistry extends EventEmitter {
 
       // Trigger initial sync in background (don't block OAuth callback)
       this.syncPlugin(userId, pluginId).catch(error => {
-        logger.error('Background sync failed after plugin enable', error as Error, { userId, pluginId });
+        logger.error(`Background sync failed after plugin enable: userId=${userId}, pluginId=${pluginId}`, error as Error);
       });
     } catch (error) {
-      logger.error('Failed to enable plugin', error as Error, { userId, pluginId });
+      logger.error(`Failed to enable plugin: userId=${userId}, pluginId=${pluginId}`, error as Error);
       throw error;
     }
   }
@@ -223,7 +219,7 @@ export class PluginRegistry extends EventEmitter {
 
       this.emit('plugin_disabled', { userId, pluginId });
     } catch (error) {
-      logger.error('Failed to disable plugin', error as Error, { userId, pluginId });
+      logger.error(`Failed to disable plugin: userId=${userId}, pluginId=${pluginId}`, error as Error);
       throw error;
     }
   }
@@ -267,7 +263,7 @@ export class PluginRegistry extends EventEmitter {
 
       return result;
     } catch (error) {
-      logger.error('Plugin sync failed', error as Error, { userId, pluginId });
+      logger.error(`Plugin sync failed: userId=${userId}, pluginId=${pluginId}`, error as Error);
       throw error;
     }
   }
@@ -284,7 +280,7 @@ export class PluginRegistry extends EventEmitter {
         const result = await this.syncPlugin(userId, pluginId, options);
         results.set(pluginId, result);
       } catch (error) {
-        logger.error('Failed to sync plugin', error as Error, { userId, pluginId });
+        logger.error(`Failed to sync plugin: userId=${userId}, pluginId=${pluginId}`, error as Error);
         results.set(pluginId, {
           success: false,
           itemsSynced: 0,
@@ -423,10 +419,7 @@ export class PluginRegistry extends EventEmitter {
 
           tools.push(...wrappedTools);
         } catch (error) {
-          logger.error('Failed to get tools from plugin', error as Error, {
-            userId,
-            pluginId
-          });
+          logger.error(`Failed to get tools from plugin: userId=${userId}, pluginId=${pluginId}`, error as Error);
         }
       }
     }
@@ -523,7 +516,7 @@ export class PluginRegistry extends EventEmitter {
         };
 
         // Validate tool before adding
-        if (pluginTool.name && pluginTool.description && pluginTool.parameters && pluginTool.execute) {
+        if (pluginTool.name && pluginTool.description && pluginTool.parameters && typeof pluginTool.execute === 'function') {
           tools.push(pluginTool);
           logger.info('Created tool for user-generated plugin', {
             userId,
@@ -549,7 +542,7 @@ export class PluginRegistry extends EventEmitter {
         toolNames: tools.map(t => t.name)
       });
     } catch (error) {
-      logger.error('Failed to load user-generated plugin tools', error as Error, { userId });
+      logger.error(`Failed to load user-generated plugin tools: userId=${userId}`, error as Error);
     }
 
     logger.info('Total tools available for user', {
@@ -598,10 +591,7 @@ export class PluginRegistry extends EventEmitter {
         const items = await plugin.getKnowledgeItems(userId, prompt, filters);
         return items;
       } catch (error) {
-        logger.error('Failed to query plugin knowledge', error as Error, {
-          userId,
-          pluginId
-        });
+        logger.error(`Failed to query plugin knowledge: userId=${userId}, pluginId=${pluginId}`, error as Error);
         return [];
       }
     });
@@ -664,11 +654,7 @@ export class PluginRegistry extends EventEmitter {
 
       return result;
     } catch (error) {
-      logger.error('Plugin action failed', error as Error, {
-        userId,
-        pluginId,
-        action
-      });
+      logger.error(`Plugin action failed: userId=${userId}, pluginId=${pluginId}, action=${action}`, error as Error);
       throw error;
     }
   }
@@ -741,12 +727,7 @@ export class PluginRegistry extends EventEmitter {
       });
       
       if (!endsWithCompleteStatement || hasUnclosedBraces || hasUnclosedQuotes) {
-        logger.error('Plugin code appears to be truncated or corrupted in database', {
-          userId,
-          pluginId,
-          codeLength: rawCode.length,
-          lastChars: rawCode.substring(Math.max(0, rawCode.length - 100))
-        });
+        logger.warn(`Plugin code appears to be truncated or corrupted in database: userId=${userId}, pluginId=${pluginId}, codeLength=${rawCode.length}, lastChars=${rawCode.substring(Math.max(0, rawCode.length - 100))}`);
         throw new Error(`Plugin code appears to be truncated or corrupted. Code length: ${rawCode.length}. Please regenerate the plugin.`);
       }
 
@@ -858,16 +839,7 @@ function execute(userId, params, credentials) {
         const closeParens = (wrappedCode.match(/\)/g) || []).length;
         
         if (openBraces !== closeBraces || openBrackets !== closeBrackets || openParens !== closeParens) {
-          logger.error('Code appears to be truncated or malformed', {
-            userId,
-            pluginId,
-            action,
-            codeLength: wrappedCode.length,
-            braces: { open: openBraces, close: closeBraces },
-            brackets: { open: openBrackets, close: closeBrackets },
-            parens: { open: openParens, close: closeParens },
-            codeEnd: wrappedCode.substring(wrappedCode.length - 500)
-          });
+          logger.warn(`Code appears to be truncated or malformed: userId=${userId}, pluginId=${pluginId}, action=${action}, codeLength=${wrappedCode.length}, braces=${openBraces}/${closeBraces}, brackets=${openBrackets}/${closeBrackets}, parens=${openParens}/${closeParens}`);
           throw new Error(`Plugin code appears to be truncated or malformed. Code length: ${wrappedCode.length}, braces: ${openBraces}/${closeBraces}, brackets: ${openBrackets}/${closeBrackets}`);
         }
 
@@ -887,13 +859,9 @@ function execute(userId, params, credentials) {
           plugin.sandboxConfig as any
         );
       } catch (sandboxError) {
-        logger.error('Sandbox execution threw an error', sandboxError as Error, {
-          userId,
-          pluginId,
-          action,
-          errorMessage: sandboxError instanceof Error ? sandboxError.message : String(sandboxError),
-          errorStack: sandboxError instanceof Error ? sandboxError.stack : undefined
-        });
+        const errorMsg = sandboxError instanceof Error ? sandboxError.message : String(sandboxError);
+        const errorStack = sandboxError instanceof Error ? sandboxError.stack : undefined;
+        logger.error(`Sandbox execution threw an error: userId=${userId}, pluginId=${pluginId}, action=${action}, errorMessage=${errorMsg}`, sandboxError as Error);
         throw sandboxError;
       }
 
@@ -901,14 +869,7 @@ function execute(userId, params, credentials) {
         const errorMsg = sandboxResult?.error || 'Plugin execution failed';
         const errorDetails = (sandboxResult as any)?.details;
         
-        logger.error('Sandbox execution failed', { 
-          userId, 
-          pluginId, 
-          action, 
-          error: errorMsg,
-          details: errorDetails,
-          sandboxResult: JSON.stringify(sandboxResult, null, 2).substring(0, 1000)
-        });
+        logger.warn(`Sandbox execution failed: userId=${userId}, pluginId=${pluginId}, action=${action}, error=${errorMsg}, details=${JSON.stringify(errorDetails)}, sandboxResult=${JSON.stringify(sandboxResult, null, 2).substring(0, 1000)}`);
         
         // Include error details in the thrown error for better debugging
         let fullError = errorMsg;
@@ -953,11 +914,7 @@ function execute(userId, params, credentials) {
           JSON.stringify(awaitedResult);
           return awaitedResult;
         } catch (serializeError) {
-          logger.error('Failed to serialize awaited result', serializeError as Error, {
-            userId,
-            pluginId,
-            action
-          });
+          logger.error(`Failed to serialize awaited result: userId=${userId}, pluginId=${pluginId}, action=${action}`, serializeError as Error);
           return { 
             error: 'Plugin returned non-serializable result',
             message: 'The plugin executed successfully but returned data that cannot be serialized'
@@ -979,14 +936,8 @@ function execute(userId, params, credentials) {
         // Return the result
         return result.result;
       } catch (serializeError) {
-        logger.error('Failed to serialize result', serializeError as Error, {
-          userId,
-          pluginId,
-          action,
-          resultType: typeof result.result,
-          resultConstructor: result.result?.constructor?.name,
-          errorMessage: serializeError instanceof Error ? serializeError.message : String(serializeError)
-        });
+        const errorMsg = serializeError instanceof Error ? serializeError.message : String(serializeError);
+        logger.error(`Failed to serialize result: userId=${userId}, pluginId=${pluginId}, action=${action}, resultType=${typeof result.result}, resultConstructor=${result.result?.constructor?.name}, errorMessage=${errorMsg}`, serializeError as Error);
         
         // Try to return a safe representation
         if (typeof result.result === 'string') {
@@ -1000,11 +951,7 @@ function execute(userId, params, credentials) {
         };
       }
     } catch (error) {
-      logger.error('User-generated plugin action failed', error as Error, {
-        userId,
-        pluginId,
-        action
-      });
+      logger.error(`User-generated plugin action failed: userId=${userId}, pluginId=${pluginId}, action=${action}`, error as Error);
       throw error;
     }
   }
@@ -1134,24 +1081,15 @@ function execute(userId, params, credentials) {
                     ));
                   logger.info('Disabled plugin due to expired OAuth token', { userId, pluginId: config.pluginId });
                 } catch (updateError) {
-                  logger.error('Failed to disable plugin after OAuth error', updateError as Error, { userId, pluginId: config.pluginId });
+                  logger.error(`Failed to disable plugin after OAuth error: userId=${userId}, pluginId=${config.pluginId}`, updateError as Error);
                 }
               } else {
                 // Check if it's a decryption error vs enable error
                 const isDecryptError = errorMessage.includes('decrypt') || errorMessage.includes('credentials');
                 if (isDecryptError) {
-                  logger.error('Failed to decrypt credentials for plugin', enableError as Error, {
-                    userId,
-                    pluginId: config.pluginId,
-                    credentialsLength: credentialsString.length,
-                    credentialsPreview: credentialsString.substring(0, 50)
-                  });
+                  logger.error(`Failed to decrypt credentials for plugin: userId=${userId}, pluginId=${config.pluginId}, credentialsLength=${credentialsString.length}, preview=${credentialsString.substring(0, 50)}`, enableError as Error);
                 } else {
-                  logger.error('Failed to enable plugin', enableError as Error, {
-                    userId,
-                    pluginId: config.pluginId,
-                    errorMessage
-                  });
+                  logger.error(`Failed to enable plugin: userId=${userId}, pluginId=${config.pluginId}, errorMessage=${errorMessage}`, enableError as Error);
                 }
               }
               // Continue without enabling - plugin will be loaded but not enabled
@@ -1171,11 +1109,7 @@ function execute(userId, params, credentials) {
 
           logger.info('Plugin loaded successfully', { userId, pluginId: config.pluginId });
         } catch (error) {
-          logger.error('Failed to load plugin for user', error as Error, {
-            userId,
-            pluginId: config.pluginId,
-            errorMessage: error instanceof Error ? error.message : String(error)
-          });
+          logger.error(`Failed to load plugin for user: userId=${userId}, pluginId=${config.pluginId}, errorMessage=${error instanceof Error ? error.message : String(error)}`, error as Error);
         }
       }
 
@@ -1223,7 +1157,7 @@ function execute(userId, params, credentials) {
         });
       }
     } catch (error) {
-      logger.error('Failed to load user plugins', error as Error, { userId });
+      logger.error(`Failed to load user plugins: userId=${userId}`, error as Error);
       throw error;
     }
   }
@@ -1262,10 +1196,7 @@ function execute(userId, params, credentials) {
           const isValid = await plugin.validateCredentials(userId);
           results.set(pluginId, isValid);
         } catch (error) {
-          logger.error('Failed to validate credentials', error as Error, {
-            userId,
-            pluginId
-          });
+          logger.error(`Failed to validate credentials: userId=${userId}, pluginId=${pluginId}`, error as Error);
           results.set(pluginId, false);
         }
       }
@@ -1282,7 +1213,7 @@ function execute(userId, params, credentials) {
     try {
       return this.credentialVault.encrypt(credentials as Record<string, any>);
     } catch (error) {
-      logger.error('Failed to encrypt credentials', error);
+      logger.error('Failed to encrypt credentials', error as Error);
       throw new Error('Credential encryption failed');
     }
   }
@@ -1295,7 +1226,7 @@ function execute(userId, params, credentials) {
     try {
       return this.credentialVault.decrypt(encryptedCredentials) as PluginCredentials;
     } catch (error) {
-      logger.error('Failed to decrypt credentials', error);
+      logger.error('Failed to decrypt credentials', error as Error);
       throw new Error('Credential decryption failed');
     }
   }
@@ -1308,7 +1239,7 @@ function execute(userId, params, credentials) {
       try {
         await plugin.cleanup();
       } catch (error) {
-        logger.error('Failed to cleanup plugin', error as Error, { pluginId });
+        logger.error(`Failed to cleanup plugin: pluginId=${pluginId}`, error as Error);
       }
     }
 
@@ -1347,11 +1278,7 @@ function execute(userId, params, credentials) {
       // Default: ask
       return 'ask';
     } catch (error) {
-      logger.error('Error checking tool permission', error as Error, {
-        userId,
-        pluginId,
-        toolId,
-      });
+      logger.error(`Error checking tool permission: userId=${userId}, pluginId=${pluginId}, toolId=${toolId}`, error as Error);
       // On error, default to 'ask' for safety
       return 'ask';
     }
