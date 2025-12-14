@@ -1104,12 +1104,41 @@ function execute(userId, params, credentials) {
 
               await plugin.enable(userId, decryptedCredentials);
             } catch (decryptError) {
-              logger.error('Failed to decrypt credentials for plugin', decryptError as Error, {
-                userId,
-                pluginId: config.pluginId,
-                credentialsLength: credentialsString.length,
-                credentialsPreview: credentialsString.substring(0, 50)
-              });
+              // Check if it's an OAuth token expiration error
+              const isOAuthError = decryptError instanceof Error && (
+                decryptError.message.includes('invalid_grant') ||
+                decryptError.message.includes('Token has been expired') ||
+                decryptError.message.includes('Token has been revoked') ||
+                (decryptError as any).response?.data?.error === 'invalid_grant'
+              );
+              
+              if (isOAuthError) {
+                logger.warn('OAuth token expired or revoked - disabling plugin', {
+                  userId,
+                  pluginId: config.pluginId,
+                  error: decryptError instanceof Error ? decryptError.message : String(decryptError)
+                });
+                
+                // Disable the plugin since credentials are invalid
+                try {
+                  await db.update(pluginConfigs)
+                    .set({ enabled: false })
+                    .where(and(
+                      eq(pluginConfigs.userId, userId),
+                      eq(pluginConfigs.pluginId, config.pluginId)
+                    ));
+                  logger.info('Disabled plugin due to expired OAuth token', { userId, pluginId: config.pluginId });
+                } catch (updateError) {
+                  logger.error('Failed to disable plugin after OAuth error', updateError as Error, { userId, pluginId: config.pluginId });
+                }
+              } else {
+                logger.error('Failed to decrypt credentials for plugin', decryptError as Error, {
+                  userId,
+                  pluginId: config.pluginId,
+                  credentialsLength: credentialsString.length,
+                  credentialsPreview: credentialsString.substring(0, 50)
+                });
+              }
               // Continue without enabling - plugin will be loaded but not enabled
             }
           } else {

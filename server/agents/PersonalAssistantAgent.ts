@@ -1440,8 +1440,23 @@ If no projectId is provided, will use the currently selected project from the co
         systemPrompt = `You are Elon, a helpful AI assistant. You have access to ${tools.length} tools. Help the user with their request.`;
       }
 
+      // CRITICAL: Pre-check user message for action requests that REQUIRE tools
+      // This forces the AI to actually use tools instead of just claiming actions
+      const actionRequiresTool = this.detectActionRequiringTool(userMessage);
+      let toolEnforcementMessage = '';
+      
+      if (actionRequiresTool) {
+        const availableTool = tools.find(t => t.name === actionRequiresTool.toolName);
+        if (availableTool) {
+          toolEnforcementMessage = `\n\n⚠️ CRITICAL INSTRUCTION: The user is asking you to ${actionRequiresTool.actionDescription}. You MUST use the ${actionRequiresTool.toolName} tool to actually perform this action. DO NOT just say you did it - you MUST call the tool. If you don't call the tool, you are LYING to the user.`;
+          logger.info(`Action detected requiring tool: ${actionRequiresTool.toolName} for userId=${userId}`);
+        } else {
+          logger.warn(`Action requires tool ${actionRequiresTool.toolName} but tool not available for userId=${userId}`);
+        }
+      }
+
       // Build user message with context
-      const enhancedMessage = this.buildEnhancedMessage(userMessage, context, options?.playgroundContext);
+      const enhancedMessage = this.buildEnhancedMessage(userMessage, context, options?.playgroundContext) + toolEnforcementMessage;
 
       // Convert tools to Anthropic format with error handling
       let anthropicTools: Anthropic.Tool[] = [];
@@ -1646,19 +1661,42 @@ If no projectId is provided, will use the currently selected project from the co
       // CRITICAL: Validate that AI didn't hallucinate tool usage
       // Check if response claims actions were taken but no tools were actually used
       const actionClaims = [
-        /jag har skickat|i've sent|i sent|skickade|sent the email|email.*sent/i,
-        /jag har taggat|i've tagged|i tagged|taggade|tagged.*discord/i,
-        /jag har kollat|i've checked|i checked|kollade|checked.*email/i,
-        /jag har schemalagt|i've scheduled|i scheduled|schemalade|scheduled.*email/i,
-        /jag har postat|i've posted|i posted|postade|posted.*discord/i,
-        /jag har skickat.*meddelande|i've sent.*message|sent.*message.*discord/i
+        { pattern: /jag har skickat|i've sent|i sent|skickade|sent the email|email.*sent/i, action: 'send_email', name: 'send email' },
+        { pattern: /jag har taggat|i've tagged|i tagged|taggade|tagged.*discord/i, action: 'send_discord_message', name: 'tag in Discord' },
+        { pattern: /jag har kollat|i've checked|i checked|kollade|checked.*email/i, action: 'search_emails', name: 'check emails' },
+        { pattern: /jag har schemalagt|i've scheduled|i scheduled|schemalade|scheduled.*email/i, action: 'schedule_email', name: 'schedule email' },
+        { pattern: /jag har postat|i've posted|i posted|postade|posted.*discord/i, action: 'send_discord_message', name: 'post in Discord' },
+        { pattern: /jag har skickat.*meddelande|i've sent.*message|sent.*message.*discord/i, action: 'send_discord_message', name: 'send Discord message' }
       ];
       
-      const claimsAction = actionClaims.some(pattern => pattern.test(enhancedResponse));
-      if (claimsAction && toolsUsed.length === 0) {
-        logger.error(`🚨 HALLUCINATION DETECTED: AI claimed action but used no tools! userId=${userId}, responsePreview=${enhancedResponse.substring(0, 200)}`);
-        // Don't modify the response here - let the system prompt fix it in future requests
-        // But log it so we can track the issue
+      const claimedAction = actionClaims.find(claim => claim.pattern.test(enhancedResponse));
+      if (claimedAction && toolsUsed.length === 0) {
+        logger.error(`🚨 HALLUCINATION DETECTED: AI claimed ${claimedAction.name} but used no tools! userId=${userId}, responsePreview=${enhancedResponse.substring(0, 200)}`);
+        
+        // CRITICAL: Modify the response to be honest about the failure
+        // Replace false claims with honest statements
+        const userLanguage = /jag|skickat|taggade|kollade|schemalade|postade/i.test(enhancedResponse) ? 'swedish' : 'english';
+        const originalResponse = enhancedResponse;
+        
+        if (userLanguage === 'swedish') {
+          enhancedResponse = enhancedResponse.replace(
+            /jag har (skickat|taggat|kollat|schemalagt|postat).*?[.!]/gi,
+            'Jag beklagar, men jag kunde inte utföra denna åtgärd eftersom verktyget inte anropades korrekt. För att faktiskt skicka mail, behöver jag använda send_email-verktyget, men det misslyckades. Kan du försöka igen?'
+          );
+          // If no replacement happened, prepend a warning
+          if (enhancedResponse === originalResponse) {
+            enhancedResponse = `⚠️ OBS: Jag beklagar, men jag kunde inte faktiskt utföra den begärda åtgärden eftersom verktyget inte anropades. Försök igen så ska jag faktiskt använda rätt verktyg.\n\n${enhancedResponse}`;
+          }
+        } else {
+          enhancedResponse = enhancedResponse.replace(
+            /i('ve| have)? (sent|tagged|checked|scheduled|posted).*?[.!]/gi,
+            'I apologize, but I was unable to actually perform this action because the tool was not called correctly. To actually send an email, I need to use the send_email tool, but it failed. Could you try again?'
+          );
+          // If no replacement happened, prepend a warning
+          if (enhancedResponse === originalResponse) {
+            enhancedResponse = `⚠️ WARNING: I apologize, but I was unable to actually perform the requested action because the tool was not called. Please try again and I will actually use the correct tool.\n\n${enhancedResponse}`;
+          }
+        }
       }
 
       logger.info(`Personal assistant request completed: userId=${userId}, toolsUsed=${toolsUsed.length}, contextItems=${context.length}`);
@@ -1673,6 +1711,41 @@ If no projectId is provided, will use the currently selected project from the co
       logger.error(`Failed to process personal assistant request: userId=${userId}`, error as Error);
       throw error;
     }
+  }
+
+  /**
+   * Detect if user message requires a specific tool action
+   * Returns tool name and description if action is detected
+   */
+  private detectActionRequiringTool(userMessage: string): { toolName: string; actionDescription: string } | null {
+    const message = userMessage.toLowerCase();
+    
+    // Email sending patterns
+    if (/skicka.*mail|send.*email|skicka.*email|mail.*till|email.*to|send.*mail/i.test(message)) {
+      return { toolName: 'send_email', actionDescription: 'send an email' };
+    }
+    
+    // Email checking patterns
+    if (/kolla.*mail|check.*email|kolla.*email|har.*mail|have.*email|visa.*mail|show.*email|read.*email/i.test(message)) {
+      return { toolName: 'search_emails', actionDescription: 'check or search emails' };
+    }
+    
+    // Email scheduling patterns
+    if (/schemalägg.*mail|schedule.*email|schemalägg.*email|planera.*mail/i.test(message)) {
+      return { toolName: 'schedule_email', actionDescription: 'schedule an email' };
+    }
+    
+    // Discord posting/tagging patterns
+    if (/skicka.*discord|post.*discord|tagg.*discord|tagga.*discord|skriv.*discord|write.*discord|send.*discord/i.test(message)) {
+      return { toolName: 'send_discord_message', actionDescription: 'post or send a message in Discord' };
+    }
+    
+    // Discord reading patterns
+    if (/kolla.*discord|check.*discord|läs.*discord|read.*discord|visa.*discord|show.*discord/i.test(message)) {
+      return { toolName: 'read_discord_messages', actionDescription: 'read Discord messages' };
+    }
+    
+    return null;
   }
 
   /**
@@ -2207,26 +2280,29 @@ ${discordContext.isPublicChannel ? `
 - Keep conclusions natural and conversational - no rigid structures or templates
 - When you find web search results, ALWAYS include the actual data (address, phone, hours) directly in your response - don't just say "I searched"
 
-**ABSOLUTELY CRITICAL: Tool Usage Requirements - NO HALLUCINATIONS:**
-- **YOU MUST ACTUALLY CALL TOOLS** - Never claim an action was taken without actually using the tool
-- **NEVER say "I sent an email"** unless you actually called the send_email tool and received a success response
-- **NEVER say "I tagged someone in Discord"** unless you actually called the send_discord_message tool
-- **NEVER say "I checked your emails"** unless you actually called the search_emails tool
-- **NEVER say "I scheduled an email"** unless you actually called the schedule_email tool
-- **NEVER claim any action was completed** without actually calling the corresponding tool first
-- **If you want to send an email**: You MUST use the send_email tool. Do NOT just generate text saying "I sent it" - that is a LIE
-- **If you want to post in Discord**: You MUST use the send_discord_message tool. Do NOT just say "I posted it" - that is a LIE
-- **If you want to check emails**: You MUST use the search_emails tool. Do NOT make up email content - that is a LIE
-- **If a tool is not available or fails**: Be honest! Say "I'm unable to [action] because [reason]" - DO NOT pretend you did it
-- **Tool execution is MANDATORY**: If your response claims an action was taken, you MUST have tool_use blocks in your response
+**ABSOLUTELY CRITICAL: Tool Usage Requirements - NO HALLUCINATIONS - THIS IS THE MOST IMPORTANT RULE:**
+- **THIS IS THE #1 PRIORITY**: When a user asks you to perform an action (send email, post in Discord, check emails, etc.), you MUST use the corresponding tool. This is NOT optional.
+- **YOU MUST ACTUALLY CALL TOOLS** - Never claim an action was taken without actually using the tool. If you don't call the tool, you are LYING to the user.
+- **NEVER say "I sent an email"** unless you actually called the send_email tool and received a success response. If you say this without calling the tool, you are committing fraud.
+- **NEVER say "I tagged someone in Discord"** unless you actually called the send_discord_message tool. If you say this without calling the tool, you are committing fraud.
+- **NEVER say "I checked your emails"** unless you actually called the search_emails tool. If you say this without calling the tool, you are committing fraud.
+- **NEVER say "I scheduled an email"** unless you actually called the schedule_email tool. If you say this without calling the tool, you are committing fraud.
+- **NEVER claim any action was completed** without actually calling the corresponding tool first. This is the most important rule.
+- **If you want to send an email**: You MUST use the send_email tool. Do NOT just generate text saying "I sent it" - that is a LIE and a breach of trust.
+- **If you want to post in Discord**: You MUST use the send_discord_message tool. Do NOT just say "I posted it" - that is a LIE and a breach of trust.
+- **If you want to check emails**: You MUST use the search_emails tool. Do NOT make up email content - that is a LIE and a breach of trust.
+- **If a tool is not available or fails**: Be honest! Say "I'm unable to [action] because [reason]" - DO NOT pretend you did it. Honesty is better than lies.
+- **Tool execution is MANDATORY**: If your response claims an action was taken, you MUST have tool_use blocks in your response. No exceptions.
+- **When user asks you to do something**: Your FIRST step is to identify which tool you need, then CALL IT. Do not skip this step.
 - **Example of CORRECT behavior**:
   * User: "Send an email to john@example.com"
-  * You: [Use send_email tool] → Wait for result → "I've sent the email to john@example.com!"
-- **Example of WRONG behavior (HALLUCINATION)**:
+  * You: [MUST use send_email tool with to="john@example.com", subject="...", body="..."] → Wait for tool result → "I've sent the email to john@example.com!"
+- **Example of WRONG behavior (HALLUCINATION - DO NOT DO THIS)**:
   * User: "Send an email to john@example.com"
-  * You: "I've sent the email!" [NO tool call] → THIS IS A LIE - DO NOT DO THIS
-- **If you're unsure whether to use a tool**: When in doubt, USE THE TOOL. It's better to try and fail than to claim success without trying
-- **Remember**: Your users trust you. Claiming actions were taken when they weren't is a serious breach of trust`;
+  * You: "I've sent the email!" [NO tool call] → THIS IS A LIE - DO NOT DO THIS - YOU ARE BREAKING USER TRUST
+- **If you're unsure whether to use a tool**: When in doubt, USE THE TOOL. It's better to try and fail than to claim success without trying.
+- **Remember**: Your users trust you. Claiming actions were taken when they weren't is a serious breach of trust and makes you unreliable.
+- **SYSTEM WILL DETECT HALLUCINATIONS**: If you claim an action without using a tool, the system will detect it and your response will be modified to be honest about the failure.`;
 
     let contextSection = '';
     if (context.length > 0) {
