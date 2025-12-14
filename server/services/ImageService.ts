@@ -4,7 +4,9 @@ import * as fs from 'fs/promises';
 import { db } from '../../db';
 import { projectFiles } from '../../db/schema-pg';
 import { eq, and } from 'drizzle-orm';
-// import sharp from 'sharp'; // Optional dependency for image processing
+
+// Type declaration for sharp (optional dependency)
+type SharpModule = typeof import('sharp');
 
 const logger = new SimpleLogger('ImageService');
 
@@ -80,15 +82,17 @@ export class ImageService {
 
       // Process image based on operation
       // Note: Image processing requires 'sharp' package to be installed
-      let sharp: any;
+      let sharpModule: SharpModule;
       try {
-        sharp = await import('sharp');
+        sharpModule = await import('sharp');
       } catch {
         return {
           success: false,
           message: 'Image processing requires the "sharp" package to be installed. Please install it with: npm install sharp'
         };
       }
+      
+      const sharp = sharpModule.default || sharpModule;
 
       switch (operation) {
         case 'resize':
@@ -98,13 +102,13 @@ export class ImageService {
               message: 'Width or height required for resize operation'
             };
           }
-          processedBuffer = await sharp.default(imageBuffer)
+          processedBuffer = await sharp(imageBuffer)
             .resize(options.width, options.height, {
               fit: 'inside',
               withoutEnlargement: true
             })
             .toBuffer();
-          const metadata = await sharp.default(processedBuffer).metadata();
+          const metadata = await sharp(processedBuffer).metadata();
           newWidth = metadata.width;
           newHeight = metadata.height;
           break;
@@ -116,7 +120,7 @@ export class ImageService {
               message: 'Width and height required for crop operation'
             };
           }
-          processedBuffer = await sharp.default(imageBuffer)
+          processedBuffer = await sharp(imageBuffer)
             .resize(options.width, options.height, {
               fit: 'cover'
             })
@@ -126,7 +130,7 @@ export class ImageService {
           break;
 
         case 'optimize':
-          processedBuffer = await sharp.default(imageBuffer)
+          processedBuffer = await sharp(imageBuffer)
             .jpeg({ quality: options?.quality || 80 })
             .png({ quality: options?.quality || 80 })
             .webp({ quality: options?.quality || 80 })

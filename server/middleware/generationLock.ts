@@ -8,10 +8,13 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     username: string;
+    email: string;
     displayName: string;
+    tier: 'free' | 'pro' | 'enterprise';
+    role: 'user' | 'admin' | 'superadmin';
   };
   generationLock?: {
-    id: string;
+    id: number;
   };
 }
 
@@ -130,7 +133,9 @@ export const createGenerationLock = (
       }
 
       // Store lock info for cleanup
-      req.generationLock = lockResult.lock;
+      if (lockResult.lock) {
+        req.generationLock = { id: lockResult.lock.id };
+      }
       next();
     } catch (error) {
       console.error('Error creating generation lock:', error);
@@ -191,7 +196,7 @@ export const handleGenerationLockCleanup = (
         });
     }
 
-    return originalEnd.call(this, chunk, encoding, cb) as Response;
+    return originalEnd.call(this, chunk, encoding || 'utf8', cb) as Response;
   };
   res.end = customEnd as typeof res.end;
 

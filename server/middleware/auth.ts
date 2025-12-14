@@ -11,7 +11,7 @@ declare global {
         username: string;
         email: string;
         displayName: string;
-        tier: string;
+        tier: 'free' | 'pro' | 'enterprise';
         role: 'user' | 'admin' | 'superadmin';
       };
     }
@@ -45,12 +45,17 @@ export const authenticateUser = async (
       ? user.role 
       : 'user';
     
+    // Validate and cast tier to ensure type safety
+    const validTier = (user.tier === 'pro' || user.tier === 'enterprise') 
+      ? user.tier 
+      : 'free';
+    
     req.user = {
       id: user.id,
       username: user.username,
       email: user.email,
       displayName: user.displayName,
-      tier: user.tier || 'free',
+      tier: validTier,
       role: validRole,
     };
 
@@ -92,12 +97,17 @@ export const optionalAuth = async (
           ? user.role 
           : 'user';
         
+        // Validate and cast tier to ensure type safety
+        const validTier = (user.tier === 'pro' || user.tier === 'enterprise') 
+          ? user.tier 
+          : 'free';
+        
         req.user = {
           id: user.id,
           username: user.username,
           email: user.email,
           displayName: user.displayName,
-          tier: user.tier || 'free',
+          tier: validTier,
           role: validRole,
         };
 

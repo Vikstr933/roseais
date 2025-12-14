@@ -3,7 +3,6 @@ import { db } from '../../db';
 import { apiKeys, users, workspaces } from '../../db/schema-pg';
 import { eq, and, or, isNull } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
-import { requireAdmin } from '../middleware/admin';
 import { getAllPreBuiltConnectors, getPreBuiltConnector } from '../data/pre-built-connectors';
 
 const router = Router();
@@ -13,7 +12,11 @@ router.use(authenticateUser);
 
 /**
  * GET /api/shared-connectors
- * Get all shared connectors (workspace-wide API keys) for the current workspace
+ * Get all shared connectors for the current user
+ * 
+ * SECURITY NOTE: "Shared" means "available across all user's projects", NOT "shared between users".
+ * Each user has their own connectors (Stripe, Vercel, GitHub, etc.) that they configure.
+ * These connectors are used when generating applications that need API keys (e.g., Stripe for payments).
  */
 router.get('/', async (req, res) => {
   try {
@@ -22,8 +25,9 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    // Get user's workspace (for now, we'll use a default workspace concept)
-    // In the future, this could be based on user's current workspace/team
+    // SECURITY: Shared connectors are per-user, not global
+    // Each user can configure their own connectors (Stripe, Vercel, GitHub, etc.)
+    // for use in their generated applications
     const sharedConnectors = await db
       .select({
         id: apiKeys.id,
@@ -45,8 +49,10 @@ router.get('/', async (req, res) => {
       .leftJoin(users, eq(apiKeys.configuredBy, users.id))
       .where(
         and(
+          eq(apiKeys.userId, userId), // SECURITY: Only show connectors for this user
           eq(apiKeys.isShared, true),
-          eq(apiKeys.isActive, true)
+          eq(apiKeys.isActive, true),
+          isNull(apiKeys.projectId) // User-wide connectors only (not project-specific)
         )
       )
       .orderBy(apiKeys.createdAt);
@@ -103,9 +109,12 @@ router.get('/', async (req, res) => {
 
 /**
  * POST /api/shared-connectors
- * Create a new shared connector (admin only)
+ * Create a new shared connector for the current user
+ * 
+ * SECURITY: Each user creates their own connectors. They're not shared between users.
+ * "Shared" means the connector is available across all of the user's projects.
  */
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const userId = (req as any).user?.id;
     const { serviceName, keyValue, keyType, description, envVariables } = req.body;
@@ -130,15 +139,18 @@ router.post('/', requireAdmin, async (req, res) => {
       });
     }
 
-    // Check if shared connector already exists for this service
+    // Check if shared connector already exists for this user and service
+    // SECURITY: Each user can have their own connector for each service
     const existing = await db
       .select()
       .from(apiKeys)
       .where(
         and(
+          eq(apiKeys.userId, userId), // SECURITY: Check only this user's connectors
           eq(apiKeys.serviceName, serviceName),
           eq(apiKeys.isShared, true),
-          eq(apiKeys.isActive, true)
+          eq(apiKeys.isActive, true),
+          isNull(apiKeys.projectId) // User-wide only
         )
       )
       .limit(1);
@@ -199,9 +211,9 @@ router.post('/', requireAdmin, async (req, res) => {
 
 /**
  * PUT /api/shared-connectors/:id
- * Update a shared connector (admin only)
+ * Update a shared connector (only the user who created it)
  */
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const userId = (req as any).user?.id;
     const { id } = req.params;
@@ -211,10 +223,11 @@ router.put('/:id', requireAdmin, async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    // Verify this is a shared connector
+    // SECURITY: Verify this is a shared connector owned by this user
     const [connector] = await db
       .select({
         id: apiKeys.id,
+        userId: apiKeys.userId,
         keyType: apiKeys.keyType,
         metadata: apiKeys.metadata,
       })
@@ -222,6 +235,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
       .where(
         and(
           eq(apiKeys.id, id),
+          eq(apiKeys.userId, userId), // SECURITY: Only user's own connectors
           eq(apiKeys.isShared, true)
         )
       )
@@ -230,7 +244,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
     if (!connector) {
       return res.status(404).json({
         success: false,
-        error: 'Shared connector not found',
+        error: 'Shared connector not found or you do not have permission to update it',
       });
     }
 
@@ -277,19 +291,25 @@ router.put('/:id', requireAdmin, async (req, res) => {
 
 /**
  * DELETE /api/shared-connectors/:id
- * Delete a shared connector (admin only)
+ * Delete a shared connector (only the user who created it)
  */
-router.delete('/:id', requireAdmin, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
+    const userId = (req as any).user?.id;
     const { id } = req.params;
 
-    // Verify this is a shared connector
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    // SECURITY: Verify this is a shared connector owned by this user
     const [connector] = await db
       .select()
       .from(apiKeys)
       .where(
         and(
           eq(apiKeys.id, id),
+          eq(apiKeys.userId, userId), // SECURITY: Only user's own connectors
           eq(apiKeys.isShared, true)
         )
       )
@@ -298,7 +318,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     if (!connector) {
       return res.status(404).json({
         success: false,
-        error: 'Shared connector not found',
+        error: 'Shared connector not found or you do not have permission to delete it',
       });
     }
 

@@ -139,7 +139,7 @@ export class SandboxManager {
           ...this.config.environment,
           PATH: process.env.PATH,
         },
-        stdio: ['pipe', 'pipe', 'pipe'] as const,
+        stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
         shell: process.platform === 'win32',
       };
 

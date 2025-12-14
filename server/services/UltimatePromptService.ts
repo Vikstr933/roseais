@@ -37,10 +37,10 @@ export class UltimatePromptService {
   /**
    * Enhances a prompt with ultimate AI engineering patterns
    */
-  enhancePrompt(
+  async enhancePrompt(
     originalPrompt: string,
     options: PromptEnhancementOptions = {}
-  ): EnhancedPromptResult {
+  ): Promise<EnhancedPromptResult> {
     const {
       agentType,
       userContext,
@@ -53,7 +53,7 @@ export class UltimatePromptService {
 
     // Apply agent-specific enhancement
     if (agentType) {
-      enhancedPrompt = PromptBuilder.buildAgentPrompt(agentType, userContext || originalPrompt);
+      enhancedPrompt = await PromptBuilder.buildAgentPrompt(agentType, userContext || originalPrompt);
       appliedPatterns.push(`Agent: ${agentType}`);
     }
 

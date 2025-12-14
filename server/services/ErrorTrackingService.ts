@@ -47,12 +47,12 @@ export class ErrorTrackingService {
       await db.insert(eventLogs).values({
         userId,
         eventType: 'error',
-        eventData: JSON.stringify({
+        metadata: {
           error,
           file: options?.file,
           severity: options?.severity || 'medium',
           projectId: options?.projectId
-        }),
+        },
         createdAt: new Date()
       });
 
@@ -122,9 +122,18 @@ export class ErrorTrackingService {
       const recent: TrackedError[] = [];
 
       for (const error of errors) {
-        const eventData = typeof error.eventData === 'string'
-          ? JSON.parse(error.eventData)
-          : error.eventData;
+        // Skip errors without userId
+        if (!error.userId) {
+          continue;
+        }
+
+        const userId = error.userId; // Type narrowing
+        const eventData = error.metadata as {
+          error?: string;
+          file?: string;
+          severity?: 'low' | 'medium' | 'high' | 'critical';
+          projectId?: number;
+        } | null;
 
         const severity = eventData?.severity || 'medium';
         bySeverity[severity as keyof typeof bySeverity]++;
@@ -139,7 +148,7 @@ export class ErrorTrackingService {
           file: eventData?.file,
           severity: severity as 'low' | 'medium' | 'high' | 'critical',
           projectId: eventData?.projectId,
-          userId: error.userId,
+          userId: userId,
           count: 1,
           firstSeen: error.createdAt || new Date(),
           lastSeen: error.createdAt || new Date(),

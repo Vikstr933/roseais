@@ -137,6 +137,7 @@ export class VercelDeploymentService {
           use: '@vercel/static-build',
           config: {
             distDir: options.outputDirectory || 'dist',
+            ...(options.buildCommand && { buildCommand: options.buildCommand }),
           },
         },
       ],
@@ -147,11 +148,6 @@ export class VercelDeploymentService {
         },
       ],
     };
-
-    // Add build command if specified
-    if (options.buildCommand) {
-      vercelConfig.builds[0].config.buildCommand = options.buildCommand;
-    }
 
     await fs.writeFile(
       path.join(deploymentPath, 'vercel.json'),
@@ -170,7 +166,7 @@ export class VercelDeploymentService {
       await execAsync(`${npmCommand} install --legacy-peer-deps`, {
         cwd: deploymentPath,
         timeout: 120000, // 2 minute timeout for Vercel deployments
-        shell: true,
+        shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash',
       });
       
       this.logger.info('VercelDeploymentService', 'Dependencies installed successfully');
@@ -194,7 +190,9 @@ export class VercelDeploymentService {
     try {
       // Check if Vercel CLI is installed
       try {
-        await execAsync('vercel --version', { shell: true });
+        await execAsync('vercel --version', { 
+          shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash' 
+        });
       } catch (error) {
         throw new Error('Vercel CLI is not installed. Please install it with: npm i -g vercel');
       }
@@ -203,7 +201,7 @@ export class VercelDeploymentService {
       const { stdout } = await execAsync('vercel --prod --yes', {
         cwd: deploymentPath,
         timeout: 300000, // 5 minute timeout
-        shell: true,
+        shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash',
       });
 
       // Parse the output to get the deployment URL

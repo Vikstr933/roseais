@@ -15,7 +15,11 @@ export class RateLimiter {
 
   async run<T>(task: Task<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.queue.push({ task, resolve, reject });
+      this.queue.push({ 
+        task: task as Task<unknown>, 
+        resolve: resolve as (value: unknown) => void, 
+        reject 
+      });
       this.processQueue();
     });
   }

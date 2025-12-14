@@ -192,7 +192,7 @@ router.post('/generate', authenticateUser, async (req, res) => {
     // Validate generated code is complete before saving
     const code = result.generatedCode;
     if (!code || code.length < 100) {
-      logger.error('Generated code is too short', { codeLength: code?.length || 0 });
+      logger.warn(`Generated code is too short: codeLength=${code?.length || 0}`);
       return res.status(500).json({
         success: false,
         error: 'Generated plugin code is incomplete. Please try again.',
@@ -288,7 +288,7 @@ router.post('/generate', authenticateUser, async (req, res) => {
       tokensUsed: result.estimatedCost,
     });
   } catch (error) {
-    logger.error('Plugin generation failed', error);
+    logger.error('Plugin generation failed', error as Error);
     res.status(500).json({
       error: 'Plugin generation failed',
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -363,7 +363,7 @@ router.get('/my-plugins', authenticateUser, async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error('Failed to fetch plugins', error);
+    logger.error('Failed to fetch plugins', error as Error);
     res.status(500).json({ error: 'Failed to fetch plugins' });
   }
 });
@@ -415,7 +415,7 @@ router.get('/:pluginId', authenticateUser, async (req, res) => {
       recentExecutions,
     });
   } catch (error) {
-    logger.error('Failed to fetch plugin details', error);
+    logger.error('Failed to fetch plugin details', error as Error);
     res.status(500).json({ error: 'Failed to fetch plugin details' });
   }
 });
@@ -483,7 +483,7 @@ router.post('/:pluginId/install', authenticateUser, async (req, res) => {
       message: 'Plugin installed successfully',
     });
   } catch (error) {
-    logger.error('Plugin installation failed', error);
+    logger.error('Plugin installation failed', error as Error);
     res.status(500).json({ error: 'Plugin installation failed' });
   }
 });
@@ -529,7 +529,7 @@ router.post('/:pluginId/uninstall', authenticateUser, async (req, res) => {
       message: 'Plugin uninstalled successfully',
     });
   } catch (error) {
-    logger.error('Plugin uninstall failed', error);
+    logger.error('Plugin uninstall failed', error as Error);
     res.status(500).json({ error: 'Plugin uninstall failed' });
   }
 });
@@ -566,7 +566,7 @@ router.delete('/:pluginId', authenticateUser, async (req, res) => {
       message: 'Plugin deleted successfully',
     });
   } catch (error) {
-    logger.error('Plugin deletion failed', error);
+    logger.error('Plugin deletion failed', error as Error);
     res.status(500).json({ error: 'Plugin deletion failed' });
   }
 });
@@ -615,7 +615,7 @@ router.get('/marketplace/browse', authenticateUser, async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error('Failed to fetch marketplace plugins', error);
+    logger.error('Failed to fetch marketplace plugins', error as Error);
     res.status(500).json({ error: 'Failed to fetch marketplace plugins' });
   }
 });
@@ -671,7 +671,7 @@ router.get('/stats/overview', authenticateUser, async (req, res) => {
       limits: tierLimits,
     });
   } catch (error) {
-    logger.error('Failed to fetch stats', error);
+    logger.error('Failed to fetch stats', error as Error);
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });

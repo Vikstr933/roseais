@@ -44,18 +44,20 @@ export class ConnectorService {
     const deploymentCredentials: { vercel?: string; github?: string } = {};
 
     try {
-      // 1. Get shared connectors (workspace-level)
-      if (workspaceId) {
-        const sharedKeys = await db
-          .select()
-          .from(apiKeys)
-          .where(
-            and(
-              eq(apiKeys.isShared, true),
-              eq(apiKeys.isActive, true),
-              eq(apiKeys.workspaceId, workspaceId.toString())
-            )
-          );
+      // 1. Get shared connectors (user-level, not workspace-level for security)
+      // SECURITY: Each user has their own connectors - they're not shared across users
+      // The "shared" name refers to them being available across all user's projects, not across users
+      const sharedKeys = await db
+        .select()
+        .from(apiKeys)
+        .where(
+          and(
+            eq(apiKeys.userId, userId), // SECURITY: Only this user's connectors
+            eq(apiKeys.isShared, true),
+            eq(apiKeys.isActive, true),
+            isNull(apiKeys.projectId) // User-wide connectors only
+          )
+        );
 
         for (const key of sharedKeys) {
           try {
@@ -104,7 +106,6 @@ export class ConnectorService {
             console.error(`Failed to decrypt shared connector ${key.id}:`, error);
           }
         }
-      }
 
       // 2. Get personal connectors (user-level)
       const personalKeys = await db

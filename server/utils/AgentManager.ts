@@ -17,7 +17,7 @@ interface DirectoryStructure {
 export class AgentManager {
   private baseDir: string;
   private structure: DirectoryStructure;
-  private activeAgents: Map<number, boolean>;
+  private activeAgents: Map<string, boolean>;
   private versionControl: AgentVersionControl;
   private logger: Logger;
 
@@ -70,7 +70,7 @@ export class AgentManager {
       const activeAgents = await db
         .select()
         .from(agents)
-        .where(eq(agents.isActive, 1));
+        .where(eq(agents.isActive, true));
       if (activeAgents.length === 0) {
         await this.initializeDefaultAgent();
       }
@@ -155,7 +155,7 @@ export class AgentManager {
       );
 
       // Update agent in database with reverted configuration
-      await db.update(agents).set(version.config).where(eq(agents.id, agentId));
+      await db.update(agents).set(version.config).where(eq(agents.id, agentId.toString()));
 
       await this.logger.info(
         'AgentManager',
@@ -268,7 +268,7 @@ export class AgentManager {
       const activeAgents = await db
         .select()
         .from(agents)
-        .where(eq(agents.isActive, 1));
+        .where(eq(agents.isActive, true));
 
       // Update active agents map
       this.activeAgents.clear();
@@ -307,7 +307,7 @@ export class AgentManager {
    * Check if an agent is active
    */
   isAgentActive(agentId: number): boolean {
-    return this.activeAgents.get(agentId) || false;
+    return this.activeAgents.get(agentId.toString()) || false;
   }
 
   /**
@@ -316,6 +316,8 @@ export class AgentManager {
   private async initializeDefaultAgent(): Promise<void> {
     try {
       const defaultAgent = {
+        id: `agent-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        type: 'component_generator',
         name: 'Default Component Generator',
         description: 'Default agent for generating React components',
         role: 'Component Generator',
@@ -325,22 +327,22 @@ export class AgentManager {
 - Implementing TypeScript types and interfaces
 - Following React best practices
 - Ensuring code quality and readability`,
-        temperature: '0.7',
-        capabilities: JSON.stringify([
+        temperature: 0.7,
+        capabilities: [
           'component generation',
           'typescript',
           'react',
-        ]),
-        expertise: JSON.stringify(['React', 'TypeScript', 'Component Design']),
-        frameworks: JSON.stringify(['React']),
-        libraries: JSON.stringify(['react-dom']),
-        bestPractices: JSON.stringify([
+        ],
+        expertise: ['React', 'TypeScript', 'Component Design'],
+        frameworks: ['React'],
+        libraries: ['react-dom'],
+        bestPractices: [
           'Clean Code',
           'Type Safety',
           'Component Composition',
           'React Hooks',
-        ]),
-        isActive: 1,
+        ],
+        isActive: true,
       };
 
       const [agent] = await db.insert(agents).values(defaultAgent).returning();

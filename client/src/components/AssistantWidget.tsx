@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { MapEmbed } from './MapEmbed';
 import { BackgroundTaskService } from '@/services/BackgroundTaskService';
+import { getFileLanguage } from '@/pages/playground/utils';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -518,7 +519,7 @@ export default function AssistantWidget({
               const content = file.content.length > 1000
                 ? file.content.substring(0, 1000) + '\n... (truncated)'
                 : file.content;
-              contextParts.push(`\n**File: ${file.path}**\n\`\`\`${file.language || 'typescript'}\n${content}\n\`\`\``);
+              contextParts.push(`\n**File: ${file.path}**\n\`\`\`${getFileLanguage(file.path)}\n${content}\n\`\`\``);
             });
           }
         }

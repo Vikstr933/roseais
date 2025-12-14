@@ -124,7 +124,7 @@ export class DeploymentService {
       await execAsync(`${npmCommand} install --legacy-peer-deps`, {
         cwd: workspacePath,
         timeout: 60000, // 60 second timeout
-        shell: true, // Use shell to resolve npm command
+        shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash', // Use shell to resolve npm command
       });
       
       this.logger.info('DeploymentService', 'Dependencies installed successfully');

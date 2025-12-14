@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '../components/ui/badge';
 import { useAuth, getAuthHeaders } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
-import { useRoute } from 'wouter';
+import { useLocation } from 'wouter';
 
 interface Plan {
   name: string;
@@ -73,12 +73,12 @@ const plans: Plan[] = [
 export default function Pricing() {
   const { user, sessionToken } = useAuth();
   const { toast } = useToast();
-  const [, navigate] = useRoute('/pricing');
+  const [, setLocation] = useLocation();
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleSubscribe = async (plan: Plan) => {
     if (!user) {
-      navigate('/auth/login?redirect=/pricing');
+      setLocation('/auth/login?redirect=/pricing');
       return;
     }
 

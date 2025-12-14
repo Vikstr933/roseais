@@ -170,7 +170,7 @@ export class UserActivityService {
             username: user?.username || 'Unknown',
             displayName: user?.displayName || 'Unknown User',
             lockType: lock.lockType,
-            startedAt: lock.startedAt,
+            startedAt: lock.startedAt ? lock.startedAt.toISOString() : new Date().toISOString(),
           };
         })
       );

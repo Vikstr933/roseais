@@ -19,7 +19,7 @@ export interface AuthenticatedRequest extends Request {
 /**
  * Check if user is admin or superadmin
  */
-export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   if (!req.user) {
     return res.status(401).json({
       error: 'Unauthorized',
@@ -43,7 +43,7 @@ export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: Nex
 /**
  * Check if user is superadmin (highest privilege)
  */
-export const requireSuperAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const requireSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
   if (!req.user) {
     return res.status(401).json({
       error: 'Unauthorized',
@@ -69,7 +69,7 @@ export const requireSuperAdmin = (req: AuthenticatedRequest, res: Response, next
  * Use this for endpoints where users can view/edit their own data, but admins can view/edit any
  */
 export const requireAdminOrOwner = (resourceUserIdField: string = 'userId') => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -105,7 +105,7 @@ export const requireAdminOrOwner = (resourceUserIdField: string = 'userId') => {
 /**
  * Add admin flag to request for conditional logic
  */
-export const checkAdminStatus = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const checkAdminStatus = (req: Request, res: Response, next: NextFunction) => {
   if (req.user) {
     (req as any).isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
     (req as any).isSuperAdmin = req.user.role === 'superadmin';

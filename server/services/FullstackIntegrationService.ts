@@ -63,7 +63,10 @@ export class FullstackIntegrationService {
     );
 
     // Use AI to analyze if backend is needed
-    let aiAnalysis = { needsBackend: false, backendType: 'none' as const };
+    let aiAnalysis: { needsBackend: boolean; backendType: 'express' | 'fastify' | 'none' } = { 
+      needsBackend: false, 
+      backendType: 'none' 
+    };
     if (needsBackend || hasBackendFiles) {
       aiAnalysis = await this.analyzeWithAI(userPrompt, files);
     }

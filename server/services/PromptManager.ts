@@ -144,7 +144,7 @@ export class PromptManager {
 
       return prompt;
     } catch (error) {
-      logger.error('Failed to load prompt', error as Error, { promptKey });
+      logger.error(`Failed to load prompt: ${promptKey}`, error as Error);
       return null;
     }
   }
@@ -210,7 +210,7 @@ export class PromptManager {
 
       return guidelines;
     } catch (error) {
-      logger.error('Failed to load guidelines', error as Error, { agentType });
+      logger.error(`Failed to load guidelines: ${agentType}`, error as Error);
       return [];
     }
   }
@@ -346,7 +346,7 @@ export class PromptManager {
       `);
     } catch (error) {
       // Don't throw - logging failures shouldn't break the main flow
-      logger.error('Failed to log prompt usage', error as Error, { promptTemplateId });
+      logger.error(`Failed to log prompt usage: ${promptTemplateId}`, error as Error);
     }
   }
 

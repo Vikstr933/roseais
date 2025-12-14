@@ -311,10 +311,10 @@ export class RequestBatcher {
     } catch (error) {
       batch.requests.forEach(({ reject }) => reject(error));
 
-      logger.error('Batch execution failed', error as Error, {
-        key,
-        requestCount: batch.requests.length
-      });
+      logger.error(
+        `Batch execution failed: key=${key}, requestCount=${batch.requests.length}`,
+        error as Error
+      );
     }
   }
 }

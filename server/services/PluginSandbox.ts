@@ -152,7 +152,7 @@ export class PluginSandbox {
 
       return result;
     } catch (error) {
-      logger.error('Sandbox execution failed', error);
+      logger.error('Sandbox execution failed', error as Error);
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('Timeout');
@@ -538,7 +538,7 @@ try {
         logger.info('Created sandbox worker script', { path: this.workerPath });
       }
     } catch (error) {
-      logger.error('Failed to create worker script', error);
+      logger.error('Failed to create worker script', error as Error);
       throw error;
     }
   }

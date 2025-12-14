@@ -3,6 +3,8 @@
  * Manages long-running tasks (like code generation) that can continue while user navigates
  */
 
+import { apiFetch, getApiUrl } from '../lib/api';
+
 export interface BackgroundTask {
   id: string;
   type: 'code-generation' | 'deployment' | 'analysis';

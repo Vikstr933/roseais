@@ -62,11 +62,9 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,      // Close idle clients after 30s
   connectionTimeoutMillis: 20000, // Timeout for new connections (20s - increased for Supabase)
   
-  // Keep-alive settings to prevent connection termination (pg uses keepalives, not keepAlive)
-  keepalives: 1,                 // Enable TCP keep-alive
-  keepalives_idle: 30000,        // Start keep-alive after 30s of inactivity (reduced from 60s)
-  keepalives_interval: 10000,    // Send keep-alive every 10s
-  keepalives_count: 3,           // Retry keep-alive 3 times before considering connection dead
+  // Keep-alive settings to prevent connection termination
+  keepAlive: true,                        // Enable TCP keep-alive
+  keepAliveInitialDelayMillis: 30000,     // Start keep-alive after 30s of inactivity
 
   // Advanced pooling configuration
   allowExitOnIdle: false,         // Keep the pool alive even when all clients are idle

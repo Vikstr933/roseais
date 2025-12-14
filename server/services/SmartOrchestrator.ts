@@ -79,7 +79,7 @@ export class SmartOrchestrator {
   async orchestrate(config: SmartOrchestrationConfig): Promise<OrchestrationResult> {
     const startTime = Date.now();
     logger.info('Starting smart orchestration');
-    logger.debug('Config', config);
+    logger.debug('Config', config as unknown as Record<string, unknown>);
 
     // 1. Check cache first (HUGE savings for repeated prompts)
     const cacheKey = this.getCacheKey(config.prompt);
@@ -113,14 +113,14 @@ export class SmartOrchestrator {
       ...agent,
       model: this.selectModel(agent.type, complexity)
     }));
-    logger.debug('Agents with models', agentsWithModels);
+    logger.debug('Agents with models', { agents: agentsWithModels });
 
     // 5. Inject only relevant context (15-25% cost savings)
     const agentsWithContext = agentsWithModels.map(agent => ({
       ...agent,
       context: this.selectContext(agent.type, config.prompt)
     }));
-    logger.debug('Agents with context', agentsWithContext);
+    logger.debug('Agents with context', { agents: agentsWithContext });
 
     // 6. Build execution graph for parallelism (40-50% faster)
     const executionPlan = this.buildExecutionGraph(agentsWithContext);

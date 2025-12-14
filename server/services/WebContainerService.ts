@@ -1,5 +1,7 @@
 // WebContainer API is browser-only, we'll use a different approach for server-side
-// import { WebContainer } from '@webcontainer/api';
+// NOTE: This code will not work on server-side - WebContainer requires browser APIs
+// Importing for TypeScript types only - actual usage should be in browser/client code
+import { WebContainer } from '@webcontainer/api';
 import { Logger } from '../utils/Logger';
 import { GeneratedFile } from '../utils/types';
 
@@ -126,7 +128,7 @@ export class WebContainerService {
         })
       );
 
-      installProcess.exit.then(exitCode => {
+      installProcess.exit.then((exitCode: number) => {
         if (exitCode === 0) {
           this.logger.info('WebContainerService', 'Dependencies installed successfully');
           resolve();

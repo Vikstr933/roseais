@@ -20,9 +20,9 @@ vi.mock('../utils/SimpleLogger', () => ({
 
 describe('Ultimate Prompt System', () => {
   describe('PromptBuilder', () => {
-    test('builds agent-specific prompts correctly', () => {
+    test('builds agent-specific prompts correctly', async () => {
       const userContext = 'Create a todo list app';
-      const prompt = PromptBuilder.buildAgentPrompt('CODE_GENERATOR', userContext);
+      const prompt = await PromptBuilder.buildAgentPrompt('CODE_GENERATOR', userContext);
 
       expect(prompt).toContain('Code Generator Agent');
       expect(prompt).toContain('Generate clean, efficient, and maintainable code');
@@ -129,9 +129,9 @@ describe('Ultimate Prompt System', () => {
   });
 
   describe('UltimatePromptService', () => {
-    test('enhances prompts with agent-specific intelligence', () => {
+    test('enhances prompts with agent-specific intelligence', async () => {
       const originalPrompt = 'Create a login form';
-      const result = ultimatePromptService.enhancePrompt(originalPrompt, {
+      const result = await ultimatePromptService.enhancePrompt(originalPrompt, {
         agentType: 'UI_DESIGNER'
       });
 
@@ -203,7 +203,7 @@ describe('Ultimate Prompt System', () => {
   });
 
   describe('Integration Tests', () => {
-    test('agent prompts work with real scenarios', () => {
+    test('agent prompts work with real scenarios', async () => {
       const scenarios = [
         {
           agent: 'REQUIREMENTS_ANALYST' as const,
@@ -223,8 +223,8 @@ describe('Ultimate Prompt System', () => {
         }
       ];
 
-      scenarios.forEach(({ agent, task }) => {
-        const prompt = PromptBuilder.buildAgentPrompt(agent, task);
+      for (const { agent, task } of scenarios) {
+        const prompt = await PromptBuilder.buildAgentPrompt(agent, task);
 
         expect(prompt).toContain(AGENT_PROMPTS[agent].role);
         expect(prompt).toContain(task);
@@ -239,7 +239,7 @@ describe('Ultimate Prompt System', () => {
         expect(prompt).toContain(
           expect.stringMatching(/production|quality|best practices/i)
         );
-      });
+      }
     });
 
     test('orchestration prompt coordinates multiple agents effectively', () => {
@@ -255,11 +255,11 @@ describe('Ultimate Prompt System', () => {
   });
 
   describe('Performance and Efficiency', () => {
-    test('prompt building is efficient for large inputs', () => {
+    test('prompt building is efficient for large inputs', async () => {
       const largePrompt = 'Create a comprehensive application '.repeat(100);
       const startTime = performance.now();
 
-      const result = PromptBuilder.buildAgentPrompt('CODE_GENERATOR', largePrompt);
+      const result = await PromptBuilder.buildAgentPrompt('CODE_GENERATOR', largePrompt);
 
       const endTime = performance.now();
       const executionTime = endTime - startTime;
@@ -287,7 +287,7 @@ describe('Ultimate Prompt System', () => {
 });
 
 describe('Prompt Engineering Best Practices Validation', () => {
-  test('prompts follow industry standards from leading AI tools', () => {
+  test('prompts follow industry standards from leading AI tools', async () => {
     // Test that our prompts incorporate best practices from:
     // - Claude Code: Professional objectivity and technical accuracy
     // - Cursor: Comprehensive context understanding
@@ -296,7 +296,7 @@ describe('Prompt Engineering Best Practices Validation', () => {
     // - Augment Code: Respect for existing patterns
     // - Replit: Focused execution
 
-    const testPrompt = PromptBuilder.buildAgentPrompt('CODE_GENERATOR', 'Test task');
+    const testPrompt = await PromptBuilder.buildAgentPrompt('CODE_GENERATOR', 'Test task');
 
     // Claude Code influence: Professional objectivity
     expect(testPrompt).toContain(
@@ -329,11 +329,11 @@ describe('Prompt Engineering Best Practices Validation', () => {
     );
   });
 
-  test('prompts include competitive intelligence features', () => {
+  test('prompts include competitive intelligence features', async () => {
     const agentTypes = ['CODE_GENERATOR', 'UI_DESIGNER', 'REQUIREMENTS_ANALYST', 'COMPLETION_AGENT'] as const;
 
-    agentTypes.forEach(agentType => {
-      const prompt = PromptBuilder.buildAgentPrompt(agentType, 'Test competitive features');
+    for (const agentType of agentTypes) {
+      const prompt = await PromptBuilder.buildAgentPrompt(agentType, 'Test competitive features');
 
       // All agents should have competitive intelligence
       expect(prompt).toContain(
@@ -354,6 +354,6 @@ describe('Prompt Engineering Best Practices Validation', () => {
       expect(prompt).toContain(
         expect.stringMatching(/comprehensive.*test|validation|quality/i)
       );
-    });
+    }
   });
 });

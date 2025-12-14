@@ -422,7 +422,10 @@ export class DatabaseProvisioningService {
       const encryptCredential = (data: string) => credentialVault.encrypt({ value: data });
       const encryptedConnectionString = encryptCredential(connectionString);
 
+      const { randomUUID } = await import('crypto');
+      
       await db.insert(projectDatabases).values({
+        id: randomUUID(),
         userId,
         projectId,
         databaseType,

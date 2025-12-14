@@ -107,7 +107,20 @@ export class ContextResearchService {
       // Build search query based on phase and agent
       const searchQuery = `${userPrompt} ${phase.description} ${phase.files.join(' ')}`;
       const knowledge = await this.knowledgeService.getRelevantKnowledge(searchQuery, userId || 'anonymous');
-      return knowledge.context || '';
+      
+      // Build context string from knowledge items
+      const contextParts: string[] = [];
+      if (knowledge.companies.length > 0) {
+        contextParts.push(`Companies: ${knowledge.companies.map(c => c.name).join(', ')}`);
+      }
+      if (knowledge.frameworks.length > 0) {
+        contextParts.push(`Frameworks: ${knowledge.frameworks.map(f => f.name).join(', ')}`);
+      }
+      if (knowledge.workspaces.length > 0) {
+        contextParts.push(`Workspaces: ${knowledge.workspaces.map(w => w.name).join(', ')}`);
+      }
+      
+      return contextParts.join('\n') || '';
     } catch (error) {
       logger.warn('Failed to load knowledge context', error as Error);
       return '';

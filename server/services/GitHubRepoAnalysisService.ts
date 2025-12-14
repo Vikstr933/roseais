@@ -356,9 +356,15 @@ export class GitHubRepoAnalysisService {
             role: agent.role || '',
             matchScore,
             matchReasons: this.getMatchReasons(agent, analysis),
-            capabilities: typeof agent.capabilities === 'object' ? agent.capabilities : {},
-            expertise: typeof agent.expertise === 'object' ? agent.expertise : {},
-            frameworks: typeof agent.frameworks === 'object' ? agent.frameworks : {},
+            capabilities: (typeof agent.capabilities === 'object' && agent.capabilities !== null) 
+              ? (agent.capabilities as Record<string, boolean>) 
+              : {},
+            expertise: (typeof agent.expertise === 'object' && agent.expertise !== null) 
+              ? (agent.expertise as Record<string, string>) 
+              : {},
+            frameworks: (typeof agent.frameworks === 'object' && agent.frameworks !== null) 
+              ? (agent.frameworks as Record<string, boolean>) 
+              : {},
           });
         }
       }

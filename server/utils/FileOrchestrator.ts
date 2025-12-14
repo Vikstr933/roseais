@@ -39,11 +39,7 @@ export class FileOrchestrator {
     }
 
     if (assignment.owner !== agentId) {
-      this.logger.error('Agent attempted to lock file owned by another agent', {
-        path,
-        owner: assignment.owner,
-        agentId,
-      });
+      this.logger.error(`Agent attempted to lock file owned by another agent: path=${path}, owner=${assignment.owner}, agentId=${agentId}`);
       return false;
     }
 
@@ -70,11 +66,7 @@ export class FileOrchestrator {
     }
 
     if (assignment.owner !== agentId) {
-      this.logger.error('Agent attempted to release lock for file owned by another agent', {
-        path,
-        owner: assignment.owner,
-        agentId,
-      });
+      this.logger.error(`Agent attempted to release lock for file owned by another agent: path=${path}, owner=${assignment.owner}, agentId=${agentId}`);
       return;
     }
 

@@ -11,7 +11,7 @@ const router = Router();
 router.get('/metrics', authenticateUser, async (req, res) => {
   try {
     // Check if user is admin
-    if (req.user?.tier !== 'admin' && req.user?.tier !== 'superadmin') {
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -30,7 +30,7 @@ router.get('/metrics', authenticateUser, async (req, res) => {
 router.get('/alerts', authenticateUser, async (req, res) => {
   try {
     // Check if user is admin
-    if (req.user?.tier !== 'admin' && req.user?.tier !== 'superadmin') {
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -49,7 +49,7 @@ router.get('/alerts', authenticateUser, async (req, res) => {
 router.get('/trends', authenticateUser, async (req, res) => {
   try {
     // Check if user is admin
-    if (req.user?.tier !== 'admin' && req.user?.tier !== 'superadmin') {
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -71,7 +71,7 @@ router.get('/user/:userId', authenticateUser, async (req, res) => {
     const { userId } = req.params;
 
     // Users can only see their own costs, admins can see all
-    if (req.user?.id !== userId && req.user?.tier !== 'admin' && req.user?.tier !== 'superadmin') {
+    if (req.user?.id !== userId && req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
@@ -122,7 +122,7 @@ router.get('/limits', authenticateUser, async (req, res) => {
 router.put('/limits', authenticateUser, async (req, res) => {
   try {
     // Check if user is admin
-    if (req.user?.tier !== 'admin' && req.user?.tier !== 'superadmin') {
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 

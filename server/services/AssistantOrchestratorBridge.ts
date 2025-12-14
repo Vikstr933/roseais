@@ -49,7 +49,11 @@ export class AssistantOrchestratorBridge {
           required: ['prompt']
         },
         execute: async (params) => {
-          return this.generateApplication(userId, params);
+          return this.generateApplication(userId, params as {
+            prompt: string;
+            projectType?: string;
+            enableOrchestration?: string;
+          });
         }
       },
       {
@@ -152,11 +156,12 @@ export class AssistantOrchestratorBridge {
         const result = await orchestrationAgent.executeTask({
           prompt: params.prompt,
           features: {
-            componentType: 'react',
-            styling: ['tailwind'],
-            functionality: [],
-            animations: false,
-            responsive: true
+            name: 'Application',
+            features: [],
+            styling: {
+              animations: false,
+              theme: 'light'
+            }
           },
           sessionId: `assistant-gen-${Date.now()}`
         });

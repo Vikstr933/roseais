@@ -181,8 +181,8 @@ export default function PromptPlayground() {
   const [relevanceData, setRelevanceData] = useState<any[]>([]);
   const [currentComponentName, setCurrentComponentName] = useState<string>('');
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
-  const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' } | null>(null);
-  const [projects, setProjects] = useState<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>>([]);
+  const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean } | null>(null);
+  const [projects, setProjects] = useState<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean }>>([]);
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
   const [showStartFreshDialog, setShowStartFreshDialog] = useState(false);
   const [isResettingProject, setIsResettingProject] = useState(false);
@@ -684,7 +684,7 @@ export default function PromptPlayground() {
   // This useEffect will be moved after generateMutation is defined to avoid temporal dead zone
 
   // Load user projects list - MUST be before useEffect that uses it for optimistic updates
-  const { data: userProjects = [], isLoading: isLoadingProjects } = useQuery<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team' }>>({
+  const { data: userProjects = [], isLoading: isLoadingProjects, refetch: refetchProjects } = useQuery<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean }>>({
     queryKey: ['/api/workspaces'],
     queryFn: async () => {
       if (!sessionToken) return [];
@@ -1049,6 +1049,7 @@ export default function PromptPlayground() {
           name: matchingProject.name,
           description: matchingProject.description,
           workspaceType: matchingProject.workspaceType || prev?.workspaceType || 'personal',
+          isPublic: matchingProject.isPublic,
         };
       });
     }
@@ -3489,7 +3490,7 @@ export default function PromptPlayground() {
           isPublic={currentProject.isPublic}
           onProjectUpdate={() => {
             // Refresh project data
-            refetch();
+            refetchProjects();
           }}
         />
       )}

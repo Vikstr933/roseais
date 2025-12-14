@@ -87,7 +87,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
 
       logger.info('Google Calendar plugin initialized', { userId });
     } catch (error) {
-      logger.error('Failed to initialize Google Calendar plugin', error as Error, { userId });
+      logger.error(`Failed to initialize Google Calendar plugin: userId=${userId}`, error as Error);
       this.updateStatus({ initialized: false, health: 'error', healthMessage: 'Initialization failed' });
       throw error;
     }
@@ -151,7 +151,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
 
       this.emitInfo('Google Calendar plugin enabled successfully');
     } catch (error) {
-      logger.error('Failed to enable Google Calendar plugin', error as Error, { userId });
+      logger.error(`Failed to enable Google Calendar plugin: userId=${userId}`, error as Error);
       this.updateStatus({
         enabled: false,
         authenticated: false,
@@ -188,7 +188,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
       await pluginRegistry.loadUserPlugins(userId);
       logger.info('Calendar state reloaded for user', { userId });
     } catch (error) {
-      logger.error('Failed to reload Calendar state', error as Error, { userId });
+      logger.error(`Failed to reload Calendar state: userId=${userId}`, error as Error);
       throw error;
     }
   }
@@ -205,7 +205,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
       });
 
       if (!tokens.refresh_token) {
-        logger.error('No refresh token available', { userId });
+        logger.error(`No refresh token available: userId=${userId}`);
         throw new Error('Calendar token expired and no refresh token available. Please reconnect your Google Calendar.');
       }
 
@@ -223,7 +223,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
 
         logger.info('Token refreshed successfully', { userId, newExpiry: userState.credentials.expiresAt });
       } catch (error) {
-        logger.error('Failed to refresh token', error as Error, { userId });
+        logger.error(`Failed to refresh token: userId=${userId}`, error as Error);
         throw new Error('Failed to refresh Calendar token. Please reconnect your Google Calendar.');
       }
     }
@@ -250,7 +250,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
 
       logger.info('Credentials saved to database', { userId, pluginId: this.metadata.id });
     } catch (error) {
-      logger.error('Failed to save credentials to database', error as Error, { userId });
+      logger.error(`Failed to save credentials to database: userId=${userId}`, error as Error);
     }
   }
 
@@ -295,10 +295,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
             message: `Synced ${syncedCount}/${events.length} events`
           });
         } catch (error) {
-          logger.error('Failed to sync event', error as Error, {
-            userId,
-            eventId: event.id
-          });
+          logger.error(`Failed to sync event: userId=${userId}, eventId=${event.id}`, error as Error);
         }
       }
 
@@ -395,7 +392,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
         status: event.status,
         analysis
       },
-      relevanceScore: this.calculateRelevanceScore(analysis, start),
+      relevanceScore: this.calculateRelevanceScore(analysis, start || ''),
       timestamp: new Date(start || Date.now()),
       syncedAt: new Date()
     }).onConflictDoUpdate({
@@ -412,7 +409,7 @@ export class GoogleCalendarPlugin extends BaseProductivityPlugin {
           status: event.status,
           analysis
         },
-        relevanceScore: this.calculateRelevanceScore(analysis, start),
+        relevanceScore: this.calculateRelevanceScore(analysis, start || ''),
         syncedAt: new Date()
       }
     });
@@ -605,7 +602,7 @@ Respond in JSON format with keys: eventType, priority, topics (array), preparati
         source: this.metadata.name
       }));
     } catch (error) {
-      logger.error('Failed to get knowledge items', error as Error, { userId });
+      logger.error(`Failed to get knowledge items: userId=${userId}`, error as Error);
       return [];
     }
   }
@@ -763,7 +760,7 @@ Respond in JSON format with keys: eventType, priority, topics (array), preparati
       logger.info('Credentials validated successfully', { userId });
       return true;
     } catch (error) {
-      logger.error('Credential validation failed', error as Error, { userId });
+      logger.error(`Credential validation failed: userId=${userId}`, error as Error);
       return false;
     }
   }

@@ -321,6 +321,42 @@ export class BrowserPlugin extends BaseProductivityPlugin {
     return `Found ${totalIssues} responsive issue(s) across ${viewportsWithIssues} viewport(s). Check individual viewport results for details.`;
   }
 
+  async getKnowledgeItems(
+    userId: string,
+    prompt: string,
+    filters?: Record<string, any>
+  ): Promise<any[]> {
+    // Browser plugin doesn't store knowledge items
+    return [];
+  }
+
+  async executeAction(
+    userId: string,
+    action: string,
+    params: Record<string, any>
+  ): Promise<any> {
+    // Route actions to appropriate methods
+    switch (action) {
+      case 'analyze_page':
+        return await this.analyzePage(params.url, params.options);
+      case 'check_responsive':
+        return await this.checkResponsive(params.url, params.viewports);
+      case 'take_screenshot':
+        return await this.takeScreenshot(
+          params.url,
+          params.viewport || { width: 1920, height: 1080 },
+          params.fullPage || false
+        );
+      default:
+        throw new Error(`Unknown action: ${action}`);
+    }
+  }
+
+  async validateCredentials(userId: string): Promise<boolean> {
+    // Browser plugin doesn't require credentials
+    return true;
+  }
+
   async cleanup(): Promise<void> {
     await this.browserAgent.close();
     logger.info('Browser plugin cleaned up');

@@ -1,6 +1,6 @@
 import { db } from '../../db';
 import { generationLocks } from '../../db/schema-pg';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, lt, gt } from 'drizzle-orm';
 
 // Infer types from schema
 type GenerationLock = typeof generationLocks.$inferSelect;
@@ -63,7 +63,7 @@ export class GenerationLockService {
       );
       const expiresAt = new Date(
         Date.now() + duration * 60 * 1000
-      ).toISOString();
+      );
 
       // Create the lock
       const lockData: InsertGenerationLock = {
@@ -116,7 +116,7 @@ export class GenerationLockService {
             eq(generationLocks.projectId, projectId),
             eq(generationLocks.lockType, lockType),
             eq(generationLocks.status, 'active'),
-            lt(now, generationLocks.expiresAt) // Not expired
+            gt(generationLocks.expiresAt, now) // Not expired (expiresAt > now)
           )
         )
         .limit(1);
@@ -221,6 +221,9 @@ export class GenerationLockService {
       );
 
       // Don't extend beyond max duration
+      if (!lock.startedAt) {
+        return false;
+      }
       const maxExpiry = new Date(lock.startedAt);
       maxExpiry.setMinutes(
         maxExpiry.getMinutes() + this.MAX_LOCK_DURATION_MINUTES
@@ -231,7 +234,7 @@ export class GenerationLockService {
       await db
         .update(generationLocks)
         .set({
-          expiresAt: finalExpiry.toISOString(),
+          expiresAt: finalExpiry,
           updatedAt: new Date(),
         })
         .where(eq(generationLocks.id, lockId));
@@ -312,7 +315,7 @@ export class GenerationLockService {
           and(
             eq(generationLocks.projectId, projectId),
             eq(generationLocks.status, 'active'),
-            lt(now, generationLocks.expiresAt)
+            gt(generationLocks.expiresAt, now) // Not expired (expiresAt > now)
           )
         )
         .orderBy(generationLocks.startedAt);
@@ -386,7 +389,13 @@ export class GenerationLockService {
   }> {
     try {
       const locks = await this.getProjectLocks(projectId);
-      const lockTypes = locks.map(lock => lock.lockType);
+      const lockTypes = locks
+        .map(lock => lock.lockType)
+        .filter((type): type is LockType => 
+          type === 'component_generation' || 
+          type === 'agent_generation' || 
+          type === 'code_generation'
+        );
 
       return {
         hasActiveLocks: locks.length > 0,

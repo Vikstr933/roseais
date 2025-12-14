@@ -44,9 +44,10 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 interface AuthDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAuthSuccess?: () => void;
 }
 
-export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
+export function AuthDialog({ open, onOpenChange, onAuthSuccess }: AuthDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [, setLocation] = useLocation();
@@ -98,6 +99,7 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
         });
         onOpenChange(false);
         loginForm.reset();
+        onAuthSuccess?.();
         
         // Check for pending prompt from homepage
         const pendingPrompt = localStorage.getItem('pendingPrompt');
@@ -138,6 +140,7 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
         });
         onOpenChange(false);
         registerForm.reset();
+        onAuthSuccess?.();
       } else {
         toast({
           title: 'Registration Failed',

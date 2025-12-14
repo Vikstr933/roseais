@@ -69,7 +69,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
       version: '1.0.0',
       description: 'Integrate GitHub for repository management, code hosting, and collaborative development',
       author: 'AI Library Team',
-      category: 'development',
+      category: 'productivity',
       icon: '🐙',
       requiresAuth: true,
       authType: 'oauth2',
@@ -104,7 +104,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
       this.updateStatus({ initialized: true });
       logger.info('GitHub plugin initialized', { userId });
     } catch (error) {
-      logger.error('Failed to initialize GitHub plugin', error as Error, { userId });
+      logger.error(`Failed to initialize GitHub plugin for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       this.updateStatus({ initialized: false, health: 'error', healthMessage: 'Initialization failed' });
       throw error;
     }
@@ -143,7 +143,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
       logger.info('GitHub plugin enabled', { userId, githubUser: user.login });
       this.emitInfo('GitHub plugin enabled successfully');
     } catch (error) {
-      logger.error('Failed to enable GitHub plugin', error as Error, { userId });
+      logger.error(`Failed to enable GitHub plugin for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       this.updateStatus({
         enabled: false,
         authenticated: false,
@@ -182,7 +182,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
       await pluginRegistry.loadUserPlugins(userId);
       logger.info('GitHub state reloaded for user', { userId });
     } catch (error) {
-      logger.error('Failed to reload GitHub state', error as Error, { userId });
+      logger.error(`Failed to reload GitHub state for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
   }
@@ -194,13 +194,13 @@ export class GitHubPlugin extends BaseProductivityPlugin {
 
     try {
       this.updateStatus({ syncInProgress: true });
-      this.emitSyncProgress({ phase: 'starting', message: 'Starting GitHub sync...' });
+      this.emitSyncProgress({ current: 0, total: 100, message: 'Starting GitHub sync...' });
 
       const octokit = await this.getUserOctokit(userId);
       const userState = this.userStates.get(userId)!;
 
       // Sync repositories
-      this.emitSyncProgress({ phase: 'syncing', message: 'Fetching repositories...' });
+      this.emitSyncProgress({ current: 10, total: 100, message: 'Fetching repositories...' });
       const { data: repos } = await octokit.repos.listForAuthenticatedUser({
         sort: 'updated',
         per_page: 50
@@ -228,8 +228,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
               updated_at: repo.updated_at
             },
             relevanceScore: this.calculateRepoRelevance(repo),
-            timestamp: new Date(repo.updated_at),
-            createdAt: new Date()
+            timestamp: new Date(repo.updated_at || Date.now())
           }).onConflictDoUpdate({
             target: [pluginKnowledge.userId, pluginKnowledge.pluginId, pluginKnowledge.externalId],
             set: {
@@ -247,22 +246,22 @@ export class GitHubPlugin extends BaseProductivityPlugin {
                 updated_at: repo.updated_at
               },
               relevanceScore: this.calculateRepoRelevance(repo),
-              timestamp: new Date(repo.updated_at)
+              timestamp: new Date(repo.updated_at || Date.now())
             }
           });
 
           itemsSynced++;
         } catch (error) {
-          logger.error('Failed to sync repository', error as Error, { userId, repo: repo.full_name });
+          logger.error(`Failed to sync repository ${repo.full_name} for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
           errors.push(`Failed to sync repository ${repo.full_name}`);
         }
       }
 
       // Sync recent pull requests
       if (this.metadata.settings?.trackPullRequests) {
-        this.emitSyncProgress({ phase: 'syncing', message: 'Fetching pull requests...' });
-        // Use search.issues instead of deprecated search.issuesAndPullRequests
-        const { data: pullRequests } = await octokit.search.issues({
+        this.emitSyncProgress({ current: 50, total: 100, message: 'Fetching pull requests...' });
+        // Use search.issuesAndPullRequests for pull requests
+        const { data: pullRequests } = await octokit.search.issuesAndPullRequests({
           q: `is:pr author:${userState.user.login} sort:updated-desc`,
           per_page: 30
         });
@@ -285,8 +284,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
                 updated_at: pr.updated_at
               },
               relevanceScore: 0.7,
-              timestamp: new Date(pr.updated_at),
-              createdAt: new Date()
+              timestamp: new Date(pr.updated_at || Date.now())
             }).onConflictDoUpdate({
               target: [pluginKnowledge.userId, pluginKnowledge.pluginId, pluginKnowledge.externalId],
               set: {
@@ -305,12 +303,12 @@ export class GitHubPlugin extends BaseProductivityPlugin {
 
             itemsSynced++;
           } catch (error) {
-            logger.error('Failed to sync pull request', error as Error, { userId, pr: pr.number });
+            logger.error(`Failed to sync pull request #${pr.number} for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
           }
         }
       }
 
-      this.emitSyncProgress({ phase: 'completed', message: `Synced ${itemsSynced} items` });
+      this.emitSyncProgress({ current: 100, total: 100, message: `Synced ${itemsSynced} items` });
 
       this.updateStatus({
         syncInProgress: false,
@@ -324,7 +322,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
         errors: errors.length > 0 ? errors : undefined
       };
     } catch (error) {
-      logger.error('GitHub sync failed', error as Error, { userId });
+      logger.error(`GitHub sync failed for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       this.updateStatus({ syncInProgress: false, health: 'error' });
       throw error;
     }
@@ -909,7 +907,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
         filesCommitted: files.length
       };
     } catch (error) {
-      logger.error('Failed to commit files', error as Error, { userId, repo: `${owner}/${repo}` });
+      logger.error(`Failed to commit files to ${owner}/${repo} for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
   }
@@ -1035,37 +1033,33 @@ export class GitHubPlugin extends BaseProductivityPlugin {
 
   public async getKnowledgeItems(
     userId: string,
-    filters?: {
-      query?: string;
-      type?: string;
-      limit?: number;
-    }
+    prompt: string,
+    filters?: Record<string, any>
   ): Promise<KnowledgeItem[]> {
     try {
-      let query = db
-        .select()
-        .from(pluginKnowledge)
-        .where(
-          and(
-            eq(pluginKnowledge.userId, userId),
-            eq(pluginKnowledge.pluginId, this.metadata.id)
-          )
-        )
-        .orderBy(desc(pluginKnowledge.relevanceScore));
+      const conditions = [
+        eq(pluginKnowledge.userId, userId),
+        eq(pluginKnowledge.pluginId, this.metadata.id)
+      ];
 
       if (filters?.type) {
-        query = query.where(eq(pluginKnowledge.type, filters.type));
+        conditions.push(eq(pluginKnowledge.type, filters.type));
       }
 
-      if (filters?.limit) {
-        query = query.limit(filters.limit);
-      }
+      const baseQuery = db
+        .select()
+        .from(pluginKnowledge)
+        .where(and(...conditions))
+        .orderBy(desc(pluginKnowledge.relevanceScore));
 
-      const results = await query;
+      const results = filters?.limit 
+        ? await baseQuery.limit(filters.limit)
+        : await baseQuery;
 
+      // Map GitHub-specific types to KnowledgeItem types
       return results.map(item => ({
         id: item.externalId,
-        type: item.type as 'repository' | 'pull_request',
+        type: this.mapGitHubTypeToKnowledgeType(item.type),
         title: item.title,
         content: item.content || '',
         metadata: item.metadata as Record<string, any>,
@@ -1074,9 +1068,16 @@ export class GitHubPlugin extends BaseProductivityPlugin {
         source: this.metadata.name
       }));
     } catch (error) {
-      logger.error('Failed to get knowledge items', error as Error, { userId });
+      logger.error(`Failed to get knowledge items for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       return [];
     }
+  }
+
+  private mapGitHubTypeToKnowledgeType(githubType: string): 'email' | 'calendar_event' | 'task' | 'document' | 'contact' | 'note' {
+    // Map GitHub types to KnowledgeItem types
+    if (githubType === 'repository') return 'document';
+    if (githubType === 'pull_request') return 'task';
+    return 'note'; // Default fallback
   }
 
   /**
@@ -1136,11 +1137,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
           );
           importedCount++;
         } catch (error) {
-          logger.error('Failed to import file', error as Error, {
-            userId,
-            projectId: project.id,
-            filePath: file.path
-          });
+          logger.error(`Failed to import file ${file.path} for project ${project.id} (user ${userId})`, error instanceof Error ? error : new Error(String(error)));
         }
       }
 
@@ -1162,11 +1159,13 @@ export class GitHubPlugin extends BaseProductivityPlugin {
       if (readmeFile) {
         try {
           readmeAnalysis = await this.analyzeReadme(readmeFile.content);
-          logger.info('Analyzed README.md for setup information', {
-            projectId: project.id,
-            foundEnvVars: readmeAnalysis.environmentVariables?.length || 0,
-            foundInstallSteps: readmeAnalysis.installationSteps?.length || 0
-          });
+          if (readmeAnalysis) {
+            logger.info('Analyzed README.md for setup information', {
+              projectId: project.id,
+              foundEnvVars: readmeAnalysis.environmentVariables?.length || 0,
+              foundInstallSteps: readmeAnalysis.installationSteps?.length || 0
+            });
+          }
         } catch (error) {
           logger.warn('Failed to analyze README.md', error as Error);
         }
@@ -1311,8 +1310,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
         databaseInfo, 
         databaseProvisioned,
         provisioningError,
-        missingApiKeys,
-        readmeAnalysis
+        missingApiKeys
       );
 
       // Send API_KEY_REQUIRED event if API keys are missing
@@ -1378,7 +1376,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
         }
       };
     } catch (error) {
-      logger.error('Failed to import repository', error as Error, { userId, owner, repo });
+      logger.error(`Failed to import repository ${owner}/${repo} for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
   }
@@ -1463,7 +1461,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
         }
       }
     } catch (error) {
-      logger.error('Failed to get repository content', error as Error, { owner, repo, path });
+      logger.error(`Failed to get repository content from ${owner}/${repo} at path ${path}`, error instanceof Error ? error : new Error(String(error)));
     }
 
     return files;
@@ -1694,8 +1692,45 @@ ${databaseInfo.recommendedSetup.setupInstructions || ''}`);
       await octokit.users.getAuthenticated();
       return true;
     } catch (error) {
-      logger.error('GitHub credentials validation failed', error as Error, { userId });
+      logger.error(`GitHub credentials validation failed for user ${userId}`, error instanceof Error ? error : new Error(String(error)));
       return false;
+    }
+  }
+
+  /**
+   * Analyze README content to extract setup information
+   */
+  private async analyzeReadme(content: string): Promise<{
+    environmentVariables?: string[];
+    installationSteps?: string[];
+    dependencies?: string[];
+    databaseInfo?: string;
+    setupInstructions?: string;
+  } | null> {
+    try {
+      // Simple regex-based extraction
+      const envVars: string[] = [];
+      const envVarRegex = /(?:export\s+|ENV\s+|\.env\s*[=:]\s*)([A-Z_][A-Z0-9_]*)/gi;
+      const matches = content.matchAll(envVarRegex);
+      for (const match of matches) {
+        if (match[1] && !envVars.includes(match[1])) {
+          envVars.push(match[1]);
+        }
+      }
+
+      const installSteps: string[] = [];
+      const installRegex = /(?:npm\s+install|yarn\s+install|pip\s+install|bundle\s+install)/gi;
+      if (installRegex.test(content)) {
+        installSteps.push('Install dependencies');
+      }
+
+      return {
+        environmentVariables: envVars.length > 0 ? envVars : undefined,
+        installationSteps: installSteps.length > 0 ? installSteps : undefined
+      };
+    } catch (error) {
+      logger.warn('Failed to analyze README', error instanceof Error ? error : new Error(String(error)));
+      return null;
     }
   }
 

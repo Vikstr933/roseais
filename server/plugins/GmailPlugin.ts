@@ -102,7 +102,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
 
       logger.info('Gmail plugin initialized', { userId });
     } catch (error) {
-      logger.error('Failed to initialize Gmail plugin', error as Error, { userId });
+      logger.error(`Failed to initialize Gmail plugin: userId=${userId}`, error as Error);
       this.updateStatus({ initialized: false, health: 'error', healthMessage: 'Initialization failed' });
       throw error;
     }
@@ -179,7 +179,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
 
       this.emitInfo('Gmail plugin enabled successfully');
     } catch (error) {
-      logger.error('Failed to enable Gmail plugin', error as Error, { userId });
+      logger.error(`Failed to enable Gmail plugin: userId=${userId}`, error as Error);
       this.updateStatus({
         enabled: false,
         authenticated: false,
@@ -219,7 +219,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
       await pluginRegistry.loadUserPlugins(userId);
       logger.info('Gmail state reloaded for user', { userId });
     } catch (error) {
-      logger.error('Failed to reload Gmail state', error as Error, { userId });
+      logger.error(`Failed to reload Gmail state: userId=${userId}`, error as Error);
       throw error;
     }
   }
@@ -240,7 +240,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
       });
 
       if (!tokens.refresh_token) {
-        logger.error('No refresh token available', { userId });
+        logger.warn(`No refresh token available: userId=${userId}`);
         throw new Error('Gmail token expired and no refresh token available. Please reconnect your Gmail account.');
       }
 
@@ -261,7 +261,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
 
         logger.info('Token refreshed successfully', { userId, newExpiry: userState.credentials.expiresAt });
       } catch (error) {
-        logger.error('Failed to refresh token', error as Error, { userId });
+        logger.error(`Failed to refresh token: userId=${userId}`, error as Error);
         throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
       }
     }
@@ -292,7 +292,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
 
       logger.info('Credentials saved to database', { userId, pluginId: this.metadata.id });
     } catch (error) {
-      logger.error('Failed to save credentials to database', error as Error, { userId });
+      logger.error(`Failed to save credentials to database: userId=${userId}`, error as Error);
       // Don't throw - the token is still refreshed in memory
     }
   }
@@ -333,10 +333,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
             message: `Synced ${syncedCount}/${messages.length} emails`
           });
         } catch (error) {
-          logger.error('Failed to sync email', error as Error, {
-            userId,
-            messageId: message.id
-          });
+          logger.error(`Failed to sync email: userId=${userId}, messageId=${message.id}`, error as Error);
         }
       }
 
@@ -379,7 +376,7 @@ export class GmailPlugin extends BaseProductivityPlugin {
     } catch (error) {
       const durationMs = Date.now() - startTime;
 
-      logger.error('Gmail sync failed', error as Error, { userId });
+      logger.error(`Gmail sync failed: userId=${userId}`, error as Error);
 
       // Log failed sync
       await db.insert(pluginSyncLogs).values({
@@ -789,7 +786,7 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
         source: this.metadata.name
       }));
     } catch (error) {
-      logger.error('Failed to get knowledge items', error as Error, { userId });
+      logger.error(`Failed to get knowledge items: userId=${userId}`, error as Error);
       return [];
     }
   }
@@ -1090,7 +1087,7 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
         message: `Email scheduled to be sent to ${to} at ${scheduledDate.toLocaleString()}`
       };
     } catch (error) {
-      logger.error('Failed to schedule email', error as Error, { userId, to });
+      logger.error(`Failed to schedule email: userId=${userId}, to=${to}`, error as Error);
       throw error;
     }
   }
@@ -1202,7 +1199,7 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
       logger.info('Credentials validated successfully', { userId });
       return true;
     } catch (error) {
-      logger.error('Credential validation failed', error as Error, { userId });
+      logger.error(`Credential validation failed: userId=${userId}`, error as Error);
       return false;
     }
   }

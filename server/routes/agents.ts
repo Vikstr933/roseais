@@ -5,6 +5,7 @@ import { eq, and, or } from 'drizzle-orm';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
 import { requireAdmin, checkAdminStatus } from '../middleware/admin';
 import { promptManager } from '../services/PromptManager';
+import { nanoid } from 'nanoid';
 
 import { Anthropic } from '@anthropic-ai/sdk';
 
@@ -483,9 +484,11 @@ router.post('/agents', authenticateUser, checkAdminStatus, async (req, res) => {
     console.log(`Creating ${agentIsSystem ? 'system' : 'user'} agent for userId: ${agentUserId || 'none (system)'}`);
 
     // Transform Record fields to ensure correct format
-    const transformedData: Partial<typeof agents.$inferInsert> = {
+    const transformedData: typeof agents.$inferInsert = {
+      id: nanoid(), // Generate unique ID
       name: name || '',
       description: description || '',
+      type: role || 'assistant', // type field is required
       role: role || '',
       model: model || '',
       systemPrompt: systemPrompt || '',
@@ -523,6 +526,7 @@ router.post('/agents', authenticateUser, checkAdminStatus, async (req, res) => {
       });
     }
 
+    // After validation, we know all required fields are present
     const newAgent = await db
       .insert(agents)
       .values(transformedData)

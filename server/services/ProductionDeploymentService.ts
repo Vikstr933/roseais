@@ -93,9 +93,9 @@ export class ProductionDeploymentService {
           // Decrypt and return the API key
           try {
             const { apiKeyService } = await import('./APIKeyService');
-            const decrypted = await apiKeyService.getAPIKey(sharedKey.id.toString(), userId);
+            const decrypted = await apiKeyService.getAPIKey(userId, serviceName);
             if (decrypted) {
-              return decrypted.keyValue;
+              return decrypted;
             }
           } catch (error) {
             this.logger.error('ProductionDeploymentService', `Failed to decrypt shared ${serviceName} connector`, error as Error);
@@ -124,9 +124,9 @@ export class ProductionDeploymentService {
         // Decrypt and return the API key
         try {
           const { apiKeyService } = await import('./APIKeyService');
-          const decrypted = await apiKeyService.getAPIKey(personalKey.id.toString(), userId);
+          const decrypted = await apiKeyService.getAPIKey(userId, serviceName);
           if (decrypted) {
-            return decrypted.keyValue;
+            return decrypted;
           }
         } catch (error) {
           this.logger.error('ProductionDeploymentService', `Failed to decrypt personal ${serviceName} connector`, error as Error);

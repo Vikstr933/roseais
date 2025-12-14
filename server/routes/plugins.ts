@@ -198,7 +198,7 @@ router.get('/', authenticateUser, async (req, res) => {
 
         return {
           id: plugin.pluginId,
-          name: plugin.pluginName,
+          name: plugin.name,
           description: plugin.description,
           category: 'custom',
           icon: '🔌',
@@ -289,10 +289,13 @@ router.get('/status', authenticateUser, async (req, res) => {
       );
     
     // Build status array from in-memory status
-    const systemStatusArray = Array.from(status.entries()).map(([pluginId, data]: [string, any]) => ({
-      pluginId,
-      ...data
-    }));
+    const systemStatusArray = Array.from(status.entries()).map((entry: [string, any]) => {
+      const [pluginId, data] = entry;
+      return {
+        pluginId,
+        ...data
+      };
+    });
     
     // Ensure all enabled plugins from database are included
     for (const config of enabledConfigs) {
@@ -319,31 +322,38 @@ router.get('/status', authenticateUser, async (req, res) => {
     }
 
     // Get user-generated plugin status
-
-    const userPlugins = await database
+    // SECURITY: Query pluginInstallations first to get plugins INSTALLED by this user
+    // (not plugins CREATED by this user). Each user only sees their own installations.
+    const userInstallations = await database
       .select()
-      .from(userGeneratedPlugins)
+      .from(pluginInstallations)
       .where(
         and(
-          eq(userGeneratedPlugins.userId, userId),
-          eq(userGeneratedPlugins.status, 'approved')
+          eq(pluginInstallations.userId, userId),
+          eq(pluginInstallations.status, 'active')
         )
       );
 
     const userPluginStatus = await Promise.all(
-      userPlugins.map(async (plugin) => {
-        const installation = await database.query.pluginInstallations.findFirst({
+      userInstallations.map(async (installation) => {
+        // Get plugin details for this installation
+        const plugin = await database.query.userGeneratedPlugins.findFirst({
           where: and(
-            eq(pluginInstallations.userId, userId),
-            eq(pluginInstallations.pluginId, plugin.pluginId)
+            eq(userGeneratedPlugins.pluginId, installation.pluginId),
+            eq(userGeneratedPlugins.status, 'approved')
           ),
         });
+
+        if (!plugin) {
+          // Plugin was deleted or rejected, skip it
+          return null;
+        }
 
         return {
           pluginId: plugin.pluginId,
           metadata: {
             id: plugin.pluginId,
-            name: plugin.pluginName,
+            name: plugin.name,
             description: plugin.description,
             category: 'custom',
             icon: '🔌',
@@ -352,20 +362,23 @@ router.get('/status', authenticateUser, async (req, res) => {
             capabilities: plugin.capabilities || [],
           },
           status: {
-            enabled: installation?.status === 'active',
-            initialized: !!installation,
-            authenticated: installation?.status === 'active',
-            health: installation?.status === 'active' ? 'healthy' : 'warning',
-            healthMessage: installation ? undefined : 'Plugin not installed',
-            lastSync: installation?.lastUsedAt,
+            enabled: installation.status === 'active',
+            initialized: true,
+            authenticated: installation.status === 'active',
+            health: installation.status === 'active' ? 'healthy' : 'warning',
+            healthMessage: undefined,
+            lastSync: installation.lastUsedAt,
             syncInProgress: false,
           },
         };
       })
     );
 
+    // Filter out null entries (plugins that were deleted/rejected)
+    const validUserPluginStatus = userPluginStatus.filter((status): status is NonNullable<typeof status> => status !== null);
+
     // Combine system and user plugin status
-    const allStatus = [...systemStatusArray, ...userPluginStatus];
+    const allStatus = [...systemStatusArray, ...validUserPluginStatus];
 
     res.json({
       success: true,
@@ -717,10 +730,7 @@ router.get('/slack/callback', async (req, res) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenData.ok || !tokenData.authed_user?.access_token) {
-      logger.error('Slack OAuth token exchange failed', {
-        error: tokenData.error,
-        error_description: tokenData.error_description
-      });
+      logger.warn(`Slack OAuth token exchange failed: error=${tokenData.error}, error_description=${tokenData.error_description}`);
       throw new Error(tokenData.error || 'Failed to obtain access token');
     }
 
@@ -841,7 +851,7 @@ router.get('/google-calendar/callback', async (req, res) => {
     const { tokens } = await oauth2Client.getToken(code as string);
 
     if (!tokens.refresh_token) {
-      logger.error('No refresh token received from Google Calendar', { userId });
+      logger.error(`No refresh token received from Google Calendar: userId=${userId}`);
       throw new Error('Failed to obtain refresh token. Please try reconnecting.');
     }
 
@@ -1051,10 +1061,7 @@ router.get('/github/callback', async (req, res) => {
     const tokenData = await tokenResponse.json();
 
     if (tokenData.error || !tokenData.access_token) {
-      logger.error('GitHub OAuth token exchange failed', {
-        error: tokenData.error,
-        error_description: tokenData.error_description
-      });
+      logger.warn(`GitHub OAuth token exchange failed: error=${tokenData.error}, error_description=${tokenData.error_description}`);
       throw new Error(tokenData.error_description || 'Failed to obtain access token');
     }
 
@@ -1280,7 +1287,7 @@ router.get('/tools', authenticateUser, async (req, res) => {
 
     res.json({
       success: true,
-      tools: tools.map(t => ({
+      tools: tools.map((t: any) => ({
         name: t.name,
         description: t.description,
         parameters: t.parameters

@@ -206,7 +206,7 @@ export class PluginSecurityAnalyzer {
         usedPackages,
       };
     } catch (error) {
-      logger.error('Error during security analysis', error);
+      logger.error('Error during security analysis', error instanceof Error ? error : undefined);
       return {
         issues: [{
           severity: 'critical',

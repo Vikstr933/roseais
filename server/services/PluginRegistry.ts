@@ -105,6 +105,12 @@ export class PluginRegistry extends EventEmitter {
 
   /**
    * Enable a plugin for a user
+   * 
+   * SECURITY: Credentials are stored per-user in pluginConfigs table with userId.
+   * Each user's credentials are encrypted and isolated - no user can access another user's credentials.
+   * - System plugins (Gmail, Calendar, etc.): credentials stored in pluginConfigs.userId
+   * - User-generated plugins: credentials stored in pluginInstallations.userId
+   * - All queries filter by userId to ensure isolation
    */
   public async enablePlugin(
     userId: string,
@@ -959,6 +965,12 @@ function execute(userId, params, credentials) {
   /**
    * Load user's plugin configurations from database
    */
+  /**
+   * Load plugins for a specific user
+   * 
+   * SECURITY: All queries filter by userId to ensure users only see their own plugins and credentials.
+   * New users start with no plugins - they must explicitly enable/install each plugin.
+   */
   public async loadUserPlugins(userId: string): Promise<void> {
     try {
       logger.info('Loading plugins for user from database', { userId });
@@ -969,6 +981,7 @@ function execute(userId, params, credentials) {
       }
 
       // Load regular plugin configurations
+      // SECURITY: Filtered by userId - each user only sees their own plugin configs
       const configs = await db.query.pluginConfigs.findMany({
         where: (configs, { eq }) => eq(configs.userId, userId)
       });

@@ -506,7 +506,12 @@ export class GitHubKnowledgeService {
       for (const framework of frameworkResults) {
         try {
           // Parse features to extract repository information
-          const features = JSON.parse(framework.features || '[]');
+          const features =
+            typeof framework.features === 'string'
+              ? JSON.parse(framework.features || '[]')
+              : (Array.isArray(framework.features)
+                  ? framework.features
+                  : []);
           const repositoryInfo = features.find((f: string) =>
             f.startsWith('Repository: ')
           );
