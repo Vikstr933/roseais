@@ -178,8 +178,10 @@ export class KnowledgeService {
         id: company.id,
         type: 'company' as const,
         name: company.name,
-        description: company.description,
-        data: JSON.parse(company.products || '[]'),
+        description: company.description || '',
+        data: typeof company.products === 'string' 
+          ? JSON.parse(company.products || '[]')
+          : (company.products || []),
         relevanceScore: 1.0, // High relevance for system knowledge
       }));
     } catch (error) {
@@ -198,8 +200,10 @@ export class KnowledgeService {
         id: framework.id,
         type: 'framework' as const,
         name: framework.name,
-        description: framework.description,
-        data: JSON.parse(framework.features || '[]'),
+        description: framework.description || '',
+        data: typeof framework.features === 'string'
+          ? JSON.parse(framework.features || '[]')
+          : (framework.features || []),
         relevanceScore: 1.0, // High relevance for system knowledge
       }));
     } catch (error) {
@@ -218,7 +222,7 @@ export class KnowledgeService {
         id: workspace.id,
         type: 'workspace' as const,
         name: workspace.name,
-        description: workspace.description,
+        description: workspace.description || '',
         data: typeof workspace.agentConfig === 'string'
           ? JSON.parse(workspace.agentConfig || '{}')
           : workspace.agentConfig || {},
@@ -371,7 +375,7 @@ export class KnowledgeService {
             id: workspace.id,
             type: 'workspace' as const,
             name: workspace.name,
-            description: workspace.description,
+            description: workspace.description || '',
             data: workspaceData,
             relevanceScore,
           };
@@ -468,11 +472,11 @@ export class KnowledgeService {
         id: workspace.id,
         type: 'workspace' as const,
         name: workspace.name,
-        description: workspace.description,
+        description: workspace.description || '',
         data: {
           id: workspace.id,
           name: workspace.name,
-          description: workspace.description,
+          description: workspace.description || '',
           agentConfig:
             typeof workspace.agentConfig === 'string'
               ? JSON.parse(workspace.agentConfig)
@@ -571,11 +575,11 @@ export class KnowledgeService {
         id: workspace.id,
         type: 'workspace' as const,
         name: workspace.name,
-        description: workspace.description,
+        description: workspace.description || '',
         data: {
           id: workspace.id,
           name: workspace.name,
-          description: workspace.description,
+          description: workspace.description || '',
           agentConfig:
             typeof workspace.agentConfig === 'string'
               ? JSON.parse(workspace.agentConfig)
