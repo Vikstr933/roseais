@@ -305,12 +305,40 @@ function ProjectDetailContent() {
   }
 
   if (!project) {
+    // Show loading state if we're still waiting for data
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"></div>
+        </div>
+      );
+    }
+    
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Project Not Found</h1>
           <p className="text-muted-foreground mb-4">
             The project you're looking for doesn't exist or you don't have access to it.
+          </p>
+          <Button onClick={() => setLocation('/workspaces')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Projects
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Validate project data structure
+  if (!project.id || !project.name) {
+    console.error('[ProjectDetail] Invalid project data structure:', project);
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Invalid Project Data</h1>
+          <p className="text-muted-foreground mb-4">
+            The project data received is invalid. Please try again.
           </p>
           <Button onClick={() => setLocation('/workspaces')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
