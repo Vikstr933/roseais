@@ -255,19 +255,40 @@ router.post('/', authenticateUser, async (req, res) => {
       }
     }
 
+    // Extract the actual user prompt from chat history if currentPrompt is not set
+    // This ensures we save the real prompt that was used, not a default value
+    let actualPrompt = session.currentPrompt;
+    if (!actualPrompt && session.chatHistory && Array.isArray(session.chatHistory)) {
+      // Find the most recent user message in chat history
+      const userMessages = session.chatHistory
+        .filter((msg: any) => msg.role === 'user')
+        .map((msg: any) => msg.content)
+        .filter((content: string) => content && content.trim().length > 0);
+      
+      if (userMessages.length > 0) {
+        actualPrompt = userMessages[userMessages.length - 1]; // Get the most recent user message
+      }
+    }
+    
+    // Fallback to default only if we truly have no prompt
+    if (!actualPrompt || actualPrompt.trim().length === 0) {
+      actualPrompt = 'Workspace session';
+    }
+
     if (existing.length > 0) {
-      // Update existing session
+      // Update existing session - also update inputPrompt if we found a better one
       await db
         .update(codeGenerationSessions as any)
         .set({
           title: session.name,
           description: session.description || null,
           workspaceId,
+          inputPrompt: actualPrompt, // Update with the actual prompt
           metadata: {
             ...session.metadata,
             type: session.type,
             generatedFiles: session.generatedFiles,
-            currentPrompt: session.currentPrompt
+            currentPrompt: actualPrompt
           },
           updatedAt: new Date(session.updatedAt)
         })
@@ -285,13 +306,13 @@ router.post('/', authenticateUser, async (req, res) => {
         title: session.name,
         description: session.description || null,
         workspaceId,
-        inputPrompt: session.currentPrompt || 'Workspace session',
+        inputPrompt: actualPrompt, // Use the actual prompt extracted from chat history
         generatedCode: JSON.stringify(session.generatedFiles || []),
         metadata: {
           ...session.metadata,
           type: session.type,
           generatedFiles: session.generatedFiles,
-          currentPrompt: session.currentPrompt
+          currentPrompt: actualPrompt
         },
         createdAt: new Date(session.createdAt),
         updatedAt: new Date(session.updatedAt)
