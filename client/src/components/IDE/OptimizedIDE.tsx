@@ -739,18 +739,18 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
   return (
     <div className={`${isFullscreen ? 'fixed inset-0 z-[100]' : 'fixed inset-4 z-[100]'}`}>
-    <Card className="flex flex-col bg-background border-2 border-purple-200/50 relative h-full w-full">
+    <Card className="flex flex-col bg-background border-2 border-purple-200/50 relative h-full w-full overflow-hidden" style={{ isolation: 'isolate' }}>
       {/* Animated brand gradient border glow */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg">
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden rounded-lg" style={{ pointerEvents: 'none' }}>
         <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-purple-500/0 animate-[shimmer_3s_ease-in-out_infinite] opacity-30" />
       </div>
 
       {/* Header with brand gradient accent */}
-      <CardHeader className="flex flex-row items-center justify-between border-b border-purple-200/50 pb-2 flex-shrink-0 bg-gradient-to-r from-purple-50/50 via-purple-50/30 to-transparent relative">
+      <CardHeader className="flex flex-row items-center justify-between border-b border-purple-200/50 pb-2 flex-shrink-0 bg-gradient-to-r from-purple-50/50 via-purple-50/30 to-transparent relative z-10">
         {/* Subtle animated gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-400/5 via-pink-400/5 to-purple-400/5 opacity-50 animate-[shimmer_4s_ease-in-out_infinite]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-400/5 via-pink-400/5 to-purple-400/5 opacity-50 animate-[shimmer_4s_ease-in-out_infinite] pointer-events-none" />
         
-        <div className="flex items-center gap-2 flex-1 min-w-0 relative z-10">
+        <div className="flex items-center gap-2 flex-1 min-w-0 relative z-20">
           <Button
             variant="ghost"
             size="sm"
@@ -834,10 +834,10 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       </CardHeader>
 
       {/* Top menubar like classic IDEs */}
-      <div className="border-b border-purple-200/50 px-2 py-1 bg-purple-50/30 flex-shrink-0 relative">
+      <div className="border-b border-purple-200/50 px-2 py-1 bg-purple-50/30 flex-shrink-0 relative z-10">
         {/* Subtle animated gradient accent line */}
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-400/0 via-purple-400/40 to-purple-400/0 opacity-60 animate-[shimmer_3s_ease-in-out_infinite]" />
-        <Menubar className="relative z-10">
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-400/0 via-purple-400/40 to-purple-400/0 opacity-60 animate-[shimmer_3s_ease-in-out_infinite] pointer-events-none" />
+        <Menubar className="relative z-20">
           <MenubarMenu>
             <MenubarTrigger>File</MenubarTrigger>
             <MenubarContent>
