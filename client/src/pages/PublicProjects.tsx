@@ -364,7 +364,7 @@ export default function PublicProjects() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {projects.map((project, index) => {
+            {projects.map((project, index) => (
               const categoryGradient = categoryColors[project.projectType] || categoryColors.web_app;
               const categoryLabel = categoryLabels[project.projectType] || project.projectType;
               const isVoted = votedProjects.has(project.id);
@@ -462,8 +462,8 @@ export default function PublicProjects() {
                       </div>
                   </div>
                 </motion.div>
-              );
-            })}
+              )
+            ))}
           </div>
         )}
       </div>
