@@ -3070,14 +3070,10 @@ export default function PromptPlayground() {
               <>
                 <ProjectSharing
                   projectId={currentProject?.id?.toString() || 'temp'}
-                projectName={currentProject?.name || currentComponentName || 'My App'}
-                files={files}
-                previewUrl={livePreviewUrl || undefined}
-                isPublic={false}
-                onUpdateSharing={(settings) => {
-                  console.log('Sharing settings updated:', settings);
-                }}
-              />
+                  projectName={currentProject?.name || currentComponentName || 'My App'}
+                  files={files}
+                  previewUrl={livePreviewUrl || undefined}
+                />
 
               <ProductionDeployment
                 files={files}

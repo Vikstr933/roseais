@@ -5,10 +5,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { AuthGuard } from '@/components/AuthGuard';
 import {
   ArrowLeft,
@@ -25,6 +28,8 @@ import {
   QrCode,
   Link,
   X,
+  Globe,
+  Lock,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
@@ -106,8 +111,15 @@ function ProjectDetailContent() {
   const queryClient = useQueryClient();
   const [newMessage, setNewMessage] = useState('');
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showIDE, setShowIDE] = useState(false);
   const [initialFileId, setInitialFileId] = useState<number | undefined>(undefined);
+  const [privacySettings, setPrivacySettings] = useState({
+    isPublic: false,
+    allowComments: true,
+    allowFork: true,
+  });
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
   const { data: project, isLoading } = useQuery({
@@ -205,11 +217,56 @@ function ProjectDetailContent() {
   };
 
   const openProjectSettings = () => {
-    // Navigate to project settings (you can implement a settings page later)
-    toast({
-      title: 'Project Settings',
-      description: 'Settings page coming soon! You can update workspace details here.',
-    });
+    setShowProjectSettings(true);
+    // Fetch current privacy settings
+    if (project) {
+      setPrivacySettings({
+        isPublic: project.isPublic || false,
+        allowComments: project.allowComments !== false,
+        allowFork: project.allowFork !== false,
+      });
+    }
+  };
+
+  const updatePrivacySettings = async () => {
+    if (!id || !sessionToken) return;
+
+    setIsUpdatingSettings(true);
+    try {
+      const response = await apiFetch(`/api/workspaces/${id}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(sessionToken),
+        body: JSON.stringify({
+          isPublic: privacySettings.isPublic,
+          allowComments: privacySettings.allowComments,
+          allowFork: privacySettings.allowFork,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to update settings');
+      }
+
+      queryClient.invalidateQueries({
+        queryKey: [`/api/workspaces/${id}`],
+      });
+
+      toast({
+        title: 'Settings Updated!',
+        description: 'Privacy settings have been saved',
+      });
+
+      setShowProjectSettings(false);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update settings',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdatingSettings(false);
+    }
   };
 
   const shareProject = () => {
@@ -450,6 +507,15 @@ function ProjectDetailContent() {
                 <Play className="h-3 w-3 mr-1" />
                 Playground
               </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={openProjectSettings}
+              >
+                <Settings className="h-3 w-3 mr-1" />
+                Settings
+              </Button>
               {project.inviteCode && (
                 <Button 
                   variant="outline" 
@@ -464,83 +530,154 @@ function ProjectDetailContent() {
             </div>
           </Card>
 
-          {/* Share Dialog - Compact */}
-          {showShareDialog && project?.inviteCode && (
-            <Card className="border-primary p-3">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-medium flex items-center gap-1.5 uppercase text-muted-foreground">
-                  <Share2 className="h-3.5 w-3.5" />
-                  Share Project
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => setShowShareDialog(false)}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {/* Invite Code Section */}
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1">
-                    Invite Code
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      value={project.inviteCode}
-                      readOnly
-                      className="font-mono text-xs h-7"
-                    />
-                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={copyInviteCode}>
-                      <Copy className="h-3 w-3" />
-                    </Button>
+          {/* Share Dialog */}
+          <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Share2 className="h-5 w-5" />
+                  Share "{project?.name}"
+                </DialogTitle>
+              </DialogHeader>
+              {project?.inviteCode && (
+                <div className="space-y-4">
+                  {/* Invite Code Section */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Invite Code</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={project.inviteCode}
+                        readOnly
+                        className="font-mono"
+                      />
+                      <Button variant="outline" onClick={copyInviteCode}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
 
-                {/* Share Link Section */}
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1">
-                    Share Link
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      value={`${window.location.origin}/workspaces/join?code=${project.inviteCode}`}
-                      readOnly
-                      className="font-mono text-xs h-7"
-                    />
-                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={copyShareLink}>
-                      <Link className="h-3 w-3" />
-                    </Button>
+                  {/* Share Link Section */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Share Link</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={`${window.location.origin}/workspaces/join?code=${project.inviteCode}`}
+                        readOnly
+                        className="font-mono text-sm"
+                      />
+                      <Button variant="outline" onClick={copyShareLink}>
+                        <Link className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
 
-                {/* QR Code Section */}
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground block mb-1">
-                    QR Code
-                  </label>
-                  <div className="flex flex-col items-center gap-2 p-3 bg-muted rounded-md">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
-                        `${window.location.origin}/workspaces/join?code=${project.inviteCode}`
-                      )}`}
-                      alt="Project QR Code"
-                      className="w-32 h-32 border-2 border-background rounded-md"
-                    />
-                    <Button onClick={downloadQRCode} size="sm" className="h-7 text-xs">
-                      <QrCode className="h-3 w-3 mr-1" />
-                      Download
-                    </Button>
-                    <p className="text-[10px] text-muted-foreground text-center">
-                      Team members can scan this to join
-                    </p>
+                  {/* QR Code Section */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">QR Code</Label>
+                    <div className="flex flex-col items-center gap-3 p-4 bg-muted rounded-lg">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+                          `${window.location.origin}/workspaces/join?code=${project.inviteCode}`
+                        )}`}
+                        alt="Project QR Code"
+                        className="w-32 h-32 border-2 border-background rounded-md"
+                      />
+                      <Button onClick={downloadQRCode} size="sm">
+                        <QrCode className="h-4 w-4 mr-2" />
+                        Download QR Code
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Team members can scan this to join your project
+                      </p>
+                    </div>
                   </div>
                 </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Project Settings Dialog */}
+          <Dialog open={showProjectSettings} onOpenChange={setShowProjectSettings}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  Project Settings
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-6">
+                {/* Privacy Settings */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      {privacySettings.isPublic ? <Globe className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                      Privacy Settings
+                    </CardTitle>
+                    <CardDescription>
+                      Control who can access and interact with your project
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="public">Make Project Public</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Anyone with the link can view this project
+                        </p>
+                      </div>
+                      <Switch
+                        id="public"
+                        checked={privacySettings.isPublic}
+                        onCheckedChange={(checked) =>
+                          setPrivacySettings(prev => ({ ...prev, isPublic: checked }))
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="comments">Allow Comments</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Let viewers leave feedback on your project
+                        </p>
+                      </div>
+                      <Switch
+                        id="comments"
+                        checked={privacySettings.allowComments}
+                        onCheckedChange={(checked) =>
+                          setPrivacySettings(prev => ({ ...prev, allowComments: checked }))
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="fork">Allow Forking</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Let others create their own copy of this project
+                        </p>
+                      </div>
+                      <Switch
+                        id="fork"
+                        checked={privacySettings.allowFork}
+                        onCheckedChange={(checked) =>
+                          setPrivacySettings(prev => ({ ...prev, allowFork: checked }))
+                        }
+                      />
+                    </div>
+
+                    <Button 
+                      onClick={updatePrivacySettings} 
+                      className="w-full"
+                      disabled={isUpdatingSettings}
+                    >
+                      {isUpdatingSettings ? 'Updating...' : 'Update Settings'}
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
-            </Card>
-          )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Files Tab */}

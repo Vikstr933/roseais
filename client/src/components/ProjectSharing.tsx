@@ -3,21 +3,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Switch } from './ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Alert, AlertDescription } from './ui/alert';
 import {
   Share2,
   Copy,
   Eye,
-  Lock,
-  Globe,
   QrCode,
   Download,
   ExternalLink,
-  Users,
-  Settings
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { apiFetch } from '../lib/api';
@@ -27,18 +21,9 @@ interface ProjectSharingProps {
   projectId: string;
   projectName: string;
   files: Array<{ path: string; content: string }>;
-  isPublic?: boolean;
   previewUrl?: string; // Optional preview URL for sharing
-  onUpdateSharing?: (settings: SharingSettings) => void;
 }
 
-interface SharingSettings {
-  isPublic: boolean;
-  allowComments: boolean;
-  allowFork: boolean;
-  password?: string;
-  expiresAt?: Date;
-}
 
 interface ShareLink {
   id: string;
@@ -53,41 +38,12 @@ export function ProjectSharing({
   projectId,
   projectName,
   files,
-  isPublic = false,
   previewUrl,
-  onUpdateSharing
 }: ProjectSharingProps) {
   const { sessionToken } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [currentIsPublic, setCurrentIsPublic] = useState(isPublic);
-  const [settings, setSettings] = useState<SharingSettings>({
-    isPublic,
-    allowComments: true,
-    allowFork: true,
-  });
 
-  // Fetch current project state when dialog opens
-  useEffect(() => {
-    if (isOpen && projectId !== 'temp' && sessionToken) {
-      const fetchProjectState = async () => {
-        try {
-          const response = await apiFetch(`/api/workspaces/${projectId}`, {
-            headers: getAuthHeaders(sessionToken),
-          });
-          if (response.ok) {
-            const project = await response.json();
-            const projectIsPublic = project.isPublic || false;
-            setCurrentIsPublic(projectIsPublic);
-            setSettings(prev => ({ ...prev, isPublic: projectIsPublic }));
-          }
-        } catch (error) {
-          console.error('Failed to fetch project state:', error);
-        }
-      };
-      fetchProjectState();
-    }
-  }, [isOpen, projectId, sessionToken]);
   
   // Generate actual shareable links based on preview URL
   const getShareLinks = React.useCallback((): ShareLink[] => {
@@ -190,87 +146,6 @@ export function ProjectSharing({
     });
   };
 
-  const updateSharingSettings = async () => {
-    if (!sessionToken || projectId === 'temp') {
-      toast({
-        title: "Error",
-        description: "Please save your project first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsUpdating(true);
-    try {
-      console.log(`[ProjectSharing] Updating project ${projectId} isPublic to: ${settings.isPublic}`);
-      
-      const response = await apiFetch(`/api/workspaces/${projectId}`, {
-        method: 'PATCH',
-        headers: {
-          ...getAuthHeaders(sessionToken),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          isPublic: settings.isPublic,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('[ProjectSharing] Update failed:', errorData);
-        throw new Error(errorData.error || `HTTP ${response.status}: Failed to update settings`);
-      }
-
-      const updatedProject = await response.json();
-      console.log('[ProjectSharing] Update successful:', updatedProject);
-      
-      // Update local state to reflect the change
-      setCurrentIsPublic(settings.isPublic);
-      onUpdateSharing?.(settings);
-      
-      // If making project public and we have a preview URL, trigger screenshot capture
-      if (settings.isPublic && previewUrl) {
-        try {
-          console.log('[ProjectSharing] Triggering screenshot capture for public project');
-          const screenshotResponse = await apiFetch(`/api/screenshots/${projectId}/capture`, {
-            method: 'POST',
-            headers: {
-              ...getAuthHeaders(sessionToken),
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url: previewUrl, force: false }),
-          });
-          
-          if (screenshotResponse.ok) {
-            console.log('[ProjectSharing] Screenshot capture initiated');
-          } else {
-            console.warn('[ProjectSharing] Screenshot capture failed, but project is public');
-          }
-        } catch (error) {
-          console.warn('[ProjectSharing] Screenshot capture error (non-blocking):', error);
-        }
-      }
-      
-      toast({
-        title: "Settings Updated!",
-        description: settings.isPublic 
-          ? "Your project is now public and visible in the community!" 
-          : "Your project is now private",
-      });
-      
-      // Close dialog after successful update
-      setIsOpen(false);
-    } catch (error: any) {
-      console.error('[ProjectSharing] Failed to update sharing settings:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update project settings. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
 
   const getLinkIcon = (type: string) => {
     switch (type) {
@@ -301,134 +176,62 @@ export function ProjectSharing({
 
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-lg">
             <Share2 className="h-5 w-5" />
             Share "{projectName}"
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Privacy Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                {settings.isPublic ? <Globe className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
-                Privacy Settings
-              </CardTitle>
-              <CardDescription>
-                Control who can access and interact with your project
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="public">Make Project Public</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Anyone with the link can view this project
-                  </p>
-                </div>
-                <Switch
-                  id="public"
-                  checked={settings.isPublic}
-                  onCheckedChange={(checked) =>
-                    setSettings(prev => ({ ...prev, isPublic: checked }))
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="comments">Allow Comments</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Let viewers leave feedback on your project
-                  </p>
-                </div>
-                <Switch
-                  id="comments"
-                  checked={settings.allowComments}
-                  onCheckedChange={(checked) =>
-                    setSettings(prev => ({ ...prev, allowComments: checked }))
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="fork">Allow Forking</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Let others create their own copy of this project
-                  </p>
-                </div>
-                <Switch
-                  id="fork"
-                  checked={settings.allowFork}
-                  onCheckedChange={(checked) =>
-                    setSettings(prev => ({ ...prev, allowFork: checked }))
-                  }
-                />
-              </div>
-
-              <Button 
-                onClick={updateSharingSettings} 
-                className="w-full"
-                disabled={isUpdating}
-              >
-                {isUpdating ? 'Updating...' : 'Update Settings'}
-              </Button>
-            </CardContent>
-          </Card>
-
+        <div className="space-y-4">
           {/* Share Links */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Share2 className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-2">
+                <Share2 className="h-4 w-4" />
                 Share Links
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm">
                 Generate different types of links for various use cases
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               {shareLinks.map((link) => (
-                <div key={link.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className={`p-2 rounded-full ${getLinkColor(link.type)}`}>
+                <div key={link.id} className="flex items-center justify-between p-2.5 border rounded-md hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    <div className={`p-1.5 rounded ${getLinkColor(link.type)} flex-shrink-0`}>
                       {getLinkIcon(link.type)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="capitalize">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="secondary" className="capitalize text-xs">
                           {link.type}
                         </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {link.clicks} clicks
-                        </span>
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
+                      <p className="text-xs text-muted-foreground truncate mb-1">
                         {link.description}
                       </p>
-                      <code className="text-xs bg-muted px-2 py-1 rounded mt-1 block truncate">
+                      <code className="text-xs bg-muted px-2 py-0.5 rounded block truncate font-mono">
                         {link.url}
                       </code>
                     </div>
                   </div>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 flex-shrink-0"
                     onClick={() => copyToClipboard(link.url, `${link.type} link`)}
                   >
-                    <Copy className="h-3 w-3" />
+                    <Copy className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               ))}
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-2 border-t">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => generateNewLink('view')}
-                  className="flex-1"
+                  className="flex-1 h-8 text-xs"
                 >
                   <Eye className="h-3 w-3 mr-1" />
                   View Link
@@ -437,7 +240,7 @@ export function ProjectSharing({
                   variant="outline"
                   size="sm"
                   onClick={() => generateNewLink('preview')}
-                  className="flex-1"
+                  className="flex-1 h-8 text-xs"
                 >
                   <ExternalLink className="h-3 w-3 mr-1" />
                   Preview Link
@@ -449,80 +252,37 @@ export function ProjectSharing({
           {/* Additional Options */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Download className="h-5 w-5" />
-                Export & Embed
+              <CardTitle className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                Export & QR Code
               </CardTitle>
-              <CardDescription>
-                Additional ways to share and use your project
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" onClick={exportProject} className="h-20 flex-col gap-2">
-                  <Download className="h-5 w-5" />
-                  <span className="text-sm">Export JSON</span>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={exportProject} className="h-16 flex-col gap-1.5 text-xs">
+                  <Download className="h-4 w-4" />
+                  <span>Export JSON</span>
                 </Button>
 
                 <Button
                   variant="outline"
                   onClick={() => setShowQR(!showQR)}
-                  className="h-20 flex-col gap-2"
+                  className="h-16 flex-col gap-1.5 text-xs"
                 >
-                  <QrCode className="h-5 w-5" />
-                  <span className="text-sm">QR Code</span>
+                  <QrCode className="h-4 w-4" />
+                  <span>QR Code</span>
                 </Button>
               </div>
 
-              {showQR && (
-                <div className="flex justify-center p-4 bg-muted rounded-lg">
-                  <div className="w-32 h-32 bg-white border-2 border-gray-300 rounded-lg flex items-center justify-center">
-                    <QrCode className="h-16 w-16 text-gray-400" />
-                  </div>
+              {showQR && shareLinks.length > 0 && (
+                <div className="flex justify-center p-3 bg-muted rounded-md">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(shareLinks[0]?.url || '')}`}
+                    alt="QR Code"
+                    className="w-32 h-32 border-2 border-background rounded-md"
+                  />
                 </div>
               )}
-
-              <Alert>
-                <Users className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Collaboration:</strong> Invite team members to collaborate on this project
-                  by generating edit links. They'll be able to modify the code in real-time.
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
-
-          {/* Embed Code */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Embed Code</CardTitle>
-              <CardDescription>
-                Add this project to your website or blog
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label>Iframe Embed</Label>
-                <div className="flex gap-2">
-                  <Input
-                    readOnly
-                    value={`<iframe src="${shareLinks[1]?.url}" width="100%" height="600" frameborder="0"></iframe>`}
-                    className="font-mono text-xs"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      copyToClipboard(
-                        `<iframe src="${shareLinks[1]?.url}" width="100%" height="600" frameborder="0"></iframe>`,
-                        'Embed code'
-                      )
-                    }
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>
