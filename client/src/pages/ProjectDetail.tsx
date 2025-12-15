@@ -497,7 +497,7 @@ function ProjectDetailContent() {
                 onClick={() => setShowIDE(true)}
               >
                 <Code2 className="h-3 w-3 mr-1" />
-                IDE
+                Vik IDE
               </Button>
               <Button 
                 size="sm"

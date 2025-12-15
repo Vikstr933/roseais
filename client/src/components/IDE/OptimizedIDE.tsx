@@ -750,7 +750,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
             <Folder className="h-4 w-4" />
           </Button>
           <div className="text-sm font-semibold truncate">
-            IDE ({openFiles.length}/{MAX_OPEN_FILES} files)
+            Vik IDE ({openFiles.length}/{MAX_OPEN_FILES} files)
           </div>
         </div>
 

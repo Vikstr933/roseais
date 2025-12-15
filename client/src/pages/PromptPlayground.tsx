@@ -79,7 +79,7 @@ import {
 
 // Extracted components
 import { ChatPanel } from "./playground/components";
-import { DesktopTab, EditorTab, PreviewTab, MobileTab } from "./playground/tabs";
+import { DesktopTab, PreviewTab, MobileTab } from "./playground/tabs";
 import { MobileBottomNav, MobileChatSheet, MobileProgressIndicator, MobilePreviewModal } from "./playground/mobile";
 import { RenameProjectDialog } from "./playground/dialogs";
 
@@ -109,7 +109,7 @@ export default function PromptPlayground() {
   const [, setLocation] = useLocation();
   const hasProjectRoute = Boolean(match && params?.projectId);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<'desktop' | 'editor' | 'preview'>('desktop');
+  const [activeTab, setActiveTab] = useState<'desktop' | 'preview'>('desktop');
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [response, setResponse] = useState<PlaygroundResponse | null>(null);
@@ -1501,7 +1501,7 @@ export default function PromptPlayground() {
             setAgentsActive(false); // Stop agent animation when fully complete
             addChatMessage({
               role: 'assistant',
-              content: `All done! Your app is ready - check out the Editor and Preview tabs!`,
+              content: `All done! Your app is ready - check out the Preview tab!`,
               timestamp: Date.now()
             });
             break;
@@ -2028,7 +2028,7 @@ export default function PromptPlayground() {
 
       // âœ¨ Bolt.new-style: Auto-switch to Editor tab FIRST (before loading state)
       console.log('ðŸŽ¨ Switching to Editor tab');
-      setActiveTab('editor');
+      setActiveTab('preview');
 
       // Small delay to let the tab switch be visible, then start loading
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -2248,7 +2248,7 @@ export default function PromptPlayground() {
                         if (data.data.index === 1 && filePath) {
                           setTimeout(() => {
                             setSelectedFileIndex(0);
-                            setActiveTab('editor');
+                            setActiveTab('preview');
                             setEditorLanguage(getFileLanguage(filePath));
                           }, 0);
                         }
@@ -2289,7 +2289,7 @@ export default function PromptPlayground() {
                       if (filePath) {
                         setTimeout(() => {
                           setSelectedFileIndex(fileIndex);
-                          setActiveTab('editor');
+                          setActiveTab('preview');
                           setEditorLanguage(getFileLanguage(filePath));
                           console.log(`👁️ Switched to file ${fileIndex + 1}/${updatedFiles.length}: ${filePath}`);
                         }, 0);
@@ -3178,23 +3178,6 @@ export default function PromptPlayground() {
                 Desktop
               </button>
               <button
-                onClick={() => setActiveTab('editor')}
-                className={`flex items-center gap-2 px-3 md:px-3 py-2.5 md:py-2 text-sm font-medium rounded-lg transition-smooth relative focus-ring min-h-[44px] md:min-h-0 ${
-                  activeTab === 'editor'
-                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <Code className="icon-sm" />
-                Editor
-                {isLoading && activeTab === 'editor' && (
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-500 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500"></span>
-                  </span>
-                )}
-              </button>
-              <button
                 onClick={() => setActiveTab('preview')}
                 className={`flex items-center gap-2 px-3 md:px-3 py-2.5 md:py-2 text-sm font-medium rounded-lg transition-smooth focus-ring min-h-[44px] md:min-h-0 ${
                   activeTab === 'preview'
@@ -3236,23 +3219,6 @@ export default function PromptPlayground() {
                 <span className="text-[10px] font-medium">Apps</span>
               </button>
               <button
-                onClick={() => setActiveTab('editor')}
-                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-smooth relative min-w-[70px] ${
-                  activeTab === 'editor'
-                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                    : 'text-muted-foreground'
-                }`}
-              >
-                <Code className="h-5 w-5" />
-                <span className="text-[10px] font-medium">Editor</span>
-                {isLoading && activeTab === 'editor' && (
-                  <span className="absolute top-1 right-2 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-500 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
-                  </span>
-                )}
-              </button>
-              <button
                 onClick={() => setActiveTab('preview')}
                 className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-smooth min-w-[70px] ${
                   activeTab === 'preview'
@@ -3285,7 +3251,7 @@ export default function PromptPlayground() {
                     }}
                     onCreateProject={() => setShowCreateProjectDialog(true)}
                     onEditProject={(projectId) => {
-                      setActiveTab('editor');
+                      setActiveTab('preview');
                       window.location.href = `/playground/${projectId}`;
                     }}
                     webContainerService={webContainerService}
@@ -3303,7 +3269,7 @@ export default function PromptPlayground() {
                     }}
                     onCreateProject={() => setShowCreateProjectDialog(true)}
                     onEditProject={(projectId) => {
-                      setActiveTab('editor');
+                      setActiveTab('preview');
                       window.location.href = `/playground/${projectId}`;
                     }}
                     webContainerService={webContainerService}
@@ -3313,21 +3279,6 @@ export default function PromptPlayground() {
               </>
             )}
 
-            {/* Editor Tab */}
-            {activeTab === 'editor' && (
-              <EditorTab
-                response={response}
-                selectedFileIndex={selectedFileIndex}
-                setSelectedFileIndex={setSelectedFileIndex}
-                editorLanguage={editorLanguage}
-                setEditorLanguage={setEditorLanguage}
-                editorTheme={editorTheme}
-                isLoading={isLoading}
-                updateGeneratedFiles={updateGeneratedFiles}
-                setResponse={setResponse}
-                addChatMessage={addChatMessage}
-              />
-            )}
 
             {/* Preview Tab */}
             {activeTab === 'preview' && (
@@ -3365,7 +3316,7 @@ export default function PromptPlayground() {
       {/* Mobile: Bottom Navigation Footer (iOS/Android style) */}
       <MobileBottomNav
         activeTab={activeTab}
-        setActiveTab={(tab) => setActiveTab(tab as 'desktop' | 'editor' | 'preview')}
+        setActiveTab={(tab) => setActiveTab(tab as 'desktop' | 'preview')}
         setChatSheetOpen={setChatSheetOpen}
         setPreviewModalOpen={setPreviewModalOpen}
         chatHistory={chatHistory}
