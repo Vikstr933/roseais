@@ -3558,17 +3558,47 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
     const sessionId = params._sessionId as string | undefined;
 
     try {
+      // Normalize prompt for intent detection
+      const normalizedPrompt = (prompt || '').toLowerCase();
+
+      // Heuristic: does the user clearly ask for a *new* project/app from scratch?
+      const wantsNewProject =
+        /\b(ny(?:tt)?\s+(?:projekt|app|applikation|webbapp|hemsida|site|projektidé))\b/.test(
+          normalizedPrompt
+        ) ||
+        /\bskapa\s+ett?\s+nytt?\s+(?:projekt|app|applikation|webbapp|hemsida|site)\b/.test(
+          normalizedPrompt
+        ) ||
+        /\b(create|build|make)\s+(a\s+)?new\s+(app|application|project|site|website)\b/i.test(
+          prompt || ''
+        ) ||
+        /\bfrom scratch\b/i.test(prompt || '');
+
       // Determine which project to use: explicit projectId, selected project, or auto-created project
       let targetProjectId = projectId;
       let targetProjectName = 'the project';
 
+      // If user explicitly asks for a "new project/app", ignore any explicit projectId
+      if (targetProjectId && wantsNewProject) {
+        logger.info(
+          `generateCode: overriding explicit projectId=${targetProjectId} due to new-project intent in prompt`
+        );
+        targetProjectId = undefined;
+      }
+
       if (!targetProjectId && sessionId) {
-        // Check if there's a selected project for this session
+        // Check if there's a selected project for this session, unless the user is clearly asking for a new project
         const selectedProject = this.selectedProjects.get(sessionId);
-        if (selectedProject) {
+        if (selectedProject && !wantsNewProject) {
           targetProjectId = selectedProject.projectId;
           targetProjectName = selectedProject.projectName;
-          logger.info(`Using selected project from session: ${targetProjectName} (${targetProjectId})`);
+          logger.info(
+            `Using selected project from session: ${targetProjectName} (${targetProjectId})`
+          );
+        } else if (selectedProject && wantsNewProject) {
+          logger.info(
+            `generateCode: user asked for a new project, ignoring previously selected project ${selectedProject.projectId}`
+          );
         }
       }
 
