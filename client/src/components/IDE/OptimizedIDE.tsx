@@ -4,9 +4,9 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
-  X, Save, Loader2, Search, Undo, Redo, 
+  X, Save, Loader2, Search, Undo, Redo,
   Maximize2, Minimize2, FileText, Folder, FilePlus,
-  Terminal, ChevronRight, ChevronDown, FileCode, Trash2
+  Terminal as TerminalIcon, ChevronRight, ChevronDown, FileCode, Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/api';
@@ -31,6 +31,8 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
 } from '@/components/ui/context-menu';
+import { Terminal } from 'xterm';
+import 'xterm/css/xterm.css';
 
 interface ProjectFile {
   id: number;
@@ -156,6 +158,9 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const xtermRef = useRef<Terminal | null>(null);
+  const terminalStreamRef = useRef<EventSource | null>(null);
   
   const saveTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const fileCache = useRef<Map<number, string>>(new Map()); // LRU cache for file contents
@@ -424,6 +429,49 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
     }
   }, [openFiles, saveFile]);
 
+  // Close all tabs except the one at index
+  const closeOtherTabs = useCallback((index: number) => {
+    setOpenFiles(prev => {
+      const keep = prev[index];
+      if (!keep) return prev;
+
+      // Clear timeouts and caches for others
+      prev.forEach((file, i) => {
+        if (i !== index) {
+          const timeout = saveTimeouts.current.get(file.id);
+          if (timeout) {
+            clearTimeout(timeout);
+            saveTimeouts.current.delete(file.id);
+          }
+          if (!file.isDirty) {
+            fileCache.current.delete(file.id);
+          }
+        }
+      });
+
+      return [keep];
+    });
+    setActiveFileIndex(0);
+  }, []);
+
+  // Close all tabs
+  const closeAllTabs = useCallback(() => {
+    setOpenFiles(prev => {
+      prev.forEach(file => {
+        const timeout = saveTimeouts.current.get(file.id);
+        if (timeout) {
+          clearTimeout(timeout);
+          saveTimeouts.current.delete(file.id);
+        }
+        if (!file.isDirty) {
+          fileCache.current.delete(file.id);
+        }
+      });
+      return [];
+    });
+    setActiveFileIndex(0);
+  }, []);
+
   // Create new file
   const createNewFile = useCallback(async () => {
     if (!newFileName.trim()) return;
@@ -514,6 +562,74 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
       saveTimeouts.current.clear();
     };
   }, []);
+
+  // Initialize xterm.js terminal and subscribe to backend terminal stream
+  useEffect(() => {
+    if (!showTerminal) {
+      // Hide terminal: do not destroy xterm instance, but stop streaming
+      if (terminalStreamRef.current) {
+        terminalStreamRef.current.close();
+        terminalStreamRef.current = null;
+      }
+      return;
+    }
+
+    if (!terminalContainerRef.current) return;
+
+    // Lazy-init xterm instance
+    if (!xtermRef.current) {
+      const term = new Terminal({
+        convertEol: true,
+        fontSize: 13,
+        theme: {
+          background: '#000000',
+          foreground: '#d1fae5',
+        },
+      });
+      xtermRef.current = term;
+      term.open(terminalContainerRef.current);
+      term.writeln('IDE Terminal (logs)');
+      term.writeln('Listening for build/deploy output...');
+      term.writeln('');
+    }
+
+    // Subscribe to terminal SSE stream for this project
+    try {
+      const stream = new EventSource(`/api/terminal/${projectId}/stream`, {
+        withCredentials: true,
+      });
+
+      stream.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.type === 'output' && typeof payload.data === 'string') {
+            xtermRef.current?.writeln(payload.data);
+          }
+        } catch {
+          // Fallback: write raw data
+          if (event.data) {
+            xtermRef.current?.writeln(String(event.data));
+          }
+        }
+      };
+
+      stream.onerror = () => {
+        xtermRef.current?.writeln('[terminal] Connection error. Retrying or reload page if this persists.');
+      };
+
+      terminalStreamRef.current = stream;
+    } catch (error) {
+      console.error('Failed to connect to terminal stream', error);
+      xtermRef.current?.writeln('[terminal] Failed to connect to terminal stream.');
+    }
+
+    return () => {
+      if (terminalStreamRef.current) {
+        terminalStreamRef.current.close();
+        terminalStreamRef.current = null;
+      }
+    };
+  }, [showTerminal, projectId]);
 
   // Filter files for quick switcher
   const quickSwitcherFiles = useMemo(() => 
@@ -619,7 +735,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
             <Search className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setShowTerminal(!showTerminal)} title="Terminal">
-            <Terminal className="h-4 w-4" />
+            <TerminalIcon className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setEditorTheme(editorTheme === 'vs-dark' ? 'light' : 'vs-dark')}>
             {editorTheme === 'vs-dark' ? '☀️' : '🌙'}
@@ -753,30 +869,46 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
           {openFiles.length > 0 && (
             <div className="border-b bg-muted/20 flex items-center overflow-x-auto">
               {openFiles.map((file, index) => (
-                <div
-                  key={file.id}
-                  className={`flex items-center gap-2 px-3 py-2 border-r cursor-pointer min-w-fit ${
-                    index === activeFileIndex
-                      ? 'bg-background border-b-2 border-b-primary'
-                      : 'bg-muted/50 hover:bg-muted'
-                  }`}
-                  onClick={() => setActiveFileIndex(index)}
-                >
-                  <FileCode className="h-3 w-3" />
-                  <span className="text-sm truncate max-w-[200px]">{file.filePath}</span>
-                  {file.isDirty && <span className="text-xs">●</span>}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeFile(index);
-                    }}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
+                <ContextMenu key={file.id}>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2 border-r cursor-pointer min-w-fit ${
+                        index === activeFileIndex
+                          ? 'bg-background border-b-2 border-b-primary'
+                          : 'bg-muted/50 hover:bg-muted'
+                      }`}
+                      onClick={() => setActiveFileIndex(index)}
+                    >
+                      <FileCode className="h-3 w-3" />
+                      <span className="text-sm truncate max-w-[200px]">{file.filePath}</span>
+                      {file.isDirty && <span className="text-xs">●</span>}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-4 w-4 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeFile(index);
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={() => closeFile(index)}>Close</ContextMenuItem>
+                    <ContextMenuItem onClick={() => closeOtherTabs(index)}>Close Others</ContextMenuItem>
+                    <ContextMenuItem onClick={closeAllTabs}>Close All</ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      disabled={isDeleting}
+                      className="text-destructive"
+                      onClick={() => deleteFile(file.id, file.filePath)}
+                    >
+                      Delete File
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               ))}
             </div>
           )}
@@ -824,9 +956,8 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
 
           {/* Terminal */}
           {showTerminal && (
-            <div className="h-64 border-t bg-black text-green-400 font-mono text-sm p-4">
-              <div className="mb-2">Terminal (Coming soon - xterm.js integration)</div>
-              <div className="opacity-50">$ Ready for commands...</div>
+            <div className="h-64 border-t bg-black text-green-400 font-mono text-sm">
+              <div ref={terminalContainerRef} className="h-full w-full overflow-hidden px-2 py-1" />
             </div>
           )}
         </div>
