@@ -110,25 +110,47 @@ function ProjectDetailContent() {
   const [showIDE, setShowIDE] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
+  // Debug logging
+  useEffect(() => {
+    console.log('[ProjectDetail] Component mounted/updated:', {
+      match,
+      id,
+      hasSessionToken: !!sessionToken,
+      hasUser: !!user,
+      params
+    });
+  }, [match, id, sessionToken, user, params]);
+
   const { data: project, isLoading, error: projectError } = useQuery({
     queryKey: [`/api/workspaces/${id}`],
     enabled: !!id && !!sessionToken,
     queryFn: async () => {
-      console.log('[ProjectDetail] Fetching project:', id);
+      console.log('[ProjectDetail] Fetching project:', { id, hasToken: !!sessionToken });
+      if (!sessionToken) {
+        throw new Error('No session token available');
+      }
       const response = await apiFetch(`/api/workspaces/${id}`, {
         headers: getAuthHeaders(sessionToken),
       });
+      console.log('[ProjectDetail] Response status:', response.status);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('[ProjectDetail] Failed to fetch project:', response.status, errorData);
         throw new Error(errorData.error || errorData.message || 'Failed to fetch project');
       }
       const data = await response.json();
-      console.log('[ProjectDetail] Project loaded:', data);
+      console.log('[ProjectDetail] Project loaded successfully:', { id: data.id, name: data.name });
       return data;
     },
     retry: 1,
   });
+
+  // Log errors separately
+  useEffect(() => {
+    if (projectError) {
+      console.error('[ProjectDetail] Query error:', projectError);
+    }
+  }, [projectError]);
 
   const { data: chatMessages = [] } = useQuery({
     queryKey: [`/api/workspaces/${id}/chat`],
