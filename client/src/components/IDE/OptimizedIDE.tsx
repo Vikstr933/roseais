@@ -239,7 +239,9 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
       if (fileCache.current.size >= FILE_CACHE_SIZE) {
         // Remove oldest entry (simple FIFO for cache)
         const firstKey = fileCache.current.keys().next().value;
-        fileCache.current.delete(firstKey);
+        if (firstKey !== undefined) {
+          fileCache.current.delete(firstKey);
+        }
       }
       fileCache.current.set(file.id, content);
     }
