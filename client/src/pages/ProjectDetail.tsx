@@ -30,8 +30,6 @@ import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import ActiveUsersIndicator from '@/components/ActiveUsersIndicator';
 import { useUserActivity } from '@/hooks/useUserActivity';
 import { FileEditor } from '@/components/FileEditor';
-import { OptimizedIDE } from '@/components/IDE/OptimizedIDE';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Type definitions for project data
 interface ProjectMember {
@@ -91,32 +89,9 @@ interface ProjectActivity {
 }
 
 export default function ProjectDetail() {
-  console.log('[ProjectDetail] Component wrapper rendering');
-  
   return (
     <AuthGuard>
-      <ErrorBoundary
-        onError={(error, errorInfo) => {
-          console.error('[ProjectDetail] ErrorBoundary caught error:', error);
-          console.error('[ProjectDetail] Error info:', errorInfo);
-          console.error('[ProjectDetail] Current URL:', typeof window !== 'undefined' ? window.location.href : 'N/A');
-        }}
-        fallback={
-          <div className="container mx-auto px-4 py-8">
-            <div className="text-center">
-              <h1 className="text-2xl font-bold mb-4">Error Loading Project</h1>
-              <p className="text-muted-foreground mb-4">
-                Something went wrong while loading the project. Please try again.
-              </p>
-              <Button onClick={() => window.location.reload()}>
-                Reload Page
-              </Button>
-            </div>
-          </div>
-        }
-      >
-        <ProjectDetailContent />
-      </ErrorBoundary>
+      <ProjectDetailContent />
     </AuthGuard>
   );
 }
@@ -131,107 +106,41 @@ function ProjectDetailContent() {
   const [newMessage, setNewMessage] = useState('');
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedFile, setSelectedFile] = useState<ProjectFile | null>(null);
-  const [showIDE, setShowIDE] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
-  // Early debug logging - before anything else
-  console.log('[ProjectDetail] Component rendering:', {
-    match,
-    id,
-    params,
-    hasSessionToken: !!sessionToken,
-    hasUser: !!user,
-    currentPath: typeof window !== 'undefined' ? window.location.pathname : 'N/A'
-  });
-
-  // Debug logging
-  useEffect(() => {
-    console.log('[ProjectDetail] Component mounted/updated:', {
-      match,
-      id,
-      hasSessionToken: !!sessionToken,
-      hasUser: !!user,
-      params,
-      enabled: !!id && !!sessionToken
-    });
-  }, [match, id, sessionToken, user, params]);
-
-  const { data: project, isLoading, error: projectError } = useQuery({
+  const { data: project, isLoading } = useQuery({
     queryKey: [`/api/workspaces/${id}`],
-    enabled: !!id && !!sessionToken,
+    enabled: !!id,
     queryFn: async () => {
-      try {
-        console.log('[ProjectDetail] Fetching project:', { id, hasToken: !!sessionToken });
-        if (!sessionToken) {
-          throw new Error('No session token available');
-        }
-        if (!id) {
-          throw new Error('Project ID is missing');
-        }
-        const response = await apiFetch(`/api/workspaces/${id}`, {
-          headers: getAuthHeaders(sessionToken),
-        });
-        console.log('[ProjectDetail] Response status:', response.status);
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('[ProjectDetail] Failed to fetch project:', response.status, errorData);
-          throw new Error(errorData.error || errorData.message || `Failed to fetch project (${response.status})`);
-        }
-        const data = await response.json();
-        console.log('[ProjectDetail] Project loaded successfully:', { id: data.id, name: data.name });
-        
-        // Validate data structure
-        if (!data || typeof data !== 'object') {
-          throw new Error('Invalid project data received from server');
-        }
-        
-        return data;
-      } catch (error) {
-        console.error('[ProjectDetail] Error in queryFn:', error);
-        throw error;
-      }
+      const response = await apiFetch(`/api/workspaces/${id}`, {
+        headers: getAuthHeaders(sessionToken),
+      });
+      if (!response.ok) throw new Error('Failed to fetch project');
+      return response.json();
     },
-    retry: 1,
   });
-
-  // Log errors separately
-  useEffect(() => {
-    if (projectError) {
-      console.error('[ProjectDetail] Query error:', projectError);
-    }
-  }, [projectError]);
 
   const { data: chatMessages = [] } = useQuery({
     queryKey: [`/api/workspaces/${id}/chat`],
-    enabled: !!id && !!sessionToken,
+    enabled: !!id,
     queryFn: async () => {
-      try {
-        const response = await apiFetch(`/api/workspaces/${id}/chat`, {
-          headers: getAuthHeaders(sessionToken),
-        });
-        if (!response.ok) throw new Error('Failed to fetch chat messages');
-        return response.json() || [];
-      } catch (error) {
-        console.error('[ProjectDetail] Error fetching chat:', error);
-        return [];
-      }
+      const response = await apiFetch(`/api/workspaces/${id}/chat`, {
+        headers: getAuthHeaders(sessionToken),
+      });
+      if (!response.ok) throw new Error('Failed to fetch chat messages');
+      return response.json();
     },
   });
 
   const { data: projectFiles = [] } = useQuery({
     queryKey: [`/api/workspaces/${id}/files`],
-    enabled: !!id && !!sessionToken,
+    enabled: !!id,
     queryFn: async () => {
-      try {
-        const response = await apiFetch(`/api/workspaces/${id}/files`, {
-          headers: getAuthHeaders(sessionToken),
-        });
-        if (!response.ok) throw new Error('Failed to fetch project files');
-        return response.json() || [];
-      } catch (error) {
-        console.error('[ProjectDetail] Error fetching files:', error);
-        return [];
-      }
+      const response = await apiFetch(`/api/workspaces/${id}/files`, {
+        headers: getAuthHeaders(sessionToken),
+      });
+      if (!response.ok) throw new Error('Failed to fetch project files');
+      return response.json();
     },
   });
 
@@ -345,60 +254,11 @@ function ProjectDetailContent() {
     );
   }
 
-  if (projectError) {
-    console.error('[ProjectDetail] Project error:', projectError);
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Error Loading Project</h1>
-          <p className="text-muted-foreground mb-4">
-            {projectError instanceof Error ? projectError.message : 'An error occurred'}
-          </p>
-          <Button onClick={() => setLocation('/workspaces')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   if (!project) {
-    // Show loading state if we're still waiting for data
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center h-screen">
-          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"></div>
-        </div>
-      );
-    }
-    
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Project Not Found</h1>
-          <p className="text-muted-foreground mb-4">
-            The project you're looking for doesn't exist or you don't have access to it.
-          </p>
-          <Button onClick={() => setLocation('/workspaces')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Validate project data structure
-  if (!project.id || !project.name) {
-    console.error('[ProjectDetail] Invalid project data structure:', project);
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Invalid Project Data</h1>
-          <p className="text-muted-foreground mb-4">
-            The project data received is invalid. Please try again.
-          </p>
           <Button onClick={() => setLocation('/workspaces')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Projects
@@ -422,22 +282,6 @@ function ProjectDetailContent() {
         return '📁';
     }
   };
-
-  // Safety check - ensure project data is valid before rendering
-  if (!project || typeof project !== 'object') {
-    console.error('[ProjectDetail] Invalid project object:', project);
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Invalid Project Data</h1>
-          <Button onClick={() => setLocation('/workspaces')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -465,7 +309,7 @@ function ProjectDetailContent() {
                 {project.name}
               </h1>
               <p className="text-muted-foreground mt-1">
-                {project.description || 'No description'}
+                {project.description}
               </p>
             </div>
           </div>
@@ -521,9 +365,9 @@ function ProjectDetailContent() {
                         <div
                           key={member.id}
                           className="w-8 h-8 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-xs font-medium"
-                          title={`${member.user?.displayName || 'Unknown'} (${member.role || 'member'})`}
+                          title={`${member.user.displayName} (${member.role})`}
                         >
-                          {member.user?.displayName?.charAt(0).toUpperCase() || '?'}
+                          {member.user.displayName.charAt(0).toUpperCase()}
                         </div>
                       ))}
                     {project.members.length > 5 && (
@@ -721,57 +565,41 @@ function ProjectDetailContent() {
                     Generate components in the playground and export them to
                     this project
                   </p>
-                  <div className="flex gap-2 justify-center">
-                    <Button onClick={openInPlayground}>
-                      <Play className="h-4 w-4 mr-2" />
-                      Start Building
-                    </Button>
-                    <Button onClick={() => setShowIDE(true)} variant="outline">
-                      <Code2 className="h-4 w-4 mr-2" />
-                      Open IDE
-                    </Button>
-                  </div>
+                  <Button onClick={openInPlayground}>
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Building
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="mb-4 flex justify-between items-center">
-                    <h4 className="text-sm font-medium">Click a file to edit, or open IDE for full experience</h4>
-                    <Button onClick={() => setShowIDE(true)} size="sm">
-                      <Code2 className="h-4 w-4 mr-2" />
-                      Open IDE
-                    </Button>
-                  </div>
-                  {projectFiles.map((file: ProjectFile) => {
-                    if (!file || !file.id) return null;
-                    return (
-                      <div
-                        key={file.id}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => setSelectedFile(file)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">
-                            {file.filePath?.endsWith('.tsx')
-                              ? '⚛️'
-                              : file.filePath?.endsWith('.ts')
-                                ? '📄'
-                                : file.filePath?.endsWith('.css')
-                                  ? '🎨'
-                                  : '📁'}
-                          </span>
-                          <div>
-                            <p className="font-medium">{file.filePath || 'Unknown file'}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {file.fileType || 'unknown'} • v{file.version || 1}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {file.updatedAt ? new Date(file.updatedAt).toLocaleDateString() : 'Unknown date'}
+                  {projectFiles.map((file: ProjectFile) => (
+                    <div
+                      key={file.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => setSelectedFile(file)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">
+                          {file.filePath.endsWith('.tsx')
+                            ? '⚛️'
+                            : file.filePath.endsWith('.ts')
+                              ? '📄'
+                              : file.filePath.endsWith('.css')
+                                ? '🎨'
+                                : '📁'}
+                        </span>
+                        <div>
+                          <p className="font-medium">{file.filePath}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {file.fileType} • v{file.version}
+                          </p>
                         </div>
                       </div>
-                    );
-                  })}
+                      <div className="text-sm text-muted-foreground">
+                        {new Date(file.updatedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -816,7 +644,7 @@ function ProjectDetailContent() {
                               {message.user?.displayName || 'Unknown User'}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {message.createdAt ? new Date(message.createdAt).toLocaleString() : 'Unknown time'}
+                              {new Date(message.createdAt).toLocaleString()}
                             </span>
                           </div>
                           <p className="text-sm">{message.message}</p>
@@ -865,9 +693,9 @@ function ProjectDetailContent() {
                         <Activity className="h-4 w-4" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm">{activity.description || 'No description'}</p>
+                        <p className="text-sm">{activity.description}</p>
                         <p className="text-xs text-muted-foreground">
-                          {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : 'Unknown date'}
+                          {new Date(activity.createdAt).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -887,8 +715,8 @@ function ProjectDetailContent() {
         </TabsContent>
       </Tabs>
 
-      {/* File Editor Modal - Simple single file editor */}
-      {selectedFile && id && !showIDE && (
+      {/* File Editor Modal */}
+      {selectedFile && id && (
         <FileEditor
           file={{
             id: selectedFile.id,
@@ -900,20 +728,6 @@ function ProjectDetailContent() {
           projectId={id}
           onClose={() => setSelectedFile(null)}
           onSave={() => {
-            queryClient.invalidateQueries({
-              queryKey: [`/api/workspaces/${id}/files`],
-            });
-          }}
-        />
-      )}
-
-      {/* Full IDE - Optimized */}
-      {showIDE && id && (
-        <OptimizedIDE
-          projectId={id}
-          projectFiles={projectFiles}
-          onClose={() => setShowIDE(false)}
-          onFilesUpdate={() => {
             queryClient.invalidateQueries({
               queryKey: [`/api/workspaces/${id}/files`],
             });
