@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   X, Save, Loader2, Search, Undo, Redo,
   Maximize2, Minimize2, FileText, Folder, FilePlus,
-  Terminal as TerminalIcon, ChevronRight, ChevronDown, FileCode, Trash2
+  Terminal as TerminalIcon, ChevronRight, ChevronDown, FileCode, Trash2, Sparkles
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch, getApiUrl } from '@/lib/api';
@@ -738,20 +738,31 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
   const activeFile = openFiles[activeFileIndex];
 
   return (
-    <Card className={`${isFullscreen ? 'fixed inset-0 z-50' : 'fixed inset-4 z-50'} flex flex-col bg-background border-2 border-purple-200/50`}>
+    <Card className={`${isFullscreen ? 'fixed inset-0 z-50' : 'fixed inset-4 z-50'} flex flex-col bg-background border-2 border-purple-200/50 relative overflow-hidden`}>
+      {/* Animated brand gradient border glow */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-purple-500/0 animate-[shimmer_3s_ease-in-out_infinite] opacity-30" />
+      </div>
+
       {/* Header with brand gradient accent */}
-      <CardHeader className="flex flex-row items-center justify-between border-b border-purple-200/50 pb-2 flex-shrink-0 bg-gradient-to-r from-purple-50/50 to-transparent">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+      <CardHeader className="flex flex-row items-center justify-between border-b border-purple-200/50 pb-2 flex-shrink-0 bg-gradient-to-r from-purple-50/50 via-purple-50/30 to-transparent relative">
+        {/* Subtle animated gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-400/5 via-pink-400/5 to-purple-400/5 opacity-50 animate-[shimmer_4s_ease-in-out_infinite]" />
+        
+        <div className="flex items-center gap-2 flex-1 min-w-0 relative z-10">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowFileExplorer(!showFileExplorer)}
-            className="hover:bg-purple-100 text-purple-600 hover:text-purple-700"
+            className="hover:bg-purple-100 text-purple-600 hover:text-purple-700 transition-all hover:scale-105"
           >
             <Folder className="h-4 w-4" />
           </Button>
           <div className="text-sm font-semibold truncate flex items-center gap-2">
-            <span className="text-purple-600 dark:text-purple-400">Vik IDE</span>
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400 animate-[pulse_2s_ease-in-out_infinite]" />
+              <span className="brand-gradient-text font-bold text-base">Vik IDE</span>
+            </div>
             <span className="text-muted-foreground text-xs">({openFiles.length}/{MAX_OPEN_FILES} files)</span>
           </div>
         </div>
@@ -822,8 +833,10 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       </CardHeader>
 
       {/* Top menubar like classic IDEs */}
-      <div className="border-b border-purple-200/50 px-2 py-1 bg-purple-50/30 flex-shrink-0">
-        <Menubar>
+      <div className="border-b border-purple-200/50 px-2 py-1 bg-purple-50/30 flex-shrink-0 relative">
+        {/* Subtle animated gradient accent line */}
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-400/0 via-purple-400/40 to-purple-400/0 opacity-60 animate-[shimmer_3s_ease-in-out_infinite]" />
+        <Menubar className="relative z-10">
           <MenubarMenu>
             <MenubarTrigger>File</MenubarTrigger>
             <MenubarContent>
@@ -910,10 +923,15 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* File Explorer Sidebar */}
         {showFileExplorer && (
-          <div className="w-64 border-r border-purple-200/50 bg-purple-50/20 flex flex-col">
-            <div className="p-2 border-b border-purple-200/50">
+          <div className="w-64 border-r border-purple-200/50 bg-purple-50/20 flex flex-col relative">
+            {/* Subtle animated gradient accent */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 opacity-50 animate-[shimmer_3s_ease-in-out_infinite]" />
+            <div className="p-2 border-b border-purple-200/50 pt-3">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase text-purple-700 dark:text-purple-400">Explorer</h3>
+                <h3 className="text-xs font-semibold uppercase text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3 animate-[spin_4s_linear_infinite]" />
+                  Explorer
+                </h3>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -924,7 +942,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
                 </Button>
               </div>
             </div>
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 [&>[data-radix-scroll-area-viewport]]:scrollbar-thin [&>[data-radix-scroll-area-viewport]]:scrollbar-thumb-purple-300 [&>[data-radix-scroll-area-viewport]]:scrollbar-track-purple-100/50 hover:[&>[data-radix-scroll-area-viewport]]:scrollbar-thumb-purple-400">
               <div className="p-1">
                 {fileTree.children?.map(child => renderFileTree(child))}
               </div>
@@ -936,15 +954,17 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
         <div className="flex-1 flex flex-col min-w-0">
           {/* Tabs */}
           {openFiles.length > 0 && (
-            <div className="border-b border-purple-200/50 bg-purple-50/30 flex items-center overflow-x-auto">
+            <div className="border-b border-purple-200/50 bg-purple-50/30 flex items-center overflow-x-auto relative">
+              {/* Animated accent line under tabs */}
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-400/0 via-purple-400/50 to-purple-400/0 animate-[shimmer_2s_ease-in-out_infinite]" />
               {openFiles.map((file, index) => (
                 <ContextMenu key={file.id}>
                   <ContextMenuTrigger asChild>
                     <div
-                      className={`flex items-center gap-2 px-3 py-2 border-r border-purple-200/30 cursor-pointer min-w-fit transition-colors ${
+                      className={`flex items-center gap-2 px-3 py-2 border-r border-purple-200/30 cursor-pointer min-w-fit transition-all duration-200 ${
                         index === activeFileIndex
-                          ? 'bg-background border-b-2 border-b-purple-600 text-purple-700 dark:text-purple-400'
-                          : 'bg-purple-50/50 hover:bg-purple-100/50 text-purple-800/70 dark:text-purple-300/70'
+                          ? 'bg-background border-b-2 border-b-purple-600 text-purple-700 dark:text-purple-400 shadow-[0_2px_8px_rgba(139,92,246,0.15)]'
+                          : 'bg-purple-50/50 hover:bg-purple-100/50 text-purple-800/70 dark:text-purple-300/70 hover:shadow-[0_1px_4px_rgba(139,92,246,0.1)]'
                       }`}
                       onClick={() => setActiveFileIndex(index)}
                     >
@@ -1014,10 +1034,15 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
               />
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50 text-purple-400" />
-                <p className="text-purple-700 dark:text-purple-300">No file open</p>
+            <div className="flex-1 flex items-center justify-center text-muted-foreground relative">
+              {/* Subtle animated background pattern */}
+              <div className="absolute inset-0 opacity-[0.02] bg-[radial-gradient(circle_at_50%_50%,rgba(139,92,246,1),transparent_70%)] animate-[pulse_4s_ease-in-out_infinite]" />
+              <div className="text-center relative z-10">
+                <div className="relative inline-block mb-4">
+                  <FileText className="h-12 w-12 mx-auto opacity-50 text-purple-400 animate-[float_3s_ease-in-out_infinite]" />
+                  <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-purple-500 animate-[pulse_2s_ease-in-out_infinite]" />
+                </div>
+                <p className="text-purple-700 dark:text-purple-300 font-medium">No file open</p>
                 <p className="text-sm mt-2 text-purple-600/70 dark:text-purple-400/70">Click a file in the explorer to open it</p>
               </div>
             </div>
