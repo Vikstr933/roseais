@@ -264,53 +264,44 @@ export default function PublicProjects() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-cyan-50 text-gray-900 pt-20">
-      {/* Gradient Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-purple-400/40 rounded-full blur-[120px]" />
-        <div className="absolute top-[20%] right-[-15%] w-[500px] h-[500px] bg-pink-400/40 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="relative max-w-7xl mx-auto px-4 py-12">
+    <div className="min-h-screen bg-background text-foreground pt-16">
+      <div className="relative max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-12"
+          className="mb-8"
         >
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4">
-            <span className="text-gray-900">From the</span>{' '}
-            <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-              Community
-            </span>
+          <h1 className="text-3xl font-bold mb-2 text-foreground">
+            Community Projects
           </h1>
-          <p className="text-lg text-gray-700 max-w-2xl">
-            Discover, remix, and build upon projects created by our community
+          <p className="text-sm text-muted-foreground">
+            Discover and remix projects from our community
           </p>
         </motion.div>
 
         {/* Filters and Search */}
-        <div className="mb-8 space-y-4">
+        <div className="mb-6 space-y-3">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search projects..."
-              className="pl-12 bg-white/95 border-purple-200/50 text-gray-900 placeholder:text-gray-400 h-12"
+              className="pl-9 h-9 text-sm"
             />
           </div>
 
           {/* Filter Row */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Category Filter */}
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-600" />
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-4 py-2 rounded-lg bg-white/95 border border-purple-200/50 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                className="px-3 py-1.5 rounded-md border text-sm bg-background"
               >
                 {categoryFilters.map(cat => (
                   <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -319,20 +310,20 @@ export default function PublicProjects() {
             </div>
 
             {/* Sort Options */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {sortOptions.map(option => {
                 const Icon = option.icon;
                 return (
                   <button
                     key={option.value}
                     onClick={() => setSortBy(option.value)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       sortBy === option.value
-                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/25'
-                        : 'bg-white/90 text-gray-700 hover:bg-purple-50 hover:text-purple-700 border border-purple-200/50'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-3 w-3" />
                     <span className="hidden sm:inline">{option.label}</span>
                   </button>
                 );
@@ -342,157 +333,133 @@ export default function PublicProjects() {
             {/* Featured Toggle */}
             <button
               onClick={() => setFeaturedOnly(!featuredOnly)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 featuredOnly
-                  ? 'bg-amber-500/20 text-amber-700 border border-amber-500/30'
-                  : 'bg-white/90 text-gray-700 hover:bg-purple-50 hover:text-purple-700 border border-purple-200/50'
+                  ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
-              <Star className="h-4 w-4 inline mr-2" />
+              <Star className="h-3 w-3 inline mr-1.5" />
               Featured
             </button>
           </div>
         </div>
 
         {/* Results Count */}
-        <div className="mb-6 text-gray-600 text-sm">
-          {loading ? 'Loading...' : `${total} projects found`}
+        <div className="mb-4 text-muted-foreground text-xs">
+          {loading ? 'Loading...' : `${total} projects`}
         </div>
 
         {/* Projects Grid */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="bg-white/90 rounded-2xl border border-purple-200/50 aspect-[4/3] animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+              <div key={i} className="bg-card rounded-lg border aspect-[4/3] animate-pulse" />
             ))}
           </div>
         ) : projects.length === 0 ? (
-          <div className="text-center py-20">
-            <FileCode className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-600 text-lg">No projects found</p>
-            <p className="text-gray-500 text-sm mt-2">Try adjusting your filters</p>
+          <div className="text-center py-16">
+            <FileCode className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">No projects found</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {projects.map((project, index) => {
               const categoryGradient = categoryColors[project.projectType] || categoryColors.web_app;
               const categoryLabel = categoryLabels[project.projectType] || project.projectType;
               const isVoted = votedProjects.has(project.id);
               
+              // Validate screenshot URL
+              const hasValidScreenshot = project.screenshotUrl && 
+                (project.screenshotUrl.startsWith('http://') || project.screenshotUrl.startsWith('https://')) &&
+                project.screenshotUrl.length > 10;
+              const hasValidThumbnail = project.thumbnailUrl && 
+                (project.thumbnailUrl.startsWith('http://') || project.thumbnailUrl.startsWith('https://')) &&
+                project.thumbnailUrl.length > 10;
+              
               return (
                 <motion.div
                   key={project.id}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="group relative"
+                  transition={{ delay: index * 0.03 }}
+                  className="group"
                 >
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-400/40 to-indigo-400/40 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  <div className="relative bg-white/95 backdrop-blur-sm rounded-2xl border border-purple-200/50 overflow-hidden hover:border-purple-300/70 transition-all duration-500 shadow-lg hover:shadow-xl">
+                  <div 
+                    className="relative bg-card rounded-lg border overflow-hidden hover:border-primary/50 transition-colors cursor-pointer"
+                    onClick={() => setLocation(`/public-projects/${project.id}`)}
+                  >
                     {/* Screenshot/Thumbnail */}
-                    <div className={`aspect-[4/3] relative overflow-hidden ${
-                      project.screenshotUrl || project.thumbnailUrl
-                        ? ''
-                        : `bg-gradient-to-br ${categoryGradient}`
+                    <div className={`aspect-[4/3] relative overflow-hidden bg-muted ${
+                      !hasValidScreenshot && !hasValidThumbnail ? `bg-gradient-to-br ${categoryGradient}` : ''
                     }`}>
-                      {project.screenshotUrl || project.thumbnailUrl ? (
+                      {(hasValidScreenshot || hasValidThumbnail) ? (
                         <img
                           src={project.screenshotUrl || project.thumbnailUrl || ''}
                           alt={project.name}
                           className="w-full h-full object-cover"
+                          loading="lazy"
                           onError={(e) => {
-                            // Fallback to gradient if image fails
+                            // Hide image and show gradient fallback
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
-                            target.parentElement!.className += ` bg-gradient-to-br ${categoryGradient}`;
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.className = `aspect-[4/3] relative overflow-hidden bg-gradient-to-br ${categoryGradient}`;
+                            }
                           }}
                         />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="p-6 rounded-2xl bg-white/90 backdrop-blur-sm border border-purple-200/50 shadow-lg">
-                            <FileCode className="h-12 w-12 text-purple-600" />
-                          </div>
+                          <Code className="h-8 w-8 text-muted-foreground/50" />
                         </div>
                       )}
                       
                       {/* Stats Overlay */}
-                      <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-                        {project.featured && (
-                          <div className="px-3 py-1.5 rounded-full bg-amber-100 backdrop-blur-sm border border-amber-300/50 text-amber-700 text-xs font-semibold flex items-center gap-1.5">
-                            <Star className="h-3 w-3 fill-current" />
-                            Featured
-                          </div>
-                        )}
-                        <div className="ml-auto flex items-center gap-2">
-                          <div className="px-2 py-1 rounded-full bg-white/95 backdrop-blur-sm text-purple-700 text-xs flex items-center gap-1 border border-purple-200/50 shadow-md">
-                            <Code className="h-3 w-3" />
-                            {project.fileCount}
-                          </div>
+                      {project.featured && (
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs font-medium flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-current" />
+                          <span className="hidden sm:inline">Featured</span>
                         </div>
-                      </div>
-
-                      {/* Hover Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-purple-600/90 via-purple-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4 gap-2">
-                        <Button
-                          size="sm"
-                          className="flex-1 bg-violet-600 hover:bg-violet-500 text-white"
-                          onClick={() => setLocation(`/public-projects/${project.id}`)}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Project
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="bg-white/90 hover:bg-white text-purple-700 border-purple-200/50"
-                          onClick={() => handleRemix(project.id)}
-                        >
-                          <GitBranch className="h-4 w-4 mr-2" />
-                          Remix
-                        </Button>
-                      </div>
+                      )}
                     </div>
 
                     {/* Info */}
-                    <div className="p-5">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-gray-900 font-semibold text-lg group-hover:text-violet-600 transition-colors truncate">
-                            {project.name}
-                          </h3>
-                          <p className="text-gray-600 text-sm capitalize">{categoryLabel}</p>
-                        </div>
-                      </div>
-                      
+                    <div className="p-3">
+                      <h3 className="font-medium text-sm truncate mb-1">
+                        {project.name}
+                      </h3>
                       {project.description && (
-                        <p className="text-gray-700 text-sm line-clamp-2 mb-3">{project.description}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{project.description}</p>
                       )}
 
                       {/* Stats */}
-                      <div className="flex items-center justify-between pt-3 border-t border-purple-200/30">
-                        <div className="flex items-center gap-4 text-gray-600 text-xs">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex items-center gap-3">
                           <div className="flex items-center gap-1">
-                            <Eye className="h-3.5 w-3.5" />
-                            <span>{project.viewCount.toLocaleString()}</span>
+                            <Eye className="h-3 w-3" />
+                            <span>{project.viewCount}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <GitBranch className="h-3.5 w-3.5" />
+                            <GitBranch className="h-3 w-3" />
                             <span>{project.remixCount}</span>
                           </div>
                         </div>
                         <button
-                          onClick={() => handleVote(project.id)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleVote(project.id);
+                          }}
+                          className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${
                             isVoted
-                              ? 'bg-rose-100 text-rose-600 border border-rose-300/50'
-                              : 'bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-200/50'
+                              ? 'text-rose-600'
+                              : 'hover:text-rose-600'
                           }`}
                         >
-                          <Heart className={`h-4 w-4 ${isVoted ? 'fill-current' : ''}`} />
-                          <span className="text-sm font-medium">{project.voteCount}</span>
+                          <Heart className={`h-3.5 w-3.5 ${isVoted ? 'fill-current' : ''}`} />
+                          <span className="font-medium">{project.voteCount}</span>
                         </button>
                       </div>
-                    </div>
                   </div>
                 </motion.div>
               );
