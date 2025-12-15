@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { db } from '../../db/index.js';
+import { users } from '../../db/schema-pg.js';
+import { eq } from 'drizzle-orm';
 import { Logger } from '../utils/Logger';
 
 const router = Router();
@@ -9,7 +11,7 @@ const logger = new Logger(process.cwd());
 // Initialize Stripe with your secret key (you'll need to add this to your .env file)
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
+      apiVersion: '2025-09-30.clover',
     })
   : null;
 
@@ -193,34 +195,27 @@ router.get('/subscription/:userId', async (req: Request, res: Response) => {
   const { userId } = req.params;
 
   try {
-    // Query your database for the user's subscription
-    const result = await db.query(
-      `SELECT
-        stripe_customer_id,
-        stripe_subscription_id,
-        subscription_plan,
-        subscription_status,
-        credits_remaining,
-        subscription_period_end
-      FROM users
-      WHERE id = $1`,
-      [userId]
-    );
+    // Query database for the user's subscription using Drizzle ORM
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const user = result.rows[0];
-    const plan = PLANS[user.subscription_plan as keyof typeof PLANS] || PLANS.free;
+    // Map tier to plan (tier is the subscription plan in our schema)
+    const plan = PLANS[user.tier as keyof typeof PLANS] || PLANS.free;
 
     res.json({
-      customerId: user.stripe_customer_id,
-      subscriptionId: user.stripe_subscription_id,
-      plan: user.subscription_plan,
-      status: user.subscription_status,
-      creditsRemaining: user.credits_remaining,
-      periodEnd: user.subscription_period_end,
+      customerId: user.stripeCustomerId || null,
+      subscriptionId: user.subscriptionId || null,
+      plan: user.tier || 'free',
+      status: user.subscriptionStatus || 'inactive',
+      creditsRemaining: null, // Not stored in users table
+      periodEnd: null, // Not stored in users table
       planDetails: plan
     });
   } catch (error) {
@@ -249,26 +244,16 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
     const planDetails = PLANS[plan as keyof typeof PLANS];
 
-    // Update user in database
-    await db.query(
-      `UPDATE users
-       SET stripe_customer_id = $1,
-           stripe_subscription_id = $2,
-           subscription_plan = $3,
-           subscription_status = $4,
-           credits_remaining = $5,
-           subscription_period_end = $6
-       WHERE id = $7`,
-      [
-        customerId,
-        subscriptionId,
-        plan,
-        subscription.status,
-        planDetails.credits,
-        new Date(subscription.current_period_end * 1000),
-        userId
-      ]
-    );
+    // Update user in database using Drizzle ORM
+    await db
+      .update(users)
+      .set({
+        stripeCustomerId: customerId,
+        subscriptionId: subscriptionId,
+        tier: plan as any,
+        subscriptionStatus: subscription.status as any,
+      })
+      .where(eq(users.id, userId));
 
     logger.info('StripeWebhook', 'Checkout completed', { userId, plan });
   }
@@ -277,15 +262,16 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
 
-  // Find user by customer ID
-  const result = await db.query(
-    'SELECT id FROM users WHERE stripe_customer_id = $1',
-    [customerId]
-  );
+  // Find user by customer ID using Drizzle ORM
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.stripeCustomerId, customerId))
+    .limit(1);
 
-  if (result.rows.length === 0) return;
+  if (!user) return;
 
-  const userId = result.rows[0].id;
+  const userId = user.id;
   const priceId = subscription.items.data[0].price.id;
 
   // Determine plan
@@ -293,24 +279,14 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   if (priceId === PLANS.pro.priceId) plan = 'pro';
   if (priceId === PLANS.enterprise.priceId) plan = 'enterprise';
 
-  const planDetails = PLANS[plan as keyof typeof PLANS];
-
-  // Update subscription
-  await db.query(
-    `UPDATE users
-     SET subscription_plan = $1,
-         subscription_status = $2,
-         subscription_period_end = $3,
-         credits_remaining = $4
-     WHERE id = $5`,
-    [
-      plan,
-      subscription.status,
-      new Date(subscription.current_period_end * 1000),
-      planDetails.credits,
-      userId
-    ]
-  );
+  // Update subscription using Drizzle ORM
+  await db
+    .update(users)
+    .set({
+      tier: plan as any,
+      subscriptionStatus: subscription.status as any,
+    })
+    .where(eq(users.id, userId));
 
   logger.info('StripeWebhook', 'Subscription updated', { userId, plan, status: subscription.status });
 }
@@ -318,24 +294,25 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
 
-  const result = await db.query(
-    'SELECT id FROM users WHERE stripe_customer_id = $1',
-    [customerId]
-  );
+  // Find user by customer ID using Drizzle ORM
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.stripeCustomerId, customerId))
+    .limit(1);
 
-  if (result.rows.length === 0) return;
+  if (!user) return;
 
-  const userId = result.rows[0].id;
+  const userId = user.id;
 
-  // Downgrade to free plan
-  await db.query(
-    `UPDATE users
-     SET subscription_plan = 'free',
-         subscription_status = 'canceled',
-         credits_remaining = $1
-     WHERE id = $2`,
-    [PLANS.free.credits, userId]
-  );
+  // Downgrade to free plan using Drizzle ORM
+  await db
+    .update(users)
+    .set({
+      tier: 'free',
+      subscriptionStatus: 'canceled',
+    })
+    .where(eq(users.id, userId));
 
   logger.info('StripeWebhook', 'Subscription canceled', { userId });
 }
@@ -343,14 +320,16 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string;
 
-  const result = await db.query(
-    'SELECT id FROM users WHERE stripe_customer_id = $1',
-    [customerId]
-  );
+  // Find user by customer ID using Drizzle ORM
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.stripeCustomerId, customerId))
+    .limit(1);
 
-  if (result.rows.length === 0) return;
+  if (!user) return;
 
-  const userId = result.rows[0].id;
+  const userId = user.id;
 
   logger.info('StripeWebhook', 'Payment succeeded', { userId, amount: invoice.amount_paid });
 }
@@ -358,14 +337,14 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string;
 
-  const result = await db.query(
-    'SELECT id, email FROM users WHERE stripe_customer_id = $1',
-    [customerId]
-  );
+  // Find user by customer ID using Drizzle ORM
+  const [user] = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(eq(users.stripeCustomerId, customerId))
+    .limit(1);
 
-  if (result.rows.length === 0) return;
-
-  const user = result.rows[0];
+  if (!user) return;
 
   // TODO: Send email notification about failed payment
   logger.error('StripeWebhook', 'Payment failed', { userId: user.id, email: user.email });
