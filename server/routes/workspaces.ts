@@ -688,6 +688,18 @@ router.post('/:id/files', authenticateUser, async (req, res) => {
         componentName || 'Component'
       );
 
+      // Invalidate cached file lists for this workspace so new files appear immediately
+      try {
+        const cache = performanceService.getCache();
+        const deletedFilesCache = cache.deletePattern(`/api/workspaces/${projectId}/files`);
+        const deletedWorkspaceDetailCache = cache.deletePattern(`/api/workspaces/${projectId}{`);
+        console.log(
+          `[Cache] Invalidated ${deletedFilesCache + deletedWorkspaceDetailCache} cache entries for workspace ${projectId} after file export`
+        );
+      } catch (cacheError) {
+        console.warn('[Cache] Failed to invalidate workspace file cache after export', cacheError);
+      }
+
       res.json({ success: true, message: `Saved ${files.length} files to project` });
     } catch (exportError) {
       console.error('Error in exportToProject:', exportError);
