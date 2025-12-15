@@ -61,6 +61,8 @@ function PublicProjectDetail() {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
   const [isRemixing, setIsRemixing] = useState(false);
+  const [files, setFiles] = useState<Array<{ id: number; path: string; name: string }>>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
 
   const projectId = params?.id ? Number(params.id) : null;
 
@@ -94,6 +96,24 @@ function PublicProjectDetail() {
         .catch(() => {});
     }
   }, [projectId, user, sessionToken]);
+
+  // Fetch files
+  useEffect(() => {
+    if (projectId) {
+      setFilesLoading(true);
+      apiFetch(`/api/public-projects/${projectId}/files`, {
+        headers: sessionToken ? getAuthHeaders(sessionToken) : {},
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setFiles(data.files || []);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setFilesLoading(false));
+    }
+  }, [projectId, sessionToken]);
 
   const handleVote = async () => {
     if (!user) {
@@ -264,7 +284,11 @@ function PublicProjectDetail() {
                     </Badge>
                   </div>
                   <h1 className="text-4xl md:text-5xl font-bold mb-3 text-foreground">{project.name}</h1>
-                  <p className="text-lg text-muted-foreground mb-4">{project.description}</p>
+                  {project.description ? (
+                    <p className="text-lg text-muted-foreground mb-4">{project.description}</p>
+                  ) : (
+                    <p className="text-lg text-muted-foreground mb-4 italic">No description provided</p>
+                  )}
                 </div>
               </div>
 
@@ -355,13 +379,13 @@ function PublicProjectDetail() {
         </motion.div>
 
         {/* Tags */}
-        {project.tags && project.tags.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="mb-8"
-          >
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-8"
+        >
+          {project.tags && project.tags.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {project.tags.map((tag, index) => (
                 <Badge key={index} variant="outline" className="border-border">
@@ -369,6 +393,49 @@ function PublicProjectDetail() {
                 </Badge>
               ))}
             </div>
+          ) : (
+            <div className="text-sm text-muted-foreground italic">No tags</div>
+          )}
+        </motion.div>
+
+        {/* Files Section */}
+        {project.fileCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-8"
+          >
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Code2 className="h-5 w-5 text-primary" />
+                  Project Files ({project.fileCount})
+                </CardTitle>
+                <CardDescription>Files included in this project</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {filesLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading files...</div>
+                ) : files.length > 0 ? (
+                  <ScrollArea className="h-[300px] pr-4">
+                    <div className="space-y-1">
+                      {files.map((file) => (
+                        <div
+                          key={file.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                        >
+                          <Code2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="text-sm font-mono text-foreground truncate flex-1">{file.path}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="text-sm text-muted-foreground italic">No files found</div>
+                )}
+              </CardContent>
+            </Card>
           </motion.div>
         )}
 

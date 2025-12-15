@@ -147,6 +147,68 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/public-projects/:id/files
+ * Get files for a public project (read-only, for viewing)
+ * MUST be before /:id route to avoid route conflicts
+ */
+router.get('/:id/files', optionalAuth, async (req, res) => {
+  try {
+    const projectId = Number(req.params.id);
+
+    // Verify project exists and is public
+    const project = await db
+      .select({ id: workspaces.id, isPublic: workspaces.isPublic })
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.id, projectId),
+          eq(workspaces.isPublic, true)
+        )
+      )
+      .limit(1);
+
+    if (!project[0]) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found or not public',
+      });
+    }
+
+    // Get files (read-only)
+    const files = await db
+      .select({
+        id: projectFiles.id,
+        filePath: projectFiles.filePath,
+      })
+      .from(projectFiles)
+      .where(
+        and(
+          eq(projectFiles.projectId, projectId),
+          eq(projectFiles.isActive, true)
+        )
+      )
+      .orderBy(projectFiles.filePath);
+
+    res.json({
+      success: true,
+      files: files.map(f => ({
+        id: f.id,
+        path: f.filePath,
+        name: f.filePath.split('/').pop() || f.filePath,
+      })),
+      count: files.length,
+    });
+  } catch (error: any) {
+    console.error('Error fetching public project files:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch project files',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/public-projects/:id
  * Get a single public project with details
  */
