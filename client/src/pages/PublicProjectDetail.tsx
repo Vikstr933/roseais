@@ -67,7 +67,7 @@ function PublicProjectDetail() {
   const projectId = params?.id ? Number(params.id) : null;
 
   // Fetch project details
-  const { data: projectData, isLoading } = useQuery<{ success: boolean; project: PublicProject }>({
+  const { data: projectData, isLoading, refetch } = useQuery<{ success: boolean; project: PublicProject }>({
     queryKey: [`/api/public-projects/${projectId}`],
     enabled: !!projectId,
     queryFn: async () => {
@@ -135,7 +135,7 @@ function PublicProjectDetail() {
           description: data.voted ? 'Thanks for your vote!' : 'Your vote has been removed',
         });
         // Refresh project data to update vote count
-        window.location.reload();
+        refetch();
       }
     } catch (error) {
       console.error('Failed to vote:', error);

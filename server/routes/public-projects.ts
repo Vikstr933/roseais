@@ -471,6 +471,12 @@ router.post('/:id/vote', authenticateUser, async (req, res) => {
           )
         );
 
+      // Update vote count (decrement, ensure it doesn't go below 0)
+      await db
+        .update(workspaces)
+        .set({ voteCount: sql`GREATEST(COALESCE(${workspaces.voteCount}, 0) - 1, 0)` })
+        .where(eq(workspaces.id, projectId));
+
       return res.json({
         success: true,
         voted: false,
@@ -483,6 +489,12 @@ router.post('/:id/vote', authenticateUser, async (req, res) => {
       projectId,
       userId,
     });
+
+    // Update vote count (increment)
+    await db
+      .update(workspaces)
+      .set({ voteCount: sql`COALESCE(${workspaces.voteCount}, 0) + 1` })
+      .where(eq(workspaces.id, projectId));
 
     res.json({
       success: true,
