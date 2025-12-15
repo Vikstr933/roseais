@@ -673,7 +673,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       return (
         <div key={node.path}>
           <div
-            className="flex items-center text-sm px-2 py-1 hover:bg-muted cursor-pointer"
+            className="flex items-center text-sm px-2 py-1 hover:bg-purple-100/50 cursor-pointer text-purple-900 dark:text-purple-100"
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={() => {
               setExpandedFolders(prev => {
@@ -688,11 +688,11 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
             }}
           >
             {isExpanded ? (
-              <ChevronDown className="h-3 w-3 mr-1" />
+              <ChevronDown className="h-3 w-3 mr-1 text-purple-600" />
             ) : (
-              <ChevronRight className="h-3 w-3 mr-1" />
+              <ChevronRight className="h-3 w-3 mr-1 text-purple-600" />
             )}
-            <Folder className="h-4 w-4 mr-1" />
+            <Folder className="h-4 w-4 mr-1 text-purple-600" />
             <span className="flex-1 truncate">{node.name}</span>
           </div>
           {isExpanded && node.children && (
@@ -711,11 +711,11 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       <ContextMenu key={node.path}>
         <ContextMenuTrigger asChild>
           <div
-            className="flex items-center text-sm px-2 py-1 hover:bg-muted cursor-pointer"
+            className="flex items-center text-sm px-2 py-1 hover:bg-purple-100/50 cursor-pointer text-purple-900 dark:text-purple-100"
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={() => openFile(file)}
           >
-            <FileText className="h-4 w-4 mr-1" />
+            <FileText className="h-4 w-4 mr-1 text-purple-500" />
             <span className="flex-1 truncate">{node.name}</span>
           </div>
         </ContextMenuTrigger>
@@ -738,50 +738,91 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
   const activeFile = openFiles[activeFileIndex];
 
   return (
-    <Card className={`${isFullscreen ? 'fixed inset-0 z-50' : 'fixed inset-4 z-50'} flex flex-col bg-background border-2`}>
-      {/* Header */}
-      <CardHeader className="flex flex-row items-center justify-between border-b pb-2 flex-shrink-0">
+    <Card className={`${isFullscreen ? 'fixed inset-0 z-50' : 'fixed inset-4 z-50'} flex flex-col bg-background border-2 border-purple-200/50`}>
+      {/* Header with brand gradient accent */}
+      <CardHeader className="flex flex-row items-center justify-between border-b border-purple-200/50 pb-2 flex-shrink-0 bg-gradient-to-r from-purple-50/50 to-transparent">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowFileExplorer(!showFileExplorer)}
+            className="hover:bg-purple-100 text-purple-600 hover:text-purple-700"
           >
             <Folder className="h-4 w-4" />
           </Button>
-          <div className="text-sm font-semibold truncate">
-            Vik IDE ({openFiles.length}/{MAX_OPEN_FILES} files)
+          <div className="text-sm font-semibold truncate flex items-center gap-2">
+            <span className="text-purple-600 dark:text-purple-400">Vik IDE</span>
+            <span className="text-muted-foreground text-xs">({openFiles.length}/{MAX_OPEN_FILES} files)</span>
           </div>
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => setShowNewFileDialog(true)} title="New File (Ctrl+N)">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setShowNewFileDialog(true)} 
+            title="New File (Ctrl+N)"
+            className="hover:bg-purple-100 text-purple-600 hover:text-purple-700"
+          >
             <FilePlus className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setShowQuickSwitcher(true)} title="Quick Switcher (Ctrl+P)">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setShowQuickSwitcher(true)} 
+            title="Quick Switcher (Ctrl+P)"
+            className="hover:bg-purple-100 text-purple-600 hover:text-purple-700"
+          >
             <Search className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setShowTerminal(!showTerminal)} title="Terminal">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setShowTerminal(!showTerminal)} 
+            title="Terminal"
+            className="hover:bg-purple-100 text-purple-600 hover:text-purple-700"
+          >
             <TerminalIcon className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setEditorTheme(editorTheme === 'vs-dark' ? 'light' : 'vs-dark')}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setEditorTheme(editorTheme === 'vs-dark' ? 'light' : 'vs-dark')}
+            className="hover:bg-purple-100"
+          >
             {editorTheme === 'vs-dark' ? '☀️' : '🌙'}
           </Button>
-          <Button variant="ghost" size="sm" onClick={saveAll} disabled={!openFiles.some(f => f.isDirty)}>
+          <Button 
+            variant={openFiles.some(f => f.isDirty) ? "default" : "ghost"}
+            size="sm" 
+            onClick={saveAll} 
+            disabled={!openFiles.some(f => f.isDirty)}
+            className={openFiles.some(f => f.isDirty) ? "brand-gradient text-white hover:opacity-90" : "hover:bg-purple-100 disabled:opacity-50"}
+          >
             <Save className="h-4 w-4 mr-1" />
-            Save All
+            <span className="font-medium">Save All</span>
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setIsFullscreen(!isFullscreen)}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="hover:bg-purple-100"
+          >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onClose}
+            className="hover:bg-red-100 hover:text-red-600"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
 
       {/* Top menubar like classic IDEs */}
-      <div className="border-b px-2 py-1 bg-background flex-shrink-0">
+      <div className="border-b border-purple-200/50 px-2 py-1 bg-purple-50/30 flex-shrink-0">
         <Menubar>
           <MenubarMenu>
             <MenubarTrigger>File</MenubarTrigger>
@@ -869,14 +910,15 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* File Explorer Sidebar */}
         {showFileExplorer && (
-          <div className="w-64 border-r bg-muted/30 flex flex-col">
-            <div className="p-2 border-b">
+          <div className="w-64 border-r border-purple-200/50 bg-purple-50/20 flex flex-col">
+            <div className="p-2 border-b border-purple-200/50">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase">Explorer</h3>
+                <h3 className="text-xs font-semibold uppercase text-purple-700 dark:text-purple-400">Explorer</h3>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowNewFileDialog(true)}
+                  className="hover:bg-purple-100 text-purple-600 hover:text-purple-700"
                 >
                   <FilePlus className="h-3 w-3" />
                 </Button>
@@ -894,25 +936,25 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
         <div className="flex-1 flex flex-col min-w-0">
           {/* Tabs */}
           {openFiles.length > 0 && (
-            <div className="border-b bg-muted/20 flex items-center overflow-x-auto">
+            <div className="border-b border-purple-200/50 bg-purple-50/30 flex items-center overflow-x-auto">
               {openFiles.map((file, index) => (
                 <ContextMenu key={file.id}>
                   <ContextMenuTrigger asChild>
                     <div
-                      className={`flex items-center gap-2 px-3 py-2 border-r cursor-pointer min-w-fit ${
+                      className={`flex items-center gap-2 px-3 py-2 border-r border-purple-200/30 cursor-pointer min-w-fit transition-colors ${
                         index === activeFileIndex
-                          ? 'bg-background border-b-2 border-b-primary'
-                          : 'bg-muted/50 hover:bg-muted'
+                          ? 'bg-background border-b-2 border-b-purple-600 text-purple-700 dark:text-purple-400'
+                          : 'bg-purple-50/50 hover:bg-purple-100/50 text-purple-800/70 dark:text-purple-300/70'
                       }`}
                       onClick={() => setActiveFileIndex(index)}
                     >
-                      <FileCode className="h-3 w-3" />
+                      <FileCode className={`h-3 w-3 ${index === activeFileIndex ? 'text-purple-600' : 'text-purple-500'}`} />
                       <span className="text-sm truncate max-w-[200px]">{file.filePath}</span>
-                      {file.isDirty && <span className="text-xs">●</span>}
+                      {file.isDirty && <span className="text-xs text-purple-600">●</span>}
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-4 w-4 p-0"
+                        className="h-4 w-4 p-0 hover:bg-purple-200"
                         onClick={(e) => {
                           e.stopPropagation();
                           closeFile(index);
@@ -974,9 +1016,9 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No file open</p>
-                <p className="text-sm mt-2">Click a file in the explorer to open it</p>
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50 text-purple-400" />
+                <p className="text-purple-700 dark:text-purple-300">No file open</p>
+                <p className="text-sm mt-2 text-purple-600/70 dark:text-purple-400/70">Click a file in the explorer to open it</p>
               </div>
             </div>
           )}
@@ -995,7 +1037,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
         <Dialog open={showQuickSwitcher} onOpenChange={setShowQuickSwitcher}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Quick Switcher (Ctrl+P)</DialogTitle>
+              <DialogTitle className="text-purple-700 dark:text-purple-400">Quick Switcher (Ctrl+P)</DialogTitle>
             </DialogHeader>
             <Input
               placeholder="Type to search files..."
@@ -1008,7 +1050,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
                 {quickSwitcherFiles.map(file => (
                   <div
                     key={file.id}
-                    className="p-2 hover:bg-muted cursor-pointer rounded"
+                    className="p-2 hover:bg-purple-100/50 cursor-pointer rounded transition-colors"
                     onClick={() => {
                       openFile(file);
                       setShowQuickSwitcher(false);
@@ -1016,8 +1058,8 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
                     }}
                   >
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      <span className="text-sm">{file.filePath}</span>
+                      <FileText className="h-4 w-4 text-purple-500" />
+                      <span className="text-sm text-purple-900 dark:text-purple-100">{file.filePath}</span>
                     </div>
                   </div>
                 ))}
@@ -1032,7 +1074,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
         <Dialog open={showNewFileDialog} onOpenChange={setShowNewFileDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New File</DialogTitle>
+              <DialogTitle className="text-purple-700 dark:text-purple-400">Create New File</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -1053,7 +1095,11 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
               <Button variant="outline" onClick={() => setShowNewFileDialog(false)}>
                 Cancel
               </Button>
-              <Button onClick={createNewFile} disabled={!newFileName.trim() || isSaving}>
+              <Button 
+                onClick={createNewFile} 
+                disabled={!newFileName.trim() || isSaving}
+                className="brand-gradient text-white hover:opacity-90"
+              >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create'}
               </Button>
             </DialogFooter>
