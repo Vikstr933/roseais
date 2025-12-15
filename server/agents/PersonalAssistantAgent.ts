@@ -3619,25 +3619,28 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
           const { ProjectService } = await import('../services/ProjectService');
           const projectService = new ProjectService();
 
-          const inferredName =
-            (prompt.match(/mini[- ]?transformer/i) && 'Mini Transformer Visualizer') ||
-            (prompt.match(/radio/i) && 'RadioWave App') ||
-            (prompt.length > 40 ? `${prompt.slice(0, 40).trim()}...` : prompt);
+          // Derive a reasonable default name from the prompt (first sentence, trimmed & truncated)
+          const firstSentence =
+            (prompt || '')
+              .split(/[\.\n]/)[0]
+              .trim();
 
           const projectName =
-            (inferredName && inferredName.replace(/["\n\r]/g, '').slice(0, 80)) ||
-            'Nytt AI-projekt';
+            (firstSentence && firstSentence.slice(0, 80)) || 'Nytt AI-projekt';
 
-          const description = `Created automatically from assistant request: "${prompt.slice(0, 120).replace(/[\r\n]+/g, ' ')}..."`;
+          const description = `Created automatically from assistant request: "${prompt
+            .slice(0, 120)
+            .replace(/[\r\n]+/g, ' ')}..."`;
 
           const newProject = await projectService.createProject({
             name: projectName,
             description,
             projectType: 'web_app',
             ownerId: userId,
-            agentConfig: null,
-            testCases: null,
-            settings: null,
+            // Let service apply its own defaults for optional fields
+            agentConfig: undefined,
+            testCases: undefined,
+            settings: undefined,
           });
 
           targetProjectId = String(newProject.id);
