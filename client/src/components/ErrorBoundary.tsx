@@ -63,9 +63,52 @@ export class ErrorBoundary extends Component<Props, State> {
     });
   };
 
+  /**
+   * Ritar ut detaljerad felinfo så att vi kan se det faktiska felet
+   * även i produktion (även om console.log råkar vara avstängt).
+   */
+  private renderDebugDetails() {
+    const { error, errorInfo } = this.state;
+    if (!error && !errorInfo) return null;
+
+    return (
+      <div className="mt-4 p-3 border border-border/60 rounded bg-background/80 text-left text-xs font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto">
+        {error && (
+          <>
+            <div className="font-semibold mb-1">Error</div>
+            <div className="mb-2">{error.toString()}</div>
+            {error.stack && (
+              <details className="mb-2">
+                <summary className="cursor-pointer font-semibold">Stack trace</summary>
+                <pre className="mt-1 whitespace-pre-wrap">{error.stack}</pre>
+              </details>
+            )}
+          </>
+        )}
+        {errorInfo?.componentStack && (
+          <details>
+            <summary className="cursor-pointer font-semibold">Component stack</summary>
+            <pre className="mt-1 whitespace-pre-wrap">{errorInfo.componentStack}</pre>
+          </details>
+        )}
+      </div>
+    );
+  }
+
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
+        // Om ett anpassat fallback-UI används (t.ex. i main.tsx) så
+        // wrappar vi det och lägger till debug-info under, så att
+        // vi kan se det riktiga felet på skärmen.
+        if (React.isValidElement(this.props.fallback)) {
+          return (
+            <div className="flex flex-col items-stretch min-h-[300px]">
+              {this.props.fallback}
+              {this.renderDebugDetails()}
+            </div>
+          );
+        }
         return this.props.fallback;
       }
 
@@ -106,6 +149,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   Reload Page
                 </Button>
               </div>
+              {this.renderDebugDetails()}
             </AlertDescription>
           </Alert>
         </div>
