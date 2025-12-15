@@ -9,7 +9,7 @@ import {
   Terminal as TerminalIcon, ChevronRight, ChevronDown, FileCode, Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getApiUrl } from '@/lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import Editor from '@monaco-editor/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -595,15 +595,25 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
 
     // Subscribe to terminal SSE stream for this project
     try {
-      const stream = new EventSource(`/api/terminal/${projectId}/stream`, {
+      const streamUrl = getApiUrl(`/api/terminal/${encodeURIComponent(projectId)}/stream`);
+      console.log('[IDE Terminal] Connecting to:', streamUrl);
+      
+      const stream = new EventSource(streamUrl, {
         withCredentials: true,
       });
+
+      stream.onopen = () => {
+        console.log('[IDE Terminal] Connection opened');
+        xtermRef.current?.writeln('[terminal] Connected to log stream');
+      };
 
       stream.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
           if (payload?.type === 'output' && typeof payload.data === 'string') {
             xtermRef.current?.writeln(payload.data);
+          } else if (payload?.type === 'heartbeat') {
+            // Silently handle heartbeats
           }
         } catch {
           // Fallback: write raw data
@@ -613,14 +623,20 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
         }
       };
 
-      stream.onerror = () => {
-        xtermRef.current?.writeln('[terminal] Connection error. Retrying or reload page if this persists.');
+      stream.onerror = (error) => {
+        console.error('[IDE Terminal] Connection error:', error);
+        // Check if connection is closed
+        if (stream.readyState === EventSource.CLOSED) {
+          xtermRef.current?.writeln('[terminal] Connection closed. Check if endpoint exists: /api/terminal/' + projectId + '/stream');
+        } else {
+          xtermRef.current?.writeln('[terminal] Connection error. Retrying...');
+        }
       };
 
       terminalStreamRef.current = stream;
     } catch (error) {
-      console.error('Failed to connect to terminal stream', error);
-      xtermRef.current?.writeln('[terminal] Failed to connect to terminal stream.');
+      console.error('[IDE Terminal] Failed to create EventSource:', error);
+      xtermRef.current?.writeln('[terminal] Failed to connect to terminal stream: ' + (error instanceof Error ? error.message : String(error)));
     }
 
     return () => {
