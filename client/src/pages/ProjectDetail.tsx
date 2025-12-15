@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import ActiveUsersIndicator from '@/components/ActiveUsersIndicator';
 import { useUserActivity } from '@/hooks/useUserActivity';
+import { FileEditor } from '@/components/FileEditor';
 
 // Type definitions for project data
 interface ProjectMember {
@@ -104,6 +105,7 @@ function ProjectDetailContent() {
   const queryClient = useQueryClient();
   const [newMessage, setNewMessage] = useState('');
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<ProjectFile | null>(null);
   const { trackViewing, trackChatting } = useUserActivity();
 
   const { data: project, isLoading } = useQuery({
@@ -573,7 +575,8 @@ function ProjectDetailContent() {
                   {projectFiles.map((file: ProjectFile) => (
                     <div
                       key={file.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => setSelectedFile(file)}
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-lg">
@@ -711,6 +714,26 @@ function ProjectDetailContent() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* File Editor Modal */}
+      {selectedFile && id && (
+        <FileEditor
+          file={{
+            id: selectedFile.id,
+            filePath: selectedFile.filePath,
+            fileContent: selectedFile.fileContent || '',
+            fileType: selectedFile.fileType,
+            version: selectedFile.version,
+          }}
+          projectId={id}
+          onClose={() => setSelectedFile(null)}
+          onSave={() => {
+            queryClient.invalidateQueries({
+              queryKey: [`/api/workspaces/${id}/files`],
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../../db';
-import { workspaces, projectMembers, projectRemixes, projectFolders } from '../../db/schema-pg';
+import { workspaces, projectMembers, projectRemixes, projectFolders, projectFiles } from '../../db/schema-pg';
 import { chatMessages, codeGenerationSessions } from '../../db/schema-pg';
 import { eq, and, sql } from 'drizzle-orm';
 import { projectService } from '../services/ProjectService';
@@ -757,6 +757,94 @@ router.get('/:id/files', optionalAuth, async (req, res) => {
 
     const files = await projectService.getProjectFiles(projectId);
     res.json(files);
+  } catch (error) {
+    console.error('Error fetching project files:', error);
+    res.status(500).json({ error: 'Failed to fetch project files' });
+  }
+});
+
+// PUT /api/workspaces/:id/files/:fileId - Update a single file
+router.put('/:id/files/:fileId', authenticateUser, async (req, res) => {
+  try {
+    const projectId = parseInt(req.params.id);
+    const fileId = parseInt(req.params.fileId);
+    const { content } = req.body;
+
+    if (content === undefined) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+
+    // First, verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, projectId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if user has access to project (owner or member)
+    const isOwner = workspace.ownerId === req.user!.id;
+    
+    if (!isOwner) {
+      // Check if user is a member
+      const [member] = await db
+        .select()
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, projectId),
+            eq(projectMembers.userId, req.user!.id),
+            eq(projectMembers.isActive, 1)
+          )
+        )
+        .limit(1);
+
+      if (!member) {
+        return res.status(403).json({ error: 'Access denied to project' });
+      }
+    }
+
+    // Get the file to update
+    const [file] = await db
+      .select()
+      .from(projectFiles)
+      .where(
+        and(
+          eq(projectFiles.id, fileId),
+          eq(projectFiles.projectId, projectId),
+          eq(projectFiles.isActive, true)
+        )
+      )
+      .limit(1);
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Update the file using the service
+    await projectService.updateProjectFileByPath(
+      projectId,
+      file.filePath,
+      req.user!.id,
+      content
+    );
+
+    // Get the updated file
+    const updatedFiles = await projectService.getProjectFiles(projectId);
+    const updatedFile = updatedFiles.find((f: any) => f.id === fileId);
+
+    res.json(updatedFile || { success: true });
+  } catch (error) {
+    console.error('Error updating file:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ 
+      error: 'Failed to update file',
+      details: errorMessage
+    });
+  }
   } catch (error) {
     console.error('Error fetching project files:', error);
     res.status(500).json({ error: 'Failed to fetch project files' });
