@@ -836,6 +836,18 @@ router.put('/:id/files/:fileId', authenticateUser, async (req, res) => {
     const updatedFiles = await projectService.getProjectFiles(projectId);
     const updatedFile = updatedFiles.find((f: any) => f.id === fileId);
 
+    // Invalidate cached file lists for this workspace so clients see fresh content
+    try {
+      const cache = performanceService.getCache();
+      const deletedFilesCache = cache.deletePattern(`/api/workspaces/${projectId}/files`);
+      const deletedWorkspaceDetailCache = cache.deletePattern(`/api/workspaces/${projectId}{`);
+      console.log(
+        `[Cache] Invalidated ${deletedFilesCache + deletedWorkspaceDetailCache} cache entries for workspace ${projectId} files`
+      );
+    } catch (cacheError) {
+      console.warn('[Cache] Failed to invalidate workspace file cache after update', cacheError);
+    }
+
     res.json(updatedFile || { success: true });
   } catch (error) {
     console.error('Error updating file:', error);
