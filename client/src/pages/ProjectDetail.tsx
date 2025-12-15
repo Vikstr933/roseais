@@ -110,16 +110,24 @@ function ProjectDetailContent() {
   const [showIDE, setShowIDE] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
-  const { data: project, isLoading } = useQuery({
+  const { data: project, isLoading, error: projectError } = useQuery({
     queryKey: [`/api/workspaces/${id}`],
-    enabled: !!id,
+    enabled: !!id && !!sessionToken,
     queryFn: async () => {
+      console.log('[ProjectDetail] Fetching project:', id);
       const response = await apiFetch(`/api/workspaces/${id}`, {
         headers: getAuthHeaders(sessionToken),
       });
-      if (!response.ok) throw new Error('Failed to fetch project');
-      return response.json();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[ProjectDetail] Failed to fetch project:', response.status, errorData);
+        throw new Error(errorData.error || errorData.message || 'Failed to fetch project');
+      }
+      const data = await response.json();
+      console.log('[ProjectDetail] Project loaded:', data);
+      return data;
     },
+    retry: 1,
   });
 
   const { data: chatMessages = [] } = useQuery({
@@ -256,11 +264,32 @@ function ProjectDetailContent() {
     );
   }
 
+  if (projectError) {
+    console.error('[ProjectDetail] Project error:', projectError);
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Error Loading Project</h1>
+          <p className="text-muted-foreground mb-4">
+            {projectError instanceof Error ? projectError.message : 'An error occurred'}
+          </p>
+          <Button onClick={() => setLocation('/workspaces')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Projects
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Project Not Found</h1>
+          <p className="text-muted-foreground mb-4">
+            The project you're looking for doesn't exist or you don't have access to it.
+          </p>
           <Button onClick={() => setLocation('/workspaces')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Projects
