@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../../db';
-import { workspaces, projectMembers, projectRemixes, projectFolders, projectFiles } from '../../db/schema-pg';
+import { workspaces, projectMembers, projectRemixes, projectFolders, projectFiles, users } from '../../db/schema-pg';
 import { chatMessages, codeGenerationSessions } from '../../db/schema-pg';
 import { eq, and, sql } from 'drizzle-orm';
 import { projectService } from '../services/ProjectService';
@@ -334,8 +334,8 @@ router.put('/:id/publishing-policy', authenticateUser, async (req, res) => {
     // Check if user is admin or owner
     const [user] = await db
       .select()
-      .from(users)
-      .where(eq(users.id, userId))
+      .from(users as any)
+      .where(eq((users as any).id, userId))
       .limit(1);
 
     const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -844,10 +844,6 @@ router.put('/:id/files/:fileId', authenticateUser, async (req, res) => {
       error: 'Failed to update file',
       details: errorMessage
     });
-  }
-  } catch (error) {
-    console.error('Error fetching project files:', error);
-    res.status(500).json({ error: 'Failed to fetch project files' });
   }
 });
 
