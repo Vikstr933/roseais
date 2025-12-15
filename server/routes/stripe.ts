@@ -207,20 +207,30 @@ router.get('/subscription/:userId', async (req: Request, res: Response) => {
     }
 
     // Map tier to plan (tier is the subscription plan in our schema)
-    const plan = PLANS[user.tier as keyof typeof PLANS] || PLANS.free;
+    const userTier = (user.tier as string) || 'free';
+    const planKey = (['free', 'pro', 'enterprise'].includes(userTier) ? userTier : 'free') as keyof typeof PLANS;
+    const plan = PLANS[planKey] || PLANS.free;
 
     res.json({
       customerId: user.stripeCustomerId || null,
       subscriptionId: user.subscriptionId || null,
-      plan: user.tier || 'free',
+      plan: userTier,
       status: user.subscriptionStatus || 'inactive',
       creditsRemaining: null, // Not stored in users table
       periodEnd: null, // Not stored in users table
       planDetails: plan
     });
-  } catch (error) {
-    logger.error('StripeRoute', 'Failed to get subscription', { error });
-    res.status(500).json({ error: 'Failed to get subscription status' });
+  } catch (error: any) {
+    logger.error('StripeRoute', 'Failed to get subscription', { 
+      error: error.message || error,
+      stack: error.stack,
+      userId 
+    });
+    console.error('Stripe subscription error details:', error);
+    res.status(500).json({ 
+      error: 'Failed to get subscription status',
+      message: error.message || 'Unknown error'
+    });
   }
 });
 
