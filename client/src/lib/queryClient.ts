@@ -19,8 +19,8 @@ export const queryClient = new QueryClient({
         return res.json();
       },
       refetchInterval: false,
-      refetchOnWindowFocus: true, // Refetch when user returns to tab
-      staleTime: 30 * 1000, // Data considered fresh for 30 seconds (was Infinity!)
+      refetchOnWindowFocus: false, // Disabled to reduce rate limit issues
+      staleTime: 60 * 1000, // Data considered fresh for 60 seconds (increased from 30s)
       gcTime: 5 * 60 * 1000, // Garbage collect after 5 minutes (previously cacheTime)
       retry: 1, // Retry once on failure
       retryDelay: 1000, // Wait 1 second before retry

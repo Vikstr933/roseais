@@ -373,9 +373,9 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
       </div>
 
       {/* Preview Area */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Main Preview */}
-        <div className="flex-1 flex flex-col items-center justify-start p-2 bg-muted/20 overflow-auto">
+        <div className="flex-1 flex flex-col items-center justify-start p-2 bg-muted/20 overflow-auto min-w-0">
           {/* Device Frame */}
           <div
             className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-2xl ring-1 ring-black/5 overflow-hidden flex-shrink-0"
@@ -434,10 +434,10 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                 <iframe
                   ref={iframeRef}
                   src={previewUrl}
-                  className="border-0 absolute inset-0"
+                  className="border-0 w-full h-full"
                   style={{
-                    width: '100%',
-                    height: '100%',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
                   }}
                   title={`Preview of ${projectName}`}
                   onLoad={() => {

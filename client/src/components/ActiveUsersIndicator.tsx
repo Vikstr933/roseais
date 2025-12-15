@@ -57,8 +57,13 @@ const ActiveUsersIndicator: React.FC<ActiveUsersIndicatorProps> = ({
   useEffect(() => {
     fetchActivityStatus();
 
-    // Poll for updates every 5 seconds
-    const interval = setInterval(fetchActivityStatus, 5000);
+    // Poll for updates every 15 seconds (reduced frequency to avoid rate limits)
+    // Only poll when tab is visible to reduce unnecessary requests
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchActivityStatus();
+      }
+    }, 15000);
 
     return () => clearInterval(interval);
   }, [projectId]);

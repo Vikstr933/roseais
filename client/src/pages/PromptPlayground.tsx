@@ -698,6 +698,8 @@ export default function PromptPlayground() {
       return safeJsonParse(response);
     },
     enabled: !!sessionToken,
+    staleTime: 60000, // Consider data fresh for 60 seconds
+    refetchOnWindowFocus: false, // Disabled to reduce rate limit issues
     staleTime: 30000, // Consider data fresh for 30 seconds to avoid refetching
   });
 

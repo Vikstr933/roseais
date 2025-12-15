@@ -74,6 +74,8 @@ export function useServerStatus() {
 
     const pollStatus = async () => {
       if (!mounted) return;
+      // Only poll when tab is visible to reduce unnecessary requests
+      if (document.hidden) return;
 
       try {
         await checkStatus();
@@ -85,8 +87,8 @@ export function useServerStatus() {
     // Initial check
     pollStatus();
 
-    // Set up polling with a longer interval
-    const interval = setInterval(pollStatus, 10000);
+    // Set up polling with a longer interval (reduced frequency to avoid rate limits)
+    const interval = setInterval(pollStatus, 30000);
 
     // Cleanup
     return () => {

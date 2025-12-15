@@ -54,7 +54,8 @@ function WorkspacesContent() {
     },
     retry: 2,
     retryDelay: 1000,
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 60000, // Consider data fresh for 60 seconds (increased to reduce polling)
+    refetchOnWindowFocus: false, // Disabled to reduce rate limit issues
   });
 
   const createProjectMutation = useMutation({
