@@ -24,12 +24,12 @@ import {
   Share2,
   QrCode,
   Link,
+  X,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import ActiveUsersIndicator from '@/components/ActiveUsersIndicator';
 import { useUserActivity } from '@/hooks/useUserActivity';
-import { FileEditor } from '@/components/FileEditor';
 import { OptimizedIDE } from '@/components/IDE/OptimizedIDE';
 
 // Type definitions for project data
@@ -106,8 +106,8 @@ function ProjectDetailContent() {
   const queryClient = useQueryClient();
   const [newMessage, setNewMessage] = useState('');
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<ProjectFile | null>(null);
   const [showIDE, setShowIDE] = useState(false);
+  const [initialFileId, setInitialFileId] = useState<number | undefined>(undefined);
   const { trackViewing, trackChatting } = useUserActivity();
 
   const { data: project, isLoading } = useQuery({
@@ -286,45 +286,41 @@ function ProjectDetailContent() {
   };
 
   return (
-    <div className="container mx-auto px-4 pt-20 sm:pt-24 pb-8">
-      {/* Header */}
+    <div className="container mx-auto px-3 pt-16 sm:pt-20 pb-4 max-w-7xl">
+      {/* Minimalist Header */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        className="mb-4"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
+              className="h-7 px-2"
               onClick={() => setLocation('/workspaces')}
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
+              <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold flex items-center gap-2">
-                <span>
-                  {getProjectTypeIcon(project.projectType || 'web_app')}
-                </span>
+              <h1 className="text-xl font-semibold flex items-center gap-2">
                 {project.name}
               </h1>
-              <p className="text-muted-foreground mt-1">
-                {project.description}
-              </p>
+              {project.description && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {project.description}
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
               {project.projectType?.replace('_', ' ') || 'Unknown'}
             </Badge>
-            <Badge variant="outline">
-              {project.projectStatus || 'Unknown'}
-            </Badge>
             {project.inviteCode && (
-              <Button variant="outline" size="sm" onClick={copyInviteCode}>
-                <Copy className="h-4 w-4 mr-2" />
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={copyInviteCode}>
+                <Copy className="h-3 w-3 mr-1" />
                 {project.inviteCode}
               </Button>
             )}
@@ -333,307 +329,282 @@ function ProjectDetailContent() {
       </motion.div>
 
       {/* Main Content */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="files">Files</TabsTrigger>
-          <TabsTrigger value="chat">Chat</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+      <Tabs defaultValue="files" className="space-y-3">
+        <TabsList className="h-8 grid w-full grid-cols-4">
+          <TabsTrigger value="overview" className="text-xs py-1">Overview</TabsTrigger>
+          <TabsTrigger value="files" className="text-xs py-1">Files</TabsTrigger>
+          <TabsTrigger value="chat" className="text-xs py-1">Chat</TabsTrigger>
+          <TabsTrigger value="activity" className="text-xs py-1">Activity</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Project Stats */}
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Team Members
-                </h3>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
+        <TabsContent value="overview" className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Project Stats - Compact */}
+            <Card className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase">Members</h3>
+                </div>
+                <div className="text-lg font-semibold">
                   {project.members?.length || 0}
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Active collaborators
-                </p>
-                {project.members && project.members.length > 0 && (
-                  <div className="flex -space-x-2 mt-3">
-                    {project.members
-                      .slice(0, 5)
-                      .map((member: ProjectMember) => (
-                        <div
-                          key={member.id}
-                          className="w-8 h-8 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-xs font-medium"
-                          title={`${member.user.displayName} (${member.role})`}
-                        >
-                          {member.user.displayName.charAt(0).toUpperCase()}
-                        </div>
-                      ))}
-                    {project.members.length > 5 && (
-                      <div className="w-8 h-8 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs font-medium">
-                        +{project.members.length - 5}
+              </div>
+              {project.members && project.members.length > 0 && (
+                <div className="flex -space-x-1.5 mt-2">
+                  {project.members
+                    .slice(0, 4)
+                    .map((member: ProjectMember) => (
+                      <div
+                        key={member.id}
+                        className="w-5 h-5 rounded-full bg-primary/20 border border-background flex items-center justify-center text-[10px] font-medium"
+                        title={`${member.user.displayName} (${member.role})`}
+                      >
+                        {member.user.displayName.charAt(0).toUpperCase()}
                       </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
+                    ))}
+                  {project.members.length > 4 && (
+                    <div className="w-5 h-5 rounded-full bg-muted border border-background flex items-center justify-center text-[10px] font-medium">
+                      +{project.members.length - 4}
+                    </div>
+                  )}
+                </div>
+              )}
             </Card>
 
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Files
-                </h3>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
+            <Card className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase">Files</h3>
+                </div>
+                <div className="text-lg font-semibold">
                   {project.fileCount || 0}
                 </div>
-                <p className="text-sm text-muted-foreground">Project files</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={openInPlayground}
-                >
-                  <Code2 className="h-4 w-4 mr-2" />
-                  Open in Playground
-                </Button>
-              </CardContent>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs mt-2 px-2"
+                onClick={openInPlayground}
+              >
+                <Code2 className="h-3 w-3 mr-1" />
+                Playground
+              </Button>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Recent Activity
-                </h3>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
+            <Card className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase">Activity</h3>
+                </div>
+                <div className="text-lg font-semibold">
                   {project.recentActivity?.length || 0}
                 </div>
-                <p className="text-sm text-muted-foreground">Recent actions</p>
-                {project.recentActivity &&
-                  project.recentActivity.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                      {project.recentActivity[0]?.description ||
-                        'No description'}
-                    </p>
-                  )}
-              </CardContent>
+              </div>
+              {project.recentActivity && project.recentActivity.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-2 line-clamp-1">
+                  {project.recentActivity[0]?.description || 'No description'}
+                </p>
+              )}
             </Card>
           </div>
 
-          {/* Active Users Indicator */}
+          {/* Active Users Indicator - Compact */}
           {id && (
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Live Activity
-                </h3>
-              </CardHeader>
-              <CardContent>
-                <ActiveUsersIndicator
+            <Card className="p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                <h3 className="text-xs font-medium text-muted-foreground uppercase">Live Activity</h3>
+              </div>
+              <ActiveUsersIndicator
                   projectId={parseInt(id)}
                   currentUserId={user?.id}
                 />
-              </CardContent>
             </Card>
           )}
 
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold">Quick Actions</h3>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowIDE(true)}
+          {/* Quick Actions - Compact */}
+          <Card className="p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+              <h3 className="text-xs font-medium text-muted-foreground uppercase">Actions</h3>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={() => setShowIDE(true)}
+              >
+                <Code2 className="h-3 w-3 mr-1" />
+                IDE
+              </Button>
+              <Button 
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={openInPlayground}
+              >
+                <Play className="h-3 w-3 mr-1" />
+                Playground
+              </Button>
+              {project.inviteCode && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={shareProject}
                 >
-                  <Code2 className="h-4 w-4 mr-2" />
-                  Open IDE
+                  <Share2 className="h-3 w-3 mr-1" />
+                  Share
                 </Button>
-                <Button onClick={openInPlayground}>
-                  <Play className="h-4 w-4 mr-2" />
-                  Generate in Playground
-                </Button>
-                <Button variant="outline" onClick={openProjectSettings}>
-                  <Settings className="h-4 w-4 mr-2" />
-                  Project Settings
-                </Button>
-                {project.inviteCode && (
-                  <Button variant="outline" onClick={shareProject}>
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Share Project
-                  </Button>
-                )}
-              </div>
-            </CardContent>
+              )}
+            </div>
           </Card>
 
-          {/* Share Dialog */}
+          {/* Share Dialog - Compact */}
           {showShareDialog && project?.inviteCode && (
-            <Card className="border-primary">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <Share2 className="h-5 w-5" />
-                    Share Project
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowShareDialog(false)}
-                  >
-                    ✕
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
+            <Card className="border-primary p-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-medium flex items-center gap-1.5 uppercase text-muted-foreground">
+                  <Share2 className="h-3.5 w-3.5" />
+                  Share Project
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setShowShareDialog(false)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="space-y-3">
                 {/* Invite Code Section */}
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground block mb-2">
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">
                     Invite Code
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <Input
                       value={project.inviteCode}
                       readOnly
-                      className="font-mono"
+                      className="font-mono text-xs h-7"
                     />
-                    <Button variant="outline" onClick={copyInviteCode}>
-                      <Copy className="h-4 w-4" />
+                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={copyInviteCode}>
+                      <Copy className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
 
                 {/* Share Link Section */}
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground block mb-2">
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">
                     Share Link
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <Input
                       value={`${window.location.origin}/workspaces/join?code=${project.inviteCode}`}
                       readOnly
-                      className="font-mono text-sm"
+                      className="font-mono text-xs h-7"
                     />
-                    <Button variant="outline" onClick={copyShareLink}>
-                      <Link className="h-4 w-4" />
+                    <Button variant="outline" size="sm" className="h-7 px-2" onClick={copyShareLink}>
+                      <Link className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
 
                 {/* QR Code Section */}
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground block mb-2">
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">
                     QR Code
                   </label>
-                  <div className="flex flex-col items-center gap-4 p-4 bg-muted rounded-lg">
+                  <div className="flex flex-col items-center gap-2 p-3 bg-muted rounded-md">
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
                         `${window.location.origin}/workspaces/join?code=${project.inviteCode}`
                       )}`}
                       alt="Project QR Code"
-                      className="w-48 h-48 border-4 border-background rounded-lg"
+                      className="w-32 h-32 border-2 border-background rounded-md"
                     />
-                    <Button onClick={downloadQRCode} size="sm">
-                      <QrCode className="h-4 w-4 mr-2" />
-                      Download QR Code
+                    <Button onClick={downloadQRCode} size="sm" className="h-7 text-xs">
+                      <QrCode className="h-3 w-3 mr-1" />
+                      Download
                     </Button>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Team members can scan this to join your project
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Team members can scan this to join
                     </p>
                   </div>
                 </div>
-              </CardContent>
+              </div>
             </Card>
           )}
         </TabsContent>
 
         {/* Files Tab */}
         <TabsContent value="files">
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold">Project Files</h3>
-            </CardHeader>
-            <CardContent>
-              {projectFiles.length === 0 ? (
-                <div className="text-center py-8">
-                  <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h4 className="text-lg font-medium mb-2">No Files Yet</h4>
-                  <p className="text-muted-foreground mb-4">
-                    Generate components in the playground and export them to
-                    this project
-                  </p>
-                  <Button onClick={openInPlayground}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Start Building
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {projectFiles.map((file: ProjectFile) => (
-                    <div
-                      key={file.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => setSelectedFile(file)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg">
-                          {file.filePath.endsWith('.tsx')
-                            ? '⚛️'
-                            : file.filePath.endsWith('.ts')
-                              ? '📄'
-                              : file.filePath.endsWith('.css')
-                                ? '🎨'
-                                : '📁'}
-                        </span>
-                        <div>
-                          <p className="font-medium">{file.filePath}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {file.fileType} • v{file.version}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {new Date(file.updatedAt).toLocaleDateString()}
-                      </div>
+          {projectFiles.length === 0 ? (
+            <Card className="p-6">
+              <div className="text-center py-6">
+                <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+                <h4 className="text-sm font-medium mb-1">No Files Yet</h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Generate components in the playground and export them to this project
+                </p>
+                <Button size="sm" className="h-7 text-xs" onClick={openInPlayground}>
+                  <Play className="h-3 w-3 mr-1" />
+                  Start Building
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <div className="space-y-1">
+              {projectFiles.map((file: ProjectFile) => (
+                <div
+                  key={file.id}
+                  className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/50 hover:border-primary/20 cursor-pointer transition-all text-sm group"
+                  onClick={() => {
+                    setInitialFileId(file.id);
+                    setShowIDE(true);
+                  }}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{file.filePath}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {file.fileType} • v{file.version}
+                      </p>
                     </div>
-                  ))}
+                  </div>
+                  <div className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                    {new Date(file.updatedAt).toLocaleDateString()}
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* Chat Tab */}
         <TabsContent value="chat">
-          <Card className="h-[600px] flex flex-col">
-            <CardHeader>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Project Chat
+          <Card className="h-[500px] flex flex-col">
+            <CardHeader className="p-3 border-b">
+              <h3 className="text-xs font-medium flex items-center gap-1.5 uppercase text-muted-foreground">
+                <MessageSquare className="h-3.5 w-3.5" />
+                Chat
               </h3>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              <ScrollArea className="flex-1 mb-4">
-                <div className="space-y-4">
+            <CardContent className="flex-1 flex flex-col p-3">
+              <ScrollArea className="flex-1 mb-3">
+                <div className="space-y-2">
                   {chatMessages.length === 0 ? (
                     <div className="text-center py-8">
-                      <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h4 className="text-lg font-medium mb-2">
-                        No Messages Yet
-                      </h4>
-                      <p className="text-muted-foreground">
+                      <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                      <h4 className="text-sm font-medium mb-1">No Messages Yet</h4>
+                      <p className="text-xs text-muted-foreground">
                         Start a conversation with your team
                       </p>
                     </div>
@@ -641,40 +612,43 @@ function ProjectDetailContent() {
                     chatMessages.map((message: ProjectChatMessage) => (
                       <div
                         key={message.id}
-                        className="flex gap-3 p-3 rounded-lg bg-muted/50"
+                        className="flex gap-2 p-2 rounded-md bg-muted/30"
                       >
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium">
+                        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium flex-shrink-0">
                           {message.user?.displayName?.charAt(0).toUpperCase() ||
                             'U'}
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="font-medium text-xs">
                               {message.user?.displayName || 'Unknown User'}
                             </span>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-[10px] text-muted-foreground">
                               {new Date(message.createdAt).toLocaleString()}
                             </span>
                           </div>
-                          <p className="text-sm">{message.message}</p>
+                          <p className="text-xs">{message.message}</p>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
               </ScrollArea>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <Input
                   value={newMessage}
                   onChange={e => setNewMessage(e.target.value)}
                   placeholder="Type a message..."
+                  className="h-8 text-xs"
                   onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
                 />
                 <Button
+                  size="sm"
+                  className="h-8 px-2"
                   onClick={handleSendMessage}
                   disabled={!newMessage.trim() || sendMessageMutation.isPending}
                 >
-                  <Send className="h-4 w-4" />
+                  <Send className="h-3 w-3" />
                 </Button>
               </div>
             </CardContent>
@@ -683,73 +657,49 @@ function ProjectDetailContent() {
 
         {/* Activity Tab */}
         <TabsContent value="activity">
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Project Activity
-              </h3>
-            </CardHeader>
-            <CardContent>
-              {project.recentActivity && project.recentActivity.length > 0 ? (
-                <div className="space-y-3">
-                  {project.recentActivity.map((activity: ProjectActivity) => (
-                    <div
-                      key={activity.id}
-                      className="flex items-center gap-3 p-3 border rounded-lg"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                        <Activity className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm">{activity.description}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(activity.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+          {project.recentActivity && project.recentActivity.length > 0 ? (
+            <div className="space-y-1">
+              {project.recentActivity.map((activity: ProjectActivity) => (
+                <div
+                  key={activity.id}
+                  className="flex items-center gap-2 p-2 border rounded-md"
+                >
+                  <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Activity className="h-3 w-3" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs">{activity.description}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {new Date(activity.createdAt).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h4 className="text-lg font-medium mb-2">No Activity Yet</h4>
-                  <p className="text-muted-foreground">
-                    Project activity will appear here as team members work
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          ) : (
+            <Card className="p-6">
+              <div className="text-center py-6">
+                <Activity className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <h4 className="text-sm font-medium mb-1">No Activity Yet</h4>
+                <p className="text-xs text-muted-foreground">
+                  Project activity will appear here as team members work
+                </p>
+              </div>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
-
-      {/* File Editor Modal */}
-      {selectedFile && id && !showIDE && (
-        <FileEditor
-          file={{
-            id: selectedFile.id,
-            filePath: selectedFile.filePath,
-            fileContent: selectedFile.fileContent || '',
-            fileType: selectedFile.fileType,
-            version: selectedFile.version,
-          }}
-          projectId={id}
-          onClose={() => setSelectedFile(null)}
-          onSave={() => {
-            queryClient.invalidateQueries({
-              queryKey: [`/api/workspaces/${id}/files`],
-            });
-          }}
-        />
-      )}
 
       {/* Full IDE Modal */}
       {showIDE && id && (
         <OptimizedIDE
           projectId={id}
           projectFiles={projectFiles}
-          onClose={() => setShowIDE(false)}
+          initialFileId={initialFileId}
+          onClose={() => {
+            setShowIDE(false);
+            setInitialFileId(undefined);
+          }}
           onFilesUpdate={() => {
             queryClient.invalidateQueries({
               queryKey: [`/api/workspaces/${id}/files`],

@@ -59,6 +59,7 @@ interface IDEProps {
   projectFiles: ProjectFile[];
   onClose: () => void;
   onFilesUpdate?: () => void;
+  initialFileId?: number; // Optional: open this file on mount
 }
 
 // Performance constants
@@ -144,7 +145,7 @@ function useVirtualScroll<T>(items: T[], itemHeight: number = 24, containerHeigh
   };
 }
 
-export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }: IDEProps) {
+export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, initialFileId }: IDEProps) {
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -554,6 +555,16 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Open initial file on mount if provided
+  useEffect(() => {
+    if (initialFileId && projectFiles.length > 0 && openFiles.length === 0) {
+      const fileToOpen = projectFiles.find(f => f.id === initialFileId);
+      if (fileToOpen) {
+        openFile(fileToOpen);
+      }
+    }
+  }, [initialFileId, projectFiles, openFiles.length, openFile]); // Run when initialFileId or projectFiles change
 
   // Cleanup timeouts on unmount
   useEffect(() => {
