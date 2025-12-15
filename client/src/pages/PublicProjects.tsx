@@ -460,6 +460,7 @@ export default function PublicProjects() {
                           <span className="font-medium">{project.voteCount}</span>
                         </button>
                       </div>
+                    </div>
                   </div>
                 </motion.div>
               );
