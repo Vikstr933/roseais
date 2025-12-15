@@ -455,7 +455,11 @@ router.delete('/:id', authenticateUser, async (req, res) => {
 
     // Check if user is the owner
     if (workspace.ownerId !== userId) {
-      return res.status(403).json({ error: 'Only the workspace owner can delete it' });
+      console.log(`[FORBIDDEN] User ${userId} attempted to delete workspace ${workspaceId} (owner: ${workspace.ownerId})`);
+      return res.status(403).json({ 
+        error: 'Only the workspace owner can delete it',
+        message: 'You do not have permission to delete this workspace'
+      });
     }
 
     // Check if this project has been remixed by others
