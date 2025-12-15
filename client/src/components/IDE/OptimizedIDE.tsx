@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   X, Save, Loader2, Search, Undo, Redo, 
   Maximize2, Minimize2, FileText, Folder, FilePlus,
-  Terminal, ChevronRight, ChevronDown, FileCode
+  Terminal, ChevronRight, ChevronDown, FileCode, Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/api';
@@ -14,6 +14,23 @@ import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import Editor from '@monaco-editor/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import {
+  Menubar,
+  MenubarMenu,
+  MenubarTrigger,
+  MenubarContent,
+  MenubarItem,
+  MenubarSeparator,
+  MenubarShortcut,
+} from '@/components/ui/menubar';
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+} from '@/components/ui/context-menu';
 
 interface ProjectFile {
   id: number;
@@ -138,6 +155,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
   const [newFileName, setNewFileName] = useState('');
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const saveTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const fileCache = useRef<Map<number, string>>(new Map()); // LRU cache for file contents
@@ -348,6 +366,51 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
     }
   }, [openFiles, projectId, sessionToken, toast, onFilesUpdate]);
 
+  // Delete file (soft delete via API)
+  const deleteFile = useCallback(
+    async (fileId: number, filePath: string) => {
+      if (!confirm(`Delete "${filePath}" from this project? This cannot be undone inside the app.`)) {
+        return;
+      }
+
+      setIsDeleting(true);
+      try {
+        const response = await apiFetch(`/api/workspaces/${projectId}/files/${fileId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(sessionToken),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete file');
+        }
+
+        // Remove from open files
+        setOpenFiles(prev => prev.filter(f => f.id !== fileId));
+        // Remove from cache
+        fileCache.current.delete(fileId);
+
+        toast({
+          title: 'File deleted',
+          description: `${filePath} has been deleted`,
+        });
+
+        if (onFilesUpdate) {
+          onFilesUpdate();
+        }
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to delete file',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsDeleting(false);
+      }
+    },
+    [projectId, sessionToken, toast, onFilesUpdate]
+  );
+
   // Save all files
   const saveAll = useCallback(async () => {
     // Clear all pending auto-saves
@@ -502,15 +565,30 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
     if (!file) return null;
 
     return (
-      <div
-        key={node.path}
-        className="flex items-center text-sm px-2 py-1 hover:bg-muted cursor-pointer"
-        style={{ paddingLeft: `${level * 12 + 8}px` }}
-        onClick={() => openFile(file)}
-      >
-        <FileText className="h-4 w-4 mr-1" />
-        <span className="flex-1 truncate">{node.name}</span>
-      </div>
+      <ContextMenu key={node.path}>
+        <ContextMenuTrigger asChild>
+          <div
+            className="flex items-center text-sm px-2 py-1 hover:bg-muted cursor-pointer"
+            style={{ paddingLeft: `${level * 12 + 8}px` }}
+            onClick={() => openFile(file)}
+          >
+            <FileText className="h-4 w-4 mr-1" />
+            <span className="flex-1 truncate">{node.name}</span>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => openFile(file)}>Open</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            disabled={isDeleting}
+            className="text-destructive"
+            onClick={() => deleteFile(file.id, file.filePath)}
+          >
+            Delete
+            <ContextMenuShortcut>Del</ContextMenuShortcut>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     );
   };
 
@@ -558,6 +636,92 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
           </Button>
         </div>
       </CardHeader>
+
+      {/* Top menubar like classic IDEs */}
+      <div className="border-b px-2 py-1 bg-background flex-shrink-0">
+        <Menubar>
+          <MenubarMenu>
+            <MenubarTrigger>File</MenubarTrigger>
+            <MenubarContent>
+              <MenubarItem onClick={() => setShowNewFileDialog(true)}>
+                New File
+                <MenubarShortcut>Ctrl+N</MenubarShortcut>
+              </MenubarItem>
+              <MenubarItem onClick={() => setShowQuickSwitcher(true)}>
+                Open File...
+                <MenubarShortcut>Ctrl+P</MenubarShortcut>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                disabled={!openFiles[activeFileIndex]?.isDirty}
+                onClick={() => saveFile(activeFileIndex)}
+              >
+                Save
+                <MenubarShortcut>Ctrl+S</MenubarShortcut>
+              </MenubarItem>
+              <MenubarItem onClick={saveAll} disabled={!openFiles.some(f => f.isDirty)}>
+                Save All
+                <MenubarShortcut>Ctrl+Shift+S</MenubarShortcut>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
+
+          <MenubarMenu>
+            <MenubarTrigger>Edit</MenubarTrigger>
+            <MenubarContent>
+              <MenubarItem>
+                Undo
+                <MenubarShortcut>Ctrl+Z</MenubarShortcut>
+              </MenubarItem>
+              <MenubarItem>
+                Redo
+                <MenubarShortcut>Ctrl+Y</MenubarShortcut>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
+
+          <MenubarMenu>
+            <MenubarTrigger>View</MenubarTrigger>
+            <MenubarContent>
+              <MenubarItem onClick={() => setShowFileExplorer(v => !v)}>
+                Toggle File Explorer
+              </MenubarItem>
+              <MenubarItem onClick={() => setShowTerminal(v => !v)}>
+                Toggle Terminal
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
+
+          <MenubarMenu>
+            <MenubarTrigger>Go</MenubarTrigger>
+            <MenubarContent>
+              <MenubarItem onClick={() => setShowQuickSwitcher(true)}>
+                Go to File...
+                <MenubarShortcut>Ctrl+P</MenubarShortcut>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
+
+          <MenubarMenu>
+            <MenubarTrigger>Run</MenubarTrigger>
+            <MenubarContent>
+              <MenubarItem onClick={() => setShowTerminal(true)}>
+                Run Command...
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
+
+          <MenubarMenu>
+            <MenubarTrigger>Terminal</MenubarTrigger>
+            <MenubarContent>
+              <MenubarItem onClick={() => setShowTerminal(v => !v)}>
+                Show/Hide Terminal
+                <MenubarShortcut>Ctrl+`</MenubarShortcut>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
+        </Menubar>
+      </div>
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* File Explorer Sidebar */}

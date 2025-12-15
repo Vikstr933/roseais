@@ -871,6 +871,87 @@ router.put('/:id/files/:fileId', authenticateUser, async (req, res) => {
   }
 });
 
+// DELETE /api/workspaces/:id/files/:fileId - Soft delete a single file
+router.delete('/:id/files/:fileId', authenticateUser, async (req, res) => {
+  try {
+    const projectId = parseInt(req.params.id);
+    const fileId = parseInt(req.params.fileId);
+
+    // Verify workspace exists
+    const [workspace] = await db
+      .select()
+      .from(workspaces as any)
+      .where(eq((workspaces as any).id, projectId))
+      .limit(1);
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check if user has access to project (owner or member)
+    const isOwner = workspace.ownerId === req.user!.id;
+
+    if (!isOwner) {
+      const [member] = await db
+        .select()
+        .from(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, projectId),
+            eq(projectMembers.userId, req.user!.id),
+            eq(projectMembers.isActive, 1)
+          )
+        )
+        .limit(1);
+
+      if (!member) {
+        return res.status(403).json({ error: 'Access denied to project' });
+      }
+    }
+
+    // Get the file to delete
+    const [file] = await db
+      .select()
+      .from(projectFiles)
+      .where(
+        and(
+          eq(projectFiles.id, fileId),
+          eq(projectFiles.projectId, projectId),
+          eq(projectFiles.isActive, true)
+        )
+      )
+      .limit(1);
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Use service to perform soft delete + activity log
+    await projectService.deleteProjectFile(projectId, file.filePath, req.user!.id);
+
+    // Invalidate cached file lists so UI refreshes
+    try {
+      const cache = performanceService.getCache();
+      const deletedFilesCache = cache.deletePattern(`/api/workspaces/${projectId}/files`);
+      const deletedWorkspaceDetailCache = cache.deletePattern(`/api/workspaces/${projectId}{`);
+      console.log(
+        `[Cache] Invalidated ${deletedFilesCache + deletedWorkspaceDetailCache} cache entries for workspace ${projectId} after file delete`
+      );
+    } catch (cacheError) {
+      console.warn('[Cache] Failed to invalidate workspace file cache after delete', cacheError);
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+      error: 'Failed to delete file',
+      details: errorMessage,
+    });
+  }
+});
+
 // GET /api/workspaces/:id/members - Get workspace members
 router.get('/:id/members', authenticateUser, async (req, res) => {
   try {
