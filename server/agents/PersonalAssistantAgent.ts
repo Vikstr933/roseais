@@ -3558,7 +3558,7 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
     const sessionId = params._sessionId as string | undefined;
 
     try {
-      // Determine which project to use: explicit projectId, selected project, or playground context
+      // Determine which project to use: explicit projectId, selected project, or auto-created project
       let targetProjectId = projectId;
       let targetProjectName = 'the project';
 
@@ -3572,8 +3572,6 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
         }
       }
 
-      logger.info(`Generating code: prompt="${prompt.substring(0, 100)}...", projectId=${targetProjectId || 'none'}, userId=${userId || 'none'}`);
-
       if (!userId) {
         logger.error('generateCode called without userId');
         return {
@@ -3582,6 +3580,64 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
           message: 'I need your user ID to generate code. Please try again or use the web playground.'
         };
       }
+
+      // If no project is selected/explicit, automatically create a new workspace for this request.
+      // This is especially useful for Discord flows where the user just says
+      // "bygg en mini-transformer i python" utan att välja projekt först.
+      if (!targetProjectId) {
+        try {
+          const { ProjectService } = await import('../services/ProjectService');
+          const projectService = new ProjectService();
+
+          const inferredName =
+            (prompt.match(/mini[- ]?transformer/i) && 'Mini Transformer Visualizer') ||
+            (prompt.match(/radio/i) && 'RadioWave App') ||
+            (prompt.length > 40 ? `${prompt.slice(0, 40).trim()}...` : prompt);
+
+          const projectName =
+            (inferredName && inferredName.replace(/["\n\r]/g, '').slice(0, 80)) ||
+            'Nytt AI-projekt';
+
+          const description = `Created automatically from assistant request: "${prompt.slice(0, 120).replace(/[\r\n]+/g, ' ')}..."`;
+
+          const newProject = await projectService.createProject({
+            name: projectName,
+            description,
+            projectType: 'web_app',
+            ownerId: userId,
+            agentConfig: null,
+            testCases: null,
+            settings: null,
+          });
+
+          targetProjectId = String(newProject.id);
+          targetProjectName = newProject.name;
+
+          // Remember as selected project for this conversation/session
+          if (sessionId) {
+            this.selectedProjects.set(sessionId, {
+              projectId: targetProjectId,
+              projectName: targetProjectName,
+            });
+          }
+
+          logger.info(
+            `Auto-created project for generateCode: ${targetProjectName} (${targetProjectId}) for user ${userId}`
+          );
+        } catch (createError) {
+          logger.error('Failed to auto-create project for generateCode', createError as Error);
+          return {
+            success: false,
+            error: 'Failed to create project',
+            message:
+              'I tried to create a new project for your request but something went wrong. Please create a project on the web and try again, or select an existing project.',
+          };
+        }
+      }
+
+      logger.info(
+        `Generating code: prompt="${prompt.substring(0, 100)}...", projectId=${targetProjectId || 'none'}, userId=${userId || 'none'}`
+      );
 
       if (!targetProjectId) {
         return {
