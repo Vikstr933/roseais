@@ -738,9 +738,10 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
   const activeFile = openFiles[activeFileIndex];
 
   return (
-    <Card className={`${isFullscreen ? 'fixed inset-0 z-50' : 'fixed inset-4 z-50'} flex flex-col bg-background border-2 border-purple-200/50 relative overflow-hidden`}>
+    <div className={`${isFullscreen ? 'fixed inset-0 z-[100]' : 'fixed inset-4 z-[100]'}`}>
+    <Card className="flex flex-col bg-background border-2 border-purple-200/50 relative h-full w-full">
       {/* Animated brand gradient border glow */}
-      <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg">
         <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-purple-500/0 animate-[shimmer_3s_ease-in-out_infinite] opacity-30" />
       </div>
 
@@ -1132,6 +1133,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
         </Dialog>
       )}
     </Card>
+    </div>
   );
 }
 
