@@ -30,6 +30,7 @@ import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import ActiveUsersIndicator from '@/components/ActiveUsersIndicator';
 import { useUserActivity } from '@/hooks/useUserActivity';
 import { FileEditor } from '@/components/FileEditor';
+import { OptimizedIDE } from '@/components/IDE/OptimizedIDE';
 
 // Type definitions for project data
 interface ProjectMember {
@@ -106,6 +107,7 @@ function ProjectDetailContent() {
   const [newMessage, setNewMessage] = useState('');
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedFile, setSelectedFile] = useState<ProjectFile | null>(null);
+  const [showIDE, setShowIDE] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
   const { data: project, isLoading } = useQuery({
@@ -565,13 +567,26 @@ function ProjectDetailContent() {
                     Generate components in the playground and export them to
                     this project
                   </p>
-                  <Button onClick={openInPlayground}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Start Building
-                  </Button>
+                  <div className="flex gap-2 justify-center">
+                    <Button onClick={openInPlayground}>
+                      <Play className="h-4 w-4 mr-2" />
+                      Start Building
+                    </Button>
+                    <Button onClick={() => setShowIDE(true)} variant="outline">
+                      <Code2 className="h-4 w-4 mr-2" />
+                      Open IDE
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
+                  <div className="mb-4 flex justify-between items-center">
+                    <h4 className="text-sm font-medium">Click a file to edit, or open IDE for full experience</h4>
+                    <Button onClick={() => setShowIDE(true)} size="sm">
+                      <Code2 className="h-4 w-4 mr-2" />
+                      Open IDE
+                    </Button>
+                  </div>
                   {projectFiles.map((file: ProjectFile) => (
                     <div
                       key={file.id}
@@ -715,8 +730,8 @@ function ProjectDetailContent() {
         </TabsContent>
       </Tabs>
 
-      {/* File Editor Modal */}
-      {selectedFile && id && (
+      {/* File Editor Modal - Simple single file editor */}
+      {selectedFile && id && !showIDE && (
         <FileEditor
           file={{
             id: selectedFile.id,
@@ -728,6 +743,20 @@ function ProjectDetailContent() {
           projectId={id}
           onClose={() => setSelectedFile(null)}
           onSave={() => {
+            queryClient.invalidateQueries({
+              queryKey: [`/api/workspaces/${id}/files`],
+            });
+          }}
+        />
+      )}
+
+      {/* Full IDE - Optimized */}
+      {showIDE && id && (
+        <OptimizedIDE
+          projectId={id}
+          projectFiles={projectFiles}
+          onClose={() => setShowIDE(false)}
+          onFilesUpdate={() => {
             queryClient.invalidateQueries({
               queryKey: [`/api/workspaces/${id}/files`],
             });
