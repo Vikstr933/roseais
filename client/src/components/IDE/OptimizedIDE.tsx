@@ -719,7 +719,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
             <span className="flex-1 truncate">{node.name}</span>
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent>
+        <ContextMenuContent className="z-[101]">
           <ContextMenuItem onClick={() => openFile(file)}>Open</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
@@ -840,7 +840,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
         <Menubar className="relative z-20">
           <MenubarMenu>
             <MenubarTrigger>File</MenubarTrigger>
-            <MenubarContent>
+            <MenubarContent className="z-[101]">
               <MenubarItem onClick={() => setShowNewFileDialog(true)}>
                 New File
                 <MenubarShortcut>Ctrl+N</MenubarShortcut>
@@ -866,7 +866,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
           <MenubarMenu>
             <MenubarTrigger>Edit</MenubarTrigger>
-            <MenubarContent>
+            <MenubarContent className="z-[101]">
               <MenubarItem>
                 Undo
                 <MenubarShortcut>Ctrl+Z</MenubarShortcut>
@@ -880,7 +880,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
           <MenubarMenu>
             <MenubarTrigger>View</MenubarTrigger>
-            <MenubarContent>
+            <MenubarContent className="z-[101]">
               <MenubarItem onClick={() => setShowFileExplorer(v => !v)}>
                 Toggle File Explorer
               </MenubarItem>
@@ -892,7 +892,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
           <MenubarMenu>
             <MenubarTrigger>Go</MenubarTrigger>
-            <MenubarContent>
+            <MenubarContent className="z-[101]">
               <MenubarItem onClick={() => setShowQuickSwitcher(true)}>
                 Go to File...
                 <MenubarShortcut>Ctrl+P</MenubarShortcut>
@@ -902,7 +902,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
           <MenubarMenu>
             <MenubarTrigger>Run</MenubarTrigger>
-            <MenubarContent>
+            <MenubarContent className="z-[101]">
               <MenubarItem onClick={() => setShowTerminal(true)}>
                 Run Command...
               </MenubarItem>
@@ -911,7 +911,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
           <MenubarMenu>
             <MenubarTrigger>Terminal</MenubarTrigger>
-            <MenubarContent>
+            <MenubarContent className="z-[101]">
               <MenubarItem onClick={() => setShowTerminal(v => !v)}>
                 Show/Hide Terminal
                 <MenubarShortcut>Ctrl+`</MenubarShortcut>
@@ -985,7 +985,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
                       </Button>
                     </div>
                   </ContextMenuTrigger>
-                  <ContextMenuContent>
+                  <ContextMenuContent className="z-[101]">
                     <ContextMenuItem onClick={() => closeFile(index)}>Close</ContextMenuItem>
                     <ContextMenuItem onClick={() => closeOtherTabs(index)}>Close Others</ContextMenuItem>
                     <ContextMenuItem onClick={closeAllTabs}>Close All</ContextMenuItem>
@@ -1061,7 +1061,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       {/* Quick Switcher */}
       {showQuickSwitcher && (
         <Dialog open={showQuickSwitcher} onOpenChange={setShowQuickSwitcher}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl z-[101]">
             <DialogHeader>
               <DialogTitle className="text-purple-700 dark:text-purple-400">Quick Switcher (Ctrl+P)</DialogTitle>
             </DialogHeader>
@@ -1098,7 +1098,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
       {/* New File Dialog */}
       {showNewFileDialog && (
         <Dialog open={showNewFileDialog} onOpenChange={setShowNewFileDialog}>
-          <DialogContent>
+          <DialogContent className="z-[101]">
             <DialogHeader>
               <DialogTitle className="text-purple-700 dark:text-purple-400">Create New File</DialogTitle>
             </DialogHeader>
