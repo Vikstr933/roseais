@@ -6,10 +6,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   X, Save, Loader2, Search, Undo, Redo,
   Maximize2, Minimize2, FileText, Folder, FilePlus,
-  Terminal as TerminalIcon, ChevronRight, ChevronDown, FileCode, Trash2, Sparkles
+  ChevronRight, ChevronDown, FileCode, Trash2, Sparkles
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { apiFetch, getApiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import Editor from '@monaco-editor/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -31,8 +31,6 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
 } from '@/components/ui/context-menu';
-import { Terminal } from 'xterm';
-import 'xterm/css/xterm.css';
 
 interface ProjectFile {
   id: number;
@@ -152,16 +150,12 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
   const [showFileExplorer, setShowFileExplorer] = useState(true);
-  const [showTerminal, setShowTerminal] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const terminalStreamRef = useRef<EventSource | null>(null);
   
   const saveTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const fileCache = useRef<Map<number, string>>(new Map()); // LRU cache for file contents
@@ -574,89 +568,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
     };
   }, []);
 
-  // Initialize xterm.js terminal and subscribe to backend terminal stream
-  useEffect(() => {
-    if (!showTerminal) {
-      // Hide terminal: do not destroy xterm instance, but stop streaming
-      if (terminalStreamRef.current) {
-        terminalStreamRef.current.close();
-        terminalStreamRef.current = null;
-      }
-      return;
-    }
-
-    if (!terminalContainerRef.current) return;
-
-    // Lazy-init xterm instance
-    if (!xtermRef.current) {
-      const term = new Terminal({
-        convertEol: true,
-        fontSize: 13,
-        theme: {
-          background: '#000000',
-          foreground: '#d1fae5',
-        },
-      });
-      xtermRef.current = term;
-      term.open(terminalContainerRef.current);
-      term.writeln('IDE Terminal (logs)');
-      term.writeln('Listening for build/deploy output...');
-      term.writeln('');
-    }
-
-    // Subscribe to terminal SSE stream for this project
-    try {
-      const streamUrl = getApiUrl(`/api/terminal/${encodeURIComponent(projectId)}/stream`);
-      console.log('[IDE Terminal] Connecting to:', streamUrl);
-      
-      const stream = new EventSource(streamUrl, {
-        withCredentials: true,
-      });
-
-      stream.onopen = () => {
-        console.log('[IDE Terminal] Connection opened');
-        xtermRef.current?.writeln('[terminal] Connected to log stream');
-      };
-
-      stream.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload?.type === 'output' && typeof payload.data === 'string') {
-            xtermRef.current?.writeln(payload.data);
-          } else if (payload?.type === 'heartbeat') {
-            // Silently handle heartbeats
-          }
-        } catch {
-          // Fallback: write raw data
-          if (event.data) {
-            xtermRef.current?.writeln(String(event.data));
-          }
-        }
-      };
-
-      stream.onerror = (error) => {
-        console.error('[IDE Terminal] Connection error:', error);
-        // Check if connection is closed
-        if (stream.readyState === EventSource.CLOSED) {
-          xtermRef.current?.writeln('[terminal] Connection closed. Check if endpoint exists: /api/terminal/' + projectId + '/stream');
-        } else {
-          xtermRef.current?.writeln('[terminal] Connection error. Retrying...');
-        }
-      };
-
-      terminalStreamRef.current = stream;
-    } catch (error) {
-      console.error('[IDE Terminal] Failed to create EventSource:', error);
-      xtermRef.current?.writeln('[terminal] Failed to connect to terminal stream: ' + (error instanceof Error ? error.message : String(error)));
-    }
-
-    return () => {
-      if (terminalStreamRef.current) {
-        terminalStreamRef.current.close();
-        terminalStreamRef.current = null;
-      }
-    };
-  }, [showTerminal, projectId]);
 
   // Filter files for quick switcher
   const quickSwitcherFiles = useMemo(() => 
@@ -790,15 +701,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={() => setShowTerminal(!showTerminal)} 
-            title="Terminal"
-            className="hover:bg-purple-100 text-purple-600 hover:text-purple-700"
-          >
-            <TerminalIcon className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
             onClick={() => setEditorTheme(editorTheme === 'vs-dark' ? 'light' : 'vs-dark')}
             className="hover:bg-purple-100"
           >
@@ -884,9 +786,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
               <MenubarItem onClick={() => setShowFileExplorer(v => !v)}>
                 Toggle File Explorer
               </MenubarItem>
-              <MenubarItem onClick={() => setShowTerminal(v => !v)}>
-                Toggle Terminal
-              </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
 
@@ -896,25 +795,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
               <MenubarItem onClick={() => setShowQuickSwitcher(true)}>
                 Go to File...
                 <MenubarShortcut>Ctrl+P</MenubarShortcut>
-              </MenubarItem>
-            </MenubarContent>
-          </MenubarMenu>
-
-          <MenubarMenu>
-            <MenubarTrigger>Run</MenubarTrigger>
-            <MenubarContent className="z-[101]">
-              <MenubarItem onClick={() => setShowTerminal(true)}>
-                Run Command...
-              </MenubarItem>
-            </MenubarContent>
-          </MenubarMenu>
-
-          <MenubarMenu>
-            <MenubarTrigger>Terminal</MenubarTrigger>
-            <MenubarContent className="z-[101]">
-              <MenubarItem onClick={() => setShowTerminal(v => !v)}>
-                Show/Hide Terminal
-                <MenubarShortcut>Ctrl+`</MenubarShortcut>
               </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
@@ -1047,13 +927,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
                 <p className="text-purple-700 dark:text-purple-300 font-medium">No file open</p>
                 <p className="text-sm mt-2 text-purple-600/70 dark:text-purple-400/70">Click a file in the explorer to open it</p>
               </div>
-            </div>
-          )}
-
-          {/* Terminal */}
-          {showTerminal && (
-            <div className="h-64 border-t bg-black text-green-400 font-mono text-sm">
-              <div ref={terminalContainerRef} className="h-full w-full overflow-hidden px-2 py-1" />
             </div>
           )}
         </div>
