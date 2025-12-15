@@ -739,10 +739,10 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
   return (
     <div className={`${isFullscreen ? 'fixed inset-0 z-[100]' : 'fixed inset-4 z-[100]'}`}>
-    <Card className="flex flex-col bg-background border-2 border-purple-200/50 relative h-full w-full overflow-hidden" style={{ isolation: 'isolate' }}>
-      {/* Animated brand gradient border glow */}
-      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden rounded-lg" style={{ pointerEvents: 'none' }}>
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-purple-500/0 animate-[shimmer_3s_ease-in-out_infinite] opacity-30" />
+    <Card className="flex flex-col bg-background border-2 border-purple-200/50 relative h-full w-full overflow-hidden">
+      {/* Animated brand gradient border glow - positioned to not block content */}
+      <div className="absolute top-0 left-0 right-0 h-1 pointer-events-none z-0 overflow-hidden rounded-t-lg" style={{ pointerEvents: 'none' }}>
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/50 to-purple-500/0 animate-[shimmer_3s_ease-in-out_infinite] opacity-30" />
       </div>
 
       {/* Header with brand gradient accent */}
@@ -921,10 +921,10 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
         </Menubar>
       </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden relative z-10">
         {/* File Explorer Sidebar */}
         {showFileExplorer && (
-          <div className="w-64 border-r border-purple-200/50 bg-purple-50/20 flex flex-col relative">
+          <div className="w-64 border-r border-purple-200/50 bg-purple-50/20 flex flex-col relative z-10">
             {/* Subtle animated gradient accent */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 opacity-50 animate-[shimmer_3s_ease-in-out_infinite]" />
             <div className="p-2 border-b border-purple-200/50 pt-3">
@@ -968,6 +968,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
                           : 'bg-purple-50/50 hover:bg-purple-100/50 text-purple-800/70 dark:text-purple-300/70 hover:shadow-[0_1px_4px_rgba(139,92,246,0.1)]'
                       }`}
                       onClick={() => setActiveFileIndex(index)}
+                      style={{ position: 'relative', zIndex: 1 }}
                     >
                       <FileCode className={`h-3 w-3 ${index === activeFileIndex ? 'text-purple-600' : 'text-purple-500'}`} />
                       <span className="text-sm truncate max-w-[200px]">{file.filePath}</span>
@@ -1005,7 +1006,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate, 
 
           {/* Editor - Only render active tab for performance */}
           {activeFile ? (
-            <div className="flex-1 relative">
+            <div className="flex-1 relative z-10">
               <Editor
                 height="100%"
                 language={activeFile.language}
