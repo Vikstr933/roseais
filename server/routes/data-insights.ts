@@ -127,6 +127,19 @@ router.get('/overview', async (req, res) => {
       .orderBy(sql`DATE(${workspaces.lastActivity}) DESC`)
       .limit(30);
 
+    // Calculate distinct active projects over the whole period (last 30 days)
+    const [activeProjectsSummary] = await db
+      .select({
+        activeProjects: sql<number>`COUNT(DISTINCT ${workspaces.id})`,
+      })
+      .from(workspaces)
+      .where(
+        and(
+          getUserFilter(workspaces.ownerId),
+          sql`${workspaces.lastActivity} >= ${thirtyDaysAgo.toISOString()}`
+        )
+      );
+
     // 4. Collaboration Insights
     const collaborationStats = await db
       .select({
@@ -243,7 +256,8 @@ router.get('/overview', async (req, res) => {
         summary: {
           totalSessions: agentPerformanceWithNames.reduce((sum, a) => sum + (a.totalSessions || 0), 0),
           uniqueAgents: agentPerformanceWithNames.length,
-          activeProjects: projectActivity.reduce((sum, p) => sum + (p.activeProjects || 0), 0),
+          // Number of unique projects that have had activity in the last 30 days
+          activeProjects: Number(activeProjectsSummary?.activeProjects || 0),
         },
       },
     });
