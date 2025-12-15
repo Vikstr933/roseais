@@ -12,8 +12,6 @@ import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/api';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import Editor from '@monaco-editor/react';
-import type { editor } from 'monaco-editor';
-import * as monaco from 'monaco-editor';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
@@ -131,8 +129,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
-  const [showFindReplace, setShowFindReplace] = useState(false);
-  const [findText, setFindText] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
   const [showFileExplorer, setShowFileExplorer] = useState(true);
@@ -143,7 +139,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [quickSwitcherQuery, setQuickSwitcherQuery] = useState('');
   
-  const editorRefs = useRef<(editor.IStandaloneCodeEditor | null)[]>([]);
   const saveTimeouts = useRef<Map<number, NodeJS.Timeout>>(new Map());
   const fileCache = useRef<Map<number, string>>(new Map()); // LRU cache for file contents
   const { toast } = useToast();
@@ -407,24 +402,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
     }
   }, [newFileName, projectId, sessionToken, toast, onFilesUpdate]);
 
-  // Handle editor mount
-  const handleEditorMount = useCallback((editor: editor.IStandaloneCodeEditor, index: number) => {
-    editorRefs.current[index] = editor;
-
-    // Keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      saveFile(index);
-    });
-
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
-      setShowFindReplace(true);
-    });
-
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => {
-      setShowQuickSwitcher(true);
-    });
-  }, [saveFile]);
-
   // Handle content change with debounced auto-save
   const handleContentChange = useCallback((value: string | undefined, index: number) => {
     const newContent = value || '';
@@ -447,7 +424,7 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
     scheduleAutoSave(index);
   }, [scheduleAutoSave]);
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts (ctrl+p for quick switcher, ctrl+n for new file)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'p' && !e.shiftKey) {
@@ -460,8 +437,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
       }
       if (e.key === 'Escape') {
         setShowQuickSwitcher(false);
-        setShowFindReplace(false);
-        setShowNewFileDialog(false);
       }
     };
 
@@ -651,7 +626,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
                 value={activeFile.content}
                 theme={editorTheme}
                 onChange={(value) => handleContentChange(value, activeFileIndex)}
-                onMount={(editor) => handleEditorMount(editor, activeFileIndex)}
                 options={{
                   minimap: { enabled: openFiles.length < 5 }, // Disable for many files
                   fontSize: 14,
@@ -693,24 +667,6 @@ export function OptimizedIDE({ projectId, projectFiles, onClose, onFilesUpdate }
           )}
         </div>
       </div>
-
-      {/* Find/Replace Bar */}
-      {showFindReplace && activeFile && (
-        <div className="border-t p-2 flex items-center gap-2 bg-muted/50">
-          <Input
-            placeholder="Find..."
-            value={findText}
-            onChange={(e) => setFindText(e.target.value)}
-            className="h-8"
-          />
-          <Button size="sm" onClick={() => editorRefs.current[activeFileIndex]?.getAction('actions.find')?.run()}>
-            Find
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowFindReplace(false)}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
 
       {/* Quick Switcher */}
       {showQuickSwitcher && (

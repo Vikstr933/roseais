@@ -30,6 +30,7 @@ import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import ActiveUsersIndicator from '@/components/ActiveUsersIndicator';
 import { useUserActivity } from '@/hooks/useUserActivity';
 import { FileEditor } from '@/components/FileEditor';
+import { OptimizedIDE } from '@/components/IDE/OptimizedIDE';
 
 // Type definitions for project data
 interface ProjectMember {
@@ -106,6 +107,7 @@ function ProjectDetailContent() {
   const [newMessage, setNewMessage] = useState('');
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedFile, setSelectedFile] = useState<ProjectFile | null>(null);
+  const [showIDE, setShowIDE] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
   const { data: project, isLoading } = useQuery({
@@ -452,6 +454,13 @@ function ProjectDetailContent() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowIDE(true)}
+                >
+                  <Code2 className="h-4 w-4 mr-2" />
+                  Open IDE
+                </Button>
                 <Button onClick={openInPlayground}>
                   <Play className="h-4 w-4 mr-2" />
                   Generate in Playground
@@ -716,7 +725,7 @@ function ProjectDetailContent() {
       </Tabs>
 
       {/* File Editor Modal */}
-      {selectedFile && id && (
+      {selectedFile && id && !showIDE && (
         <FileEditor
           file={{
             id: selectedFile.id,
@@ -728,6 +737,20 @@ function ProjectDetailContent() {
           projectId={id}
           onClose={() => setSelectedFile(null)}
           onSave={() => {
+            queryClient.invalidateQueries({
+              queryKey: [`/api/workspaces/${id}/files`],
+            });
+          }}
+        />
+      )}
+
+      {/* Full IDE Modal */}
+      {showIDE && id && (
+        <OptimizedIDE
+          projectId={id}
+          projectFiles={projectFiles}
+          onClose={() => setShowIDE(false)}
+          onFilesUpdate={() => {
             queryClient.invalidateQueries({
               queryKey: [`/api/workspaces/${id}/files`],
             });
