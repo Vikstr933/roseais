@@ -31,6 +31,7 @@ import ActiveUsersIndicator from '@/components/ActiveUsersIndicator';
 import { useUserActivity } from '@/hooks/useUserActivity';
 import { FileEditor } from '@/components/FileEditor';
 import { OptimizedIDE } from '@/components/IDE/OptimizedIDE';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Type definitions for project data
 interface ProjectMember {
@@ -92,7 +93,23 @@ interface ProjectActivity {
 export default function ProjectDetail() {
   return (
     <AuthGuard>
-      <ProjectDetailContent />
+      <ErrorBoundary
+        fallback={
+          <div className="container mx-auto px-4 py-8">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold mb-4">Error Loading Project</h1>
+              <p className="text-muted-foreground mb-4">
+                Something went wrong while loading the project. Please try again.
+              </p>
+              <Button onClick={() => window.location.reload()}>
+                Reload Page
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <ProjectDetailContent />
+      </ErrorBoundary>
     </AuthGuard>
   );
 }
@@ -125,22 +142,36 @@ function ProjectDetailContent() {
     queryKey: [`/api/workspaces/${id}`],
     enabled: !!id && !!sessionToken,
     queryFn: async () => {
-      console.log('[ProjectDetail] Fetching project:', { id, hasToken: !!sessionToken });
-      if (!sessionToken) {
-        throw new Error('No session token available');
+      try {
+        console.log('[ProjectDetail] Fetching project:', { id, hasToken: !!sessionToken });
+        if (!sessionToken) {
+          throw new Error('No session token available');
+        }
+        if (!id) {
+          throw new Error('Project ID is missing');
+        }
+        const response = await apiFetch(`/api/workspaces/${id}`, {
+          headers: getAuthHeaders(sessionToken),
+        });
+        console.log('[ProjectDetail] Response status:', response.status);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('[ProjectDetail] Failed to fetch project:', response.status, errorData);
+          throw new Error(errorData.error || errorData.message || `Failed to fetch project (${response.status})`);
+        }
+        const data = await response.json();
+        console.log('[ProjectDetail] Project loaded successfully:', { id: data.id, name: data.name });
+        
+        // Validate data structure
+        if (!data || typeof data !== 'object') {
+          throw new Error('Invalid project data received from server');
+        }
+        
+        return data;
+      } catch (error) {
+        console.error('[ProjectDetail] Error in queryFn:', error);
+        throw error;
       }
-      const response = await apiFetch(`/api/workspaces/${id}`, {
-        headers: getAuthHeaders(sessionToken),
-      });
-      console.log('[ProjectDetail] Response status:', response.status);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('[ProjectDetail] Failed to fetch project:', response.status, errorData);
-        throw new Error(errorData.error || errorData.message || 'Failed to fetch project');
-      }
-      const data = await response.json();
-      console.log('[ProjectDetail] Project loaded successfully:', { id: data.id, name: data.name });
-      return data;
     },
     retry: 1,
   });
@@ -154,25 +185,35 @@ function ProjectDetailContent() {
 
   const { data: chatMessages = [] } = useQuery({
     queryKey: [`/api/workspaces/${id}/chat`],
-    enabled: !!id,
+    enabled: !!id && !!sessionToken,
     queryFn: async () => {
-      const response = await apiFetch(`/api/workspaces/${id}/chat`, {
-        headers: getAuthHeaders(sessionToken),
-      });
-      if (!response.ok) throw new Error('Failed to fetch chat messages');
-      return response.json();
+      try {
+        const response = await apiFetch(`/api/workspaces/${id}/chat`, {
+          headers: getAuthHeaders(sessionToken),
+        });
+        if (!response.ok) throw new Error('Failed to fetch chat messages');
+        return response.json() || [];
+      } catch (error) {
+        console.error('[ProjectDetail] Error fetching chat:', error);
+        return [];
+      }
     },
   });
 
   const { data: projectFiles = [] } = useQuery({
     queryKey: [`/api/workspaces/${id}/files`],
-    enabled: !!id,
+    enabled: !!id && !!sessionToken,
     queryFn: async () => {
-      const response = await apiFetch(`/api/workspaces/${id}/files`, {
-        headers: getAuthHeaders(sessionToken),
-      });
-      if (!response.ok) throw new Error('Failed to fetch project files');
-      return response.json();
+      try {
+        const response = await apiFetch(`/api/workspaces/${id}/files`, {
+          headers: getAuthHeaders(sessionToken),
+        });
+        if (!response.ok) throw new Error('Failed to fetch project files');
+        return response.json() || [];
+      } catch (error) {
+        console.error('[ProjectDetail] Error fetching files:', error);
+        return [];
+      }
     },
   });
 
