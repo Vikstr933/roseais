@@ -91,9 +91,16 @@ interface ProjectActivity {
 }
 
 export default function ProjectDetail() {
+  console.log('[ProjectDetail] Component wrapper rendering');
+  
   return (
     <AuthGuard>
       <ErrorBoundary
+        onError={(error, errorInfo) => {
+          console.error('[ProjectDetail] ErrorBoundary caught error:', error);
+          console.error('[ProjectDetail] Error info:', errorInfo);
+          console.error('[ProjectDetail] Current URL:', typeof window !== 'undefined' ? window.location.href : 'N/A');
+        }}
         fallback={
           <div className="container mx-auto px-4 py-8">
             <div className="text-center">
@@ -127,6 +134,16 @@ function ProjectDetailContent() {
   const [showIDE, setShowIDE] = useState(false);
   const { trackViewing, trackChatting } = useUserActivity();
 
+  // Early debug logging - before anything else
+  console.log('[ProjectDetail] Component rendering:', {
+    match,
+    id,
+    params,
+    hasSessionToken: !!sessionToken,
+    hasUser: !!user,
+    currentPath: typeof window !== 'undefined' ? window.location.pathname : 'N/A'
+  });
+
   // Debug logging
   useEffect(() => {
     console.log('[ProjectDetail] Component mounted/updated:', {
@@ -134,7 +151,8 @@ function ProjectDetailContent() {
       id,
       hasSessionToken: !!sessionToken,
       hasUser: !!user,
-      params
+      params,
+      enabled: !!id && !!sessionToken
     });
   }, [match, id, sessionToken, user, params]);
 
