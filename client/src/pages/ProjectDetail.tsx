@@ -405,6 +405,22 @@ function ProjectDetailContent() {
     }
   };
 
+  // Safety check - ensure project data is valid before rendering
+  if (!project || typeof project !== 'object') {
+    console.error('[ProjectDetail] Invalid project object:', project);
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Invalid Project Data</h1>
+          <Button onClick={() => setLocation('/workspaces')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Projects
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -431,7 +447,7 @@ function ProjectDetailContent() {
                 {project.name}
               </h1>
               <p className="text-muted-foreground mt-1">
-                {project.description}
+                {project.description || 'No description'}
               </p>
             </div>
           </div>
@@ -487,9 +503,9 @@ function ProjectDetailContent() {
                         <div
                           key={member.id}
                           className="w-8 h-8 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-xs font-medium"
-                          title={`${member.user.displayName} (${member.role})`}
+                          title={`${member.user?.displayName || 'Unknown'} (${member.role || 'member'})`}
                         >
-                          {member.user.displayName.charAt(0).toUpperCase()}
+                          {member.user?.displayName?.charAt(0).toUpperCase() || '?'}
                         </div>
                       ))}
                     {project.members.length > 5 && (
@@ -707,34 +723,37 @@ function ProjectDetailContent() {
                       Open IDE
                     </Button>
                   </div>
-                  {projectFiles.map((file: ProjectFile) => (
-                    <div
-                      key={file.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => setSelectedFile(file)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg">
-                          {file.filePath.endsWith('.tsx')
-                            ? '⚛️'
-                            : file.filePath.endsWith('.ts')
-                              ? '📄'
-                              : file.filePath.endsWith('.css')
-                                ? '🎨'
-                                : '📁'}
-                        </span>
-                        <div>
-                          <p className="font-medium">{file.filePath}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {file.fileType} • v{file.version}
-                          </p>
+                  {projectFiles.map((file: ProjectFile) => {
+                    if (!file || !file.id) return null;
+                    return (
+                      <div
+                        key={file.id}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => setSelectedFile(file)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg">
+                            {file.filePath?.endsWith('.tsx')
+                              ? '⚛️'
+                              : file.filePath?.endsWith('.ts')
+                                ? '📄'
+                                : file.filePath?.endsWith('.css')
+                                  ? '🎨'
+                                  : '📁'}
+                          </span>
+                          <div>
+                            <p className="font-medium">{file.filePath || 'Unknown file'}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {file.fileType || 'unknown'} • v{file.version || 1}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {file.updatedAt ? new Date(file.updatedAt).toLocaleDateString() : 'Unknown date'}
                         </div>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        {new Date(file.updatedAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -779,7 +798,7 @@ function ProjectDetailContent() {
                               {message.user?.displayName || 'Unknown User'}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {new Date(message.createdAt).toLocaleString()}
+                              {message.createdAt ? new Date(message.createdAt).toLocaleString() : 'Unknown time'}
                             </span>
                           </div>
                           <p className="text-sm">{message.message}</p>
@@ -828,9 +847,9 @@ function ProjectDetailContent() {
                         <Activity className="h-4 w-4" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm">{activity.description}</p>
+                        <p className="text-sm">{activity.description || 'No description'}</p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(activity.createdAt).toLocaleString()}
+                          {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : 'Unknown date'}
                         </p>
                       </div>
                     </div>
