@@ -407,6 +407,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       // First, look for Register button in top right corner (common pattern)
       // Try multiple strategies to find the Register button
       const registerSelectors = [
+        // Retrotales specific
+        'button#reg-openModal',
+        'button[id="reg-openModal"]',
         // Top right corner patterns
         'header button:has-text("Register")',
         'header a:has-text("Register")',
@@ -432,15 +435,25 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       let registerClicked = false;
       for (const selector of registerSelectors) {
         try {
-          // Wait for the element to be visible
-          await page.waitForSelector(selector, { timeout: 5000, state: 'visible' });
-          await page.click(selector, { timeout: 5000 });
-          actions.push(`Clicked Register button: ${selector}`);
+          // Wait for the element to exist in DOM (attached, not necessarily visible)
+          await page.waitForSelector(selector, { timeout: 5000, state: 'attached' });
+          
+          // Try clicking with force if element exists but isn't visible
+          try {
+            await page.click(selector, { timeout: 5000, force: false });
+            actions.push(`Clicked Register button: ${selector}`);
+          } catch {
+            // If normal click fails, try with force
+            await page.click(selector, { timeout: 5000, force: true });
+            actions.push(`Clicked Register button (force): ${selector}`);
+          }
+          
           registerClicked = true;
-          // Wait for dialog/modal to open
-          await page.waitForTimeout(2000);
+          // Wait for dialog/modal/form to open
+          await page.waitForTimeout(3000);
           break;
-        } catch {
+        } catch (error) {
+          logger.debug(`Register button selector ${selector} failed: ${error instanceof Error ? error.message : String(error)}`);
           continue;
         }
       }
@@ -486,30 +499,67 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         }
       }
 
-      // Wait for dialog/modal to appear and be fully visible (look for common modal/dialog patterns)
+      // Wait for registration form to appear in DOM (form#register-form or form fields)
       try {
-        await page.waitForSelector('dialog, [role="dialog"], .modal, .dialog, [class*="modal" i], [class*="dialog" i], #registerModal, [id*="modal" i]', { 
-          timeout: 10000,
-          state: 'visible' 
+        // Wait for the registration form or form fields to appear
+        await page.waitForSelector('form#register-form, input[name="reg-username"], input[name="reg-password"], input[name="password_again"]', {
+          timeout: 15000,
+          state: 'attached' // Just need them to exist in DOM
         });
-        actions.push('Dialog/modal appeared');
+        actions.push('Registration form detected in DOM');
         
-        // Wait for dialog to be fully rendered and visible
+        // Wait a bit for form to be fully rendered
         await page.waitForTimeout(2000);
         
-        // Ensure dialog is in viewport and fully visible
+        // Make form and fields visible/accessible
         await page.evaluate(() => {
-          const dialogs = document.querySelectorAll('dialog, [role="dialog"], .modal, .dialog, [class*="modal" i], [class*="dialog" i], #registerModal, [id*="modal" i]');
-          dialogs.forEach((dialog: Element) => {
-            if (dialog instanceof HTMLElement) {
-              dialog.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Find the registration form
+          const form = document.querySelector('form#register-form') as HTMLFormElement;
+          if (form) {
+            // Make form visible
+            form.style.display = '';
+            form.style.visibility = '';
+            form.style.opacity = '';
+            form.removeAttribute('hidden');
+            
+            // Make all input fields visible
+            const fields = form.querySelectorAll('input[name="reg-username"], input[name="reg-password"], input[name="password_again"]');
+            fields.forEach((field: Element) => {
+              if (field instanceof HTMLElement) {
+                field.style.display = '';
+                field.style.visibility = '';
+                field.style.opacity = '';
+                field.removeAttribute('hidden');
+                // Remove disabled attribute if present
+                (field as HTMLInputElement).disabled = false;
+              }
+            });
+            
+            // Make submit button visible and enabled
+            const submitBtn = form.querySelector('button#register-submit-btn') as HTMLButtonElement;
+            if (submitBtn) {
+              submitBtn.style.display = '';
+              submitBtn.style.visibility = '';
+              submitBtn.style.opacity = '';
+              submitBtn.removeAttribute('hidden');
             }
-          });
+          }
         });
         
         await page.waitForTimeout(1000);
-      } catch {
-        logger.warn('No dialog detected, continuing anyway');
+        actions.push('Form made visible and accessible');
+      } catch (error) {
+        logger.warn('Registration form not found, trying to find form fields directly', error as Error);
+        // Try to find form fields anyway
+        try {
+          await page.waitForSelector('input[name="reg-username"], input[name="reg-password"], input[name="password_again"]', {
+            timeout: 10000,
+            state: 'attached'
+          });
+          actions.push('Form fields found without form element');
+        } catch {
+          logger.warn('Form fields not found in DOM');
+        }
       }
 
       // Fill Account Name field (first field, usually)
@@ -530,13 +580,22 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         ];
         for (const selector of accountNameSelectors) {
           try {
-            // Wait for element to exist
+            // Wait for element to exist in DOM (attached, not necessarily visible)
             await page.waitForSelector(selector, { timeout: 5000, state: 'attached' });
             
-            // Try to make element visible by scrolling and focusing
+            // Make element visible and interactable
             await page.evaluate((sel: string) => {
               const el = document.querySelector(sel) as HTMLElement;
               if (el) {
+                // Remove hidden styles and attributes
+                el.style.display = '';
+                el.style.visibility = '';
+                el.style.opacity = '';
+                el.removeAttribute('hidden');
+                // Make it visible
+                if (el instanceof HTMLInputElement) {
+                  el.type = el.getAttribute('data-original-type') || el.type;
+                }
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 el.focus();
               }
@@ -544,39 +603,50 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             
             await page.waitForTimeout(500);
             
-            // Try clicking first (human-like)
-            try {
-              await page.click(selector, { timeout: 3000, force: false });
-            } catch {
-              // If click fails, try with force
-              await page.click(selector, { timeout: 3000, force: true });
+            // Try to set value directly first (most reliable for hidden elements)
+            const valueSet = await page.evaluate(({ sel, val }: { sel: string; val: string }) => {
+              const el = document.querySelector(sel) as HTMLInputElement;
+              if (el) {
+                el.value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                el.dispatchEvent(new Event('blur', { bubbles: true }));
+                return el.value === val;
+              }
+              return false;
+            }, { sel: selector, val: accountName });
+            
+            if (valueSet) {
+              // Verify the value was set
+              const value = await page.inputValue(selector);
+              if (value === accountName) {
+                actions.push(`Filled Account Name (direct): ${accountName}`);
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
             }
             
-            await page.waitForTimeout(200 + Math.random() * 300);
-            
-            // Clear and type with human-like delays
-            await page.fill(selector, '');
-            await page.type(selector, accountName, { delay: 50 + Math.random() * 100 });
-            
-            // Verify the value was set
-            const value = await page.inputValue(selector);
-            if (value === accountName) {
-              actions.push(`Filled Account Name: ${accountName}`);
-              await page.waitForTimeout(500 + Math.random() * 500);
-              break;
-            } else {
-              // Fallback: use evaluate to set value directly
-              await page.evaluate(({ sel, val }: { sel: string; val: string }) => {
-                const el = document.querySelector(sel) as HTMLInputElement;
-                if (el) {
-                  el.value = val;
-                  el.dispatchEvent(new Event('input', { bubbles: true }));
-                  el.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-              }, { sel: selector, val: accountName });
-              actions.push(`Filled Account Name (direct): ${accountName}`);
-              await page.waitForTimeout(500 + Math.random() * 500);
-              break;
+            // Fallback: try clicking and typing (human-like)
+            try {
+              await page.click(selector, { timeout: 3000, force: true });
+              await page.waitForTimeout(200 + Math.random() * 300);
+              await page.fill(selector, '');
+              await page.type(selector, accountName, { delay: 50 + Math.random() * 100 });
+              
+              const value = await page.inputValue(selector);
+              if (value === accountName) {
+                actions.push(`Filled Account Name: ${accountName}`);
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
+            } catch {
+              // If that fails, value was already set by evaluate
+              const value = await page.inputValue(selector);
+              if (value === accountName) {
+                actions.push(`Filled Account Name (evaluate): ${accountName}`);
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
             }
           } catch (error) {
             logger.warn(`Failed to fill account name with selector ${selector}: ${error instanceof Error ? error.message : String(error)}`);
@@ -621,52 +691,66 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         ];
         for (const selector of passwordSelectors) {
           try {
-            // Wait for element to exist
+            // Wait for element to exist in DOM
             await page.waitForSelector(selector, { timeout: 5000, state: 'attached' });
             
-            // Try to make element visible
-            await page.evaluate((sel: string) => {
-              const el = document.querySelector(sel) as HTMLElement;
+            // Make element visible and set value directly
+            const valueSet = await page.evaluate(({ sel, val }: { sel: string; val: string }) => {
+              const el = document.querySelector(sel) as HTMLInputElement;
               if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                el.focus();
+                // Remove hidden styles
+                el.style.display = '';
+                el.style.visibility = '';
+                el.style.opacity = '';
+                el.removeAttribute('hidden');
+                // Set value
+                el.value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                el.dispatchEvent(new Event('blur', { bubbles: true }));
+                return el.value === val;
               }
-            }, selector);
+              return false;
+            }, { sel: selector, val: validPassword });
             
-            await page.waitForTimeout(500);
-            
-            // Try clicking
-            try {
-              await page.click(selector, { timeout: 3000, force: false });
-            } catch {
-              await page.click(selector, { timeout: 3000, force: true });
+            if (valueSet) {
+              const value = await page.inputValue(selector);
+              if (value === validPassword) {
+                actions.push('Filled Password (direct)');
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
             }
             
-            await page.waitForTimeout(200 + Math.random() * 300);
-            
-            // Clear and type
-            await page.fill(selector, '');
-            await page.type(selector, validPassword, { delay: 50 + Math.random() * 100 });
-            
-            // Verify
-            const value = await page.inputValue(selector);
-            if (value === validPassword) {
-              actions.push('Filled Password');
-              await page.waitForTimeout(500 + Math.random() * 500);
-              break;
-            } else {
-              // Fallback: direct value setting
-              await page.evaluate(({ sel, val }: { sel: string; val: string }) => {
-                const el = document.querySelector(sel) as HTMLInputElement;
+            // Fallback: try clicking and typing
+            try {
+              await page.evaluate((sel: string) => {
+                const el = document.querySelector(sel) as HTMLElement;
                 if (el) {
-                  el.value = val;
-                  el.dispatchEvent(new Event('input', { bubbles: true }));
-                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  el.focus();
                 }
-              }, { sel: selector, val: validPassword });
-              actions.push('Filled Password (direct)');
-              await page.waitForTimeout(500 + Math.random() * 500);
-              break;
+              }, selector);
+              
+              await page.waitForTimeout(500);
+              await page.click(selector, { timeout: 3000, force: true });
+              await page.waitForTimeout(200 + Math.random() * 300);
+              await page.fill(selector, '');
+              await page.type(selector, validPassword, { delay: 50 + Math.random() * 100 });
+              
+              const value = await page.inputValue(selector);
+              if (value === validPassword) {
+                actions.push('Filled Password');
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
+            } catch {
+              const value = await page.inputValue(selector);
+              if (value === validPassword) {
+                actions.push('Filled Password (evaluate)');
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
             }
           } catch (error) {
             logger.warn(`Failed to fill password with selector ${selector}: ${error instanceof Error ? error.message : String(error)}`);
@@ -695,52 +779,66 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         ];
         for (const selector of confirmPasswordSelectors) {
           try {
-            // Wait for element to exist
+            // Wait for element to exist in DOM
             await page.waitForSelector(selector, { timeout: 5000, state: 'attached' });
             
-            // Try to make element visible
-            await page.evaluate((sel: string) => {
-              const el = document.querySelector(sel) as HTMLElement;
+            // Make element visible and set value directly
+            const valueSet = await page.evaluate(({ sel, val }: { sel: string; val: string }) => {
+              const el = document.querySelector(sel) as HTMLInputElement;
               if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                el.focus();
+                // Remove hidden styles
+                el.style.display = '';
+                el.style.visibility = '';
+                el.style.opacity = '';
+                el.removeAttribute('hidden');
+                // Set value
+                el.value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                el.dispatchEvent(new Event('blur', { bubbles: true }));
+                return el.value === val;
               }
-            }, selector);
+              return false;
+            }, { sel: selector, val: confirmPasswordValue });
             
-            await page.waitForTimeout(500);
-            
-            // Try clicking
-            try {
-              await page.click(selector, { timeout: 3000, force: false });
-            } catch {
-              await page.click(selector, { timeout: 3000, force: true });
+            if (valueSet) {
+              const value = await page.inputValue(selector);
+              if (value === confirmPasswordValue) {
+                actions.push('Filled Confirm Password (direct)');
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
             }
             
-            await page.waitForTimeout(200 + Math.random() * 300);
-            
-            // Clear and type
-            await page.fill(selector, '');
-            await page.type(selector, confirmPasswordValue, { delay: 50 + Math.random() * 100 });
-            
-            // Verify
-            const value = await page.inputValue(selector);
-            if (value === confirmPasswordValue) {
-              actions.push('Filled Confirm Password');
-              await page.waitForTimeout(500 + Math.random() * 500);
-              break;
-            } else {
-              // Fallback: direct value setting
-              await page.evaluate(({ sel, val }: { sel: string; val: string }) => {
-                const el = document.querySelector(sel) as HTMLInputElement;
+            // Fallback: try clicking and typing
+            try {
+              await page.evaluate((sel: string) => {
+                const el = document.querySelector(sel) as HTMLElement;
                 if (el) {
-                  el.value = val;
-                  el.dispatchEvent(new Event('input', { bubbles: true }));
-                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  el.focus();
                 }
-              }, { sel: selector, val: confirmPasswordValue });
-              actions.push('Filled Confirm Password (direct)');
-              await page.waitForTimeout(500 + Math.random() * 500);
-              break;
+              }, selector);
+              
+              await page.waitForTimeout(500);
+              await page.click(selector, { timeout: 3000, force: true });
+              await page.waitForTimeout(200 + Math.random() * 300);
+              await page.fill(selector, '');
+              await page.type(selector, confirmPasswordValue, { delay: 50 + Math.random() * 100 });
+              
+              const value = await page.inputValue(selector);
+              if (value === confirmPasswordValue) {
+                actions.push('Filled Confirm Password');
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
+            } catch {
+              const value = await page.inputValue(selector);
+              if (value === confirmPasswordValue) {
+                actions.push('Filled Confirm Password (evaluate)');
+                await page.waitForTimeout(500 + Math.random() * 500);
+                break;
+              }
             }
           } catch (error) {
             logger.warn(`Failed to fill confirm password with selector ${selector}: ${error instanceof Error ? error.message : String(error)}`);
@@ -749,37 +847,56 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         }
       }
 
-      // Handle Cloudflare protection - wait extra time for it to complete
-      logger.info('Waiting for Cloudflare protection to complete...');
-      actions.push('Waiting for Cloudflare protection');
-      await page.waitForTimeout(5000); // Wait 5 seconds for Cloudflare to complete
+      // Handle Cloudflare Turnstile protection
+      logger.info('Waiting for Cloudflare Turnstile to complete...');
+      actions.push('Waiting for Cloudflare Turnstile');
       
-      // Check if Cloudflare challenge is visible and wait for it to complete
-      try {
-        const cloudflareSelectors = [
-          '[data-ray]', // Cloudflare Turnstile
-          '.cf-browser-verification',
-          '#cf-challenge-running',
-          '[id*="cf-"]',
-          '[class*="cf-"]'
-        ];
+      // Check if Cloudflare Turnstile is present
+      const hasTurnstile = await page.evaluate(() => {
+        return !!document.querySelector('.cf-turnstile, [class*="cf-turnstile"], [id*="cf-"]');
+      });
+      
+      if (hasTurnstile) {
+        logger.info('Cloudflare Turnstile detected, waiting for completion...');
+        actions.push('Cloudflare Turnstile detected');
         
-        for (const selector of cloudflareSelectors) {
-          try {
-            const cfElement = await page.waitForSelector(selector, { timeout: 2000, state: 'visible' });
-            if (cfElement) {
-              logger.info('Cloudflare challenge detected, waiting for completion...');
-              // Wait up to 15 seconds for Cloudflare to complete automatically
-              await page.waitForTimeout(15000);
-              actions.push('Cloudflare challenge completed');
-              break;
+        // Wait for Turnstile response token to be set
+        try {
+          await page.waitForFunction(() => {
+            // Check if Turnstile response input has a value
+            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+            if (responseInput && responseInput.value && responseInput.value.length > 0) {
+              return true;
             }
-          } catch {
-            continue;
+            // Also check if callback was called (check for success indicators)
+            return (window as any).__turnstileSuccess === true;
+          }, {
+            timeout: 30000, // Wait up to 30 seconds
+            polling: 1000 // Check every second
+          });
+          
+          logger.info('Cloudflare Turnstile completed successfully');
+          actions.push('Cloudflare Turnstile completed');
+        } catch {
+          // If timeout, wait a bit more and check if we can proceed anyway
+          logger.warn('Cloudflare Turnstile timeout, waiting additional time...');
+          await page.waitForTimeout(10000);
+          
+          // Check if response token exists anyway
+          const hasToken = await page.evaluate(() => {
+            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+            return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+          });
+          
+          if (hasToken) {
+            actions.push('Cloudflare Turnstile token found (after timeout)');
+          } else {
+            actions.push('Cloudflare Turnstile may not be completed - proceeding anyway');
           }
         }
-      } catch {
-        // No Cloudflare detected, continue
+      } else {
+        // No Turnstile detected, wait a bit anyway for any other protection
+        await page.waitForTimeout(3000);
       }
 
       // Verify all fields are filled before submitting
