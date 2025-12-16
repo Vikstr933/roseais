@@ -321,7 +321,7 @@ export class AgentManager {
         name: 'Default Component Generator',
         description: 'Default agent for generating React components',
         role: 'Component Generator',
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
         systemPrompt: `You are a specialized agent for generating React components. You focus on:
 - Creating clean, maintainable React components
 - Implementing TypeScript types and interfaces

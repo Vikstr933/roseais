@@ -279,7 +279,7 @@ export class DiscordBotService {
 
       // First, detect the language
       const detectResponse = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 100,
         messages: [{
           role: 'user',
@@ -293,7 +293,7 @@ export class DiscordBotService {
 
       // Generate localized message
       const messageResponse = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 500,
         messages: [{
           role: 'user',
@@ -375,7 +375,7 @@ Use Discord markdown formatting (**bold**, etc.) and emojis appropriately. Write
       });
 
       const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 150,
         messages: [{
           role: 'user',
@@ -526,7 +526,7 @@ Generate ONLY the status message, nothing else.`
             const detectResponse = await new Anthropic({
               apiKey: process.env.ANTHROPIC_API_KEY || ''
             }).messages.create({
-              model: 'claude-3-5-sonnet-20241022',
+              model: 'claude-sonnet-4-5-20250929',
               max_tokens: 10,
               messages: [{
                 role: 'user',

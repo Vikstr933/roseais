@@ -61,7 +61,7 @@ export class PersonalAssistantAgent {
   private trackErrorTool: Tool;
   private getUsageStatsTool: Tool;
   private getDataInsightsTool: Tool;
-  private browserUseTool: Tool;
+    private browserUseTool: Tool;
   private selectedProjects: Map<string, { projectId: string; projectName: string; projectDescription?: string; isGitHubRepo?: boolean; githubRepo?: { fullName: string; owner: string; repo: string; defaultBranch?: string } }> = new Map(); // Store selected project per session
   private userMessageCounts: Map<string, number> = new Map(); // Track message count per user for Discord recommendations
   private lastDiscordRecommendation: Map<string, number> = new Map(); // Track last recommendation timestamp
@@ -69,6 +69,11 @@ export class PersonalAssistantAgent {
   constructor() {
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY || ''
+    });
+
+    // Initialize tool handler registry (lazy, will be done on first use)
+    this.initializeToolHandlers().catch(err => {
+      logger.warn('Failed to initialize tool handlers, will retry on first use', err as Error);
     });
 
     // Initialize built-in web search tool
@@ -252,13 +257,13 @@ If no projectId is provided, will use the currently selected project from the co
     // Initialize read file tool
     this.readFileTool = {
       name: 'read_file',
-      description: 'Read and analyze a specific file from a project. **CRITICAL: Use this tool FIRST whenever the user mentions a specific file by name (e.g., "look at xxxx.lua", "check the App.tsx file", "review config.json").** After reading the file, you can then use other tools like suggest_improvements, analyze_code, or provide direct analysis based on what the user asked for (e.g., performance improvements, bug fixes, refactoring suggestions). You can read any file in the project by its path.',
+        description: 'Read and analyze a specific file from a project. **CRITICAL: Use this tool FIRST whenever the user mentions a specific file by name (e.g., "look at xxxx.lua", "check the App.tsx file", "review config.json").** After reading the file, you can then use other tools like suggest_improvements, analyze_code, or provide direct analysis based on what the user asked for (e.g., performance improvements, bug fixes, refactoring suggestions). You can read any file in the project by its path.',
       parameters: {
         type: 'object',
         properties: {
           filePath: {
             type: 'string',
-            description: 'The path to the file to read (e.g., "src/App.tsx", "src/components/Button.tsx", "package.json", "data/script.lua"). Extract the file path from the user\'s message if they mention a specific file.'
+              description: 'The path to the file to read (e.g., "src/App.tsx", "src/components/Button.tsx", "package.json", "data/script.lua"). Extract the file path from the user\'s message if they mention a specific file.'
           },
           projectId: {
             type: 'string',
@@ -511,13 +516,13 @@ If no projectId is provided, will use the currently selected project from the co
     // Initialize analyze code tool
     this.analyzeCodeTool = {
       name: 'analyze_code',
-      description: 'Analyze code for errors, warnings, and improvements. Use this when the user asks you to analyze code, check for errors, find issues, or review code quality. This performs comprehensive analysis including syntax errors, type errors, security issues, performance problems, and best practices. **When the user mentions a specific file, use read_file first to read it, then use this tool with the filePath parameter to analyze that specific file.**',
+        description: 'Analyze code for errors, warnings, and improvements. Use this when the user asks you to analyze code, check for errors, find issues, or review code quality. This performs comprehensive analysis including syntax errors, type errors, security issues, performance problems, and best practices. **When the user mentions a specific file, use read_file first to read it, then use this tool with the filePath parameter to analyze that specific file.**',
       parameters: {
         type: 'object',
         properties: {
           filePath: {
             type: 'string',
-            description: 'Optional specific file path to analyze. If the user mentioned a specific file, provide the file path here to analyze that file. If not provided, analyzes all files in the project.'
+              description: 'Optional specific file path to analyze. If the user mentioned a specific file, provide the file path here to analyze that file. If not provided, analyzes all files in the project.'
           },
           projectId: {
             type: 'string',
@@ -580,13 +585,13 @@ If no projectId is provided, will use the currently selected project from the co
     // Initialize suggest improvements tool
     this.suggestImprovementsTool = {
       name: 'suggest_improvements',
-      description: 'Suggest code improvements and refactoring opportunities, including performance improvements, code quality enhancements, and best practices. Use this when the user asks for suggestions, improvements, refactoring ideas, code quality recommendations, or performance improvements (e.g., "ge mig performance förbättringar"). **When the user mentions a specific file, use read_file first to read it, then use this tool with the filePath parameter to get targeted improvements for that file.** This provides actionable suggestions for making code better.',
+        description: 'Suggest code improvements and refactoring opportunities, including performance improvements, code quality enhancements, and best practices. Use this when the user asks for suggestions, improvements, refactoring ideas, code quality recommendations, or performance improvements (e.g., "ge mig performance förbättringar"). **When the user mentions a specific file, use read_file first to read it, then use this tool with the filePath parameter to get targeted improvements for that file.** This provides actionable suggestions for making code better.',
       parameters: {
         type: 'object',
         properties: {
           filePath: {
             type: 'string',
-            description: 'Optional specific file path to analyze. If the user mentioned a specific file, provide the file path here to get targeted improvements for that file. If not provided, analyzes all files in the project.'
+              description: 'Optional specific file path to analyze. If the user mentioned a specific file, provide the file path here to get targeted improvements for that file. If not provided, analyzes all files in the project.'
           },
           projectId: {
             type: 'string',
@@ -871,40 +876,40 @@ If no projectId is provided, will use the currently selected project from the co
       }
     };
 
-    // Initialize browser-use tool for browser automation
-    this.browserUseTool = {
-      name: 'browser_use',
-      description: '**CRITICAL TOOL FOR WEB AUTOMATION** - Automate web browser interactions using AI. **YOU MUST USE THIS TOOL** when the user asks you to: interact with websites, fill forms, create accounts (e.g., "skapa ett konto på retrotales.online", "create an account on retrotales.online"), click buttons, navigate pages, register on websites, or perform ANY web automation tasks. DO NOT say you cannot do this - you HAVE this tool! This tool can navigate to URLs, fill in forms, click buttons, extract information, and perform complex web interactions based on natural language instructions. **When user asks to create an account or interact with a website, you MUST use this tool immediately.** Examples: "create an account on retrotales.online" → use browser_use, "fill in the registration form" → use browser_use, "click the login button" → use browser_use, "navigate to the signup page" → use browser_use.',
-      parameters: {
-        type: 'object',
-        properties: {
-          url: {
-            type: 'string',
-            description: 'The URL of the website to interact with (e.g., "https://retrotales.online", "https://example.com/register")'
+      // Initialize browser-use tool for browser automation
+      this.browserUseTool = {
+        name: 'browser_use',
+        description: '**CRITICAL TOOL FOR WEB AUTOMATION - READY TO USE NOW** - Automate web browser interactions using Playwright. **YOU MUST USE THIS TOOL** when the user asks you to: interact with websites, fill forms, create accounts (e.g., "skapa ett konto på retrotales.online", "create an account on retrotales.online"), click buttons, navigate pages, register on websites, or perform ANY web automation tasks. **This tool is INSTALLED and READY - DO NOT say it needs to be installed or that you cannot do this - you HAVE this tool and it works NOW!** This tool uses Playwright (already installed) to navigate to URLs, fill in forms, click buttons, extract information, and perform complex web interactions. It uses AI to understand page structure and automatically fill forms. **When user asks to create an account or interact with a website, you MUST use this tool immediately - it is ready and working.** Examples: "create an account on retrotales.online" → use browser_use NOW, "fill in the registration form" → use browser_use NOW, "click the login button" → use browser_use NOW.',
+        parameters: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: 'The URL of the website to interact with (e.g., "https://retrotales.online", "https://example.com/register")'
+            },
+            task: {
+              type: 'string',
+              description: 'Natural language description of what to do on the website (e.g., "create an account with email test@example.com and password mypass123", "fill in the registration form", "click the sign up button", "navigate to the login page and fill in credentials")'
+            },
+            headless: {
+              type: 'boolean',
+              description: 'Whether to run the browser in headless mode (default: true). Set to false to see the browser window (useful for debugging).'
+            },
+            timeout: {
+              type: 'number',
+              description: 'Timeout in milliseconds (default: 60000 = 60 seconds). Increase for complex tasks.'
+            },
+            screenshot: {
+              type: 'boolean',
+              description: 'Whether to take a screenshot after completing the task (default: false)'
+            }
           },
-          task: {
-            type: 'string',
-            description: 'Natural language description of what to do on the website (e.g., "create an account with email test@example.com and password mypass123", "fill in the registration form", "click the sign up button", "navigate to the login page and fill in credentials")'
-          },
-          headless: {
-            type: 'boolean',
-            description: 'Whether to run the browser in headless mode (default: true). Set to false to see the browser window (useful for debugging).'
-          },
-          timeout: {
-            type: 'number',
-            description: 'Timeout in milliseconds (default: 60000 = 60 seconds). Increase for complex tasks.'
-          },
-          screenshot: {
-            type: 'boolean',
-            description: 'Whether to take a screenshot after completing the task (default: false)'
-          }
+          required: ['url', 'task']
         },
-        required: ['url', 'task']
-      },
-      execute: async (params: Record<string, any>) => {
-        return await this.useBrowser(params);
-      }
-    };
+        execute: async (params: Record<string, any>) => {
+          return await this.useBrowser(params);
+        }
+      };
   }
 
   /**
@@ -1144,16 +1149,29 @@ If no projectId is provided, will use the currently selected project from the co
       // Add any additional tools registered for this user (e.g., from orchestrator bridge)
       const additionalToolsForUser = this.additionalTools.get(userId) || [];
       
+      // Try to get tools from new handler system first
+      await this.initializeToolHandlers();
+      const handlerTools = await this.getToolsFromHandlers(userId, sessionId, options);
+      
       // Include built-in tools (web search, Discord, code generation, project management, and deployment)
-      const builtInTools = [
-        this.webSearchTool,
-        // Browser automation tool
-        {
-          ...this.browserUseTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.useBrowser({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        },
+      // Start with handler tools if available, then add legacy tools that aren't in handlers
+      const builtInTools: Tool[] = [];
+      
+      // Add handler tools first
+      if (handlerTools.length > 0) {
+        builtInTools.push(...handlerTools);
+      }
+      
+      // Add legacy tools that aren't yet migrated to handlers
+      const legacyTools: Tool[] = [
+        this.webSearchTool, 
+          // Browser automation tool
+          {
+            ...this.browserUseTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.useBrowser({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          },
         // Wrap Discord tools to automatically include discordContext
         {
           ...this.discordTool,
@@ -1193,6 +1211,9 @@ If no projectId is provided, will use the currently selected project from the co
         }
       ];
       
+      // Add legacy tools that aren't in handlers yet
+      builtInTools.push(...legacyTools);
+      
       // Add code generation tool if we have playground context or a selected project
       const hasProjectContext = options?.playgroundContext?.projectId || this.selectedProjects.has(sessionId);
       if (hasProjectContext) {
@@ -1216,6 +1237,18 @@ If no projectId is provided, will use the currently selected project from the co
         builtInTools.push(deployToolWithUserId);
 
         // Add file operation tools if we have a project
+        // Check if read_file is already in handler tools
+        const hasReadFileInHandlers = builtInTools.some(t => t.name === 'read_file');
+        if (!hasReadFileInHandlers) {
+          const readFileToolWithUserId = {
+            ...this.readFileTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.readFile({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(readFileToolWithUserId);
+        }
+        
         const writeFileToolWithUserId = {
           ...this.writeFileTool,
           execute: async (params: Record<string, any>) => {
@@ -1473,14 +1506,29 @@ If no projectId is provided, will use the currently selected project from the co
 
       logger.info(`Tools available for PersonalAssistantAgent: userId=${userId}, totalTools=${tools.length}, pluginToolsCount=${validPluginTools.length}, toolNames=${tools.map(t => t.name).join(', ')}`);
 
-      // Build system prompt with error handling
+      // Build system prompt with error handling using SystemPromptBuilder
       let systemPrompt: string;
       try {
-        systemPrompt = this.buildSystemPrompt(context, tools, options?.playgroundContext, options?.discordContext, memories);
+        const { SystemPromptBuilder } = await import('./tools/SystemPromptBuilder');
+        const systemPromptBuilder = new SystemPromptBuilder();
+        systemPrompt = await systemPromptBuilder.buildPrompt({
+          userId,
+          sessionId,
+          knowledgeItems: context,
+          memories: memories,
+          playgroundContext: options?.playgroundContext,
+          discordContext: options?.discordContext,
+          tools: tools
+        });
       } catch (error) {
         logger.error(`Failed to build system prompt: ${error instanceof Error ? error.message : String(error)} (userId: ${userId}, toolCount: ${tools.length}, contextCount: ${context.length})`, error as Error);
-        // Use a minimal fallback prompt
-        systemPrompt = `You are Elon, a helpful AI assistant. You have access to ${tools.length} tools. Help the user with their request.`;
+        // Fallback to legacy buildSystemPrompt if SystemPromptBuilder fails
+        try {
+          systemPrompt = this.buildSystemPrompt(context, tools, options?.playgroundContext, options?.discordContext, memories);
+        } catch (fallbackError) {
+          // Use a minimal fallback prompt
+          systemPrompt = `You are Elon, a helpful AI assistant. You have access to ${tools.length} tools. Help the user with their request.`;
+        }
       }
 
       // CRITICAL: Pre-check user message for action requests that REQUIRE tools
@@ -1787,11 +1835,11 @@ If no projectId is provided, will use the currently selected project from the co
     if (/kolla.*discord|check.*discord|läs.*discord|read.*discord|visa.*discord|show.*discord/i.test(message)) {
       return { toolName: 'read_discord_messages', actionDescription: 'read Discord messages' };
     }
-    
-    // Browser automation patterns - account creation, form filling, web interaction
-    if (/skapa.*konto|create.*account|registrera|register|fyll.*formulär|fill.*form|klicka.*knapp|click.*button|interagera.*webb|interact.*website|navigera.*sida|navigate.*page|browser.*use|web.*automation|automatisera.*webb/i.test(message)) {
-      return { toolName: 'browser_use', actionDescription: 'automate web browser interactions (create accounts, fill forms, interact with websites)' };
-    }
+      
+      // Browser automation patterns - account creation, form filling, web interaction
+      if (/skapa.*konto|create.*account|registrera|register|fyll.*formulär|fill.*form|klicka.*knapp|click.*button|interagera.*webb|interact.*website|navigera.*sida|navigate.*page|browser.*use|web.*automation|automatisera.*webb/i.test(message)) {
+        return { toolName: 'browser_use', actionDescription: 'automate web browser interactions (create accounts, fill forms, interact with websites)' };
+      }
     
     return null;
   }
@@ -1902,7 +1950,7 @@ Your personality:
 - Enthusiastic about helping - show genuine excitement when you can assist
 
 Your capabilities:
-- **🚨 BROWSER AUTOMATION (browser_use) - READ THIS FIRST**: You have a tool called browser_use that allows you to automate web browser interactions. **When ANY user asks you to create accounts, fill forms, interact with websites, or do ANY web automation, you MUST use browser_use tool. DO NOT say you cannot do it - you CAN and MUST use browser_use!** Examples: "Skapa ett konto på retrotales.online" → use browser_use immediately, "create an account" → use browser_use immediately. See detailed instructions below.
+  - **🚨 BROWSER AUTOMATION (browser_use) - READ THIS FIRST - IT IS INSTALLED AND READY**: You have a tool called browser_use that uses Playwright (ALREADY INSTALLED) to automate web browser interactions. **When ANY user asks you to create accounts, fill forms, interact with websites, or do ANY web automation, you MUST use browser_use tool IMMEDIATELY. DO NOT say it needs installation, DO NOT say you cannot do it - it is INSTALLED and READY NOW!** Examples: "Skapa ett konto på retrotales.online" → use browser_use immediately (it works NOW), "create an account" → use browser_use immediately (it works NOW). See detailed instructions below.
 
 - **Discord Integration**: You have direct access to both read and post messages in the user's Discord community
   * **CRITICAL - YOU MUST USE TOOLS**: When the user asks you to post in Discord, tag someone, or read Discord messages, you MUST actually call the send_discord_message or read_discord_messages tool. DO NOT just say "I posted it" or "I tagged them" - that is a LIE if you didn't use the tool.
@@ -1969,39 +2017,42 @@ Your capabilities:
     - DO NOT provide potentially incorrect details
     - Clearly state: "I'm unable to search the web for this information right now because the web search tool encountered an error."
     - Include the errorLog field from the tool response in your message so the user can send it to the administrator
-    - Example: "I'm sorry, but I cannot search the web for this information at the moment. Here's the error log you can send to the administrator:\\n\\n[errorLog content]"
-- **Browser Automation (browser_use)**: Automate web browser interactions using AI
-  * **🚨 CRITICAL - YOU MUST USE THIS TOOL - IT IS AVAILABLE TO YOU**: When the user asks you to interact with websites, fill forms, create accounts, click buttons, navigate pages, or perform any web automation tasks, you MUST use the browser_use tool. **DO NOT say "I can't do that", "I don't have access", "I have no integration", or "I cannot create accounts" - you HAVE this tool and it works!** If you say you cannot do web automation, you are LYING to the user.
-  * **You MUST use browser_use when users ask you to**:
-    - Create accounts on websites (e.g., "create an account on retrotales.online", "skapa ett konto på retrotales.online", "Skapa ett konto på www.retrotales.online åt mig")
-    - Fill in forms (registration forms, contact forms, etc.)
-    - Click buttons or links
-    - Navigate to specific pages
-    - Extract information from websites
-    - Perform any web interaction task
-  * **When user says things like**:
-    - "Skapa ett konto på retrotales.online" → **IMMEDIATELY use browser_use tool**
-    - "Create an account on [website]" → **IMMEDIATELY use browser_use tool**
-    - "Fill in the form" → **IMMEDIATELY use browser_use tool**
-    - "Register on [website]" → **IMMEDIATELY use browser_use tool**
-  * **DO NOT**:
-    - Say "I cannot create accounts" - you CAN with browser_use
-    - Say "I don't have access to websites" - you DO with browser_use
-    - Say "I need you to do it manually" - you CAN automate it with browser_use
-    - Make excuses - just USE THE TOOL
-  * **How to use browser_use**:
-    - Required parameters: url (the website URL) and task (natural language description of what to do)
-    - The task parameter should be detailed and specific (e.g., "create an account with email test@example.com and password mypass123", "fill in the registration form with name John Doe, email john@example.com, and password secure123")
-    - Optional parameters: headless (default: true), timeout (default: 60000ms), screenshot (default: false)
-    - Example: User says "create an account on retrotales.online" - Use browser_use with url: "https://retrotales.online" and task: "navigate to the registration page and create a new account"
-  * **Important notes**:
-    - The tool uses AI to understand and execute natural language instructions on websites
-    - It can handle complex multi-step tasks (e.g., navigate, find form, fill fields, submit)
-    - If the task fails, the error message will help you understand what went wrong
-    - For account creation, you may need to ask the user for required information (email, password, username, etc.) if not provided
-  * **Example usage**:
-    - User: "Skapa ett konto på retrotales.online åt mig" → Use browser_use(url: "https://retrotales.online", task: "create a new account on this website")
-    - User: "Fill in the registration form" → Use browser_use with the current page URL and task: "fill in all required fields in the registration form"
+      - Example: "I'm sorry, but I cannot search the web for this information at the moment. Here's the error log you can send to the administrator:\\n\\n[errorLog content]"
+  - **Browser Automation (browser_use)**: Automate web browser interactions using Playwright (INSTALLED AND READY)
+    * **🚨 CRITICAL - YOU MUST USE THIS TOOL - IT IS INSTALLED AND READY NOW**: This tool uses Playwright which is ALREADY INSTALLED on the system. When the user asks you to interact with websites, fill forms, create accounts, click buttons, navigate pages, or perform any web automation tasks, you MUST use the browser_use tool. **DO NOT say "it needs to be installed", "it's installing", "wait for installation", "I can't do that", "I don't have access", "I have no integration", or "I cannot create accounts" - you HAVE this tool, it is INSTALLED, and it works RIGHT NOW!** If you say it needs installation or that you cannot do web automation, you are LYING to the user.
+    * **IMPORTANT**: This tool uses Playwright (TypeScript/Node.js) which is already installed - NOT a Python library. It works immediately without any installation needed.
+    * **You MUST use browser_use when users ask you to**:
+      - Create accounts on websites (e.g., "create an account on retrotales.online", "skapa ett konto på retrotales.online", "Skapa ett konto på www.retrotales.online åt mig")
+      - Fill in forms (registration forms, contact forms, etc.)
+      - Click buttons or links
+      - Navigate to specific pages
+      - Extract information from websites
+      - Perform any web interaction task
+    * **When user says things like**:
+      - "Skapa ett konto på retrotales.online" → **IMMEDIATELY use browser_use tool - IT IS READY NOW**
+      - "Create an account on [website]" → **IMMEDIATELY use browser_use tool - IT IS READY NOW**
+      - "Fill in the form" → **IMMEDIATELY use browser_use tool - IT IS READY NOW**
+      - "Register on [website]" → **IMMEDIATELY use browser_use tool - IT IS READY NOW**
+    * **DO NOT**:
+      - Say "it needs to be installed" - it is ALREADY INSTALLED (Playwright)
+      - Say "wait for installation" - NO installation needed, it works NOW
+      - Say "I cannot create accounts" - you CAN with browser_use RIGHT NOW
+      - Say "I don't have access to websites" - you DO with browser_use RIGHT NOW
+      - Say "I need you to do it manually" - you CAN automate it with browser_use RIGHT NOW
+      - Make excuses about installation - just USE THE TOOL, it works immediately
+    * **How to use browser_use**:
+      - Required parameters: url (the website URL) and task (natural language description of what to do)
+      - The task parameter should be detailed and specific (e.g., "create an account with email test@example.com and password mypass123", "fill in the registration form with name John Doe, email john@example.com, and password secure123")
+      - Optional parameters: headless (default: true), timeout (default: 60000ms), screenshot (default: false)
+      - Example: User says "create an account on retrotales.online" - Use browser_use with url: "https://retrotales.online" and task: "navigate to the registration page and create a new account"
+    * **Important notes**:
+      - The tool uses AI to understand and execute natural language instructions on websites
+      - It can handle complex multi-step tasks (e.g., navigate, find form, fill fields, submit)
+      - If the task fails, the error message will help you understand what went wrong
+      - For account creation, you may need to ask the user for required information (email, password, username, etc.) if not provided
+    * **Example usage**:
+      - User: "Skapa ett konto på retrotales.online åt mig" → Use browser_use(url: "https://retrotales.online", task: "create a new account on this website")
+      - User: "Fill in the registration form" → Use browser_use with the current page URL and task: "fill in all required fields in the registration form"
 - **Email Management (Gmail Plugin)**: Full access to Gmail when connected
   * **CRITICAL - YOU MUST USE TOOLS**: When the user asks you to send an email, check emails, or schedule an email, you MUST actually call the corresponding tool (send_email, search_emails, schedule_email). DO NOT just say "I sent it" or "I checked" - that is a LIE if you didn't use the tool.
   * Search emails using natural language: "emails from john about project" or "unread emails from last week" → USE search_emails tool
@@ -2166,7 +2217,7 @@ ${playgroundContext ? `
     - You: Use read_file to understand the quest structure, then write_file to create the new quest script → "Jag har skapat en ny quest script baserat på dina befintliga quests..."
 
 - **FILE OPERATIONS**: You have direct access to file operations for quick edits and changes:
-  * **read_file**: Read and analyze files from a project. **CRITICAL: When the user mentions a specific file (e.g., "look at xxxx.lua", "check App.tsx", "review config.json", "kolla på xxxx.lua filen"), you MUST use read_file FIRST to read that file before analyzing, suggesting improvements, or discussing it.** After reading the file, you can then use suggest_improvements, analyze_code, or provide direct analysis based on what the user asked for (e.g., "ge mig performance förbättringar" → read the file first, then analyze for performance improvements). Use this to understand existing code before making changes.
+    * **read_file**: Read and analyze files from a project. **CRITICAL: When the user mentions a specific file (e.g., "look at xxxx.lua", "check App.tsx", "review config.json", "kolla på xxxx.lua filen"), you MUST use read_file FIRST to read that file before analyzing, suggesting improvements, or discussing it.** After reading the file, you can then use suggest_improvements, analyze_code, or provide direct analysis based on what the user asked for (e.g., "ge mig performance förbättringar" → read the file first, then analyze for performance improvements). Use this to understand existing code before making changes.
   * **write_file**: Create a new file or completely replace an existing file. Use this when the user asks you to create a new file, write content to a file, or completely rewrite a file. Example: "Create a new Button component" or "Write a utils.ts file with helper functions".
   * **edit_file**: Edit specific parts of an existing file. Use this when the user asks you to modify, change, or update specific parts of a file (e.g., "change the button color", "update the function", "modify the onClick handler"). This is perfect for targeted changes without rewriting the entire file. Example: "Change the button color to blue" → use edit_file to modify just the color property.
   * **delete_file**: Delete a file from a project. Use this when the user explicitly asks you to remove or delete a file. Always confirm with the user before deleting important files.
@@ -2178,24 +2229,24 @@ ${playgroundContext ? `
     - For large changes that affect multiple files: use **generate_code** (it can handle complex multi-file changes)
     - For removing files: use **delete_file**
     - For creating folder structures: use **create_directory**
-  * **Discussing specific files - IMPORTANT WORKFLOW**:
-    - When user mentions a specific file (e.g., "kolla på xxxx.lua filen och ge mig performance förbättringar"):
-      1. **FIRST**: Use **read_file** with the file path extracted from the user's message
-      2. **THEN**: Based on what the user asked for:
-         - For performance improvements: Use **suggest_improvements** with the filePath, or analyze the code directly focusing on performance
-         - For bug fixes: Use **analyze_code** or **find_errors** with the filePath
-         - For general improvements: Use **suggest_improvements** with the filePath
-         - For code review: Read the file and provide detailed analysis
-    - **Example**: User says "look at script.lua and give me performance improvements"
-      → Step 1: read_file(filePath: "script.lua")
-      → Step 2: suggest_improvements(filePath: "script.lua") OR provide direct performance-focused analysis
+    * **Discussing specific files - IMPORTANT WORKFLOW**:
+      - When user mentions a specific file (e.g., "kolla på xxxx.lua filen och ge mig performance förbättringar"):
+        1. **FIRST**: Use **read_file** with the file path extracted from the user's message
+        2. **THEN**: Based on what the user asked for:
+          - For performance improvements: Use **suggest_improvements** with the filePath, or analyze the code directly focusing on performance
+          - For bug fixes: Use **analyze_code** or **find_errors** with the filePath
+          - For general improvements: Use **suggest_improvements** with the filePath
+          - For code review: Read the file and provide detailed analysis
+      - **Example**: User says "look at script.lua and give me performance improvements"
+        → Step 1: read_file(filePath: "script.lua")
+        → Step 2: suggest_improvements(filePath: "script.lua") OR provide direct performance-focused analysis
   * **Best practices**:
     - Always read the file first (read_file) if you're not sure about its current content before editing
-    - **When user mentions a file by name, ALWAYS read it first before analyzing or discussing it**
+      - **When user mentions a file by name, ALWAYS read it first before analyzing or discussing it**
     - Use edit_file for quick fixes and small changes - it's faster than full code generation
     - Use generate_code for complex changes that require understanding the entire project structure
     - When editing, provide clear context in the "changes" parameter about what you're modifying
-    - Chain tools: read_file → suggest_improvements/analyze_code when user asks about specific files
+      - Chain tools: read_file → suggest_improvements/analyze_code when user asks about specific files
 
 - **GIT OPERATIONS**: You have direct access to Git version control operations:
   * **git_status**: Check the current Git status. Use this when the user asks about Git status, what files have changed, or what the current state is. Shows modified, untracked, and staged files.
@@ -2253,21 +2304,21 @@ ${playgroundContext ? `
   * **get_data_insights**: Get comprehensive data insights about AI agent performance, code generation patterns, project activity, and interesting correlations. Use this when the user asks about data insights, analytics, patterns in their data, agent performance, productivity patterns, or wants to discuss data analysis.
 
 - **CODE ANALYSIS**: You have access to comprehensive code analysis tools:
-  * **analyze_code**: Comprehensive code analysis. Use this when the user asks you to analyze code, check for errors, review code quality, or find issues. This performs full analysis including syntax errors, type errors, security issues, performance problems, and best practices. **When the user mentions a specific file, use read_file first, then use this tool with the filePath parameter.**
+    * **analyze_code**: Comprehensive code analysis. Use this when the user asks you to analyze code, check for errors, review code quality, or find issues. This performs full analysis including syntax errors, type errors, security issues, performance problems, and best practices. **When the user mentions a specific file, use read_file first, then use this tool with the filePath parameter.**
   * **check_types**: TypeScript type checking. Use this when the user asks you to check types, verify TypeScript types, or find type errors. This performs TypeScript type checking on the project.
-  * **find_errors**: Find errors in code. Use this when the user asks you to find errors, check for bugs, or identify problems. This focuses specifically on finding errors (not warnings). **When the user mentions a specific file, use read_file first, then use this tool with the filePath parameter.**
-  * **suggest_improvements**: Suggest code improvements, including performance improvements. Use this when the user asks for suggestions, improvements, refactoring ideas, code quality recommendations, or performance improvements (e.g., "ge mig performance förbättringar"). This provides actionable suggestions for making code better. **When the user mentions a specific file, use read_file first, then use this tool with the filePath parameter.**
+    * **find_errors**: Find errors in code. Use this when the user asks you to find errors, check for bugs, or identify problems. This focuses specifically on finding errors (not warnings). **When the user mentions a specific file, use read_file first, then use this tool with the filePath parameter.**
+    * **suggest_improvements**: Suggest code improvements, including performance improvements. Use this when the user asks for suggestions, improvements, refactoring ideas, code quality recommendations, or performance improvements (e.g., "ge mig performance förbättringar"). This provides actionable suggestions for making code better. **When the user mentions a specific file, use read_file first, then use this tool with the filePath parameter.**
   * **When to use which tool**:
     - For comprehensive analysis: use **analyze_code** (includes everything)
     - For type checking only: use **check_types**
     - For finding bugs: use **find_errors**
-    - For refactoring suggestions or performance improvements: use **suggest_improvements**
-  * **Workflow for specific files**:
-    - When user mentions a specific file (e.g., "kolla på xxxx.lua filen och ge mig performance förbättringar"):
-      1. **FIRST**: Use **read_file** to read the file
-      2. **THEN**: Use the appropriate analysis tool (**suggest_improvements**, **analyze_code**, or **find_errors**) with the filePath parameter
+      - For refactoring suggestions or performance improvements: use **suggest_improvements**
+    * **Workflow for specific files**:
+      - When user mentions a specific file (e.g., "kolla på xxxx.lua filen och ge mig performance förbättringar"):
+        1. **FIRST**: Use **read_file** to read the file
+        2. **THEN**: Use the appropriate analysis tool (**suggest_improvements**, **analyze_code**, or **find_errors**) with the filePath parameter
   * **Best practices**:
-    - **Always read files first when user mentions them by name**
+      - **Always read files first when user mentions them by name**
     - Run analyze_code before committing to catch issues early
     - Use check_types when working with TypeScript to ensure type safety
     - Use find_errors when debugging or before deployment
@@ -6245,70 +6296,117 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
         message: 'Failed to retrieve data insights. Please try again later.'
       };
     }
-  }
+    }
 
-  /**
-   * Use browser automation via browser-use
-   */
-  private async useBrowser(params: Record<string, any>): Promise<any> {
-    const url = params.url as string;
-    const task = params.task as string;
-    const headless = params.headless !== false; // Default to true
-    const timeout = params.timeout as number | undefined;
-    const screenshot = params.screenshot === true;
+    /**
+     * Use browser automation via browser-use
+     */
+    private async useBrowser(params: Record<string, any>): Promise<any> {
+      const url = params.url as string;
+      const task = params.task as string;
+      const headless = params.headless !== false; // Default to true
+      const timeout = params.timeout as number | undefined;
+      const screenshot = params.screenshot === true;
 
-    try {
-      logger.info(`Browser automation: ${task} on ${url}`);
+      try {
+        logger.info(`Browser automation: ${task} on ${url}`);
 
-      // Import browser-use service
-      const { browserUseService } = await import('../services/BrowserUseService');
+        // Import browser-use service
+        const { browserUseService } = await import('../services/BrowserUseService');
 
-      // Check if browser-use is available
-      const isAvailable = await browserUseService.isAvailable();
-      if (!isAvailable) {
-        return {
-          success: false,
-          error: 'browser-use not available',
-          message: 'browser-use Python library is not installed. It will be installed automatically on first use, but this may take a few minutes. Please try again in a moment.'
-        };
-      }
-
-      // Execute the browser task
-      const result = await browserUseService.executeTask({
-        url,
-        task,
-        options: {
-          headless,
-          timeout,
-          screenshot
+        // Check if browser-use is available
+        const isAvailable = await browserUseService.isAvailable();
+        if (!isAvailable) {
+          return {
+            success: false,
+            error: 'browser-use not available',
+            message: 'browser-use Python library is not installed. It will be installed automatically on first use, but this may take a few minutes. Please try again in a moment.'
+          };
         }
-      });
 
-      if (!result.success) {
+        // Execute the browser task
+        const result = await browserUseService.executeTask({
+          url,
+          task,
+          options: {
+            headless,
+            timeout,
+            screenshot
+          }
+        });
+
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error || 'Browser automation failed',
+            message: result.error || 'Failed to complete browser task',
+            output: result.output
+          };
+        }
+
+        return {
+          success: true,
+          message: result.output || 'Browser task completed successfully',
+          url,
+          task,
+          screenshot: result.screenshot,
+          extractedData: result.extractedData
+        };
+      } catch (error) {
+        logger.error('Error using browser automation', error as Error);
         return {
           success: false,
-          error: result.error || 'Browser automation failed',
-          message: result.error || 'Failed to complete browser task',
-          output: result.output
-        };
-      }
-
-      return {
-        success: true,
-        message: result.output || 'Browser task completed successfully',
-        url,
-        task,
-        screenshot: result.screenshot,
-        extractedData: result.extractedData
-      };
-    } catch (error) {
-      logger.error('Error using browser automation', error as Error);
-      return {
-        success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
         message: `Browser automation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
+  }
+
+  /**
+   * Initialize tool handlers (lazy initialization)
+   */
+  private async initializeToolHandlers(): Promise<void> {
+    try {
+      const { toolHandlerRegistry } = await import('./tools/ToolHandlerRegistry');
+      // Inject this agent instance so handlers can call its methods
+      await toolHandlerRegistry.initialize(this);
+      logger.info('✅ Tool handlers initialized with agent instance');
+    } catch (error) {
+      logger.warn('Tool handler initialization failed, using legacy tools', error as Error);
+    }
+  }
+
+  /**
+   * Get tools from new handler system (with fallback to legacy)
+   */
+  private async getToolsFromHandlers(
+    userId: string,
+    sessionId: string,
+    options?: any
+  ): Promise<Tool[]> {
+    try {
+      const { toolHandlerRegistry } = await import('./tools/ToolHandlerRegistry');
+      
+      if (toolHandlerRegistry.isInitialized()) {
+        const toolFactory = toolHandlerRegistry.getToolFactory();
+        const context = {
+          userId,
+          sessionId,
+          options
+        };
+        
+        const handlerTools = await toolFactory.getAllTools(context);
+        if (handlerTools.length > 0) {
+          logger.info(`Using ${handlerTools.length} tools from handler system`);
+          return handlerTools;
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to get tools from handlers, using legacy', error as Error);
+    }
+    
+    // Fallback to empty array - legacy tools will be used
+    return [];
   }
 }
 

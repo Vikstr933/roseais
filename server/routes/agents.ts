@@ -40,7 +40,7 @@ Return ONLY a JSON object with these fields, no markdown formatting or additiona
   "name": "string - a clear, descriptive name",
   "description": "string - detailed description of the agent's purpose",
   "role": "string - specific role/function of the agent",
-  "model": "string - one of: claude-sonnet-4-5-20250929, claude-3-5-sonnet-20241022 (only current Claude models)",
+  "model": "string - one of: claude-sonnet-4-5-20250929 (only current Claude models)",
   "systemPrompt": "string - clear instructions for the agent's behavior",
   "temperature": "string - value between 0 and 1",
   "capabilities": ["string array - key capabilities"],

@@ -123,15 +123,6 @@ export class MultiModelAIService {
       },
       {
         provider: 'anthropic',
-        model: 'claude-3-5-sonnet-20241022',
-        maxTokens: 8192,
-        temperature: 0.7,
-        costPerToken: 0.003, // $3 per 1M tokens
-        qualityScore: 9.5, // Fallback option
-        enabled: !!this.anthropic
-      },
-      {
-        provider: 'anthropic',
         model: 'claude-3-haiku-20240307',
         maxTokens: 4096,
         temperature: 0.7,

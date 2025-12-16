@@ -957,7 +957,7 @@ router.post(
           userPrompt,
           systemPrompt ||
             'You are a helpful AI that generates React applications.',
-          model || 'claude-3-5-sonnet-20241022'
+          model || 'claude-sonnet-4-5-20250929'
         );
       } else {
         // Use agent orchestration with dynamically selected agents
