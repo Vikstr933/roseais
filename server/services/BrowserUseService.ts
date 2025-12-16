@@ -476,6 +476,10 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       // Fill Account Name field (first field, usually)
       if (accountName) {
         const accountNameSelectors = [
+          // Retrotales specific
+          'input[name="reg-username"]',
+          'input[id="reg-username"]',
+          // Generic selectors
           'input[name*="account" i]',
           'input[id*="account" i]',
           'input[placeholder*="account" i]',
@@ -504,13 +508,39 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         }
       }
 
-      // Fill password field (first password field)
+      // Validate and potentially fix password to meet requirements
+      let validPassword = password;
       if (password) {
+        // Check if password meets common requirements (8+ chars, uppercase, lowercase, number)
+        const hasMinLength = password.length >= 8;
+        const hasUppercase = /[A-Z]/.test(password);
+        const hasLowercase = /[a-z]/.test(password);
+        const hasNumber = /[0-9]/.test(password);
+        
+        if (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumber) {
+          logger.warn(`Password "${password}" does not meet requirements. Generating valid password...`);
+          // Generate a valid password based on the original
+          const base = password.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6) || 'pass';
+          validPassword = base.charAt(0).toUpperCase() + base.substring(1).toLowerCase() + '123';
+          if (validPassword.length < 8) {
+            validPassword = validPassword + '456';
+          }
+          logger.info(`Generated valid password: ${validPassword}`);
+          actions.push(`Password adjusted to meet requirements: ${validPassword}`);
+        }
+      }
+
+      // Fill password field (first password field)
+      if (validPassword) {
         const passwordSelectors = [
+          // Retrotales specific
+          'input[name="reg-password"]',
+          'input[id="reg-password"]',
+          // Generic selectors
           'input[type="password"]:first-of-type',
-          'input[name*="password" i]:not([name*="confirm" i])',
-          'input[id*="password" i]:not([id*="confirm" i])',
-          'input[placeholder*="password" i]:not([placeholder*="confirm" i])'
+          'input[name*="password" i]:not([name*="confirm" i]):not([name*="again" i])',
+          'input[id*="password" i]:not([id*="confirm" i]):not([id*="again" i])',
+          'input[placeholder*="password" i]:not([placeholder*="confirm" i]):not([placeholder*="again" i])'
         ];
         for (const selector of passwordSelectors) {
           try {
@@ -518,7 +548,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             if (element) {
               await page.click(selector, { timeout: 3000 });
               await page.waitForTimeout(200 + Math.random() * 300);
-              await page.type(selector, password, { delay: 50 + Math.random() * 100 });
+              // Clear field first
+              await page.fill(selector, '');
+              await page.type(selector, validPassword, { delay: 50 + Math.random() * 100 });
               actions.push('Filled Password');
               await page.waitForTimeout(500 + Math.random() * 500);
               break;
@@ -530,12 +562,20 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       }
 
       // Fill confirm password field (second password field)
-      if (confirmPassword) {
+      const confirmPasswordValue = confirmPassword || validPassword;
+      if (confirmPasswordValue) {
         const confirmPasswordSelectors = [
+          // Retrotales specific
+          'input[name="password_again"]',
+          'input[id="password_again"]',
+          // Generic selectors
           'input[type="password"]:last-of-type',
           'input[name*="confirm" i]',
+          'input[name*="again" i]',
           'input[id*="confirm" i]',
+          'input[id*="again" i]',
           'input[placeholder*="confirm" i]',
+          'input[placeholder*="again" i]',
           'input[name*="password" i][name*="confirm" i]',
           'input[id*="password" i][id*="confirm" i]'
         ];
@@ -545,7 +585,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             if (element) {
               await page.click(selector, { timeout: 3000 });
               await page.waitForTimeout(200 + Math.random() * 300);
-              await page.type(selector, confirmPassword, { delay: 50 + Math.random() * 100 });
+              // Clear field first
+              await page.fill(selector, '');
+              await page.type(selector, confirmPasswordValue, { delay: 50 + Math.random() * 100 });
               actions.push('Filled Confirm Password');
               await page.waitForTimeout(500 + Math.random() * 500);
               break;
@@ -589,30 +631,72 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // No Cloudflare detected, continue
       }
 
+      // Wait a bit for form validation to complete
+      await page.waitForTimeout(1000 + Math.random() * 1000);
+
       // Submit form - look for submit button in dialog/modal
       const submitSelectors = [
-        'button[type="submit"]',
+        // Retrotales specific
+        'button#register-submit-btn',
+        'button[id="register-submit-btn"]',
+        // Generic selectors
+        'button[type="submit"]:not([disabled])',
+        'button:has-text("Continue")',
         'button:has-text("Register")',
         'button:has-text("Sign Up")',
         'button:has-text("Create Account")',
         'button:has-text("Submit")',
-        'button[class*="submit" i]',
-        'button[class*="register" i]',
-        'dialog button[type="submit"]',
-        '[role="dialog"] button[type="submit"]',
-        '.modal button[type="submit"]'
+        'button[class*="submit" i]:not([disabled])',
+        'button[class*="register" i]:not([disabled])',
+        'dialog button[type="submit"]:not([disabled])',
+        '[role="dialog"] button[type="submit"]:not([disabled])',
+        '.modal button[type="submit"]:not([disabled])'
       ];
 
       let submitted = false;
       for (const selector of submitSelectors) {
         try {
-          const submitButton = await page.waitForSelector(selector, { timeout: 3000, state: 'visible' });
+          // Wait for button to be visible and enabled
+          const submitButton = await page.waitForSelector(selector, { 
+            timeout: 5000, 
+            state: 'visible' 
+          });
+          
           if (submitButton) {
-            await page.click(selector, { timeout: 5000 });
-            actions.push('Submitted form');
-            submitted = true;
-            await page.waitForTimeout(3000); // Wait for form submission
-            break;
+            // Check if button is enabled (not disabled)
+            const isEnabled = await page.evaluate((sel) => {
+              const btn = document.querySelector(sel);
+              return btn && !(btn as HTMLButtonElement).disabled;
+            }, selector);
+            
+            if (isEnabled) {
+              await page.click(selector, { timeout: 5000 });
+              actions.push('Submitted form');
+              submitted = true;
+              await page.waitForTimeout(3000); // Wait for form submission
+              break;
+            } else {
+              // Button exists but is disabled - wait for it to become enabled
+              logger.info('Submit button is disabled, waiting for it to become enabled...');
+              try {
+                await page.waitForFunction(
+                  (sel) => {
+                    const btn = document.querySelector(sel);
+                    return btn && !(btn as HTMLButtonElement).disabled;
+                  },
+                  selector,
+                  { timeout: 10000 }
+                );
+                await page.click(selector, { timeout: 5000 });
+                actions.push('Submitted form (waited for button to be enabled)');
+                submitted = true;
+                await page.waitForTimeout(3000);
+                break;
+              } catch {
+                logger.warn(`Button ${selector} remained disabled`);
+                continue;
+              }
+            }
           }
         } catch {
           continue;
@@ -626,13 +710,19 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           actions.push('Pressed Enter to submit');
           await page.waitForTimeout(3000);
         } catch {
-          actions.push('Could not submit form - no submit button found');
+          actions.push('Could not submit form - no submit button found or button remained disabled');
         }
       }
 
+      const finalPassword = validPassword || password;
       return {
-        message: `Registration form filled and submitted. Actions: ${actions.join(', ')}`,
-        data: { actions }
+        message: `Registration form filled and submitted. Actions: ${actions.join(', ')}. ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`,
+        data: { 
+          actions,
+          accountName,
+          password: finalPassword,
+          passwordAdjusted: finalPassword !== password
+        }
       };
     } catch (error) {
       return {
