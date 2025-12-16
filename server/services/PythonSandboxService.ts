@@ -824,16 +824,39 @@ class PythonSandboxService {
   ): Promise<{ success: boolean; output: string; error?: string }> {
     // Try E2B first
     if (this.isE2BAvailable()) {
+      let e2bSandbox: any = null;
       try {
-        const e2bSandbox = await this.E2BSandboxClass.create({ timeoutMs: timeout });
+        e2bSandbox = await this.E2BSandboxClass.create({ timeoutMs: timeout });
         const result = await e2bSandbox.commands.run(`python -c "${code.replace(/"/g, '\\"')}"`, { timeout });
-        await e2bSandbox.close();
+        
+        // Try to close sandbox safely
+        try {
+          if (e2bSandbox && typeof e2bSandbox.close === 'function') {
+            await e2bSandbox.close();
+          } else if (e2bSandbox && typeof e2bSandbox.kill === 'function') {
+            await e2bSandbox.kill();
+          }
+        } catch (closeError) {
+          // Ignore close errors - sandbox will timeout automatically
+          logger.debug('E2B sandbox close warning (non-critical):', closeError);
+        }
+        
         return {
           success: result.exitCode === 0,
           output: result.stdout,
           error: result.exitCode !== 0 ? result.stderr : undefined,
         };
       } catch (error) {
+        // Try to close sandbox even on error
+        try {
+          if (e2bSandbox && typeof e2bSandbox.close === 'function') {
+            await e2bSandbox.close();
+          } else if (e2bSandbox && typeof e2bSandbox.kill === 'function') {
+            await e2bSandbox.kill();
+          }
+        } catch (closeError) {
+          // Ignore close errors
+        }
         logger.warn(`E2B script execution failed, falling back to local: ${error}`);
       }
     }

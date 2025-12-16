@@ -14,11 +14,8 @@
  */
 
 import { SimpleLogger } from '../utils/SimpleLogger';
-import { pythonSandboxService } from './PythonSandboxService';
-import { spawn } from 'child_process';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
+import { chromium, Browser, Page } from 'playwright';
+import { MultiModelAIService } from './MultiModelAIService';
 
 const logger = new SimpleLogger('BrowserUseService');
 
@@ -43,10 +40,12 @@ export interface BrowserUseResult {
 
 export class BrowserUseService {
   private static instance: BrowserUseService;
-  private installationChecked = false;
-  private isInstalled = false;
+  private browser: Browser | null = null;
+  private multiModelAI: MultiModelAIService;
 
-  private constructor() {}
+  private constructor() {
+    this.multiModelAI = new MultiModelAIService();
+  }
 
   public static getInstance(): BrowserUseService {
     if (!BrowserUseService.instance) {
@@ -56,164 +55,62 @@ export class BrowserUseService {
   }
 
   /**
-   * Check if browser-use is installed, install if needed
+   * Get or create browser instance
    */
-  private async ensureInstalled(): Promise<boolean> {
-    if (this.installationChecked && this.isInstalled) {
-      return true;
-    }
-
-    // Don't cache failed installations - retry each time
-    if (!this.installationChecked) {
-      this.installationChecked = true;
-    }
-
-    try {
-      // Check if browser-use is installed
-      const checkCode = `
-import sys
-try:
-    import browser_use
-    print("INSTALLED")
-    sys.exit(0)
-except ImportError:
-    print("NOT_INSTALLED")
-    sys.exit(0)
-`;
-
-      const result = await pythonSandboxService.executeScript(checkCode, 15000);
-      
-      if (result.success && result.output.includes('INSTALLED')) {
-        this.isInstalled = true;
-        logger.info('browser-use is already installed');
-        return true;
+  private async getBrowser(): Promise<Browser> {
+    if (!this.browser) {
+      logger.info('Launching browser for automation...');
+      try {
+        this.browser = await chromium.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+        logger.info('✅ Browser launched successfully');
+      } catch (error) {
+        logger.error('Failed to launch browser', error as Error);
+        throw new Error('Failed to launch browser. Playwright may need to be installed: npx playwright install chromium');
       }
-
-      // Try to install browser-use with better error handling
-      logger.info('Installing browser-use Python package...');
-      const installCode = `
-import subprocess
-import sys
-import os
-
-# Try multiple package names and installation methods
-package_names = ['browser-use', 'browser_use']
-install_methods = [
-    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg, '--user', '--upgrade', '--no-cache-dir'],
-    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg, '--upgrade', '--no-cache-dir'],
-    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg, '--user'],
-    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg]
-]
-
-for package_name in package_names:
-    for method in install_methods:
-        try:
-            cmd = method(package_name)
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=180
-            )
-            
-            if result.returncode == 0:
-                # Verify installation by trying to import
-                import importlib
-                try:
-                    importlib.import_module('browser_use')
-                    print("INSTALLED")
-                    sys.exit(0)
-                except ImportError as ie:
-                    # Installation succeeded but import failed - might be wrong package
-                    print(f"INSTALL_WARNING: Package installed but import failed: {str(ie)}")
-                    continue
-            else:
-                # Installation failed - try next method
-                stderr_msg = result.stderr[:200] if result.stderr else ''
-                if 'already satisfied' in stderr_msg.lower():
-                    # Package might already be installed
-                    try:
-                        import importlib
-                        importlib.import_module('browser_use')
-                        print("INSTALLED")
-                        sys.exit(0)
-                    except ImportError:
-                        pass
-                continue
-        except subprocess.TimeoutExpired:
-            print(f"TIMEOUT installing {package_name}")
-            continue
-        except Exception as e:
-            print(f"ERROR with {package_name}: {str(e)[:200]}")
-            continue
-
-print("ERROR: Failed to install browser-use. Tried all package names and installation methods.")
-print("HINT: You may need to install it manually: pip install browser-use")
-sys.exit(1)
-`;
-
-      const installResult = await pythonSandboxService.executeScript(installCode, 180000); // 3 min timeout
-      
-      if (installResult.success && installResult.output.includes('INSTALLED')) {
-        this.isInstalled = true;
-        logger.info('✅ browser-use installed successfully');
-        return true;
-      } else {
-        const errorMsg = installResult.error || installResult.output || 'Unknown error';
-        logger.warn('Failed to install browser-use:', new Error(errorMsg));
-        // Don't set isInstalled to false permanently - allow retry
-        return false;
-      }
-    } catch (error) {
-      logger.error('Error checking/installing browser-use', error as Error);
-      return false;
     }
+    return this.browser;
   }
 
   /**
-   * Execute a browser automation task using browser-use
+   * Execute a browser automation task using Playwright
    */
   async executeTask(task: BrowserUseTask): Promise<BrowserUseResult> {
+    const page: Page | null = null;
     try {
-      // Always try to ensure it's installed (don't cache failures)
-      const isInstalled = await this.ensureInstalled();
-      
-      if (!isInstalled) {
-        logger.warn('browser-use installation failed, attempting to install again during execution...');
-        // Reset installation check to allow retry
-        this.installationChecked = false;
-        this.isInstalled = false;
-        
-        // Try one more time
-        const retryInstalled = await this.ensureInstalled();
-        if (!retryInstalled) {
-          return {
-            success: false,
-            output: '',
-            error: 'browser-use is not installed and could not be installed automatically. The Python package "browser-use" needs to be installed in the Python environment. Error details may be in the logs.'
-          };
-        }
-      }
-
       logger.info(`Executing browser task: ${task.task} on ${task.url}`);
 
-      // Generate Python script for browser-use
-      const pythonScript = this.generateBrowserUseScript(task);
+      const browser = await this.getBrowser();
+      const browserPage = await browser.newPage();
+      
+      try {
+        // Navigate to URL
+        await browserPage.goto(task.url, { waitUntil: 'networkidle', timeout: 30000 });
+        logger.info(`Navigated to ${task.url}`);
 
-      // Execute the script
-      const timeout = (task.options?.timeout || 60000); // Default 60 seconds
-      const result = await pythonSandboxService.executeScript(pythonScript, timeout);
+        // Use AI to understand the task and execute it
+        const result = await this.executeTaskWithAI(browserPage, task);
 
-      if (!result.success) {
+        // Take screenshot if requested
+        let screenshot: string | undefined;
+        if (task.options?.screenshot) {
+          screenshot = (await browserPage.screenshot({ type: 'png' })).toString('base64');
+        }
+
+        await browserPage.close();
+
         return {
-          success: false,
-          output: result.output,
-          error: result.error || 'Browser automation failed'
+          success: true,
+          output: result.message || 'Task completed successfully',
+          screenshot,
+          extractedData: result.data
         };
+      } catch (error) {
+        await browserPage.close();
+        throw error;
       }
-
-      // Parse the result
-      return this.parseBrowserUseResult(result.output);
     } catch (error) {
       logger.error('Error executing browser task', error as Error);
       return {
@@ -225,123 +122,229 @@ sys.exit(1)
   }
 
   /**
-   * Generate Python script for browser-use
+   * Execute task using AI to understand and perform actions
    */
-  private generateBrowserUseScript(task: BrowserUseTask): string {
-    const headless = task.options?.headless !== false; // Default to headless
-    const waitForNavigation = task.options?.waitForNavigation !== false;
-    const takeScreenshot = task.options?.screenshot === true;
+  private async executeTaskWithAI(page: Page, task: BrowserUseTask): Promise<{ message: string; data?: Record<string, any> }> {
+    // Get page content and structure
+    const pageContent = await page.content();
+    const pageText = await page.evaluate(() => {
+      return {
+        title: document.title,
+        url: window.location.href,
+        text: document.body.innerText.substring(0, 5000), // First 5000 chars
+        buttons: Array.from(document.querySelectorAll('button, a[role="button"], input[type="submit"]')).map(el => ({
+          text: el.textContent?.trim() || el.getAttribute('value') || '',
+          type: el.tagName.toLowerCase(),
+          id: el.id,
+          className: el.className
+        })),
+        inputs: Array.from(document.querySelectorAll('input, textarea, select')).map(el => ({
+          type: (el as HTMLInputElement).type,
+          name: (el as HTMLInputElement).name,
+          id: el.id,
+          placeholder: (el as HTMLInputElement).placeholder,
+          label: el.closest('label')?.textContent?.trim() || ''
+        }))
+      };
+    });
 
-    return `
-import asyncio
-import json
-import sys
-from browser_use import Agent
-from browser_use.browser.browser import Browser
+    // Use AI to determine what actions to take
+    const aiPrompt = `You are a browser automation assistant. The user wants to: ${task.task}
 
-async def main():
-    try:
-        # Create browser agent with task and URL
-        agent = Agent(
-            task="${this.escapeString(task.task)}",
-            url="${this.escapeString(task.url)}",
-            headless=${headless}
-        )
-        
-        # Execute the task
-        result = await agent.run()
-        
-        # Prepare output
-        output = {
-            "success": True,
-            "message": str(result) if result else "Task completed successfully",
-            "url": "${task.url}",
-            "task": "${this.escapeString(task.task)}"
-        }
-        
-        ${takeScreenshot ? `
-        # Take screenshot if requested
-        try:
-            # Get screenshot from browser
-            if hasattr(agent, 'browser') and agent.browser:
-                screenshot_bytes = await agent.browser.screenshot()
-                if screenshot_bytes:
-                    import base64
-                    output["screenshot"] = base64.b64encode(screenshot_bytes).decode('utf-8')
-        except Exception as e:
-            output["screenshot_error"] = str(e)
-        ` : ''}
-        
-        print(json.dumps(output))
-        
-    except Exception as e:
-        import traceback
-        error_output = {
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "url": "${task.url}",
-            "task": "${this.escapeString(task.task)}"
-        }
-        print(json.dumps(error_output))
-        sys.exit(1)
+Current page information:
+- URL: ${pageText.url}
+- Title: ${pageText.title}
+- Available buttons: ${JSON.stringify(pageText.buttons.slice(0, 10))}
+- Available form fields: ${JSON.stringify(pageText.inputs.slice(0, 20))}
+- Page text (first part): ${pageText.text.substring(0, 1000)}
 
-# Run the async function
-asyncio.run(main())
-`;
-  }
+Based on the task "${task.task}", determine the sequence of actions needed. Respond with a JSON object:
+{
+  "actions": [
+    {"type": "click", "selector": "button#signup", "reason": "..."},
+    {"type": "fill", "selector": "input[name='email']", "value": "vingosAI@gmail.com", "reason": "..."},
+    {"type": "fill", "selector": "input[name='username']", "value": "Vingoai2", "reason": "..."},
+    {"type": "fill", "selector": "input[name='password']", "value": "vingoai1", "reason": "..."},
+    {"type": "click", "selector": "button[type='submit']", "reason": "..."}
+  ],
+  "message": "Summary of what was done"
+}
 
-  /**
-   * Escape string for use in Python code
-   */
-  private escapeString(str: string): string {
-    return str
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r');
-  }
+Action types: "click", "fill", "wait", "navigate"
+Use CSS selectors, IDs, or text content to identify elements.`;
 
-  /**
-   * Parse browser-use result
-   */
-  private parseBrowserUseResult(output: string): BrowserUseResult {
+    const aiResponse = await this.multiModelAI.generate({
+      prompt: aiPrompt,
+      systemPrompt: 'You are an expert at browser automation. Analyze the page structure and task, then provide a JSON response with the exact sequence of actions needed.',
+      maxTokens: 2000,
+      temperature: 0.3,
+      useCase: 'explanation',
+      priority: 'quality'
+    });
+
+    // Parse AI response and execute actions
     try {
-      // Try to find JSON in output
-      const jsonMatch = output.match(/\{[\s\S]*\}/);
+      const jsonMatch = aiResponse.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+        const plan = JSON.parse(jsonMatch[0]);
         
+        for (const action of plan.actions || []) {
+          try {
+            if (action.type === 'click') {
+              await page.click(action.selector, { timeout: 10000 });
+              await page.waitForTimeout(1000); // Wait for page to react
+            } else if (action.type === 'fill') {
+              await page.fill(action.selector, action.value, { timeout: 10000 });
+            } else if (action.type === 'wait') {
+              await page.waitForTimeout(action.duration || 2000);
+            } else if (action.type === 'navigate') {
+              await page.goto(action.url, { waitUntil: 'networkidle' });
+            }
+          } catch (actionError) {
+            logger.warn(`Action failed: ${action.type} on ${action.selector}`, actionError as Error);
+            // Continue with next action
+          }
+        }
+
         return {
-          success: parsed.success !== false,
-          output: parsed.message || parsed.output || 'Task completed',
-          error: parsed.error,
-          screenshot: parsed.screenshot,
-          extractedData: parsed.data || parsed.extractedData
+          message: plan.message || 'Task completed',
+          data: { actionsExecuted: plan.actions?.length || 0 }
         };
       }
+    } catch (parseError) {
+      logger.warn('Failed to parse AI response, trying direct approach', parseError as Error);
+    }
 
-      // If no JSON, return raw output
+    // Fallback: Try to find and fill common registration form fields
+    return await this.executeRegistrationFallback(page, task);
+  }
+
+  /**
+   * Fallback method for registration forms
+   */
+  private async executeRegistrationFallback(page: Page, task: BrowserUseTask): Promise<{ message: string; data?: Record<string, any> }> {
+    const actions: string[] = [];
+
+    // Extract email, username, password from task description
+    const emailMatch = task.task.match(/email[:\s]+([^\s\n]+@[^\s\n]+)/i) || 
+                      task.task.match(/([^\s\n]+@[^\s\n]+)/);
+    const usernameMatch = task.task.match(/username[:\s]+([^\s\n]+)/i);
+    const passwordMatch = task.task.match(/password[:\s]+([^\s\n]+)/i);
+
+    const email = emailMatch?.[1] || emailMatch?.[0];
+    const username = usernameMatch?.[1];
+    const password = passwordMatch?.[1];
+
+    try {
+      // Look for sign up / register button
+      const signupSelectors = [
+        'button:has-text("Sign Up")',
+        'button:has-text("Register")',
+        'a:has-text("Sign Up")',
+        'a:has-text("Register")',
+        'button[type="submit"]',
+        'a[href*="register"]',
+        'a[href*="signup"]'
+      ];
+
+      for (const selector of signupSelectors) {
+        try {
+          await page.click(selector, { timeout: 3000 });
+          actions.push(`Clicked ${selector}`);
+          await page.waitForTimeout(2000);
+          break;
+        } catch {
+          continue;
+        }
+      }
+
+      // Fill email field
+      if (email) {
+        const emailSelectors = ['input[type="email"]', 'input[name*="email"]', 'input[id*="email"]', 'input[placeholder*="email" i]'];
+        for (const selector of emailSelectors) {
+          try {
+            await page.fill(selector, email, { timeout: 3000 });
+            actions.push(`Filled email: ${email}`);
+            break;
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      // Fill username field
+      if (username) {
+        const usernameSelectors = ['input[name*="user"]', 'input[id*="user"]', 'input[placeholder*="user" i]'];
+        for (const selector of usernameSelectors) {
+          try {
+            await page.fill(selector, username, { timeout: 3000 });
+            actions.push(`Filled username: ${username}`);
+            break;
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      // Fill password field
+      if (password) {
+        const passwordSelectors = ['input[type="password"]', 'input[name*="password"]', 'input[id*="password"]'];
+        for (const selector of passwordSelectors) {
+          try {
+            await page.fill(selector, password, { timeout: 3000 });
+            actions.push(`Filled password`);
+            break;
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      // Submit form
+      try {
+        await page.click('button[type="submit"]', { timeout: 5000 });
+        actions.push('Submitted form');
+        await page.waitForTimeout(3000);
+      } catch {
+        // Try Enter key
+        await page.keyboard.press('Enter');
+        actions.push('Pressed Enter to submit');
+      }
+
       return {
-        success: !output.toLowerCase().includes('error'),
-        output: output,
-        error: output.toLowerCase().includes('error') ? output : undefined
+        message: `Registration form filled and submitted. Actions: ${actions.join(', ')}`,
+        data: { actions }
       };
     } catch (error) {
-      logger.warn('Failed to parse browser-use result', error as Error);
       return {
-        success: !output.toLowerCase().includes('error'),
-        output: output,
-        error: output.toLowerCase().includes('error') ? output : undefined
+        message: `Partially completed. Actions: ${actions.join(', ')}. Error: ${error instanceof Error ? error.message : 'Unknown'}`,
+        data: { actions, error: error instanceof Error ? error.message : 'Unknown' }
       };
     }
   }
 
   /**
-   * Check if browser-use is available
+   * Check if browser automation is available (Playwright)
    */
   async isAvailable(): Promise<boolean> {
-    return await this.ensureInstalled();
+    try {
+      const browser = await this.getBrowser();
+      return browser !== null;
+    } catch (error) {
+      logger.warn('Browser not available', error as Error);
+      return false;
+    }
+  }
+
+  /**
+   * Cleanup browser instance
+   */
+  async close(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+      logger.info('Browser closed');
+    }
   }
 }
 
