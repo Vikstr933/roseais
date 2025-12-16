@@ -23,7 +23,7 @@
     "generate": "drizzle-kit generate",
     "setup:components": "tsx scripts/setup-component-generation.ts",
     "setup:stripe": "tsx scripts/setup-stripe-products.ts",
-    "postinstall": "npx playwright install chromium || echo 'Playwright browser installation failed - this is OK if not using browser features'",
+    "postinstall": "npx playwright install --with-deps chromium || npx playwright install chromium || echo 'Playwright browser installation failed - will retry at runtime if needed'",
     "test": "vitest run"
   },
   "dependencies": {

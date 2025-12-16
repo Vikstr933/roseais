@@ -67,8 +67,28 @@ export class BrowserUseService {
         });
         logger.info('✅ Browser launched successfully');
       } catch (error) {
-        logger.error('Failed to launch browser', error as Error);
-        throw new Error('Failed to launch browser. Playwright may need to be installed: npx playwright install chromium');
+        logger.warn('Failed to launch browser, attempting to install Playwright browsers...', error as Error);
+        
+        // Try to install Playwright browsers at runtime
+        try {
+          const { execa } = await import('execa');
+          logger.info('Installing Playwright browsers...');
+          await execa('npx', ['playwright', 'install', 'chromium'], {
+            timeout: 120000, // 2 minutes timeout
+            stdio: 'inherit'
+          });
+          logger.info('✅ Playwright browsers installed, retrying launch...');
+          
+          // Retry launching browser
+          this.browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+          });
+          logger.info('✅ Browser launched successfully after installation');
+        } catch (installError) {
+          logger.error('Failed to install Playwright browsers at runtime', installError as Error);
+          throw new Error('Failed to launch browser. Playwright browsers are not installed. Please ensure Playwright is installed: npx playwright install chromium');
+        }
       }
     }
     return this.browser;

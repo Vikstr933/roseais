@@ -7,7 +7,7 @@ services:
     plan: free
     branch: main
     rootDir: .
-    buildCommand: npm install && npx playwright install chromium && npm run build:backend
+    buildCommand: npm install && npx playwright install --with-deps chromium || npx playwright install chromium || echo "Playwright installation failed, will retry at runtime" && npm run build:backend
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
