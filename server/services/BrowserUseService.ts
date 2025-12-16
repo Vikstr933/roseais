@@ -95,6 +95,85 @@ export class BrowserUseService {
   }
 
   /**
+   * Setup page with realistic headers and stealth features
+   */
+  private async setupStealthPage(page: Page, url: string): Promise<void> {
+    // Set realistic viewport
+    await page.setViewportSize({ width: 1920, height: 1080 });
+
+    // Override navigator.webdriver to hide automation
+    await page.addInitScript(() => {
+      // Remove webdriver flag
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      });
+
+      // Override plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission } as PermissionStatus) :
+          originalQuery(parameters)
+      );
+
+      // Mock chrome object
+      (window as any).chrome = {
+        runtime: {},
+      };
+    });
+
+    // Set realistic headers
+    const headers = {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': new URL(url).origin,
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+      'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"'
+    };
+
+    await page.setExtraHTTPHeaders(headers);
+  }
+
+  /**
+   * Simulate human-like behavior (mouse movements, scrolling, delays)
+   */
+  private async simulateHumanBehavior(page: Page): Promise<void> {
+    // Random delay
+    await page.waitForTimeout(1000 + Math.random() * 2000);
+
+    // Simulate mouse movement
+    await page.mouse.move(
+      100 + Math.random() * 500,
+      100 + Math.random() * 500
+    );
+
+    // Scroll a bit
+    await page.evaluate(() => {
+      window.scrollBy(0, 100 + Math.random() * 200);
+    });
+
+    await page.waitForTimeout(500 + Math.random() * 1000);
+  }
+
+  /**
    * Execute a browser automation task using Playwright
    */
   async executeTask(task: BrowserUseTask): Promise<BrowserUseResult> {
@@ -105,7 +184,13 @@ export class BrowserUseService {
       const browser = await this.getBrowser();
       browserPage = await browser.newPage();
       
+      // Setup stealth features and realistic headers
+      await this.setupStealthPage(browserPage, task.url);
+      
       try {
+        // Simulate human behavior before navigation
+        await this.simulateHumanBehavior(browserPage);
+        
         // Navigate to URL with longer timeout and less strict wait condition
         // Use 'load' instead of 'networkidle' to avoid timeouts on slow sites
         const navigationTimeout = task.options?.timeout || 60000; // Default 60 seconds
@@ -278,32 +363,56 @@ Use CSS selectors, IDs, or text content to identify elements.`;
   private async executeRegistrationFallback(page: Page, task: BrowserUseTask): Promise<{ message: string; data?: Record<string, any> }> {
     const actions: string[] = [];
 
-    // Extract email, username, password from task description
+    // Extract account name, username, password, confirm password from task description
     const emailMatch = task.task.match(/email[:\s]+([^\s\n]+@[^\s\n]+)/i) || 
                       task.task.match(/([^\s\n]+@[^\s\n]+)/);
+    const accountNameMatch = task.task.match(/account\s+name[:\s]+([^\s\n]+)/i) || 
+                            task.task.match(/accountname[:\s]+([^\s\n]+)/i);
     const usernameMatch = task.task.match(/username[:\s]+([^\s\n]+)/i);
     const passwordMatch = task.task.match(/password[:\s]+([^\s\n]+)/i);
+    const confirmPasswordMatch = task.task.match(/confirm\s+password[:\s]+([^\s\n]+)/i);
 
     const email = emailMatch?.[1] || emailMatch?.[0];
-    const username = usernameMatch?.[1];
+    const accountName = accountNameMatch?.[1] || usernameMatch?.[1];
+    const username = usernameMatch?.[1] || accountName;
     const password = passwordMatch?.[1];
+    const confirmPassword = confirmPasswordMatch?.[1] || password;
 
     try {
-      // Look for sign up / register button
-      const signupSelectors = [
-        'button:has-text("Sign Up")',
+      // First, look for Register button in top right corner (common pattern)
+      // Try multiple strategies to find the Register button
+      const registerSelectors = [
+        // Top right corner patterns
+        'header button:has-text("Register")',
+        'header a:has-text("Register")',
+        'nav button:has-text("Register")',
+        'nav a:has-text("Register")',
+        '.header button:has-text("Register")',
+        '.header a:has-text("Register")',
+        '.navbar button:has-text("Register")',
+        '.navbar a:has-text("Register")',
+        // General patterns
         'button:has-text("Register")',
-        'a:has-text("Sign Up")',
         'a:has-text("Register")',
-        'button[type="submit"]',
+        'button:has-text("Sign Up")',
+        'a:has-text("Sign Up")',
+        'button[aria-label*="Register" i]',
         'a[href*="register"]',
-        'a[href*="signup"]'
+        'a[href*="signup"]',
+        // Try by position (top right)
+        'button[class*="register" i]',
+        'a[class*="register" i]'
       ];
 
-      for (const selector of signupSelectors) {
+      let registerClicked = false;
+      for (const selector of registerSelectors) {
         try {
-          await page.click(selector, { timeout: 3000 });
-          actions.push(`Clicked ${selector}`);
+          // Wait for the element to be visible
+          await page.waitForSelector(selector, { timeout: 5000, state: 'visible' });
+          await page.click(selector, { timeout: 5000 });
+          actions.push(`Clicked Register button: ${selector}`);
+          registerClicked = true;
+          // Wait for dialog/modal to open
           await page.waitForTimeout(2000);
           break;
         } catch {
@@ -311,57 +420,214 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         }
       }
 
-      // Fill email field
-      if (email) {
-        const emailSelectors = ['input[type="email"]', 'input[name*="email"]', 'input[id*="email"]', 'input[placeholder*="email" i]'];
-        for (const selector of emailSelectors) {
+      if (!registerClicked) {
+        // Try to find by text content in all buttons/links
+        try {
+          const registerButton = await page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button, a'));
+            const found = buttons.find(el => 
+              el.textContent?.toLowerCase().includes('register') || 
+              el.textContent?.toLowerCase().includes('sign up')
+            );
+            return found ? (found as HTMLElement).outerHTML : null;
+          });
+          
+          if (registerButton) {
+            // Find the element again and click it
+            const buttonSelector = await page.evaluate(() => {
+              const buttons = Array.from(document.querySelectorAll('button, a'));
+              const found = buttons.find(el => 
+                el.textContent?.toLowerCase().includes('register') || 
+                el.textContent?.toLowerCase().includes('sign up')
+              );
+              if (found) {
+                // Generate a unique selector
+                if (found.id) return `#${found.id}`;
+                if (found.className) return `.${found.className.split(' ')[0]}`;
+                return found.tagName.toLowerCase();
+              }
+              return null;
+            });
+            
+            if (buttonSelector) {
+              await page.click(buttonSelector, { timeout: 5000 });
+              actions.push('Clicked Register button (found by text search)');
+              await page.waitForTimeout(2000);
+              registerClicked = true;
+            }
+          }
+        } catch {
+          logger.warn('Could not find Register button');
+        }
+      }
+
+      // Wait for dialog/modal to appear (look for common modal/dialog patterns)
+      try {
+        await page.waitForSelector('dialog, [role="dialog"], .modal, .dialog, [class*="modal" i], [class*="dialog" i]', { 
+          timeout: 5000,
+          state: 'visible' 
+        });
+        actions.push('Dialog/modal appeared');
+        await page.waitForTimeout(1000);
+      } catch {
+        logger.warn('No dialog detected, continuing anyway');
+      }
+
+      // Fill Account Name field (first field, usually)
+      if (accountName) {
+        const accountNameSelectors = [
+          'input[name*="account" i]',
+          'input[id*="account" i]',
+          'input[placeholder*="account" i]',
+          'input[name*="username" i]',
+          'input[id*="username" i]',
+          'input[placeholder*="username" i]',
+          'input[placeholder*="account name" i]',
+          'input[type="text"]:first-of-type'
+        ];
+        for (const selector of accountNameSelectors) {
           try {
-            await page.fill(selector, email, { timeout: 3000 });
-            actions.push(`Filled email: ${email}`);
-            break;
+            const element = await page.waitForSelector(selector, { timeout: 3000, state: 'visible' });
+            if (element) {
+              // Click on the field first (human-like)
+              await page.click(selector, { timeout: 3000 });
+              await page.waitForTimeout(200 + Math.random() * 300);
+              // Type with human-like delays
+              await page.type(selector, accountName, { delay: 50 + Math.random() * 100 });
+              actions.push(`Filled Account Name: ${accountName}`);
+              await page.waitForTimeout(500 + Math.random() * 500); // Random delay between fields
+              break;
+            }
           } catch {
             continue;
           }
         }
       }
 
-      // Fill username field
-      if (username) {
-        const usernameSelectors = ['input[name*="user"]', 'input[id*="user"]', 'input[placeholder*="user" i]'];
-        for (const selector of usernameSelectors) {
-          try {
-            await page.fill(selector, username, { timeout: 3000 });
-            actions.push(`Filled username: ${username}`);
-            break;
-          } catch {
-            continue;
-          }
-        }
-      }
-
-      // Fill password field
+      // Fill password field (first password field)
       if (password) {
-        const passwordSelectors = ['input[type="password"]', 'input[name*="password"]', 'input[id*="password"]'];
+        const passwordSelectors = [
+          'input[type="password"]:first-of-type',
+          'input[name*="password" i]:not([name*="confirm" i])',
+          'input[id*="password" i]:not([id*="confirm" i])',
+          'input[placeholder*="password" i]:not([placeholder*="confirm" i])'
+        ];
         for (const selector of passwordSelectors) {
           try {
-            await page.fill(selector, password, { timeout: 3000 });
-            actions.push(`Filled password`);
-            break;
+            const element = await page.waitForSelector(selector, { timeout: 3000, state: 'visible' });
+            if (element) {
+              await page.click(selector, { timeout: 3000 });
+              await page.waitForTimeout(200 + Math.random() * 300);
+              await page.type(selector, password, { delay: 50 + Math.random() * 100 });
+              actions.push('Filled Password');
+              await page.waitForTimeout(500 + Math.random() * 500);
+              break;
+            }
           } catch {
             continue;
           }
         }
       }
 
-      // Submit form
+      // Fill confirm password field (second password field)
+      if (confirmPassword) {
+        const confirmPasswordSelectors = [
+          'input[type="password"]:last-of-type',
+          'input[name*="confirm" i]',
+          'input[id*="confirm" i]',
+          'input[placeholder*="confirm" i]',
+          'input[name*="password" i][name*="confirm" i]',
+          'input[id*="password" i][id*="confirm" i]'
+        ];
+        for (const selector of confirmPasswordSelectors) {
+          try {
+            const element = await page.waitForSelector(selector, { timeout: 3000, state: 'visible' });
+            if (element) {
+              await page.click(selector, { timeout: 3000 });
+              await page.waitForTimeout(200 + Math.random() * 300);
+              await page.type(selector, confirmPassword, { delay: 50 + Math.random() * 100 });
+              actions.push('Filled Confirm Password');
+              await page.waitForTimeout(500 + Math.random() * 500);
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      // Handle Cloudflare protection - wait extra time for it to complete
+      logger.info('Waiting for Cloudflare protection to complete...');
+      actions.push('Waiting for Cloudflare protection');
+      await page.waitForTimeout(5000); // Wait 5 seconds for Cloudflare to complete
+      
+      // Check if Cloudflare challenge is visible and wait for it to complete
       try {
-        await page.click('button[type="submit"]', { timeout: 5000 });
-        actions.push('Submitted form');
-        await page.waitForTimeout(3000);
+        const cloudflareSelectors = [
+          '[data-ray]', // Cloudflare Turnstile
+          '.cf-browser-verification',
+          '#cf-challenge-running',
+          '[id*="cf-"]',
+          '[class*="cf-"]'
+        ];
+        
+        for (const selector of cloudflareSelectors) {
+          try {
+            const cfElement = await page.waitForSelector(selector, { timeout: 2000, state: 'visible' });
+            if (cfElement) {
+              logger.info('Cloudflare challenge detected, waiting for completion...');
+              // Wait up to 15 seconds for Cloudflare to complete automatically
+              await page.waitForTimeout(15000);
+              actions.push('Cloudflare challenge completed');
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
       } catch {
-        // Try Enter key
-        await page.keyboard.press('Enter');
-        actions.push('Pressed Enter to submit');
+        // No Cloudflare detected, continue
+      }
+
+      // Submit form - look for submit button in dialog/modal
+      const submitSelectors = [
+        'button[type="submit"]',
+        'button:has-text("Register")',
+        'button:has-text("Sign Up")',
+        'button:has-text("Create Account")',
+        'button:has-text("Submit")',
+        'button[class*="submit" i]',
+        'button[class*="register" i]',
+        'dialog button[type="submit"]',
+        '[role="dialog"] button[type="submit"]',
+        '.modal button[type="submit"]'
+      ];
+
+      let submitted = false;
+      for (const selector of submitSelectors) {
+        try {
+          const submitButton = await page.waitForSelector(selector, { timeout: 3000, state: 'visible' });
+          if (submitButton) {
+            await page.click(selector, { timeout: 5000 });
+            actions.push('Submitted form');
+            submitted = true;
+            await page.waitForTimeout(3000); // Wait for form submission
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      if (!submitted) {
+        // Try Enter key as fallback
+        try {
+          await page.keyboard.press('Enter');
+          actions.push('Pressed Enter to submit');
+          await page.waitForTimeout(3000);
+        } catch {
+          actions.push('Could not submit form - no submit button found');
+        }
       }
 
       return {
