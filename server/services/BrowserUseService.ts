@@ -42,9 +42,13 @@ export class BrowserUseService {
   private static instance: BrowserUseService;
   private browser: Browser | null = null;
   private multiModelAI: MultiModelAIService;
+  private turnstileSolverApiUrl: string | null = null;
 
   private constructor() {
     this.multiModelAI = new MultiModelAIService();
+    // Get Turnstile Solver API URL from environment variable
+    // Default: http://localhost:5000 (standard Turnstile-Solver port)
+    this.turnstileSolverApiUrl = process.env.TURNSTILE_SOLVER_API_URL || 'http://localhost:5000';
   }
 
   public static getInstance(): BrowserUseService {
@@ -851,24 +855,91 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       logger.info('Waiting for Cloudflare Turnstile to complete...');
       actions.push('Waiting for Cloudflare Turnstile');
       
-      // Check if Cloudflare Turnstile is present
+      // Check if Cloudflare Turnstile is present and extract sitekey
       const turnstileInfo = await page.evaluate(() => {
         const turnstile = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
         const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
         const iframe = turnstile?.querySelector('iframe');
+        
+        // Extract sitekey from data-sitekey attribute
+        let sitekey: string | null = null;
+        if (turnstile) {
+          sitekey = turnstile.getAttribute('data-sitekey') || null;
+          // Also check iframe src for sitekey
+          if (!sitekey && iframe) {
+            const iframeSrc = iframe.getAttribute('src') || '';
+            const sitekeyMatch = iframeSrc.match(/0x[0-9A-Za-z_-]+/);
+            if (sitekeyMatch) {
+              sitekey = sitekeyMatch[0];
+            }
+          }
+        }
         
         return {
           hasTurnstile: !!turnstile,
           hasResponseInput: !!responseInput,
           hasToken: !!(responseInput && responseInput.value && responseInput.value.length > 0),
           hasIframe: !!iframe,
+          sitekey: sitekey,
           callback: (window as any).onRegisterTurnstileSuccess ? 'onRegisterTurnstileSuccess' : null
         };
       });
       
       if (turnstileInfo.hasTurnstile) {
-        logger.info('Cloudflare Turnstile detected, attempting to interact...');
-        actions.push('Cloudflare Turnstile detected');
+        // Try to solve using Turnstile-Solver API if available
+        if (turnstileInfo.sitekey && this.turnstileSolverApiUrl) {
+          try {
+            logger.info(`Attempting to solve Turnstile using solver API (sitekey: ${turnstileInfo.sitekey})...`);
+            actions.push('Attempting to solve Turnstile using solver API');
+            
+            const token = await this.solveTurnstileWithAPI(page.url(), turnstileInfo.sitekey);
+            
+            if (token) {
+              logger.info('Turnstile solved successfully using API!');
+              actions.push('Turnstile solved using API');
+              
+              // Set the token in the response input
+              await page.evaluate((tokenValue) => {
+                const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                if (responseInput) {
+                  responseInput.value = tokenValue;
+                  // Trigger input and change events
+                  responseInput.dispatchEvent(new Event('input', { bubbles: true }));
+                  responseInput.dispatchEvent(new Event('change', { bubbles: true }));
+                  
+                  // Also trigger callback if it exists
+                  if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+                    (window as any).onRegisterTurnstileSuccess();
+                  }
+                }
+              }, token);
+              
+              logger.info('Turnstile token set successfully');
+              actions.push('Turnstile token set from API');
+              // Skip the rest of the Turnstile handling since we solved it
+              // Continue to form submission - no need to wait for Turnstile anymore
+            } else {
+              // Token not received, fall through to manual handling
+              logger.warn('Turnstile-Solver API did not return a token');
+              actions.push('Turnstile-Solver API did not return token, using manual handling');
+            }
+          } catch (error) {
+            logger.warn(`Turnstile-Solver API failed: ${error instanceof Error ? error.message : String(error)}`);
+            logger.info('Falling back to manual Turnstile handling...');
+            actions.push('Turnstile-Solver API unavailable, using manual handling');
+            // Continue with manual handling below
+          }
+        }
+        
+        // Only do manual Turnstile handling if API didn't solve it
+        const tokenAlreadySet = await page.evaluate(() => {
+          const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+          return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+        });
+        
+        if (!tokenAlreadySet) {
+          logger.info('Cloudflare Turnstile detected, attempting to interact manually...');
+          actions.push('Cloudflare Turnstile detected - manual handling');
         
         // Try to click on the Turnstile widget to trigger it
         try {
@@ -980,6 +1051,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             }
           }
         }
+        } // Close if (!tokenAlreadySet) block
       } else {
         // No Turnstile detected, wait a bit anyway for any other protection
         await page.waitForTimeout(3000);
@@ -1193,6 +1265,108 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         message: `Partially completed. Actions: ${actions.join(', ')}. Error: ${error instanceof Error ? error.message : 'Unknown'}`,
         data: { actions, error: error instanceof Error ? error.message : 'Unknown' }
       };
+    }
+  }
+
+  /**
+   * Solve Cloudflare Turnstile using Turnstile-Solver API
+   * @param url The URL where the Turnstile is located
+   * @param sitekey The Turnstile sitekey
+   * @returns The Turnstile token if solved successfully, null otherwise
+   */
+  private async solveTurnstileWithAPI(url: string, sitekey: string): Promise<string | null> {
+    if (!this.turnstileSolverApiUrl) {
+      return null;
+    }
+
+    try {
+      // Step 1: Request Turnstile solution
+      const solveUrl = `${this.turnstileSolverApiUrl}/turnstile?url=${encodeURIComponent(url)}&sitekey=${encodeURIComponent(sitekey)}`;
+      logger.info(`Requesting Turnstile solution from API: ${solveUrl}`);
+      
+      // Create AbortController for timeout
+      const solveController = new AbortController();
+      const solveTimeout = setTimeout(() => solveController.abort(), 30000);
+      
+      const solveResponse = await fetch(solveUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: solveController.signal,
+      });
+      
+      clearTimeout(solveTimeout);
+
+      if (!solveResponse.ok) {
+        logger.warn(`Turnstile-Solver API returned error: ${solveResponse.status} ${solveResponse.statusText}`);
+        return null;
+      }
+
+      const solveData = await solveResponse.json();
+      const taskId = solveData.task_id;
+
+      if (!taskId) {
+        logger.warn('Turnstile-Solver API did not return a task_id');
+        return null;
+      }
+
+      logger.info(`Turnstile solving task created: ${taskId}`);
+
+      // Step 2: Poll for result (max 2 minutes)
+      const maxAttempts = 60; // 60 attempts * 2 seconds = 2 minutes max
+      const pollInterval = 2000; // 2 seconds between polls
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const resultUrl = `${this.turnstileSolverApiUrl}/result?id=${encodeURIComponent(taskId)}`;
+        // Create AbortController for timeout
+        const resultController = new AbortController();
+        const resultTimeout = setTimeout(() => resultController.abort(), 5000);
+        
+        const resultResponse = await fetch(resultUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          signal: resultController.signal,
+        });
+        
+        clearTimeout(resultTimeout);
+
+        if (!resultResponse.ok) {
+          logger.debug(`Result poll attempt ${attempt + 1} failed: ${resultResponse.status}`);
+          continue;
+        }
+
+        const resultData = await resultResponse.json();
+
+        // Check if we have a token
+        if (resultData.value && typeof resultData.value === 'string' && resultData.value.length > 0) {
+          logger.info(`Turnstile solved in ${resultData.elapsed_time || 'unknown'} seconds`);
+          return resultData.value;
+        }
+
+        // If we get an error response, stop polling
+        if (resultData.error) {
+          logger.warn(`Turnstile-Solver API error: ${resultData.error}`);
+          return null;
+        }
+
+        // Continue polling if no result yet
+        logger.debug(`Turnstile solving in progress... (attempt ${attempt + 1}/${maxAttempts})`);
+      }
+
+      logger.warn('Turnstile solving timed out after maximum attempts');
+      return null;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        logger.warn('Turnstile-Solver API request timed out');
+      } else {
+        logger.warn(`Turnstile-Solver API error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return null;
     }
   }
 
