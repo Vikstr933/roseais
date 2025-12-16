@@ -98,17 +98,44 @@ export class BrowserUseService {
    * Execute a browser automation task using Playwright
    */
   async executeTask(task: BrowserUseTask): Promise<BrowserUseResult> {
-    const page: Page | null = null;
+    let browserPage: Page | null = null;
     try {
       logger.info(`Executing browser task: ${task.task} on ${task.url}`);
 
       const browser = await this.getBrowser();
-      const browserPage = await browser.newPage();
+      browserPage = await browser.newPage();
       
       try {
-        // Navigate to URL
-        await browserPage.goto(task.url, { waitUntil: 'networkidle', timeout: 30000 });
-        logger.info(`Navigated to ${task.url}`);
+        // Navigate to URL with longer timeout and less strict wait condition
+        // Use 'load' instead of 'networkidle' to avoid timeouts on slow sites
+        const navigationTimeout = task.options?.timeout || 60000; // Default 60 seconds
+        try {
+          await browserPage.goto(task.url, { 
+            waitUntil: 'load', 
+            timeout: navigationTimeout 
+          });
+          logger.info(`Navigated to ${task.url}`);
+        } catch (navError) {
+          // If load times out, try with domcontentloaded (less strict)
+          logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
+          try {
+            await browserPage.goto(task.url, { 
+              waitUntil: 'domcontentloaded', 
+              timeout: navigationTimeout 
+            });
+            logger.info(`Navigated to ${task.url} (domcontentloaded)`);
+          } catch (domError) {
+            // Last resort: just wait for the page to be accessible
+            logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
+            await browserPage.goto(task.url, { 
+              waitUntil: 'commit', 
+              timeout: navigationTimeout 
+            });
+            // Give it a moment to load
+            await browserPage.waitForTimeout(3000);
+            logger.info(`Navigated to ${task.url} (commit)`);
+          }
+        }
 
         // Use AI to understand the task and execute it
         const result = await this.executeTaskWithAI(browserPage, task);
@@ -128,7 +155,13 @@ export class BrowserUseService {
           extractedData: result.data
         };
       } catch (error) {
-        await browserPage.close();
+        if (browserPage) {
+          try {
+            await browserPage.close();
+          } catch (closeError) {
+            logger.warn('Error closing browser page', closeError as Error);
+          }
+        }
         throw error;
       }
     } catch (error) {
