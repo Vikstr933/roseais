@@ -59,11 +59,14 @@ export class BrowserUseService {
    * Check if browser-use is installed, install if needed
    */
   private async ensureInstalled(): Promise<boolean> {
-    if (this.installationChecked) {
-      return this.isInstalled;
+    if (this.installationChecked && this.isInstalled) {
+      return true;
     }
 
-    this.installationChecked = true;
+    // Don't cache failed installations - retry each time
+    if (!this.installationChecked) {
+      this.installationChecked = true;
+    }
 
     try {
       // Check if browser-use is installed
@@ -72,12 +75,13 @@ import sys
 try:
     import browser_use
     print("INSTALLED")
+    sys.exit(0)
 except ImportError:
     print("NOT_INSTALLED")
-sys.exit(0)
+    sys.exit(0)
 `;
 
-      const result = await pythonSandboxService.executeScript(checkCode, 10000);
+      const result = await pythonSandboxService.executeScript(checkCode, 15000);
       
       if (result.success && result.output.includes('INSTALLED')) {
         this.isInstalled = true;
@@ -85,35 +89,83 @@ sys.exit(0)
         return true;
       }
 
-      // Try to install browser-use
+      // Try to install browser-use with better error handling
       logger.info('Installing browser-use Python package...');
       const installCode = `
 import subprocess
 import sys
+import os
 
-try:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'browser-use', '--quiet'], 
-                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    print("INSTALLED")
-except Exception as e:
-    print(f"ERROR: {str(e)}")
-    sys.exit(1)
+# Try multiple package names and installation methods
+package_names = ['browser-use', 'browser_use']
+install_methods = [
+    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg, '--user', '--upgrade', '--no-cache-dir'],
+    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg, '--upgrade', '--no-cache-dir'],
+    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg, '--user'],
+    lambda pkg: [sys.executable, '-m', 'pip', 'install', pkg]
+]
+
+for package_name in package_names:
+    for method in install_methods:
+        try:
+            cmd = method(package_name)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=180
+            )
+            
+            if result.returncode == 0:
+                # Verify installation by trying to import
+                import importlib
+                try:
+                    importlib.import_module('browser_use')
+                    print("INSTALLED")
+                    sys.exit(0)
+                except ImportError as ie:
+                    # Installation succeeded but import failed - might be wrong package
+                    print(f"INSTALL_WARNING: Package installed but import failed: {str(ie)}")
+                    continue
+            else:
+                # Installation failed - try next method
+                stderr_msg = result.stderr[:200] if result.stderr else ''
+                if 'already satisfied' in stderr_msg.lower():
+                    # Package might already be installed
+                    try:
+                        import importlib
+                        importlib.import_module('browser_use')
+                        print("INSTALLED")
+                        sys.exit(0)
+                    except ImportError:
+                        pass
+                continue
+        except subprocess.TimeoutExpired:
+            print(f"TIMEOUT installing {package_name}")
+            continue
+        except Exception as e:
+            print(f"ERROR with {package_name}: {str(e)[:200]}")
+            continue
+
+print("ERROR: Failed to install browser-use. Tried all package names and installation methods.")
+print("HINT: You may need to install it manually: pip install browser-use")
+sys.exit(1)
 `;
 
-      const installResult = await pythonSandboxService.executeScript(installCode, 120000); // 2 min timeout
+      const installResult = await pythonSandboxService.executeScript(installCode, 180000); // 3 min timeout
       
       if (installResult.success && installResult.output.includes('INSTALLED')) {
         this.isInstalled = true;
         logger.info('✅ browser-use installed successfully');
         return true;
       } else {
-        logger.warn('Failed to install browser-use:', installResult.error || installResult.output);
-        this.isInstalled = false;
+        const errorMsg = installResult.error || installResult.output || 'Unknown error';
+        logger.warn('Failed to install browser-use:', new Error(errorMsg));
+        // Don't set isInstalled to false permanently - allow retry
         return false;
       }
     } catch (error) {
       logger.error('Error checking/installing browser-use', error as Error);
-      this.isInstalled = false;
       return false;
     }
   }
@@ -123,14 +175,24 @@ except Exception as e:
    */
   async executeTask(task: BrowserUseTask): Promise<BrowserUseResult> {
     try {
+      // Always try to ensure it's installed (don't cache failures)
       const isInstalled = await this.ensureInstalled();
       
       if (!isInstalled) {
-        return {
-          success: false,
-          output: '',
-          error: 'browser-use is not installed and could not be installed automatically. Please install it manually: pip install browser-use'
-        };
+        logger.warn('browser-use installation failed, attempting to install again during execution...');
+        // Reset installation check to allow retry
+        this.installationChecked = false;
+        this.isInstalled = false;
+        
+        // Try one more time
+        const retryInstalled = await this.ensureInstalled();
+        if (!retryInstalled) {
+          return {
+            success: false,
+            output: '',
+            error: 'browser-use is not installed and could not be installed automatically. The Python package "browser-use" needs to be installed in the Python environment. Error details may be in the logs.'
+          };
+        }
       }
 
       logger.info(`Executing browser task: ${task.task} on ${task.url}`);

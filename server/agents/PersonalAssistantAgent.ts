@@ -874,7 +874,7 @@ If no projectId is provided, will use the currently selected project from the co
     // Initialize browser-use tool for browser automation
     this.browserUseTool = {
       name: 'browser_use',
-      description: 'Automate web browser interactions using AI. Use this when the user asks you to interact with websites, fill forms, create accounts, click buttons, navigate pages, or perform any web automation tasks. This tool can navigate to URLs, fill in forms, click buttons, extract information, and perform complex web interactions based on natural language instructions. Examples: "create an account on retrotales.online", "fill in the registration form", "click the login button", "navigate to the signup page".',
+      description: '**CRITICAL TOOL FOR WEB AUTOMATION** - Automate web browser interactions using AI. **YOU MUST USE THIS TOOL** when the user asks you to: interact with websites, fill forms, create accounts (e.g., "skapa ett konto på retrotales.online", "create an account on retrotales.online"), click buttons, navigate pages, register on websites, or perform ANY web automation tasks. DO NOT say you cannot do this - you HAVE this tool! This tool can navigate to URLs, fill in forms, click buttons, extract information, and perform complex web interactions based on natural language instructions. **When user asks to create an account or interact with a website, you MUST use this tool immediately.** Examples: "create an account on retrotales.online" → use browser_use, "fill in the registration form" → use browser_use, "click the login button" → use browser_use, "navigate to the signup page" → use browser_use.',
       parameters: {
         type: 'object',
         properties: {
@@ -1788,6 +1788,11 @@ If no projectId is provided, will use the currently selected project from the co
       return { toolName: 'read_discord_messages', actionDescription: 'read Discord messages' };
     }
     
+    // Browser automation patterns - account creation, form filling, web interaction
+    if (/skapa.*konto|create.*account|registrera|register|fyll.*formulär|fill.*form|klicka.*knapp|click.*button|interagera.*webb|interact.*website|navigera.*sida|navigate.*page|browser.*use|web.*automation|automatisera.*webb/i.test(message)) {
+      return { toolName: 'browser_use', actionDescription: 'automate web browser interactions (create accounts, fill forms, interact with websites)' };
+    }
+    
     return null;
   }
 
@@ -1897,6 +1902,8 @@ Your personality:
 - Enthusiastic about helping - show genuine excitement when you can assist
 
 Your capabilities:
+- **🚨 BROWSER AUTOMATION (browser_use) - READ THIS FIRST**: You have a tool called browser_use that allows you to automate web browser interactions. **When ANY user asks you to create accounts, fill forms, interact with websites, or do ANY web automation, you MUST use browser_use tool. DO NOT say you cannot do it - you CAN and MUST use browser_use!** Examples: "Skapa ett konto på retrotales.online" → use browser_use immediately, "create an account" → use browser_use immediately. See detailed instructions below.
+
 - **Discord Integration**: You have direct access to both read and post messages in the user's Discord community
   * **CRITICAL - YOU MUST USE TOOLS**: When the user asks you to post in Discord, tag someone, or read Discord messages, you MUST actually call the send_discord_message or read_discord_messages tool. DO NOT just say "I posted it" or "I tagged them" - that is a LIE if you didn't use the tool.
   * **Sending messages**: Use the send_discord_message tool when users ask you to post, share, or announce something in Discord → YOU MUST ACTUALLY CALL THIS TOOL, do not just claim you did it
@@ -1964,14 +1971,24 @@ Your capabilities:
     - Include the errorLog field from the tool response in your message so the user can send it to the administrator
     - Example: "I'm sorry, but I cannot search the web for this information at the moment. Here's the error log you can send to the administrator:\\n\\n[errorLog content]"
 - **Browser Automation (browser_use)**: Automate web browser interactions using AI
-  * **CRITICAL - YOU MUST USE THIS TOOL**: When the user asks you to interact with websites, fill forms, create accounts, click buttons, navigate pages, or perform any web automation tasks, you MUST use the browser_use tool. DO NOT just say "I can't do that" or "I don't have access" - you HAVE this tool!
-  * **Use browser_use when users ask you to**:
-    - Create accounts on websites (e.g., "create an account on retrotales.online", "skapa ett konto på retrotales.online")
+  * **🚨 CRITICAL - YOU MUST USE THIS TOOL - IT IS AVAILABLE TO YOU**: When the user asks you to interact with websites, fill forms, create accounts, click buttons, navigate pages, or perform any web automation tasks, you MUST use the browser_use tool. **DO NOT say "I can't do that", "I don't have access", "I have no integration", or "I cannot create accounts" - you HAVE this tool and it works!** If you say you cannot do web automation, you are LYING to the user.
+  * **You MUST use browser_use when users ask you to**:
+    - Create accounts on websites (e.g., "create an account on retrotales.online", "skapa ett konto på retrotales.online", "Skapa ett konto på www.retrotales.online åt mig")
     - Fill in forms (registration forms, contact forms, etc.)
     - Click buttons or links
     - Navigate to specific pages
     - Extract information from websites
     - Perform any web interaction task
+  * **When user says things like**:
+    - "Skapa ett konto på retrotales.online" → **IMMEDIATELY use browser_use tool**
+    - "Create an account on [website]" → **IMMEDIATELY use browser_use tool**
+    - "Fill in the form" → **IMMEDIATELY use browser_use tool**
+    - "Register on [website]" → **IMMEDIATELY use browser_use tool**
+  * **DO NOT**:
+    - Say "I cannot create accounts" - you CAN with browser_use
+    - Say "I don't have access to websites" - you DO with browser_use
+    - Say "I need you to do it manually" - you CAN automate it with browser_use
+    - Make excuses - just USE THE TOOL
   * **How to use browser_use**:
     - Required parameters: url (the website URL) and task (natural language description of what to do)
     - The task parameter should be detailed and specific (e.g., "create an account with email test@example.com and password mypass123", "fill in the registration form with name John Doe, email john@example.com, and password secure123")
