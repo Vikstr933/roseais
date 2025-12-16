@@ -16,6 +16,8 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { chromium, Browser, Page } from 'playwright';
 import { MultiModelAIService } from './MultiModelAIService';
+import { spawn } from 'child_process';
+import { join } from 'path';
 
 const logger = new SimpleLogger('BrowserUseService');
 
@@ -43,12 +45,14 @@ export class BrowserUseService {
   private browser: Browser | null = null;
   private multiModelAI: MultiModelAIService;
   private turnstileSolverApiUrl: string | null = null;
+  private turnstileSolverPath: string;
 
   private constructor() {
     this.multiModelAI = new MultiModelAIService();
-    // Get Turnstile Solver API URL from environment variable
-    // Default: http://localhost:5000 (standard Turnstile-Solver port)
-    this.turnstileSolverApiUrl = process.env.TURNSTILE_SOLVER_API_URL || 'http://localhost:5000';
+    // Get Turnstile Solver API URL from environment variable (optional, for API mode)
+    this.turnstileSolverApiUrl = process.env.TURNSTILE_SOLVER_API_URL || null;
+    // Path to turnstile-solver directory
+    this.turnstileSolverPath = join(process.cwd(), 'turnstile-solver');
   }
 
   public static getInstance(): BrowserUseService {
@@ -886,17 +890,27 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       });
       
       if (turnstileInfo.hasTurnstile) {
-        // Try to solve using Turnstile-Solver API if available
-        if (turnstileInfo.sitekey && this.turnstileSolverApiUrl) {
+        // Try to solve using Turnstile-Solver (direct Python execution or API)
+        if (turnstileInfo.sitekey) {
           try {
-            logger.info(`Attempting to solve Turnstile using solver API (sitekey: ${turnstileInfo.sitekey})...`);
-            actions.push('Attempting to solve Turnstile using solver API');
+            logger.info(`Attempting to solve Turnstile (sitekey: ${turnstileInfo.sitekey})...`);
+            actions.push('Attempting to solve Turnstile');
             
-            const token = await this.solveTurnstileWithAPI(page.url(), turnstileInfo.sitekey);
+            // Try direct Python execution first, then API if available
+            let token: string | null = null;
+            
+            // First, try direct Python execution (no API server needed)
+            token = await this.solveTurnstileDirect(page.url(), turnstileInfo.sitekey);
+            
+            // If direct execution failed and API URL is set, try API
+            if (!token && this.turnstileSolverApiUrl) {
+              logger.info('Direct Python execution failed, trying API...');
+              token = await this.solveTurnstileWithAPI(page.url(), turnstileInfo.sitekey);
+            }
             
             if (token) {
-              logger.info('Turnstile solved successfully using API!');
-              actions.push('Turnstile solved using API');
+              logger.info('Turnstile solved successfully!');
+              actions.push('Turnstile solved');
               
               // Set the token in the response input
               await page.evaluate((tokenValue) => {
@@ -915,18 +929,18 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               }, token);
               
               logger.info('Turnstile token set successfully');
-              actions.push('Turnstile token set from API');
+              actions.push('Turnstile token set');
               // Skip the rest of the Turnstile handling since we solved it
               // Continue to form submission - no need to wait for Turnstile anymore
             } else {
               // Token not received, fall through to manual handling
-              logger.warn('Turnstile-Solver API did not return a token');
-              actions.push('Turnstile-Solver API did not return token, using manual handling');
+              logger.warn('Turnstile-Solver did not return a token');
+              actions.push('Turnstile-Solver did not return token, using manual handling');
             }
           } catch (error) {
-            logger.warn(`Turnstile-Solver API failed: ${error instanceof Error ? error.message : String(error)}`);
+            logger.warn(`Turnstile-Solver failed: ${error instanceof Error ? error.message : String(error)}`);
             logger.info('Falling back to manual Turnstile handling...');
-            actions.push('Turnstile-Solver API unavailable, using manual handling');
+            actions.push('Turnstile-Solver unavailable, using manual handling');
             // Continue with manual handling below
           }
         }
@@ -1269,12 +1283,98 @@ Use CSS selectors, IDs, or text content to identify elements.`;
   }
 
   /**
-   * Solve Cloudflare Turnstile using Turnstile-Solver API
+   * Solve Cloudflare Turnstile using direct Python execution (no API server needed)
+   * @param url The URL where the Turnstile is located
+   * @param sitekey The Turnstile sitekey
+   * @returns The Turnstile token if solved successfully, null otherwise
+   */
+  private async solveTurnstileDirect(url: string, sitekey: string): Promise<string | null> {
+    const solverScript = join(this.turnstileSolverPath, 'async_solver.py');
+    
+    try {
+      // Check if solver script exists
+      const fs = await import('fs/promises');
+      try {
+        await fs.access(solverScript);
+      } catch {
+        logger.debug('Turnstile-Solver script not found, skipping direct execution');
+        return null;
+      }
+
+      logger.info(`Solving Turnstile directly using Python (url: ${url}, sitekey: ${sitekey})`);
+      
+      // Use standalone solve script
+      const solveScript = join(this.turnstileSolverPath, 'solve_turnstile.py');
+      
+      return new Promise((resolve) => {
+        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+        const proc = spawn(pythonCmd, [solveScript, url, sitekey], {
+          cwd: this.turnstileSolverPath,
+          env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout?.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        proc.stderr?.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        const timeout = setTimeout(() => {
+          proc.kill('SIGKILL');
+          logger.warn('Turnstile-Solver direct execution timed out');
+          resolve(null);
+        }, 120000); // 2 minutes timeout
+
+        proc.on('exit', (code) => {
+          clearTimeout(timeout);
+          
+          if (code === 0 && stdout) {
+            try {
+              const result = JSON.parse(stdout.trim());
+              if (result.status === 'success' && result.turnstile_value) {
+                logger.info(`Turnstile solved directly in ${result.elapsed_time_seconds || 'unknown'} seconds`);
+                resolve(result.turnstile_value);
+              } else {
+                logger.warn(`Turnstile-Solver returned failure: ${result.reason || 'unknown'}`);
+                resolve(null);
+              }
+            } catch (parseError) {
+              logger.warn(`Failed to parse Turnstile-Solver output: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+              resolve(null);
+            }
+          } else {
+            logger.warn(`Turnstile-Solver exited with code ${code}: ${stderr || stdout}`);
+            resolve(null);
+          }
+        });
+
+        proc.on('error', (error) => {
+          clearTimeout(timeout);
+          logger.warn(`Turnstile-Solver execution error: ${error.message}`);
+          resolve(null);
+        });
+      });
+    } catch (error) {
+      logger.warn(`Turnstile-Solver direct execution failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Solve Cloudflare Turnstile using Turnstile-Solver API (fallback if API server is running)
    * @param url The URL where the Turnstile is located
    * @param sitekey The Turnstile sitekey
    * @returns The Turnstile token if solved successfully, null otherwise
    */
   private async solveTurnstileWithAPI(url: string, sitekey: string): Promise<string | null> {
+    if (!this.turnstileSolverApiUrl) {
+      return null;
+    }
     if (!this.turnstileSolverApiUrl) {
       return null;
     }
