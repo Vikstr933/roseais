@@ -222,8 +222,33 @@ export class BrowserUseService {
           }
         }
 
-        // Use AI to understand the task and execute it
-        const result = await this.executeTaskWithAI(browserPage, task);
+        // Check if this is a registration/account creation task
+        const isRegistrationTask = task.task.toLowerCase().includes('register') || 
+                                  task.task.toLowerCase().includes('create account') ||
+                                  task.task.toLowerCase().includes('sign up') ||
+                                  task.task.toLowerCase().includes('account creation') ||
+                                  task.task.toLowerCase().includes('registration');
+        
+        let result: { message: string; data?: Record<string, any> };
+        
+        // For registration tasks, use the robust fallback method directly
+        if (isRegistrationTask) {
+          logger.info('Detected registration task, using robust fallback method');
+          result = await this.executeRegistrationFallback(browserPage, task);
+        } else {
+          // For other tasks, use AI first, then fallback if needed
+          try {
+            result = await this.executeTaskWithAI(browserPage, task);
+          } catch (aiError) {
+            logger.warn('AI task execution failed, using fallback', aiError as Error);
+            // If it's a registration-like task, use registration fallback
+            if (isRegistrationTask) {
+              result = await this.executeRegistrationFallback(browserPage, task);
+            } else {
+              throw aiError;
+            }
+          }
+        }
 
         // Take screenshot if requested
         let screenshot: string | undefined;
@@ -757,8 +782,30 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // No Cloudflare detected, continue
       }
 
+      // Verify all fields are filled before submitting
+      logger.info('Verifying all fields are filled...');
+      const fieldsFilled = await page.evaluate(() => {
+        const usernameField = document.querySelector('input[name="reg-username"]') as HTMLInputElement;
+        const passwordField = document.querySelector('input[name="reg-password"]') as HTMLInputElement;
+        const confirmPasswordField = document.querySelector('input[name="password_again"]') as HTMLInputElement;
+        
+        return {
+          username: usernameField?.value || '',
+          password: passwordField?.value || '',
+          confirmPassword: confirmPasswordField?.value || '',
+          allFilled: !!(usernameField?.value && passwordField?.value && confirmPasswordField?.value)
+        };
+      });
+      
+      if (!fieldsFilled.allFilled) {
+        logger.warn(`Fields not all filled: username=${fieldsFilled.username ? 'filled' : 'empty'}, password=${fieldsFilled.password ? 'filled' : 'empty'}, confirm=${fieldsFilled.confirmPassword ? 'filled' : 'empty'}`);
+        actions.push('Warning: Some fields may not be filled correctly');
+      } else {
+        actions.push('All fields verified as filled');
+      }
+      
       // Wait a bit for form validation to complete
-      await page.waitForTimeout(1000 + Math.random() * 1000);
+      await page.waitForTimeout(2000 + Math.random() * 1000);
 
       // Submit form - look for submit button in dialog/modal
       const submitSelectors = [
@@ -841,13 +888,62 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       }
 
       const finalPassword = validPassword || password;
+      
+      // Verify that form was actually submitted by checking for success indicators
+      let formSubmitted = submitted;
+      let successIndicators: string[] = [];
+      
+      if (submitted) {
+        // Wait a bit for page to react
+        await page.waitForTimeout(2000);
+        
+        // Check for success indicators
+        try {
+          const successCheck = await page.evaluate(() => {
+            const indicators = {
+              hasSuccessMessage: document.body.innerText.toLowerCase().includes('success') ||
+                               document.body.innerText.toLowerCase().includes('created') ||
+                               document.body.innerText.toLowerCase().includes('registered') ||
+                               document.body.innerText.toLowerCase().includes('welcome'),
+              modalClosed: !document.querySelector('dialog[open], .modal:not([style*="display: none"]), [role="dialog"]:not([style*="display: none"])'),
+              urlChanged: window.location.href !== window.location.origin + '/',
+              hasError: document.body.innerText.toLowerCase().includes('error') ||
+                       document.body.innerText.toLowerCase().includes('failed') ||
+                       document.body.innerText.toLowerCase().includes('invalid')
+            };
+            return indicators;
+          });
+          
+          if (successCheck.hasSuccessMessage) {
+            successIndicators.push('Success message detected');
+            formSubmitted = true;
+          } else if (successCheck.modalClosed && successCheck.urlChanged) {
+            successIndicators.push('Modal closed and URL changed');
+            formSubmitted = true;
+          } else if (successCheck.hasError) {
+            successIndicators.push('Error message detected - form may not have been submitted');
+            formSubmitted = false;
+          } else {
+            successIndicators.push('No clear success/error indicators');
+          }
+        } catch {
+          // Could not verify, assume submitted if button was clicked
+        }
+      }
+      
+      const message = formSubmitted 
+        ? `Registration form filled and submitted successfully. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`
+        : `Registration form filled but submission may have failed. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`;
+      
       return {
-        message: `Registration form filled and submitted. Actions: ${actions.join(', ')}. ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`,
+        message,
         data: { 
           actions,
           accountName,
           password: finalPassword,
-          passwordAdjusted: finalPassword !== password
+          passwordAdjusted: finalPassword !== password,
+          formSubmitted,
+          successIndicators
         }
       };
     } catch (error) {
