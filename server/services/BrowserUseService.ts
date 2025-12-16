@@ -912,24 +912,81 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               logger.info('Turnstile solved successfully!');
               actions.push('Turnstile solved');
               
-              // Set the token in the response input
-              await page.evaluate((tokenValue) => {
+              // Set the token in the response input and trigger all necessary events
+              const tokenSet = await page.evaluate((tokenValue) => {
                 const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                 if (responseInput) {
+                  // Set the token value
                   responseInput.value = tokenValue;
-                  // Trigger input and change events
-                  responseInput.dispatchEvent(new Event('input', { bubbles: true }));
-                  responseInput.dispatchEvent(new Event('change', { bubbles: true }));
                   
-                  // Also trigger callback if it exists
-                  if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
-                    (window as any).onRegisterTurnstileSuccess();
+                  // Trigger all possible events to ensure Turnstile recognizes the token
+                  const events = ['input', 'change', 'blur', 'focus'];
+                  events.forEach(eventType => {
+                    responseInput.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+                  });
+                  
+                  // Try to find and update the Turnstile widget's data attribute if it exists
+                  const turnstileWidget = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
+                  if (turnstileWidget) {
+                    turnstileWidget.setAttribute('data-token', tokenValue);
                   }
+                  
+                  // Trigger any Turnstile callbacks that might exist
+                  if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+                    try {
+                      (window as any).onRegisterTurnstileSuccess(tokenValue);
+                    } catch (e) {
+                      // Callback might not accept parameters
+                      (window as any).onRegisterTurnstileSuccess();
+                    }
+                  }
+                  
+                  // Also check for standard Turnstile callback
+                  if (typeof (window as any).turnstile !== 'undefined' && (window as any).turnstile.render) {
+                    // Turnstile library is loaded, try to trigger success
+                    const turnstileElements = document.querySelectorAll('[data-sitekey]');
+                    turnstileElements.forEach((el: Element) => {
+                      const widgetId = el.getAttribute('data-widget-id');
+                      if (widgetId && (window as any).turnstile.reset) {
+                        // Try to notify Turnstile that it's been solved
+                        try {
+                          (window as any).turnstile.reset(widgetId);
+                        } catch (e) {
+                          // Ignore errors
+                        }
+                      }
+                    });
+                  }
+                  
+                  return true;
                 }
+                return false;
               }, token);
               
-              logger.info('Turnstile token set successfully');
-              actions.push('Turnstile token set');
+              if (tokenSet) {
+                logger.info('Turnstile token set successfully');
+                actions.push('Turnstile token set and events triggered');
+                // Wait a moment for any callbacks to process
+                await page.waitForTimeout(1000);
+                
+                // Verify the token is still there
+                const tokenVerified = await page.evaluate(() => {
+                  const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                  return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+                });
+                
+                if (tokenVerified) {
+                  logger.info('Turnstile token verified after setting');
+                  actions.push('Turnstile token verified');
+                } else {
+                  logger.warn('Turnstile token was cleared after setting - may need manual interaction');
+                  actions.push('Warning: Turnstile token was cleared');
+                }
+              } else {
+                logger.warn('Failed to set Turnstile token - input field not found');
+                actions.push('Failed to set Turnstile token');
+              }
+              
               // Skip the rest of the Turnstile handling since we solved it
               // Continue to form submission - no need to wait for Turnstile anymore
             } else {
