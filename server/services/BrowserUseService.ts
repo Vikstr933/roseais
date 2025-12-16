@@ -852,15 +852,60 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       actions.push('Waiting for Cloudflare Turnstile');
       
       // Check if Cloudflare Turnstile is present
-      const hasTurnstile = await page.evaluate(() => {
-        return !!document.querySelector('.cf-turnstile, [class*="cf-turnstile"], [id*="cf-"]');
+      const turnstileInfo = await page.evaluate(() => {
+        const turnstile = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
+        const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+        const iframe = turnstile?.querySelector('iframe');
+        
+        return {
+          hasTurnstile: !!turnstile,
+          hasResponseInput: !!responseInput,
+          hasToken: !!(responseInput && responseInput.value && responseInput.value.length > 0),
+          hasIframe: !!iframe,
+          callback: (window as any).onRegisterTurnstileSuccess ? 'onRegisterTurnstileSuccess' : null
+        };
       });
       
-      if (hasTurnstile) {
-        logger.info('Cloudflare Turnstile detected, waiting for completion...');
+      if (turnstileInfo.hasTurnstile) {
+        logger.info('Cloudflare Turnstile detected, attempting to interact...');
         actions.push('Cloudflare Turnstile detected');
         
-        // Wait for Turnstile response token to be set
+        // Try to click on the Turnstile widget to trigger it
+        try {
+          const turnstileClicked = await page.evaluate(() => {
+            const turnstile = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
+            if (turnstile) {
+              // Try clicking on the widget container
+              (turnstile as HTMLElement).click();
+              return true;
+            }
+            return false;
+          });
+          
+          if (turnstileClicked) {
+            actions.push('Clicked on Turnstile widget');
+            await page.waitForTimeout(2000);
+          }
+        } catch {
+          logger.debug('Could not click Turnstile widget directly');
+        }
+        
+        // Try clicking on the iframe (though this usually doesn't work due to cross-origin)
+        if (turnstileInfo.hasIframe) {
+          try {
+            const iframe = await page.$('.cf-turnstile iframe, [class*="cf-turnstile"] iframe');
+            if (iframe) {
+              await iframe.click({ timeout: 2000 }).catch(() => {
+                logger.debug('Could not click Turnstile iframe (expected - cross-origin restriction)');
+              });
+              await page.waitForTimeout(2000);
+            }
+          } catch {
+            // Expected to fail due to cross-origin restrictions
+          }
+        }
+        
+        // Wait for Turnstile response token to be set or callback to be called
         try {
           await page.waitForFunction(() => {
             // Check if Turnstile response input has a value
@@ -868,11 +913,20 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             if (responseInput && responseInput.value && responseInput.value.length > 0) {
               return true;
             }
-            // Also check if callback was called (check for success indicators)
-            return (window as any).__turnstileSuccess === true;
+            // Check if callback was called
+            if ((window as any).__turnstileSuccess === true) {
+              return true;
+            }
+            // Check if callback function exists and was called
+            if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+              // Check if it was already called by looking for success indicators
+              const responseInput2 = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+              return !!(responseInput2 && responseInput2.value && responseInput2.value.length > 0);
+            }
+            return false;
           }, {
-            timeout: 30000, // Wait up to 30 seconds
-            polling: 1000 // Check every second
+            timeout: 45000, // Wait up to 45 seconds (Turnstile can take time)
+            polling: 2000 // Check every 2 seconds
           });
           
           logger.info('Cloudflare Turnstile completed successfully');
@@ -880,7 +934,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         } catch {
           // If timeout, wait a bit more and check if we can proceed anyway
           logger.warn('Cloudflare Turnstile timeout, waiting additional time...');
-          await page.waitForTimeout(10000);
+          await page.waitForTimeout(15000); // Wait 15 more seconds
           
           // Check if response token exists anyway
           const hasToken = await page.evaluate(() => {
@@ -889,9 +943,41 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           });
           
           if (hasToken) {
-            actions.push('Cloudflare Turnstile token found (after timeout)');
+            logger.info('Cloudflare Turnstile token found (after extended wait)');
+            actions.push('Cloudflare Turnstile token found (after extended wait)');
           } else {
-            actions.push('Cloudflare Turnstile may not be completed - proceeding anyway');
+            logger.warn('Cloudflare Turnstile may not be completed - token not found');
+            actions.push('Warning: Cloudflare Turnstile may not be completed - form submission may fail');
+            
+            // Try to trigger Turnstile manually one more time
+            try {
+              await page.evaluate(() => {
+                // Try to find and trigger the Turnstile widget
+                const turnstile = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
+                if (turnstile) {
+                  // Dispatch click event
+                  const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+                  turnstile.dispatchEvent(event);
+                  
+                  // Also try mousedown and mouseup
+                  turnstile.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                  turnstile.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                }
+              });
+              await page.waitForTimeout(5000);
+              
+              // Check again
+              const hasTokenAfterClick = await page.evaluate(() => {
+                const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+              });
+              
+              if (hasTokenAfterClick) {
+                actions.push('Cloudflare Turnstile completed after manual trigger');
+              }
+            } catch {
+              // Ignore errors
+            }
           }
         }
       } else {
@@ -923,6 +1009,45 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       
       // Wait a bit for form validation to complete
       await page.waitForTimeout(2000 + Math.random() * 1000);
+      
+      // Final check: Ensure Cloudflare Turnstile is completed before submitting
+      logger.info('Final check: Verifying Cloudflare Turnstile is completed...');
+      const turnstileStatus = await page.evaluate(() => {
+        const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+        return {
+          hasInput: !!responseInput,
+          hasToken: !!(responseInput && responseInput.value && responseInput.value.length > 0),
+          tokenLength: responseInput?.value?.length || 0
+        };
+      });
+      
+      if (turnstileStatus.hasInput && !turnstileStatus.hasToken) {
+        logger.warn('Cloudflare Turnstile token not found before submit - waiting additional time...');
+        actions.push('Waiting for Cloudflare Turnstile token before submit');
+        
+        // Wait up to 30 more seconds for Turnstile to complete
+        try {
+          await page.waitForFunction(() => {
+            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+            return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+          }, {
+            timeout: 30000,
+            polling: 2000
+          });
+          
+          logger.info('Cloudflare Turnstile token found after additional wait');
+          actions.push('Cloudflare Turnstile token found - ready to submit');
+        } catch {
+          logger.warn('Cloudflare Turnstile still not completed - attempting submit anyway (may fail)');
+          actions.push('Warning: Submitting without Turnstile token (may fail)');
+        }
+      } else if (turnstileStatus.hasToken) {
+        logger.info(`Cloudflare Turnstile token verified (length: ${turnstileStatus.tokenLength})`);
+        actions.push('Cloudflare Turnstile token verified - ready to submit');
+      } else {
+        logger.info('No Cloudflare Turnstile detected - proceeding with submit');
+        actions.push('No Turnstile detected - proceeding');
+      }
 
       // Submit form - look for submit button in dialog/modal
       const submitSelectors = [
