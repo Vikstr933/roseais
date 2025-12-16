@@ -2,12 +2,27 @@
 
 Detta är en lokal kopia av Turnstile-Solver som kan användas direkt i projektet.
 
-## Installation
+## Snabbstart
+
+### Windows
+```bash
+cd turnstile-solver
+start.bat
+```
+
+### macOS/Linux
+```bash
+cd turnstile-solver
+chmod +x start.sh
+./start.sh
+```
+
+## Manuell Installation
 
 1. **Installera Python dependencies:**
    ```bash
    cd turnstile-solver
-   pip install quart patchright camoufox
+   pip install -r requirements.txt
    ```
 
 2. **Installera browser (Chromium rekommenderas):**
@@ -25,6 +40,10 @@ Starta API-servern:
 cd turnstile-solver
 python api_solver.py --host 127.0.0.1 --port 5000 --debug True
 ```
+
+**Eller använd start-skriptet:**
+- Windows: `start.bat`
+- macOS/Linux: `./start.sh`
 
 API-servern kommer att köra på `http://localhost:5000` och är automatiskt integrerad med `BrowserUseService`.
 
