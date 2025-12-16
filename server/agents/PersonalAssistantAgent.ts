@@ -1157,23 +1157,37 @@ If no projectId is provided, will use the currently selected project from the co
       // Start with handler tools if available, then add legacy tools that aren't in handlers
       const builtInTools: Tool[] = [];
       
+      // Helper function to check if a tool name already exists
+      const toolNameExists = (toolName: string): boolean => {
+        return builtInTools.some(t => t.name === toolName);
+      };
+      
       // Add handler tools first
       if (handlerTools.length > 0) {
         builtInTools.push(...handlerTools);
       }
       
-      // Add legacy tools that aren't yet migrated to handlers
-      const legacyTools: Tool[] = [
-        this.webSearchTool, 
-          // Browser automation tool
-          {
-            ...this.browserUseTool,
-            execute: async (params: Record<string, any>) => {
-              return await this.useBrowser({ ...params, _userId: userId, _sessionId: sessionId });
-            }
-          },
-        // Wrap Discord tools to automatically include discordContext
-        {
+      // Add legacy tools that aren't yet migrated to handlers (only if not already in handler tools)
+      const legacyTools: Tool[] = [];
+      
+      // Only add web search if not in handlers
+      if (!toolNameExists('web_search')) {
+        legacyTools.push(this.webSearchTool);
+      }
+      
+      // Only add browser_use if not in handlers
+      if (!toolNameExists('browser_use')) {
+        legacyTools.push({
+          ...this.browserUseTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.useBrowser({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      
+      // Only add Discord tools if not in handlers
+      if (!toolNameExists('send_discord_message')) {
+        legacyTools.push({
           ...this.discordTool,
           execute: async (params: Record<string, any>) => {
             // Automatically add discordContext if available and no channelId/channelName provided
@@ -1184,8 +1198,11 @@ If no projectId is provided, will use the currently selected project from the co
             }
             return await this.sendDiscordMessage(params);
           }
-        },
-        {
+        });
+      }
+      
+      if (!toolNameExists('read_discord_messages')) {
+        legacyTools.push({
           ...this.readDiscordMessagesTool,
           execute: async (params: Record<string, any>) => {
             // Automatically add discordContext if available and no channelId/channelName provided
@@ -1195,21 +1212,27 @@ If no projectId is provided, will use the currently selected project from the co
             }
             return await this.readDiscordMessages(params);
           }
-        },
-        // Project management tools (always available)
-        {
+        });
+      }
+      
+      // Only add project management tools if not in handlers
+      if (!toolNameExists('list_projects')) {
+        legacyTools.push({
           ...this.listProjectsTool,
           execute: async (params: Record<string, any>) => {
             return await this.listProjects({ ...params, _userId: userId, _sessionId: sessionId });
           }
-        },
-        {
+        });
+      }
+      
+      if (!toolNameExists('select_project')) {
+        legacyTools.push({
           ...this.selectProjectTool,
           execute: async (params: Record<string, any>) => {
             return await this.selectProject({ ...params, _userId: userId, _sessionId: sessionId });
           }
-        }
-      ];
+        });
+      }
       
       // Add legacy tools that aren't in handlers yet
       builtInTools.push(...legacyTools);
@@ -1217,29 +1240,30 @@ If no projectId is provided, will use the currently selected project from the co
       // Add code generation tool if we have playground context or a selected project
       const hasProjectContext = options?.playgroundContext?.projectId || this.selectedProjects.has(sessionId);
       if (hasProjectContext) {
-        // Create a bound version of generateCodeTool with userId
-        const generateCodeToolWithUserId = {
-          ...this.generateCodeTool,
-          execute: async (params: Record<string, any>) => {
-            // Pass userId and sessionId to generateCode
-            return await this.generateCode({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(generateCodeToolWithUserId);
+        // Only add tools that aren't already in handler tools
+        if (!toolNameExists('generate_code')) {
+          const generateCodeToolWithUserId = {
+            ...this.generateCodeTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.generateCode({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(generateCodeToolWithUserId);
+        }
         
         // Add deployment tool if we have a project
-        const deployToolWithUserId = {
-          ...this.deployToVercelTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.deployToVercel({ ...params, _userId: userId, _sessionId: sessionId, _discordContext: options?.discordContext });
-          }
-        };
-        builtInTools.push(deployToolWithUserId);
+        if (!toolNameExists('deploy_to_vercel')) {
+          const deployToolWithUserId = {
+            ...this.deployToVercelTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.deployToVercel({ ...params, _userId: userId, _sessionId: sessionId, _discordContext: options?.discordContext });
+            }
+          };
+          builtInTools.push(deployToolWithUserId);
+        }
 
         // Add file operation tools if we have a project
-        // Check if read_file is already in handler tools
-        const hasReadFileInHandlers = builtInTools.some(t => t.name === 'read_file');
-        if (!hasReadFileInHandlers) {
+        if (!toolNameExists('read_file')) {
           const readFileToolWithUserId = {
             ...this.readFileTool,
             execute: async (params: Record<string, any>) => {
@@ -1249,206 +1273,254 @@ If no projectId is provided, will use the currently selected project from the co
           builtInTools.push(readFileToolWithUserId);
         }
         
-        const writeFileToolWithUserId = {
-          ...this.writeFileTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.writeFile({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(writeFileToolWithUserId);
+        if (!toolNameExists('write_file')) {
+          const writeFileToolWithUserId = {
+            ...this.writeFileTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.writeFile({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(writeFileToolWithUserId);
+        }
 
-        const editFileToolWithUserId = {
-          ...this.editFileTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.editFile({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(editFileToolWithUserId);
+        if (!toolNameExists('edit_file')) {
+          const editFileToolWithUserId = {
+            ...this.editFileTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.editFile({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(editFileToolWithUserId);
+        }
 
-        const deleteFileToolWithUserId = {
-          ...this.deleteFileTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.deleteFile({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(deleteFileToolWithUserId);
+        if (!toolNameExists('delete_file')) {
+          const deleteFileToolWithUserId = {
+            ...this.deleteFileTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.deleteFile({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(deleteFileToolWithUserId);
+        }
 
-        const createDirectoryToolWithUserId = {
-          ...this.createDirectoryTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.createDirectory({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(createDirectoryToolWithUserId);
+        if (!toolNameExists('create_directory')) {
+          const createDirectoryToolWithUserId = {
+            ...this.createDirectoryTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.createDirectory({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(createDirectoryToolWithUserId);
+        }
 
         // Add Git operation tools if we have a project
-        const gitCommitToolWithUserId = {
-          ...this.gitCommitTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.gitCommit({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(gitCommitToolWithUserId);
+        if (!toolNameExists('git_commit')) {
+          const gitCommitToolWithUserId = {
+            ...this.gitCommitTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.gitCommit({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(gitCommitToolWithUserId);
+        }
 
-        const gitBranchToolWithUserId = {
-          ...this.gitBranchTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.gitBranch({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(gitBranchToolWithUserId);
+        if (!toolNameExists('git_branch')) {
+          const gitBranchToolWithUserId = {
+            ...this.gitBranchTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.gitBranch({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(gitBranchToolWithUserId);
+        }
 
-        const gitStatusToolWithUserId = {
-          ...this.gitStatusTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.gitStatus({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(gitStatusToolWithUserId);
+        if (!toolNameExists('git_status')) {
+          const gitStatusToolWithUserId = {
+            ...this.gitStatusTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.gitStatus({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(gitStatusToolWithUserId);
+        }
 
-        const gitDiffToolWithUserId = {
-          ...this.gitDiffTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.gitDiff({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(gitDiffToolWithUserId);
+        if (!toolNameExists('git_diff')) {
+          const gitDiffToolWithUserId = {
+            ...this.gitDiffTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.gitDiff({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(gitDiffToolWithUserId);
+        }
 
-        const gitLogToolWithUserId = {
-          ...this.gitLogTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.gitLog({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(gitLogToolWithUserId);
+        if (!toolNameExists('git_log')) {
+          const gitLogToolWithUserId = {
+            ...this.gitLogTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.gitLog({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(gitLogToolWithUserId);
+        }
 
         // Add code analysis tools if we have a project
-        const analyzeCodeToolWithUserId = {
-          ...this.analyzeCodeTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.analyzeCode({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(analyzeCodeToolWithUserId);
+        if (!toolNameExists('analyze_code')) {
+          const analyzeCodeToolWithUserId = {
+            ...this.analyzeCodeTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.analyzeCode({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(analyzeCodeToolWithUserId);
+        }
 
-        const checkTypesToolWithUserId = {
-          ...this.checkTypesTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.checkTypes({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(checkTypesToolWithUserId);
+        if (!toolNameExists('check_types')) {
+          const checkTypesToolWithUserId = {
+            ...this.checkTypesTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.checkTypes({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(checkTypesToolWithUserId);
+        }
 
-        const findErrorsToolWithUserId = {
-          ...this.findErrorsTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.findErrors({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(findErrorsToolWithUserId);
+        if (!toolNameExists('find_errors')) {
+          const findErrorsToolWithUserId = {
+            ...this.findErrorsTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.findErrors({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(findErrorsToolWithUserId);
+        }
 
-        const suggestImprovementsToolWithUserId = {
-          ...this.suggestImprovementsTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.suggestImprovements({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(suggestImprovementsToolWithUserId);
+        if (!toolNameExists('suggest_improvements')) {
+          const suggestImprovementsToolWithUserId = {
+            ...this.suggestImprovementsTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.suggestImprovements({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(suggestImprovementsToolWithUserId);
+        }
 
         // Add test tools if we have a project
-        const generateTestsToolWithUserId = {
-          ...this.generateTestsTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.generateTests({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(generateTestsToolWithUserId);
+        if (!toolNameExists('generate_tests')) {
+          const generateTestsToolWithUserId = {
+            ...this.generateTestsTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.generateTests({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(generateTestsToolWithUserId);
+        }
 
-        const runTestsToolWithUserId = {
-          ...this.runTestsTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.runTests({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(runTestsToolWithUserId);
+        if (!toolNameExists('run_tests')) {
+          const runTestsToolWithUserId = {
+            ...this.runTestsTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.runTests({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(runTestsToolWithUserId);
+        }
 
-        const testCoverageToolWithUserId = {
-          ...this.testCoverageTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.getTestCoverage({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(testCoverageToolWithUserId);
+        if (!toolNameExists('test_coverage')) {
+          const testCoverageToolWithUserId = {
+            ...this.testCoverageTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.getTestCoverage({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(testCoverageToolWithUserId);
+        }
 
         // Add documentation tool if we have a project
-        const generateDocsToolWithUserId = {
-          ...this.generateDocsTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.generateDocs({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(generateDocsToolWithUserId);
+        if (!toolNameExists('generate_docs')) {
+          const generateDocsToolWithUserId = {
+            ...this.generateDocsTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.generateDocs({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(generateDocsToolWithUserId);
+        }
 
         // Add memory tools (always available)
-        const rememberFactToolWithUserId = {
-          ...this.rememberFactTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.rememberFact({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(rememberFactToolWithUserId);
+        if (!toolNameExists('remember_fact')) {
+          const rememberFactToolWithUserId = {
+            ...this.rememberFactTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.rememberFact({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(rememberFactToolWithUserId);
+        }
 
-        const recallMemoryToolWithUserId = {
-          ...this.recallMemoryTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.recallMemory({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(recallMemoryToolWithUserId);
+        if (!toolNameExists('recall_memory')) {
+          const recallMemoryToolWithUserId = {
+            ...this.recallMemoryTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.recallMemory({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(recallMemoryToolWithUserId);
+        }
 
         // Add image processing tool if we have a project
-        const processImageToolWithUserId = {
-          ...this.processImageTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.processImage({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(processImageToolWithUserId);
+        if (!toolNameExists('process_image')) {
+          const processImageToolWithUserId = {
+            ...this.processImageTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.processImage({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(processImageToolWithUserId);
+        }
 
         // Add language detection tool if we have a project
-        const detectLanguageToolWithUserId = {
-          ...this.detectLanguageTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.detectLanguage({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(detectLanguageToolWithUserId);
+        if (!toolNameExists('detect_language')) {
+          const detectLanguageToolWithUserId = {
+            ...this.detectLanguageTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.detectLanguage({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(detectLanguageToolWithUserId);
+        }
 
         // Add error tracking tool (always available)
-        const trackErrorToolWithUserId = {
-          ...this.trackErrorTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.trackError({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(trackErrorToolWithUserId);
+        if (!toolNameExists('track_error')) {
+          const trackErrorToolWithUserId = {
+            ...this.trackErrorTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.trackError({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(trackErrorToolWithUserId);
+        }
 
         // Add analytics tool (always available)
-        const getUsageStatsToolWithUserId = {
-          ...this.getUsageStatsTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.getUsageStats({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(getUsageStatsToolWithUserId);
+        if (!toolNameExists('get_usage_stats')) {
+          const getUsageStatsToolWithUserId = {
+            ...this.getUsageStatsTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.getUsageStats({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(getUsageStatsToolWithUserId);
+        }
 
-        const getDataInsightsToolWithUserId = {
-          ...this.getDataInsightsTool,
-          execute: async (params: Record<string, any>) => {
-            return await this.getDataInsights({ ...params, _userId: userId, _sessionId: sessionId });
-          }
-        };
-        builtInTools.push(getDataInsightsToolWithUserId);
+        if (!toolNameExists('get_data_insights')) {
+          const getDataInsightsToolWithUserId = {
+            ...this.getDataInsightsTool,
+            execute: async (params: Record<string, any>) => {
+              return await this.getDataInsights({ ...params, _userId: userId, _sessionId: sessionId });
+            }
+          };
+          builtInTools.push(getDataInsightsToolWithUserId);
+        }
       }
 
       // Add memory, error tracking, and analytics tools even without project context
