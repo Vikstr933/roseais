@@ -4,6 +4,30 @@ Detta projekt har stöd för att automatiskt lösa Cloudflare Turnstile med hjä
 
 ## Installation av Turnstile-Solver
 
+Du har två alternativ:
+
+### Alternativ 1: Använd lokal kopia (Rekommenderat)
+
+Projektet innehåller redan en lokal kopia av Turnstile-Solver i `turnstile-solver/` mappen:
+
+1. **Installera Python dependencies:**
+   ```bash
+   cd turnstile-solver
+   pip install quart patchright camoufox
+   ```
+
+2. **Installera browser:**
+   ```bash
+   python -m patchright install chromium
+   ```
+
+3. **Starta API-servern:**
+   ```bash
+   python api_solver.py --host 127.0.0.1 --port 5000 --debug True
+   ```
+
+### Alternativ 2: Klona från GitHub
+
 1. **Klona Turnstile-Solver repository:**
    ```bash
    git clone https://github.com/Theyka/Turnstile-Solver.git
