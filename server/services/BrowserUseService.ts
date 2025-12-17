@@ -936,6 +936,10 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       logger.info('Checking for Cloudflare Turnstile...');
       actions.push('Checking for Cloudflare Turnstile');
       
+      // Store whether we successfully set a token via 2Captcha and the token value (accessible throughout function)
+      let tokenSetVia2Captcha = false;
+      let saved2CaptchaToken: string | null = null;
+      
       // Check if Cloudflare Turnstile is present and extract sitekey
       const turnstileInfo = await page.evaluate(() => {
         const turnstile = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
@@ -1010,10 +1014,6 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           return responseInput?.value || null;
         });
-        
-        // Store whether we successfully set a token via 2Captcha and the token value
-        let tokenSetVia2Captcha = false;
-        let saved2CaptchaToken: string | null = null;
         
         if (!currentToken || currentToken.length === 0) {
           // Try to solve using 2Captcha (reliable, human-powered service)
