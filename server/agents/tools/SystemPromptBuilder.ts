@@ -121,6 +121,9 @@ ${limitedMemories.map(m => `- ${m.category}/${m.key}: ${m.value.substring(0, 100
     
     sections.push('=== Available Tools ===');
     
+    // For Discord, keep tool descriptions very short to save tokens
+    const isDiscord = !!context.discordContext;
+    
     // Group tools by category
     const toolCategories = this.categorizeTools(tools);
     
@@ -130,10 +133,18 @@ ${limitedMemories.map(m => `- ${m.category}/${m.key}: ${m.value.substring(0, 100
       for (const tool of categoryTools) {
         const handler = await this.getToolHandler(tool.name);
         if (handler) {
-          sections.push(`- **${tool.name}**: ${handler.getDescription()}`);
-          const examples = handler.getUsageExamples();
-          if (examples.length > 0) {
-            sections.push(`  Examples: ${examples.slice(0, 2).join(', ')}`);
+          const description = handler.getDescription();
+          // For Discord, truncate descriptions to first 100 chars
+          const shortDescription = isDiscord && description.length > 100 
+            ? description.substring(0, 100) + '...' 
+            : description;
+          sections.push(`- **${tool.name}**: ${shortDescription}`);
+          // Skip examples for Discord to save tokens
+          if (!isDiscord) {
+            const examples = handler.getUsageExamples();
+            if (examples.length > 0) {
+              sections.push(`  Examples: ${examples.slice(0, 2).join(', ')}`);
+            }
           }
         } else {
           sections.push(`- **${tool.name}**: ${tool.description || 'No description available'}`);
