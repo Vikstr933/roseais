@@ -1771,8 +1771,49 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       let successIndicators: string[] = [];
       
       if (submitted) {
-        // Wait a bit for page to react
-        await page.waitForTimeout(2000);
+        // Wait longer for page to react and process submission
+        await page.waitForTimeout(5000);
+        
+        // Check current URL - if it changed, might indicate success
+        const currentUrl = page.url();
+        logger.info(`Current URL after submission: ${currentUrl}`);
+        
+        // Check for error messages in the page
+        const pageErrors = await page.evaluate(() => {
+          const errorSelectors = [
+            '[class*="error" i]',
+            '[class*="alert" i]',
+            '[id*="error" i]',
+            '.error',
+            '.alert-danger',
+            '[role="alert"]',
+            '.text-danger',
+            '.text-red'
+          ];
+          
+          const errors: string[] = [];
+          for (const selector of errorSelectors) {
+            const elements = document.querySelectorAll(selector);
+            for (const el of Array.from(elements)) {
+              const text = el.textContent || '';
+              if (text.trim().length > 0 && 
+                  (text.toLowerCase().includes('error') || 
+                   text.toLowerCase().includes('invalid') ||
+                   text.toLowerCase().includes('failed') ||
+                   text.toLowerCase().includes('try again') ||
+                   text.toLowerCase().includes('captcha') ||
+                   text.toLowerCase().includes('turnstile'))) {
+                errors.push(text.trim().substring(0, 200));
+              }
+            }
+          }
+          return errors;
+        });
+        
+        if (pageErrors.length > 0) {
+          logger.warn(`Error messages detected on page after submission: ${pageErrors.join('; ')}`);
+          actions.push(`Errors detected: ${pageErrors.join('; ')}`);
+        }
         
         // Check for success indicators
         try {
@@ -1781,12 +1822,15 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               hasSuccessMessage: document.body.innerText.toLowerCase().includes('success') ||
                                document.body.innerText.toLowerCase().includes('created') ||
                                document.body.innerText.toLowerCase().includes('registered') ||
-                               document.body.innerText.toLowerCase().includes('welcome'),
+                               document.body.innerText.toLowerCase().includes('welcome') ||
+                               document.body.innerText.toLowerCase().includes('account created'),
               modalClosed: !document.querySelector('dialog[open], .modal:not([style*="display: none"]), [role="dialog"]:not([style*="display: none"])'),
-              urlChanged: window.location.href !== window.location.origin + '/',
+              urlChanged: !window.location.href.includes('/register') && !window.location.href.includes('/signup'),
               hasError: document.body.innerText.toLowerCase().includes('error') ||
                        document.body.innerText.toLowerCase().includes('failed') ||
-                       document.body.innerText.toLowerCase().includes('invalid')
+                       document.body.innerText.toLowerCase().includes('invalid') ||
+                       document.body.innerText.toLowerCase().includes('captcha') ||
+                       document.body.innerText.toLowerCase().includes('turnstile')
             };
             return indicators;
           });
