@@ -1014,8 +1014,13 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         
         // Extract sitekey from data-sitekey attribute
         let sitekey: string | null = null;
+        let callbackName: string | null = null;
+        
         if (turnstile) {
           sitekey = turnstile.getAttribute('data-sitekey') || null;
+          // Extract callback name from data-callback attribute
+          callbackName = turnstile.getAttribute('data-callback') || null;
+          
           // Also check iframe src for sitekey
           if (!sitekey && iframe) {
             const iframeSrc = iframe.getAttribute('src') || '';
@@ -1026,15 +1031,28 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           }
         }
         
+        // Fallback: check for common callback names if data-callback is not set
+        if (!callbackName) {
+          if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+            callbackName = 'onRegisterTurnstileSuccess';
+          } else if (typeof (window as any).onLoginTurnstileSuccess === 'function') {
+            callbackName = 'onLoginTurnstileSuccess';
+          } else if (typeof (window as any).onTurnstileSuccess === 'function') {
+            callbackName = 'onTurnstileSuccess';
+          }
+        }
+        
         return {
           hasTurnstile: !!turnstile,
           hasResponseInput: !!responseInput,
           hasToken: !!(responseInput && responseInput.value && responseInput.value.length > 0),
           hasIframe: !!iframe,
           sitekey: sitekey,
-          callback: (window as any).onRegisterTurnstileSuccess ? 'onRegisterTurnstileSuccess' : null
+          callback: callbackName
         };
       });
+      
+      logger.info(`Turnstile info: sitekey=${turnstileInfo.sitekey}, callback=${turnstileInfo.callback || 'none'}`);
       
       if (turnstileInfo.hasTurnstile) {
         // KEY INSIGHT: Turnstile often gives implicit pass (no interaction needed)
@@ -1099,7 +1117,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               
               // Enhanced token application using Turnstile API
               // IMPORTANT: For 2Captcha tokens, we need to set the token properly before calling callbacks
-              const tokenSet = await page.evaluate((tokenValue) => {
+              const tokenSet = await page.evaluate((tokenValue, callbackName) => {
                 // Find and fill the response input
                 const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                 if (!responseInput) {
@@ -1237,7 +1255,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   widgetId: widgetId,
                   tokenLength: responseInput.value?.length || 0
                 };
-              }, token);
+              }, token, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
               
               if (tokenSet.success) {
                 logger.info(`Turnstile token set successfully (API: ${tokenSet.apiSuccess ? 'yes' : 'no'}, length: ${tokenSet.tokenLength})`);
@@ -1310,31 +1328,47 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                       logger.debug(`Token present but not accepted yet (waiting ${Math.round((Date.now() - startTime) / 1000)}s)...`);
                       
                       // Try to trigger Turnstile callback manually
-                      await page.evaluate(() => {
+                      await page.evaluate((callbackName) => {
                         // Try to call success callback if it exists
-                        if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
-                          try {
-                            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
-                            if (responseInput?.value) {
-                              (window as any).onRegisterTurnstileSuccess(responseInput.value);
-                              (window as any).__turnstileCallbackCalled = true;
+                        const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
+                        for (const cbName of callbackNames) {
+                          if (typeof (window as any)[cbName] === 'function') {
+                            try {
+                              const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                              if (responseInput?.value) {
+                                (window as any)[cbName](responseInput.value);
+                                (window as any).__turnstileCallbackCalled = true;
+                                break;
+                              }
+                            } catch (e) {
+                              // Try next callback
                             }
-                          } catch (e) {
-                            // Ignore
                           }
                         }
-                      });
+                      }, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
                     }
                   } else {
                     logger.warn('Token was cleared - re-setting...');
                     // Re-set token if it was cleared
-                    await page.evaluate((tokenValue) => {
+                    await page.evaluate((tokenValue, callbackName) => {
                       const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                       if (responseInput) {
                         responseInput.value = tokenValue;
                         responseInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        // Try to call callback
+                        const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
+                        for (const cbName of callbackNames) {
+                          if (typeof (window as any)[cbName] === 'function') {
+                            try {
+                              (window as any)[cbName](tokenValue);
+                              break;
+                            } catch (e) {
+                              // Try next
+                            }
+                          }
+                        }
                       }
-                    }, token);
+                    }, token, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
                   }
                 }
                 
@@ -1669,7 +1703,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       
       if (!finalTokenCheck.hasToken && tokenSetVia2Captcha && saved2CaptchaToken) {
         logger.warn('Token missing right before submit - re-setting 2Captcha token with proper callback...');
-        await page.evaluate((tokenValue) => {
+        await page.evaluate((tokenValue, callbackName) => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           const hiddenInput = document.querySelector('input[type="hidden"][name="cf-turnstile-response"]') as HTMLInputElement;
           
@@ -1684,15 +1718,20 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           }
           
           // CRITICAL: Call callback again to register token with Turnstile
-          if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
-            try {
-              (window as any).onRegisterTurnstileSuccess(tokenValue);
-              (window as any).__turnstileCallbackCalled = true;
-            } catch (e) {
-              console.warn('Error calling onRegisterTurnstileSuccess:', e);
+          // Use the callback name from data-callback attribute
+          const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
+          for (const cbName of callbackNames) {
+            if (typeof (window as any)[cbName] === 'function') {
+              try {
+                (window as any)[cbName](tokenValue);
+                (window as any).__turnstileCallbackCalled = true;
+                break;
+              } catch (e) {
+                console.warn(`Error calling ${cbName}:`, e);
+              }
             }
           }
-        }, saved2CaptchaToken);
+        }, saved2CaptchaToken, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
         
         // Wait for Turnstile to process the callback
         await page.waitForTimeout(2000);
@@ -1714,16 +1753,20 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // Even if token exists, ensure callback was called for 2Captcha tokens
         if (tokenSetVia2Captcha && saved2CaptchaToken && !finalTokenCheck.callbackCalled) {
           logger.info('Token exists but callback not called - calling callback now...');
-          await page.evaluate((tokenValue) => {
-            if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
-              try {
-                (window as any).onRegisterTurnstileSuccess(tokenValue);
-                (window as any).__turnstileCallbackCalled = true;
-              } catch (e) {
-                // Ignore
+          await page.evaluate((tokenValue, callbackName) => {
+            const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
+            for (const cbName of callbackNames) {
+              if (typeof (window as any)[cbName] === 'function') {
+                try {
+                  (window as any)[cbName](tokenValue);
+                  (window as any).__turnstileCallbackCalled = true;
+                  break;
+                } catch (e) {
+                  // Try next
+                }
               }
             }
-          }, saved2CaptchaToken);
+          }, saved2CaptchaToken, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
           await page.waitForTimeout(1000);
         }
       }
