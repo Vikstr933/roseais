@@ -1139,7 +1139,8 @@ If no projectId is provided, will use the currently selected project from the co
       const memories = await this.loadUserMemories(userId);
 
       // Gather context from all enabled plugins
-      const maxContextItems = options?.maxContextItems || 10;
+      // For Discord, use fewer context items to prevent prompt too long errors
+      const maxContextItems = options?.discordContext ? 3 : (options?.maxContextItems || 5);
       const context = options?.includeContext !== false
         ? await this.gatherContext(userId, userMessage, maxContextItems)
         : [];
