@@ -2096,11 +2096,13 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       
       if (submitted) {
         // Wait longer for page to react and process submission
-        await page.waitForTimeout(5000);
+        await page.waitForTimeout(8000); // Increased wait time for better detection
         
         // Check current URL - if it changed, might indicate success
         const currentUrl = page.url();
+        const originalUrl = task.url;
         logger.info(`Current URL after submission: ${currentUrl}`);
+        logger.info(`Original URL: ${originalUrl}`);
         
         // Check for error messages in the page
         const pageErrors = await page.evaluate(() => {
