@@ -1977,6 +1977,37 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         }
       }
       
+      // Collect browser console messages and network requests for debugging
+      const relevantConsoleMessages = consoleMessages.filter(msg => 
+        msg.text.toLowerCase().includes('error') ||
+        msg.text.toLowerCase().includes('turnstile') ||
+        msg.text.toLowerCase().includes('captcha') ||
+        msg.text.toLowerCase().includes('failed') ||
+        msg.text.toLowerCase().includes('invalid')
+      );
+      
+      const relevantNetworkRequests = networkRequests.filter(req =>
+        req.url.includes('/register') ||
+        req.url.includes('/signup') ||
+        req.url.includes('turnstile') ||
+        req.url.includes('challenges.cloudflare.com')
+      );
+      
+      // Log summary of console messages and network requests
+      if (relevantConsoleMessages.length > 0) {
+        logger.warn(`Browser console messages captured: ${relevantConsoleMessages.length} relevant messages`);
+        relevantConsoleMessages.forEach(msg => {
+          logger.warn(`  [${msg.type}] ${msg.text.substring(0, 200)}`);
+        });
+      }
+      
+      if (relevantNetworkRequests.length > 0) {
+        logger.info(`Network requests captured: ${relevantNetworkRequests.length} relevant requests`);
+        relevantNetworkRequests.forEach(req => {
+          logger.info(`  ${req.method} ${req.url} -> ${req.status || 'pending'} ${req.statusText || ''}`);
+        });
+      }
+      
       const message = formSubmitted 
         ? `Registration form filled and submitted successfully. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`
         : `Registration form filled but submission may have failed. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`;
@@ -1989,7 +2020,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           password: finalPassword,
           passwordAdjusted: finalPassword !== password,
           formSubmitted,
-          successIndicators
+          successIndicators,
+          consoleMessages: relevantConsoleMessages.length > 0 ? relevantConsoleMessages : undefined,
+          networkRequests: relevantNetworkRequests.length > 0 ? relevantNetworkRequests : undefined
         }
       };
     } catch (error) {
