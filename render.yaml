@@ -45,6 +45,8 @@ services:
         sync: false
       - key: GITHUB_CLIENT_SECRET
         sync: false
+      - key: TWOCAPTCHA_API_KEY
+        sync: false
     autoDeploy: true
     disk:
       name: ai-library-data

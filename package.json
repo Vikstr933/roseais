@@ -85,6 +85,7 @@
     "@webcontainer/api": "^1.6.1",
     "archiver": "^7.0.1",
     "axios": "^1.7.7",
+    "2captcha": "^1.1.0",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
     "class-variance-authority": "^0.7.0",

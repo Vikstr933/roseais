@@ -1035,6 +1035,12 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 logger.info('Direct Python execution failed, trying API...');
                 token = await this.solveTurnstileWithAPI(page.url(), turnstileInfo.sitekey);
               }
+              
+              // If still no token, try 2Captcha as final fallback
+              if (!token) {
+                logger.info('Python solver failed, trying 2Captcha as fallback...');
+                token = await this.solveTurnstileWith2Captcha(page.url(), turnstileInfo.sitekey);
+              }
             
             if (token) {
               logger.info('Turnstile solved successfully!');
