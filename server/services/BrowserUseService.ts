@@ -1014,23 +1014,26 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         });
         
         if (!currentToken || currentToken.length === 0) {
-        // Try to solve using Turnstile-Solver (direct Python execution or API)
-        if (turnstileInfo.sitekey) {
-          try {
-            logger.info(`Attempting to solve Turnstile (sitekey: ${turnstileInfo.sitekey})...`);
-            actions.push('Attempting to solve Turnstile');
-            
-            // Try direct Python execution first, then API if available
-            let token: string | null = null;
-            
-            // First, try direct Python execution (no API server needed)
-            token = await this.solveTurnstileDirect(page.url(), turnstileInfo.sitekey);
-            
-            // If direct execution failed and API URL is set, try API
-            if (!token && this.turnstileSolverApiUrl) {
-              logger.info('Direct Python execution failed, trying API...');
-              token = await this.solveTurnstileWithAPI(page.url(), turnstileInfo.sitekey);
-            }
+          // Try to solve using Turnstile-Solver (direct Python execution or API)
+          // Only if implicit pass didn't work
+          if (turnstileInfo.sitekey) {
+            try {
+              logger.info(`No implicit pass received, attempting active Turnstile solving (sitekey: ${turnstileInfo.sitekey})...`);
+              actions.push('Attempting active Turnstile solving');
+              
+              // Try direct Python execution first, then API if available
+              // Use shorter timeout since implicit pass is preferred
+              let token: string | null = null;
+              
+              // First, try direct Python execution (no API server needed)
+              // Use shorter timeout (45 seconds) since we prefer implicit pass
+              token = await this.solveTurnstileDirect(page.url(), turnstileInfo.sitekey, 45000);
+              
+              // If direct execution failed and API URL is set, try API
+              if (!token && this.turnstileSolverApiUrl) {
+                logger.info('Direct Python execution failed, trying API...');
+                token = await this.solveTurnstileWithAPI(page.url(), turnstileInfo.sitekey);
+              }
             
             if (token) {
               logger.info('Turnstile solved successfully!');
@@ -1469,9 +1472,10 @@ Use CSS selectors, IDs, or text content to identify elements.`;
    * Solve Cloudflare Turnstile using direct Python execution (no API server needed)
    * @param url The URL where the Turnstile is located
    * @param sitekey The Turnstile sitekey
+   * @param timeoutMs Optional timeout in milliseconds (default: 120000 = 2 minutes)
    * @returns The Turnstile token if solved successfully, null otherwise
    */
-  private async solveTurnstileDirect(url: string, sitekey: string): Promise<string | null> {
+  private async solveTurnstileDirect(url: string, sitekey: string, timeoutMs: number = 120000): Promise<string | null> {
     const solverScript = join(this.turnstileSolverPath, 'async_solver.py');
     
     try {
@@ -1552,13 +1556,24 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         });
 
         const timeout = setTimeout(() => {
-          proc.kill('SIGKILL');
-          logger.warn('Turnstile-Solver direct execution timed out');
+          try {
+            proc.kill('SIGKILL');
+            logger.warn(`Turnstile-Solver direct execution timed out after ${timeoutMs}ms`);
+          } catch (killError) {
+            logger.debug(`Error killing Turnstile-Solver process: ${killError instanceof Error ? killError.message : String(killError)}`);
+          }
           resolve(null);
-        }, 120000); // 2 minutes timeout
+        }, timeoutMs);
 
-        proc.on('exit', (code) => {
+        proc.on('exit', (code, signal) => {
           clearTimeout(timeout);
+          
+          if (code === null && signal === 'SIGKILL') {
+            // Process was killed by timeout
+            logger.debug('Turnstile-Solver process was killed (timeout)');
+            resolve(null);
+            return;
+          }
           
           if (code === 0 && stdout) {
             try {
@@ -1567,15 +1582,29 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 logger.info(`Turnstile solved directly in ${result.elapsed_time_seconds || 'unknown'} seconds`);
                 resolve(result.turnstile_value);
               } else {
-                logger.warn(`Turnstile-Solver returned failure: ${result.reason || 'unknown'}`);
+                logger.warn(`Turnstile-Solver returned failure: ${result.reason || result.error || 'unknown'}`);
+                if (result.error) {
+                  logger.debug(`Turnstile-Solver error details: ${result.error}`);
+                }
                 resolve(null);
               }
             } catch (parseError) {
               logger.warn(`Failed to parse Turnstile-Solver output: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+              if (stdout) {
+                logger.debug(`Turnstile-Solver stdout: ${stdout.substring(0, 500)}`);
+              }
+              if (stderr) {
+                logger.debug(`Turnstile-Solver stderr: ${stderr.substring(0, 500)}`);
+              }
               resolve(null);
             }
           } else {
-            logger.warn(`Turnstile-Solver exited with code ${code}: ${stderr || stdout}`);
+            // Non-zero exit code or no stdout
+            const errorMsg = stderr || stdout || 'No output';
+            logger.warn(`Turnstile-Solver exited with code ${code}${signal ? ` (signal: ${signal})` : ''}: ${errorMsg.substring(0, 200)}`);
+            if (stderr && stderr.length > 0) {
+              logger.debug(`Turnstile-Solver stderr: ${stderr.substring(0, 500)}`);
+            }
             resolve(null);
           }
         });
