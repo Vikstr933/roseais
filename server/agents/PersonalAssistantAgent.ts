@@ -2718,13 +2718,31 @@ ${discordContext.isPublicChannel ? `
         
         if (fullFiles.length > 0) {
           playgroundInfo += `\n--- Full Content Files (${fullFiles.length}) ---\n`;
-          fullFiles.forEach((file: any, idx: number) => {
+          
+          // Hard cap: only include first N full files to avoid token explosion
+          const MAX_FULL_FILES = 3;
+          const filesToShow = fullFiles.slice(0, MAX_FULL_FILES);
+
+          filesToShow.forEach((file: any, idx: number) => {
             playgroundInfo += `\nFile ${idx + 1}: ${file.path} (${file.language || 'text'})`;
-            if (file.fullContent === false) {
-              playgroundInfo += ` [Content truncated - showing first 2000 chars]`;
+
+            // Always truncate content to a safe length to stay within model token limits
+            const rawContent = typeof file.content === 'string' ? file.content : String(file.content || '');
+            const MAX_CHARS = 2000;
+            const truncatedContent = rawContent.length > MAX_CHARS 
+              ? rawContent.substring(0, MAX_CHARS) + '\n// [truncated]\n'
+              : rawContent;
+
+            if (rawContent.length > MAX_CHARS || file.fullContent === false) {
+              playgroundInfo += ` [Content truncated - showing first ${MAX_CHARS} chars]`;
             }
-            playgroundInfo += `\n\`\`\`${file.language || 'text'}\n${file.content}\n\`\`\`\n`;
+
+            playgroundInfo += `\n\`\`\`${file.language || 'text'}\n${truncatedContent}\n\`\`\`\n`;
           });
+
+          if (fullFiles.length > MAX_FULL_FILES) {
+            playgroundInfo += `\n[Note: ${fullFiles.length - MAX_FULL_FILES} additional full-content file(s) omitted to save tokens. Ask explicitly if you need a specific file.]`;
+          }
         }
         
         if (summaryFiles.length > 0) {
