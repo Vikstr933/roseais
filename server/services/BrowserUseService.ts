@@ -1580,35 +1580,86 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       }
 
       // Final token check right before submit - re-set if missing
+      // CRITICAL: Ensure token is present and properly set before form submission
       const finalTokenCheck = await page.evaluate(() => {
         const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+        const hiddenInput = document.querySelector('input[type="hidden"][name="cf-turnstile-response"]') as HTMLInputElement;
+        const turnstileWidget = document.querySelector('.cf-turnstile, [class*="cf-turnstile"], [data-sitekey]') as HTMLElement;
+        
+        const token = responseInput?.value || hiddenInput?.value || '';
+        const widgetState = turnstileWidget?.getAttribute('data-state') || '';
+        const widgetClass = turnstileWidget?.className || '';
+        
         return {
-          hasToken: !!(responseInput && responseInput.value && responseInput.value.length > 0),
-          tokenLength: responseInput?.value?.length || 0
+          hasToken: token.length > 0,
+          tokenLength: token.length,
+          tokenValue: token.substring(0, 50) + '...', // First 50 chars for logging
+          widgetSuccess: widgetState === 'success' || widgetClass.includes('success'),
+          callbackCalled: !!(window as any).__turnstileCallbackCalled
         };
       });
       
+      logger.info(`Final token check before submit: hasToken=${finalTokenCheck.hasToken}, length=${finalTokenCheck.tokenLength}, widgetSuccess=${finalTokenCheck.widgetSuccess}, callback=${finalTokenCheck.callbackCalled}`);
+      
       if (!finalTokenCheck.hasToken && tokenSetVia2Captcha && saved2CaptchaToken) {
-        logger.warn('Token missing right before submit - re-setting 2Captcha token...');
+        logger.warn('Token missing right before submit - re-setting 2Captcha token with proper callback...');
         await page.evaluate((tokenValue) => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+          const hiddenInput = document.querySelector('input[type="hidden"][name="cf-turnstile-response"]') as HTMLInputElement;
+          
           if (responseInput) {
             responseInput.value = tokenValue;
             responseInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
             responseInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-            
-            // Try callback again
+          }
+          
+          if (hiddenInput) {
+            hiddenInput.value = tokenValue;
+          }
+          
+          // CRITICAL: Call callback again to register token with Turnstile
+          if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+            try {
+              (window as any).onRegisterTurnstileSuccess(tokenValue);
+              (window as any).__turnstileCallbackCalled = true;
+            } catch (e) {
+              console.warn('Error calling onRegisterTurnstileSuccess:', e);
+            }
+          }
+        }, saved2CaptchaToken);
+        
+        // Wait for Turnstile to process the callback
+        await page.waitForTimeout(2000);
+        
+        // Verify token is still there
+        const verifyToken = await page.evaluate(() => {
+          const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+          return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+        });
+        
+        if (verifyToken) {
+          logger.info('Token re-set and verified before submit');
+        } else {
+          logger.warn('Token still missing after re-set - submission may fail');
+        }
+      } else if (finalTokenCheck.hasToken) {
+        logger.info(`Token present before submit (length: ${finalTokenCheck.tokenLength})`);
+        
+        // Even if token exists, ensure callback was called for 2Captcha tokens
+        if (tokenSetVia2Captcha && saved2CaptchaToken && !finalTokenCheck.callbackCalled) {
+          logger.info('Token exists but callback not called - calling callback now...');
+          await page.evaluate((tokenValue) => {
             if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
               try {
                 (window as any).onRegisterTurnstileSuccess(tokenValue);
+                (window as any).__turnstileCallbackCalled = true;
               } catch (e) {
                 // Ignore
               }
             }
-          }
-        }, saved2CaptchaToken);
-        await page.waitForTimeout(1000);
-        logger.info('Token re-set before submit');
+          }, saved2CaptchaToken);
+          await page.waitForTimeout(1000);
+        }
       }
       
       // Submit form - look for submit button in dialog/modal
