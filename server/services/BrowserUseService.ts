@@ -1703,7 +1703,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       
       if (!finalTokenCheck.hasToken && tokenSetVia2Captcha && saved2CaptchaToken) {
         logger.warn('Token missing right before submit - re-setting 2Captcha token with proper callback...');
-        await page.evaluate((tokenValue: string, callbackName: string | null) => {
+        await page.evaluate(({ tokenValue, callbackName }: { tokenValue: string; callbackName: string | null }) => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           const hiddenInput = document.querySelector('input[type="hidden"][name="cf-turnstile-response"]') as HTMLInputElement;
           
