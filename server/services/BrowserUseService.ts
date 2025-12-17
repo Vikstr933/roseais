@@ -69,9 +69,19 @@ export class BrowserUseService {
     if (!this.browser) {
       logger.info('Launching browser for automation...');
       try {
+        // Use improved browser args to avoid detection (based on Turnstile research)
         this.browser = await chromium.launch({
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-blink-features=AutomationControlled', // Critical for Turnstile
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+          ]
         });
         logger.info('✅ Browser launched successfully');
       } catch (error) {
@@ -87,10 +97,19 @@ export class BrowserUseService {
           });
           logger.info('✅ Playwright browsers installed, retrying launch...');
           
-          // Retry launching browser
+          // Retry launching browser with improved args
           this.browser = await chromium.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-blink-features=AutomationControlled',
+              '--disable-dev-shm-usage',
+              '--disable-accelerated-2d-canvas',
+              '--no-first-run',
+              '--no-zygote',
+              '--disable-gpu'
+            ]
           });
           logger.info('✅ Browser launched successfully after installation');
         } catch (installError) {
@@ -190,7 +209,32 @@ export class BrowserUseService {
       logger.info(`Executing browser task: ${task.task} on ${task.url}`);
 
       const browser = await this.getBrowser();
-      browserPage = await browser.newPage();
+      
+      // Create browser context with realistic settings (critical for Turnstile implicit pass)
+      // Based on research: Turnstile often gives implicit pass with good fingerprints
+      const browserContext = await browser.newContext({
+        viewport: { width: 1920, height: 1080 },
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        locale: 'en-US',
+        timezoneId: 'America/New_York',
+        // Add extra HTTP headers for better fingerprint
+        extraHTTPHeaders: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Referer': new URL(task.url).origin,
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+          'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"'
+        }
+      });
+      
+      browserPage = await browserContext.newPage();
       
       // Setup stealth features and realistic headers
       await this.setupStealthPage(browserPage, task.url);
@@ -264,7 +308,11 @@ export class BrowserUseService {
           screenshot = (await browserPage.screenshot({ type: 'png' })).toString('base64');
         }
 
+        // Close page and context (context was created for better Turnstile fingerprints)
         await browserPage.close();
+        if (browserContext) {
+          await browserContext.close();
+        }
 
         return {
           success: true,
@@ -278,6 +326,15 @@ export class BrowserUseService {
             await browserPage.close();
           } catch (closeError) {
             logger.warn('Error closing browser page', closeError as Error);
+          }
+        }
+        // Close context if it exists
+        const context = browserPage?.context();
+        if (context) {
+          try {
+            await context.close();
+          } catch (closeError) {
+            logger.warn('Error closing browser context', closeError as Error);
           }
         }
         throw error;
@@ -879,8 +936,8 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       }
 
       // Handle Cloudflare Turnstile protection
-      logger.info('Waiting for Cloudflare Turnstile to complete...');
-      actions.push('Waiting for Cloudflare Turnstile');
+      logger.info('Checking for Cloudflare Turnstile...');
+      actions.push('Checking for Cloudflare Turnstile');
       
       // Check if Cloudflare Turnstile is present and extract sitekey
       const turnstileInfo = await page.evaluate(() => {
@@ -913,6 +970,50 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       });
       
       if (turnstileInfo.hasTurnstile) {
+        // KEY INSIGHT: Turnstile often gives implicit pass (no interaction needed)
+        // Wait 3-5 seconds first to see if Turnstile auto-solves
+        logger.info('Turnstile detected - waiting for implicit pass (3-5 seconds)...');
+        actions.push('Waiting for Turnstile implicit pass');
+        
+        try {
+          // Wait for Turnstile to potentially auto-solve (implicit pass)
+          // According to research, most Turnstile challenges are implicit
+          await page.waitForFunction(() => {
+            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+            return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+          }, {
+            timeout: 5000, // Wait up to 5 seconds for implicit pass
+            polling: 500 // Check every 500ms
+          });
+          
+          // Check if we got an implicit pass
+          const implicitToken = await page.evaluate(() => {
+            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+            return responseInput?.value || null;
+          });
+          
+          if (implicitToken && implicitToken.length > 0) {
+            logger.info('✅ Turnstile gave implicit pass! Token received automatically.');
+            actions.push('Turnstile implicit pass - token received automatically');
+            // Skip all solving attempts - we already have a token!
+          } else {
+            // No implicit pass, continue with active solving below
+            logger.info('No implicit pass received, trying active solving methods...');
+            actions.push('No implicit pass - trying active solving');
+          }
+        } catch (timeoutError) {
+          // Timeout waiting for implicit pass - this is normal, continue with active solving
+          logger.info('Implicit pass timeout (expected) - trying active solving methods...');
+          actions.push('Implicit pass timeout - trying active solving');
+        }
+        
+        // Only try active solving if we don't already have a token
+        const currentToken = await page.evaluate(() => {
+          const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+          return responseInput?.value || null;
+        });
+        
+        if (!currentToken || currentToken.length === 0) {
         // Try to solve using Turnstile-Solver (direct Python execution or API)
         if (turnstileInfo.sitekey) {
           try {
@@ -1025,7 +1126,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           }
         }
         
-        // Only do manual Turnstile handling if API didn't solve it
+        } // End of "if we don't have a token yet" block
+        
+        // Final check: Do we have a token now (either from implicit pass or active solving)?
         const tokenAlreadySet = await page.evaluate(() => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           return !!(responseInput && responseInput.value && responseInput.value.length > 0);
