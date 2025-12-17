@@ -978,12 +978,13 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         try {
           // Wait for Turnstile to potentially auto-solve (implicit pass)
           // According to research, most Turnstile challenges are implicit
+          // Increased timeout to 15 seconds for server IPs (datacenter IPs need more time)
           await page.waitForFunction(() => {
             const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
             return !!(responseInput && responseInput.value && responseInput.value.length > 0);
           }, {
-            timeout: 5000, // Wait up to 5 seconds for implicit pass
-            polling: 500 // Check every 500ms
+            timeout: 15000, // Wait up to 15 seconds for implicit pass (longer for server IPs)
+            polling: 1000 // Check every 1 second
           });
           
           // Check if we got an implicit pass
@@ -1167,8 +1168,32 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           logger.info('Cloudflare Turnstile detected, attempting to interact manually...');
           actions.push('Cloudflare Turnstile detected - manual handling');
         
-        // Try to click on the Turnstile widget to trigger it
+        // Try to click on the Turnstile widget to trigger it (improved method)
         try {
+          // First, try to find the iframe and click through it
+          const iframe = await page.$('iframe[src*="challenges.cloudflare.com"]');
+          if (iframe) {
+            // Get iframe bounding box and click in the center
+            const box = await iframe.boundingBox();
+            if (box) {
+              await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+              actions.push('Clicked on Turnstile iframe (center)');
+              await page.waitForTimeout(3000); // Wait longer after click
+              
+              // Check if token appeared
+              const tokenAfterClick = await page.evaluate(() => {
+                const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+              });
+              
+              if (tokenAfterClick) {
+                logger.info('Turnstile token received after iframe click');
+                actions.push('Turnstile token received after iframe click');
+              }
+            }
+          }
+          
+          // Also try clicking the widget container directly
           const turnstileClicked = await page.evaluate(() => {
             const turnstile = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
             if (turnstile) {
@@ -1180,11 +1205,11 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           });
           
           if (turnstileClicked) {
-            actions.push('Clicked on Turnstile widget');
-            await page.waitForTimeout(2000);
+            actions.push('Clicked on Turnstile widget container');
+            await page.waitForTimeout(3000); // Wait longer after click
           }
-        } catch {
-          logger.debug('Could not click Turnstile widget directly');
+        } catch (error) {
+          logger.debug(`Could not click Turnstile widget: ${error instanceof Error ? error.message : String(error)}`);
         }
         
         // Try clicking on the iframe (though this usually doesn't work due to cross-origin)
