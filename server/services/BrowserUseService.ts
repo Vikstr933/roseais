@@ -102,10 +102,14 @@ export class BrowserUseService {
               '--disable-setuid-sandbox',
               '--disable-blink-features=AutomationControlled',
               '--disable-dev-shm-usage',
-              '--disable-accelerated-2d-canvas',
+              // IMPORTANT: Enable GPU/WebGL for better fingerprinting (helps Turnstile implicit pass)
+              '--enable-webgl',
+              '--use-gl=swiftshader', // Use SwiftShader for WebGL in headless
+              '--enable-webgl2',
               '--no-first-run',
               '--no-zygote',
-              '--disable-gpu'
+              // Don't disable GPU - it causes WebGL fallback warnings that hurt fingerprinting
+              '--enable-features=VaapiVideoDecoder'
             ]
           });
           logger.info('✅ Browser launched successfully after installation');
@@ -1249,14 +1253,16 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         });
         
         if (!currentToken || currentToken.length === 0) {
-          // WARNING: 2Captcha will likely cause Error 600010 (session mismatch)
-          // Only use as absolute last resort
-          logger.warn('No implicit pass token found. Trying 2Captcha as last resort (may cause session mismatch Error 600010)...');
-          actions.push('No implicit pass - trying 2Captcha (last resort, may fail due to session mismatch)');
+          // CRITICAL: 2Captcha causes Error 600010 (session mismatch) because token generated in different session
+          // Skip 2Captcha entirely - it doesn't work due to session validation
+          // Focus only on implicit pass which solves in our session
+          logger.warn('No implicit pass token found after extended wait. 2Captcha skipped (would cause Error 600010 session mismatch). Form may still work if Turnstile allows submission without explicit token.');
+          actions.push('No implicit pass - 2Captcha skipped (would cause session mismatch Error 600010)');
           
-          // Try to solve using 2Captcha (reliable, human-powered service)
-          // Only if implicit pass didn't work
-          if (turnstileInfo.sitekey) {
+          // DON'T use 2Captcha - it causes session mismatch
+          // Instead, proceed with form submission and hope server accepts it
+          // Many sites accept forms even if Turnstile token is missing or invalid
+          if (false && turnstileInfo.sitekey) { // Disabled - causes Error 600010
             try {
               logger.info(`No implicit pass received, attempting Turnstile solving with 2Captcha (sitekey: ${turnstileInfo.sitekey})...`);
               actions.push('Attempting Turnstile solving with 2Captcha');
