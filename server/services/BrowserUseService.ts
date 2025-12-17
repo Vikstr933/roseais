@@ -1753,7 +1753,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // Even if token exists, ensure callback was called for 2Captcha tokens
         if (tokenSetVia2Captcha && saved2CaptchaToken && !finalTokenCheck.callbackCalled) {
           logger.info('Token exists but callback not called - calling callback now...');
-          await page.evaluate((tokenValue: string, callbackName: string | null) => {
+          await page.evaluate(({ tokenValue, callbackName }: { tokenValue: string; callbackName: string | null }) => {
             const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
             for (const cbName of callbackNames) {
               if (typeof (window as any)[cbName] === 'function') {
