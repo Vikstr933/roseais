@@ -508,10 +508,22 @@ Use CSS selectors, IDs, or text content to identify elements.`;
     
     // Set up page error logging
     page.on('pageerror', (error) => {
-      logger.warn(`[Page Error]: ${error.message}`);
+      const errorMessage = error.message;
+      logger.warn(`[Page Error]: ${errorMessage}`);
+      
+      // Special handling for Turnstile Error 600010
+      if (errorMessage.includes('Turnstile') && errorMessage.includes('600010')) {
+        logger.error('[CRITICAL] Turnstile Error 600010 detected - this usually means the token was rejected by Cloudflare. Possible causes:');
+        logger.error('  1. Token from 2Captcha does not match the current browser session/IP');
+        logger.error('  2. Token has expired or was already used');
+        logger.error('  3. Browser fingerprint does not match the session where token was generated');
+        logger.error('  This is a known limitation when using 2Captcha tokens in a different session than where they were generated.');
+        actions.push('Turnstile Error 600010: Token rejected by Cloudflare (session mismatch)');
+      }
+      
       consoleMessages.push({
         type: 'error',
-        text: error.message,
+        text: errorMessage,
         url: page.url()
       });
     });
