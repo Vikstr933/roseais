@@ -125,35 +125,95 @@ export class BrowserUseService {
     // Set realistic viewport
     await page.setViewportSize({ width: 1920, height: 1080 });
 
-    // Override navigator.webdriver to hide automation
+    // Enhanced stealth script to improve browser fingerprint for Turnstile implicit pass
+    // This helps avoid session mismatch by making browser look more legitimate
     await page.addInitScript(() => {
-      // Remove webdriver flag
+      // Remove webdriver flag (CRITICAL for Turnstile)
       Object.defineProperty(navigator, 'webdriver', {
         get: () => false,
+        configurable: true
       });
 
-      // Override plugins
+      // Override plugins with realistic data
       Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
+        get: () => {
+          const plugins = [
+            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+          ];
+          return plugins as any;
+        },
+        configurable: true
       });
 
       // Override languages
       Object.defineProperty(navigator, 'languages', {
         get: () => ['en-US', 'en'],
+        configurable: true
       });
 
       // Override permissions
       const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters) => (
+      window.navigator.permissions.query = (parameters: any) => (
         parameters.name === 'notifications' ?
           Promise.resolve({ state: Notification.permission } as PermissionStatus) :
           originalQuery(parameters)
       );
 
-      // Mock chrome object
+      // Mock chrome object (important for fingerprinting)
       (window as any).chrome = {
         runtime: {},
+        app: {
+          isInstalled: false
+        }
       };
+
+      // Override getBattery to return realistic values
+      if (navigator.getBattery) {
+        const originalGetBattery = navigator.getBattery;
+        navigator.getBattery = function() {
+          return originalGetBattery.call(navigator).catch(() => {
+            return Promise.resolve({
+              charging: true,
+              chargingTime: 0,
+              dischargingTime: Infinity,
+              level: 1
+            } as BatteryManager);
+          });
+        };
+      }
+
+      // Spoof connection type for better fingerprint
+      Object.defineProperty(navigator, 'connection', {
+        get: () => ({
+          effectiveType: '4g',
+          rtt: 50,
+          downlink: 10,
+          saveData: false
+        }),
+        configurable: true
+      });
+
+      // Override deviceMemory if available
+      if ((navigator as any).deviceMemory !== undefined) {
+        Object.defineProperty(navigator, 'deviceMemory', {
+          get: () => 8,
+          configurable: true
+        });
+      }
+
+      // Override hardwareConcurrency
+      Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 4,
+        configurable: true
+      });
+
+      // Add missing properties that Turnstile might check
+      Object.defineProperty(navigator, 'maxTouchPoints', {
+        get: () => 0,
+        configurable: true
+      });
     });
 
     // Set realistic headers
@@ -1078,36 +1138,63 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           // Increased timeout to 30 seconds for server IPs (datacenter IPs need more time)
           // Try to improve implicit pass rate by simulating subtle user activity
           
-          // Start mouse movement simulation in background (helps with implicit pass)
-          const mouseMovementPromise = (async () => {
+          // SOLVE SESSION MISMATCH: Improve implicit pass rate through realistic user simulation
+          // The key is to get Turnstile to solve in OUR session, not 2Captcha's session
+          // Strategy: Simulate human behavior to encourage implicit pass
+          
+          // Start realistic user activity simulation in background (helps with implicit pass)
+          const userActivityPromise = (async () => {
             try {
-              // Wait a bit first, then do subtle movements
-              await page.waitForTimeout(5000);
-              // Small mouse movements to simulate human presence
-              for (let i = 0; i < 10; i++) {
-                await page.mouse.move(100 + i * 5, 100 + i * 3);
-                await page.waitForTimeout(3000);
+              // Wait a bit first for page to settle
+              await page.waitForTimeout(2000);
+              
+              // Simulate reading/scroll behavior (subtle movements)
+              for (let i = 0; i < 15; i++) {
+                // Small, natural mouse movements (simulating reading)
+                const x = 200 + Math.sin(i * 0.5) * 50;
+                const y = 300 + Math.cos(i * 0.3) * 30;
+                await page.mouse.move(x, y, { steps: 5 }); // Use steps for smooth movement
+                await page.waitForTimeout(2000 + Math.random() * 1000); // Random timing
+                
+                // Occasionally scroll slightly (human behavior)
+                if (i % 3 === 0) {
+                  await page.mouse.wheel(0, 50 + Math.random() * 50);
+                  await page.waitForTimeout(1000);
+                }
+                
+                // Check if token appeared during activity
+                const hasToken = await page.evaluate(() => {
+                  const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                  return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+                });
+                if (hasToken) {
+                  return; // Token found, exit early
+                }
               }
             } catch {
-              // Ignore errors in mouse movement
+              // Ignore errors in user activity simulation
             }
           })();
           
-          // Wait for token (this is the main wait)
+          // Wait for token (this is the main wait for implicit pass)
+          // Implicit pass is the BEST solution - no session mismatch!
           try {
             await page.waitForFunction(() => {
               const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
               return !!(responseInput && responseInput.value && responseInput.value.length > 0);
             }, {
-              timeout: 30000, // Wait up to 30 seconds for implicit pass (longer for server IPs)
+              timeout: 45000, // Wait up to 45 seconds for implicit pass (server IPs need time)
               polling: 2000 // Check every 2 seconds
             });
+            
+            logger.info('✅ Implicit pass detected during wait!');
           } catch {
-            // Timeout is expected if implicit pass doesn't happen
+            // Timeout is expected if implicit pass doesn't happen - we'll try 2Captcha
+            logger.debug('Implicit pass timeout - will try 2Captcha if needed');
           }
           
-          // Don't await mouse movement - let it finish in background
-          mouseMovementPromise.catch(() => {});
+          // Don't await user activity - let it finish in background (already checked above)
+          userActivityPromise.catch(() => {});
           
           // Check if we got an implicit pass
           const implicitToken = await page.evaluate(() => {
@@ -1790,7 +1877,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // Even if token exists, ensure callback was called for 2Captcha tokens
         if (tokenSetVia2Captcha && saved2CaptchaToken && !finalTokenCheck.callbackCalled) {
           logger.info('Token exists but callback not called - calling callback now...');
-          await page.evaluate(({ tokenValue, callbackName }: { tokenValue: string; callbackName: string | null }) => {
+          await page.evaluate(({ tokenValue, callbackName }: { tokenValue: string; callbackName: string | null }) => {                                          
             const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
             for (const cbName of callbackNames) {
               if (typeof (window as any)[cbName] === 'function') {
