@@ -1569,6 +1569,38 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         actions.push('No Turnstile detected - proceeding');
       }
 
+      // Final token check right before submit - re-set if missing
+      const finalTokenCheck = await page.evaluate(() => {
+        const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+        return {
+          hasToken: !!(responseInput && responseInput.value && responseInput.value.length > 0),
+          tokenLength: responseInput?.value?.length || 0
+        };
+      });
+      
+      if (!finalTokenCheck.hasToken && tokenSetVia2Captcha && token) {
+        logger.warn('Token missing right before submit - re-setting 2Captcha token...');
+        await page.evaluate((tokenValue) => {
+          const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+          if (responseInput) {
+            responseInput.value = tokenValue;
+            responseInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+            responseInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            
+            // Try callback again
+            if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+              try {
+                (window as any).onRegisterTurnstileSuccess(tokenValue);
+              } catch (e) {
+                // Ignore
+              }
+            }
+          }
+        }, token);
+        await page.waitForTimeout(1000);
+        logger.info('Token re-set before submit');
+      }
+      
       // Submit form - look for submit button in dialog/modal
       const submitSelectors = [
         // Retrotales specific
