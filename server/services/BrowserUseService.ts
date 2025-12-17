@@ -1011,8 +1011,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           return responseInput?.value || null;
         });
         
-        // Store whether we successfully set a token via 2Captcha
+        // Store whether we successfully set a token via 2Captcha and the token value
         let tokenSetVia2Captcha = false;
+        let saved2CaptchaToken: string | null = null;
         
         if (!currentToken || currentToken.length === 0) {
           // Try to solve using 2Captcha (reliable, human-powered service)
@@ -1024,6 +1025,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               
               // Use 2Captcha directly (reliable, human-powered service)
               const token = await this.solveTurnstileWith2Captcha(page.url(), turnstileInfo.sitekey);
+              saved2CaptchaToken = token; // Save token for later use
             
             if (token) {
               logger.info('Turnstile solved successfully!');
@@ -1578,7 +1580,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         };
       });
       
-      if (!finalTokenCheck.hasToken && tokenSetVia2Captcha && token) {
+      if (!finalTokenCheck.hasToken && tokenSetVia2Captcha && saved2CaptchaToken) {
         logger.warn('Token missing right before submit - re-setting 2Captcha token...');
         await page.evaluate((tokenValue) => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
@@ -1596,7 +1598,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               }
             }
           }
-        }, token);
+        }, saved2CaptchaToken);
         await page.waitForTimeout(1000);
         logger.info('Token re-set before submit');
       }
