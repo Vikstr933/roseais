@@ -1918,20 +1918,34 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           return null;
         }
 
-        if (resultData.status === 1 && resultData.solution?.token) {
+        // Handle different status values
+        // Status can be: 0 (processing), 1 (ready), or string "processing"/"ready"
+        const status = resultData.status;
+        const isReady = status === 1 || status === 'ready' || (typeof status === 'string' && status.toLowerCase() === 'ready');
+        const isProcessing = status === 0 || status === 'processing' || (typeof status === 'string' && status.toLowerCase() === 'processing');
+
+        if (isReady && resultData.solution?.token) {
           // Success! Token received
           const token = resultData.solution.token;
-          const solveTime = resultData.endTime - resultData.createTime;
+          const solveTime = resultData.endTime && resultData.createTime 
+            ? resultData.endTime - resultData.createTime 
+            : (attempt + 1) * pollInterval / 1000;
           logger.info(`2Captcha solved Turnstile successfully in ${solveTime} seconds (cost: ${resultData.cost || 'unknown'})`);
           return token;
-        } else if (resultData.status === 0) {
+        } else if (isProcessing) {
           // Still processing, continue polling
-          logger.debug(`2Captcha task ${taskId} processing... (attempt ${attempt + 1}/${maxAttempts})`);
+          logger.debug(`2Captcha task ${taskId} processing... (attempt ${attempt + 1}/${maxAttempts}, status: ${status})`);
           continue;
         } else {
-          // Unknown status
-          logger.warn(`2Captcha returned unknown status: ${resultData.status}`);
-          return null;
+          // Unknown status - log for debugging but continue polling
+          logger.debug(`2Captcha returned status: ${status} (attempt ${attempt + 1}/${maxAttempts})`);
+          // Continue polling in case it's a transient state
+          if (attempt < maxAttempts - 1) {
+            continue;
+          } else {
+            logger.warn(`2Captcha task ${taskId} ended with unknown status: ${status}`);
+            return null;
+          }
         }
       }
 
