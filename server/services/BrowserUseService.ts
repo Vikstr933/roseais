@@ -1664,16 +1664,35 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 logger.info(`Form submission response: ${response.status()} ${response.statusText()}`);
                 try {
                   const responseBody = await response.text();
-                  if (responseBody.includes('error') || responseBody.includes('Error') || responseBody.includes('invalid')) {
-                    logger.warn(`Form submission may have failed - response contains error indicators: ${responseBody.substring(0, 200)}`);
+                  logger.info(`Response body (first 500 chars): ${responseBody.substring(0, 500)}`);
+                  
+                  // Check for JSON responses
+                  let responseData: any = null;
+                  try {
+                    responseData = JSON.parse(responseBody);
+                    logger.info(`Response JSON: ${JSON.stringify(responseData).substring(0, 500)}`);
+                  } catch {
+                    // Not JSON, that's fine
+                  }
+                  
+                  if (response.status() >= 400) {
+                    logger.warn(`Form submission failed with status ${response.status()}: ${responseBody.substring(0, 300)}`);
+                    actions.push(`Error: Server returned ${response.status()}`);
+                  } else if (responseBody.includes('error') || responseBody.includes('Error') || responseBody.includes('invalid') || 
+                            (responseData && (responseData.error || responseData.message?.toLowerCase().includes('error')))) {
+                    logger.warn(`Form submission may have failed - response contains error indicators: ${responseBody.substring(0, 300)}`);
                     actions.push('Warning: Response contains error indicators');
-                  } else if (responseBody.includes('success') || responseBody.includes('Success') || responseBody.includes('created')) {
+                  } else if (responseBody.includes('success') || responseBody.includes('Success') || responseBody.includes('created') ||
+                            (responseData && (responseData.success || responseData.created))) {
                     logger.info('Form submission response contains success indicators');
                     actions.push('Response indicates success');
                   }
                 } catch (e) {
-                  // Ignore errors reading response
+                  logger.debug(`Error reading response: ${e instanceof Error ? e.message : String(e)}`);
                 }
+              } else {
+                logger.warn('No network response captured after form submission - may have failed silently');
+                actions.push('Warning: No network response captured');
               }
               break;
             } else {
@@ -1710,6 +1729,17 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 // Log response status if we got one
                 if (response) {
                   logger.info(`Form submission response: ${response.status()} ${response.statusText()}`);
+                  try {
+                    const responseBody = await response.text();
+                    logger.info(`Response body (first 500 chars): ${responseBody.substring(0, 500)}`);
+                    
+                    if (response.status() >= 400) {
+                      logger.warn(`Form submission failed with status ${response.status()}`);
+                      actions.push(`Error: Server returned ${response.status()}`);
+                    }
+                  } catch (e) {
+                    // Ignore errors reading response
+                  }
                 }
                 break;
               } catch {
