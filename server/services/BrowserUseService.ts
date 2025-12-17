@@ -510,7 +510,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       // Wait for registration form to appear in DOM (form#register-form or form fields)
       try {
         // Wait for the registration form or form fields to appear
-        await page.waitForSelector('form#register-form, input[name="reg-username"], input[name="reg-password"], input[name="password_again"]', {
+        await page.waitForSelector('form#register-form, input[name="reg-username"], input[name="reg-password"], input[name="password_again"], input[id="password-confirmation"]', {
           timeout: 15000,
           state: 'attached' // Just need them to exist in DOM
         });
@@ -531,7 +531,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             form.removeAttribute('hidden');
             
             // Make all input fields visible
-            const fields = form.querySelectorAll('input[name="reg-username"], input[name="reg-password"], input[name="password_again"]');
+            const fields = form.querySelectorAll('input[name="reg-username"], input[name="reg-password"], input[name="password_again"], input[id="password-confirmation"]');
             fields.forEach((field: Element) => {
               if (field instanceof HTMLElement) {
                 field.style.display = '';
@@ -560,7 +560,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         logger.warn('Registration form not found, trying to find form fields directly', error as Error);
         // Try to find form fields anyway
         try {
-          await page.waitForSelector('input[name="reg-username"], input[name="reg-password"], input[name="password_again"]', {
+          await page.waitForSelector('input[name="reg-username"], input[name="reg-password"], input[name="password_again"], input[id="password-confirmation"]', {
             timeout: 10000,
             state: 'attached'
           });
@@ -771,19 +771,22 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       const confirmPasswordValue = confirmPassword || validPassword;
       if (confirmPasswordValue) {
         const confirmPasswordSelectors = [
-          // Retrotales specific
-          'input[name="password_again"]',
+          // Retrotales specific (try both underscore and hyphen variations)
+          'input[id="password-confirmation"]',
           'input[id="password_again"]',
+          'input[name="password_again"]',
+          'input[name="password-confirmation"]',
           // Generic selectors
           'input[type="password"]:last-of-type',
+          'input[id*="password" i][id*="confirm" i]',
+          'input[id*="password" i][id*="again" i]',
           'input[name*="confirm" i]',
           'input[name*="again" i]',
           'input[id*="confirm" i]',
           'input[id*="again" i]',
           'input[placeholder*="confirm" i]',
           'input[placeholder*="again" i]',
-          'input[name*="password" i][name*="confirm" i]',
-          'input[id*="password" i][id*="confirm" i]'
+          'input[name*="password" i][name*="confirm" i]'
         ];
         for (const selector of confirmPasswordSelectors) {
           try {
@@ -810,7 +813,12 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             }, { sel: selector, val: confirmPasswordValue });
             
             if (valueSet) {
-              const value = await page.inputValue(selector);
+              // Verify value using evaluate (works even for hidden elements)
+              const value = await page.evaluate((sel: string) => {
+                const el = document.querySelector(sel) as HTMLInputElement;
+                return el ? el.value : '';
+              }, selector);
+              
               if (value === confirmPasswordValue) {
                 actions.push('Filled Confirm Password (direct)');
                 await page.waitForTimeout(500 + Math.random() * 500);
@@ -823,6 +831,11 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               await page.evaluate((sel: string) => {
                 const el = document.querySelector(sel) as HTMLElement;
                 if (el) {
+                  // Make sure it's visible
+                  el.style.display = '';
+                  el.style.visibility = '';
+                  el.style.opacity = '';
+                  el.removeAttribute('hidden');
                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   el.focus();
                 }
@@ -834,14 +847,24 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               await page.fill(selector, '');
               await page.type(selector, confirmPasswordValue, { delay: 50 + Math.random() * 100 });
               
-              const value = await page.inputValue(selector);
+              // Verify using evaluate
+              const value = await page.evaluate((sel: string) => {
+                const el = document.querySelector(sel) as HTMLInputElement;
+                return el ? el.value : '';
+              }, selector);
+              
               if (value === confirmPasswordValue) {
                 actions.push('Filled Confirm Password');
                 await page.waitForTimeout(500 + Math.random() * 500);
                 break;
               }
             } catch {
-              const value = await page.inputValue(selector);
+              // Final check using evaluate
+              const value = await page.evaluate((sel: string) => {
+                const el = document.querySelector(sel) as HTMLInputElement;
+                return el ? el.value : '';
+              }, selector);
+              
               if (value === confirmPasswordValue) {
                 actions.push('Filled Confirm Password (evaluate)');
                 await page.waitForTimeout(500 + Math.random() * 500);
@@ -1133,7 +1156,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       const fieldsFilled = await page.evaluate(() => {
         const usernameField = document.querySelector('input[name="reg-username"]') as HTMLInputElement;
         const passwordField = document.querySelector('input[name="reg-password"]') as HTMLInputElement;
-        const confirmPasswordField = document.querySelector('input[name="password_again"]') as HTMLInputElement;
+        const confirmPasswordField = document.querySelector('input[name="password_again"], input[id="password-confirmation"]') as HTMLInputElement;
         
         return {
           username: usernameField?.value || '',
