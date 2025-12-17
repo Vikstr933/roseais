@@ -44,14 +44,11 @@ export class BrowserUseService {
   private static instance: BrowserUseService;
   private browser: Browser | null = null;
   private multiModelAI: MultiModelAIService;
-  private turnstileSolverApiUrl: string | null = null;
   private turnstileSolverPath: string;
 
   private constructor() {
     this.multiModelAI = new MultiModelAIService();
-    // Get Turnstile Solver API URL from environment variable (optional, for API mode)
-    this.turnstileSolverApiUrl = process.env.TURNSTILE_SOLVER_API_URL || null;
-    // Path to turnstile-solver directory
+    // Path to turnstile-solver directory (kept for potential future use)
     this.turnstileSolverPath = join(process.cwd(), 'turnstile-solver');
   }
 
@@ -1015,32 +1012,15 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         });
         
         if (!currentToken || currentToken.length === 0) {
-          // Try to solve using Turnstile-Solver (direct Python execution or API)
+          // Try to solve using 2Captcha (reliable, human-powered service)
           // Only if implicit pass didn't work
           if (turnstileInfo.sitekey) {
             try {
-              logger.info(`No implicit pass received, attempting active Turnstile solving (sitekey: ${turnstileInfo.sitekey})...`);
-              actions.push('Attempting active Turnstile solving');
+              logger.info(`No implicit pass received, attempting Turnstile solving with 2Captcha (sitekey: ${turnstileInfo.sitekey})...`);
+              actions.push('Attempting Turnstile solving with 2Captcha');
               
-              // Try direct Python execution first, then API if available
-              // Use shorter timeout since implicit pass is preferred
-              let token: string | null = null;
-              
-              // First, try direct Python execution (no API server needed)
-              // Use shorter timeout (45 seconds) since we prefer implicit pass
-              token = await this.solveTurnstileDirect(page.url(), turnstileInfo.sitekey, 45000);
-              
-              // If direct execution failed and API URL is set, try API
-              if (!token && this.turnstileSolverApiUrl) {
-                logger.info('Direct Python execution failed, trying API...');
-                token = await this.solveTurnstileWithAPI(page.url(), turnstileInfo.sitekey);
-              }
-              
-              // If still no token, try 2Captcha as final fallback
-              if (!token) {
-                logger.info('Python solver failed, trying 2Captcha as fallback...');
-                token = await this.solveTurnstileWith2Captcha(page.url(), turnstileInfo.sitekey);
-              }
+              // Use 2Captcha directly (reliable, human-powered service)
+              const token = await this.solveTurnstileWith2Captcha(page.url(), turnstileInfo.sitekey);
             
             if (token) {
               logger.info('Turnstile solved successfully!');
