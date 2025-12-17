@@ -1580,10 +1580,42 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             }, selector);
             
             if (isEnabled) {
-              await page.click(selector, { timeout: 5000 });
+              // Wait for navigation or response after clicking submit
+              const [response] = await Promise.all([
+                page.waitForResponse(response => {
+                  // Check if it's a form submission response
+                  return response.request().method() === 'POST' || 
+                         response.url().includes('/register') || 
+                         response.url().includes('/signup') ||
+                         response.url().includes('/create') ||
+                         response.status() < 400;
+                }, { timeout: 10000 }).catch(() => null),
+                page.waitForNavigation({ waitUntil: 'networkidle', timeout: 10000 }).catch(() => null),
+                page.click(selector, { timeout: 5000 })
+              ]);
+              
               actions.push('Submitted form');
               submitted = true;
-              await page.waitForTimeout(3000); // Wait for form submission
+              
+              // Wait a bit more for any JavaScript to process
+              await page.waitForTimeout(2000);
+              
+              // Log response status if we got one
+              if (response) {
+                logger.info(`Form submission response: ${response.status()} ${response.statusText()}`);
+                try {
+                  const responseBody = await response.text();
+                  if (responseBody.includes('error') || responseBody.includes('Error') || responseBody.includes('invalid')) {
+                    logger.warn(`Form submission may have failed - response contains error indicators: ${responseBody.substring(0, 200)}`);
+                    actions.push('Warning: Response contains error indicators');
+                  } else if (responseBody.includes('success') || responseBody.includes('Success') || responseBody.includes('created')) {
+                    logger.info('Form submission response contains success indicators');
+                    actions.push('Response indicates success');
+                  }
+                } catch (e) {
+                  // Ignore errors reading response
+                }
+              }
               break;
             } else {
               // Button exists but is disabled - wait for it to become enabled
@@ -1597,10 +1629,29 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   selector,
                   { timeout: 10000 }
                 );
-                await page.click(selector, { timeout: 5000 });
+                // Wait for navigation or response after clicking submit
+                const [response] = await Promise.all([
+                  page.waitForResponse(response => {
+                    return response.request().method() === 'POST' || 
+                           response.url().includes('/register') || 
+                           response.url().includes('/signup') ||
+                           response.url().includes('/create') ||
+                           response.status() < 400;
+                  }, { timeout: 10000 }).catch(() => null),
+                  page.waitForNavigation({ waitUntil: 'networkidle', timeout: 10000 }).catch(() => null),
+                  page.click(selector, { timeout: 5000 })
+                ]);
+                
                 actions.push('Submitted form (waited for button to be enabled)');
                 submitted = true;
-                await page.waitForTimeout(3000);
+                
+                // Wait a bit more for any JavaScript to process
+                await page.waitForTimeout(2000);
+                
+                // Log response status if we got one
+                if (response) {
+                  logger.info(`Form submission response: ${response.status()} ${response.statusText()}`);
+                }
                 break;
               } catch {
                 logger.warn(`Button ${selector} remained disabled`);
