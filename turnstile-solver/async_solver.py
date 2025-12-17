@@ -119,24 +119,136 @@ class AsyncTurnstileSolver:
 
         return page
 
-    async def _get_turnstile_response(self, page, max_attempts: int = 10) -> Optional[str]:
-        """Attempt to retrieve Turnstile response."""
-        for _ in range(max_attempts):
+    async def _apply_turnstile_token(self, page, token: str) -> bool:
+        """Apply a Turnstile token to the page (improved method based on playwright-captcha)."""
+        try:
+            # Enhanced token application script
+            js_script = """
+            (function(token) {
+                // Find and fill the response input
+                const responseInput = document.querySelector('input[name="cf-turnstile-response"]');
+                if (responseInput) {
+                    responseInput.value = token;
+                    
+                    // Trigger all necessary events
+                    ['input', 'change', 'blur', 'focus'].forEach(eventType => {
+                        responseInput.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+                    });
+                    
+                    // Update widget data attribute
+                    const turnstileWidget = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
+                    if (turnstileWidget) {
+                        turnstileWidget.setAttribute('data-token', token);
+                    }
+                }
+                
+                // Try to call Turnstile callbacks
+                let callbackCalled = false;
+                
+                // Check for onRegisterTurnstileSuccess callback
+                if (typeof window.onRegisterTurnstileSuccess === 'function') {
+                    try {
+                        window.onRegisterTurnstileSuccess(token);
+                        callbackCalled = true;
+                    } catch (e) {
+                        try {
+                            window.onRegisterTurnstileSuccess();
+                            callbackCalled = true;
+                        } catch (e2) {
+                            // Ignore
+                        }
+                    }
+                }
+                
+                // Check for standard Turnstile API
+                if (typeof window.turnstile !== 'undefined') {
+                    const turnstileElements = document.querySelectorAll('[data-sitekey]');
+                    turnstileElements.forEach((el) => {
+                        const widgetId = el.getAttribute('data-widget-id');
+                        if (widgetId && window.turnstile.reset) {
+                            try {
+                                window.turnstile.reset(widgetId);
+                                callbackCalled = true;
+                            } catch (e) {
+                                // Ignore
+                            }
+                        }
+                    });
+                }
+                
+                return callbackCalled || !!responseInput;
+            })('%s');
+            """ % token
+            
+            result = await page.evaluate(js_script)
+            return result
+        except Exception as e:
             if self.debug:
-                logger.debug(f"Attempt {_ + 1}: No Turnstile response yet.")
+                logger.debug(f"Error applying token: {e}")
+            return False
+
+    async def _get_turnstile_response(self, page, max_attempts: int = 20) -> Optional[str]:
+        """Attempt to retrieve Turnstile response with improved click-based solving."""
+        # First, wait a bit for implicit pass
+        await asyncio.sleep(2)
+        
+        for attempt in range(max_attempts):
+            if self.debug:
+                logger.debug(f"Attempt {attempt + 1}/{max_attempts}: Checking for Turnstile response...")
             try:
+                # Check if token already exists (implicit pass)
                 turnstile_check = await page.input_value("[name=cf-turnstile-response]")
-                if turnstile_check == "":
-                    await page.click("//div[@class='cf-turnstile']", timeout=3000)
-                    await asyncio.sleep(0.5)
-                else:
-                    element = await page.query_selector("[name=cf-turnstile-response]")
-                    if element:
-                        turnstile_element = await page.query_selector("[name=cf-turnstile-response]")
-                        return await turnstile_element.get_attribute("value")
-                    break
-            except:
-                pass
+                if turnstile_check and turnstile_check.strip():
+                    if self.debug:
+                        logger.debug(f"Found Turnstile token (implicit pass): {turnstile_check[:45]}...")
+                    return turnstile_check
+                
+                # Try clicking on Turnstile widget to trigger it
+                try:
+                    # Try multiple selectors for the Turnstile widget
+                    selectors = [
+                        ".cf-turnstile",
+                        "[class*='cf-turnstile']",
+                        "iframe[src*='challenges.cloudflare.com']",
+                        "div[data-sitekey]"
+                    ]
+                    
+                    clicked = False
+                    for selector in selectors:
+                        try:
+                            element = await page.query_selector(selector)
+                            if element:
+                                # Try clicking the element
+                                await element.click(timeout=2000)
+                                clicked = True
+                                if self.debug:
+                                    logger.debug(f"Clicked Turnstile widget using selector: {selector}")
+                                break
+                        except:
+                            continue
+                    
+                    if clicked:
+                        # Wait a bit for Turnstile to process
+                        await asyncio.sleep(1.5)
+                        
+                        # Check again for token
+                        turnstile_check = await page.input_value("[name=cf-turnstile-response]")
+                        if turnstile_check and turnstile_check.strip():
+                            if self.debug:
+                                logger.debug(f"Found Turnstile token after click: {turnstile_check[:45]}...")
+                            return turnstile_check
+                except Exception as click_error:
+                    if self.debug:
+                        logger.debug(f"Click attempt failed: {click_error}")
+                
+                # Wait before next attempt
+                await asyncio.sleep(0.5)
+                
+            except Exception as e:
+                if self.debug:
+                    logger.debug(f"Error in attempt {attempt + 1}: {e}")
+                await asyncio.sleep(0.5)
+        
         return None
 
     async def solve(self, url: str, sitekey: str, action: str = None, cdata: str = None):
