@@ -1039,55 +1039,81 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               logger.info('Turnstile solved successfully!');
               actions.push('Turnstile solved');
               
-              // Set the token in the response input and trigger all necessary events
+              // Enhanced token application (based on playwright-captcha techniques)
               const tokenSet = await page.evaluate((tokenValue) => {
+                // Find and fill the response input
                 const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
-                if (responseInput) {
-                  // Set the token value
-                  responseInput.value = tokenValue;
-                  
-                  // Trigger all possible events to ensure Turnstile recognizes the token
-                  const events = ['input', 'change', 'blur', 'focus'];
-                  events.forEach(eventType => {
-                    responseInput.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
-                  });
-                  
-                  // Try to find and update the Turnstile widget's data attribute if it exists
-                  const turnstileWidget = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
-                  if (turnstileWidget) {
-                    turnstileWidget.setAttribute('data-token', tokenValue);
-                  }
-                  
-                  // Trigger any Turnstile callbacks that might exist
-                  if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+                if (!responseInput) {
+                  return false;
+                }
+                
+                // Set the token value
+                responseInput.value = tokenValue;
+                
+                // Trigger all necessary events to ensure Turnstile recognizes the token
+                const events = ['input', 'change', 'blur', 'focus'];
+                events.forEach(eventType => {
+                  responseInput.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+                });
+                
+                // Update widget data attribute if it exists
+                const turnstileWidget = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
+                if (turnstileWidget) {
+                  turnstileWidget.setAttribute('data-token', tokenValue);
+                }
+                
+                // Try to call Turnstile callbacks (improved method)
+                let callbackCalled = false;
+                
+                // Check for onRegisterTurnstileSuccess callback
+                if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+                  try {
+                    (window as any).onRegisterTurnstileSuccess(tokenValue);
+                    callbackCalled = true;
+                  } catch (e) {
                     try {
-                      (window as any).onRegisterTurnstileSuccess(tokenValue);
-                    } catch (e) {
-                      // Callback might not accept parameters
+                      // Try without parameters
                       (window as any).onRegisterTurnstileSuccess();
+                      callbackCalled = true;
+                    } catch (e2) {
+                      // Ignore errors
                     }
                   }
-                  
-                  // Also check for standard Turnstile callback
-                  if (typeof (window as any).turnstile !== 'undefined' && (window as any).turnstile.render) {
-                    // Turnstile library is loaded, try to trigger success
-                    const turnstileElements = document.querySelectorAll('[data-sitekey]');
-                    turnstileElements.forEach((el: Element) => {
-                      const widgetId = el.getAttribute('data-widget-id');
-                      if (widgetId && (window as any).turnstile.reset) {
-                        // Try to notify Turnstile that it's been solved
-                        try {
-                          (window as any).turnstile.reset(widgetId);
-                        } catch (e) {
-                          // Ignore errors
-                        }
-                      }
-                    });
-                  }
-                  
-                  return true;
                 }
-                return false;
+                
+                // Check for standard Turnstile API
+                if (typeof (window as any).turnstile !== 'undefined') {
+                  const turnstileElements = document.querySelectorAll('[data-sitekey]');
+                  turnstileElements.forEach((el: Element) => {
+                    const widgetId = el.getAttribute('data-widget-id');
+                    if (widgetId && (window as any).turnstile.reset) {
+                      try {
+                        (window as any).turnstile.reset(widgetId);
+                        callbackCalled = true;
+                      } catch (e) {
+                        // Ignore errors
+                      }
+                    }
+                  });
+                  
+                  // Also try to submit the token using Turnstile API if available
+                  if ((window as any).turnstile.submit) {
+                    try {
+                      turnstileElements.forEach((el: Element) => {
+                        const widgetId = el.getAttribute('data-widget-id');
+                        if (widgetId) {
+                          (window as any).turnstile.submit(widgetId);
+                          callbackCalled = true;
+                        }
+                      });
+                    } catch (e) {
+                      // Ignore errors
+                    }
+                  }
+                }
+                
+                // Return true if we found the input (callback success is optional)
+                return true;
               }, token);
               
               if (tokenSet) {
