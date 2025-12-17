@@ -1117,7 +1117,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               
               // Enhanced token application using Turnstile API
               // IMPORTANT: For 2Captcha tokens, we need to set the token properly before calling callbacks
-              const tokenSet = await page.evaluate((tokenValue, callbackName) => {
+              const tokenSet = await page.evaluate((tokenValue: string, callbackName: string | null) => {
                 // Find and fill the response input
                 const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                 if (!responseInput) {
@@ -1255,7 +1255,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   widgetId: widgetId,
                   tokenLength: responseInput.value?.length || 0
                 };
-              }, token, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
+              }, token, turnstileInfo.callback || 'onRegisterTurnstileSuccess') as { success: boolean; apiSuccess: boolean; widgetId: string | null; tokenLength: number };
               
               if (tokenSet.success) {
                 logger.info(`Turnstile token set successfully (API: ${tokenSet.apiSuccess ? 'yes' : 'no'}, length: ${tokenSet.tokenLength})`);
@@ -1328,7 +1328,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                       logger.debug(`Token present but not accepted yet (waiting ${Math.round((Date.now() - startTime) / 1000)}s)...`);
                       
                       // Try to trigger Turnstile callback manually
-                      await page.evaluate((callbackName) => {
+                      await page.evaluate((callbackName: string | null) => {
                         // Try to call success callback if it exists
                         const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
                         for (const cbName of callbackNames) {
@@ -1350,7 +1350,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   } else {
                     logger.warn('Token was cleared - re-setting...');
                     // Re-set token if it was cleared
-                    await page.evaluate((tokenValue, callbackName) => {
+                    await page.evaluate((tokenValue: string, callbackName: string | null) => {
                       const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                       if (responseInput) {
                         responseInput.value = tokenValue;
@@ -1703,7 +1703,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       
       if (!finalTokenCheck.hasToken && tokenSetVia2Captcha && saved2CaptchaToken) {
         logger.warn('Token missing right before submit - re-setting 2Captcha token with proper callback...');
-        await page.evaluate((tokenValue, callbackName) => {
+        await page.evaluate((tokenValue: string, callbackName: string | null) => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           const hiddenInput = document.querySelector('input[type="hidden"][name="cf-turnstile-response"]') as HTMLInputElement;
           
@@ -1753,7 +1753,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // Even if token exists, ensure callback was called for 2Captcha tokens
         if (tokenSetVia2Captcha && saved2CaptchaToken && !finalTokenCheck.callbackCalled) {
           logger.info('Token exists but callback not called - calling callback now...');
-          await page.evaluate((tokenValue, callbackName) => {
+          await page.evaluate((tokenValue: string, callbackName: string | null) => {
             const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
             for (const cbName of callbackNames) {
               if (typeof (window as any)[cbName] === 'function') {
