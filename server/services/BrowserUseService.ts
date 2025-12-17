@@ -1825,6 +1825,96 @@ Use CSS selectors, IDs, or text content to identify elements.`;
   }
 
   /**
+   * Solve Cloudflare Turnstile using 2Captcha service (paid service, reliable fallback)
+   * @param url The URL where the Turnstile is located
+   * @param sitekey The Turnstile sitekey
+   * @returns The Turnstile token if solved successfully, null otherwise
+   */
+  private async solveTurnstileWith2Captcha(url: string, sitekey: string): Promise<string | null> {
+    const apiKey = process.env.TWOCAPTCHA_API_KEY || process.env.CAPTCHA_API_KEY;
+    
+    if (!apiKey) {
+      logger.debug('2Captcha API key not configured, skipping 2Captcha solver');
+      return null;
+    }
+
+    try {
+      logger.info(`Solving Turnstile using 2Captcha (url: ${url}, sitekey: ${sitekey})`);
+      
+      // Step 1: Submit Turnstile task to 2Captcha
+      const submitUrl = 'https://2captcha.com/in.php';
+      const submitParams = new URLSearchParams({
+        key: apiKey,
+        method: 'turnstile',
+        sitekey: sitekey,
+        pageurl: url,
+        json: '1'
+      });
+
+      const submitResponse = await fetch(`${submitUrl}?${submitParams.toString()}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+
+      const submitData = await submitResponse.json();
+      
+      if (submitData.status !== 1) {
+        logger.warn(`2Captcha submission failed: ${submitData.request || 'Unknown error'}`);
+        return null;
+      }
+
+      const taskId = submitData.request;
+      logger.info(`2Captcha task created: ${taskId}`);
+
+      // Step 2: Poll for result (max 2 minutes, check every 5 seconds)
+      const maxAttempts = 24; // 24 attempts * 5 seconds = 2 minutes max
+      const pollInterval = 5000; // 5 seconds between polls
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const resultUrl = 'https://2captcha.com/res.php';
+        const resultParams = new URLSearchParams({
+          key: apiKey,
+          action: 'get',
+          id: taskId,
+          json: '1'
+        });
+
+        const resultResponse = await fetch(`${resultUrl}?${resultParams.toString()}`, {
+          method: 'GET',
+        });
+
+        const resultData = await resultResponse.json();
+
+        if (resultData.status === 1 && resultData.request) {
+          // Success! Token received
+          const token = resultData.request;
+          logger.info(`2Captcha solved Turnstile successfully in ${(attempt + 1) * 5} seconds`);
+          return token;
+        } else if (resultData.request === 'CAPCHA_NOT_READY') {
+          // Still processing, continue polling
+          logger.debug(`2Captcha task ${taskId} not ready yet (attempt ${attempt + 1}/${maxAttempts})`);
+          continue;
+        } else {
+          // Error
+          logger.warn(`2Captcha returned error: ${resultData.request || 'Unknown error'}`);
+          return null;
+        }
+      }
+
+      // Timeout
+      logger.warn(`2Captcha task ${taskId} timed out after ${maxAttempts * pollInterval / 1000} seconds`);
+      return null;
+    } catch (error) {
+      logger.warn(`2Captcha API error: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  /**
    * Check if browser automation is available (Playwright)
    */
   async isAvailable(): Promise<boolean> {
