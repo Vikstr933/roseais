@@ -1263,8 +1263,28 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 }
                 
                 if (!tokenAccepted) {
-                  logger.warn('Turnstile did not accept token within timeout - proceeding anyway (submission may fail)');
-                  actions.push('Warning: Turnstile token not fully accepted - proceeding with submit');
+                  logger.warn('Turnstile did not accept token within timeout - re-setting token before submit...');
+                  // Re-set token one more time before submit to ensure it's there
+                  await page.evaluate((tokenValue) => {
+                    const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                    if (responseInput) {
+                      responseInput.value = tokenValue;
+                      responseInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                      responseInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                      
+                      // Try callback again
+                      if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+                        try {
+                          (window as any).onRegisterTurnstileSuccess(tokenValue);
+                        } catch (e) {
+                          // Ignore
+                        }
+                      }
+                    }
+                  }, token);
+                  
+                  await page.waitForTimeout(1000);
+                  actions.push('Warning: Turnstile token not fully accepted - re-set token before submit');
                 } else {
                   // Wait a bit more to ensure everything is settled
                   await page.waitForTimeout(2000);
