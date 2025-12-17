@@ -4,7 +4,14 @@ import logging
 import asyncio
 from typing import Optional
 from dataclasses import dataclass
-from camoufox.async_api import AsyncCamoufox
+
+# Try to import camoufox, but don't crash if it's not available
+try:
+    from camoufox.async_api import AsyncCamoufox  # type: ignore
+    CAMOUFOX_AVAILABLE = True
+except ImportError:
+    CAMOUFOX_AVAILABLE = False
+
 from patchright.async_api import async_playwright
 
 @dataclass
@@ -89,6 +96,10 @@ class AsyncTurnstileSolver:
         if useragent:
             self.browser_args.append(f"--user-agent={useragent}")
 
+        # If camoufox is requested but not available, log and fall back to chromium later
+        if self.browser_type == "camoufox" and not CAMOUFOX_AVAILABLE:
+            logger.warning("camoufox is not available in this environment - falling back to chromium for Turnstile solving")
+
     async def _setup_page(self, browser, url: str, sitekey: str, action: str = None, cdata: str = None):
         """Set up the page with Turnstile widget."""
         if self.browser_type == "chrome":
@@ -134,13 +145,22 @@ class AsyncTurnstileSolver:
         """
         start_time = time.time()
 
-        if self.browser_type in ["chromium", "chrome", "msedge"]:
+        playwright = None
+        used_camoufox = False
+
+        # Decide which browser backend to use
+        if self.browser_type in ["chromium", "chrome", "msedge"] or (self.browser_type == "camoufox" and not CAMOUFOX_AVAILABLE):
+            # Use standard Playwright/patchright (chromium) backend
+            if self.browser_type == "camoufox" and not CAMOUFOX_AVAILABLE:
+                logger.info("Using chromium backend because camoufox is not available")
             playwright = await async_playwright().start()
             browser = await playwright.chromium.launch(
                 headless=self.headless,
                 args=self.browser_args
             )
-        elif self.browser_type == "camoufox":
+        elif self.browser_type == "camoufox" and CAMOUFOX_AVAILABLE:
+            # Use camoufox backend when available
+            used_camoufox = True
             browser = await AsyncCamoufox(headless=self.headless).start()
 
         try:
@@ -164,14 +184,28 @@ class AsyncTurnstileSolver:
                 )
                 logger.success(f"Successfully solved captcha: {turnstile_value[:45]}... in {elapsed_time} seconds")
         finally:
-            await browser.close()
-            if self.browser_type == "chrome" or self.browser_type == "chromium":
-                await playwright.stop()
-            else:
+            # Safely shut down browser and underlying engines
+            try:
+                if browser:
+                    await browser.close()
+            except Exception as e:
+                logger.warning(f"Error while closing browser: {e}")
+
+            # Stop Playwright if it was started
+            if playwright is not None:
                 try:
-                    await browser.stop()
-                except:
+                    await playwright.stop()
+                except Exception as e:
+                    logger.warning(f"Error while stopping Playwright: {e}")
+
+            # Stop camoufox backend if we actually used it
+            if used_camoufox and CAMOUFOX_AVAILABLE:
+                try:
+                    await browser.stop()  # type: ignore[attr-defined]
+                except Exception:
+                    # Best-effort cleanup; ignore errors here
                     pass
+
             if self.debug:
                 logger.debug(f"Elapsed time: {result.elapsed_time_seconds} seconds")
                 logger.debug("Browser closed. Returning result.")
