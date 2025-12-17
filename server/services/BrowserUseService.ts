@@ -1075,14 +1075,38 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         try {
           // Wait for Turnstile to potentially auto-solve (implicit pass)
           // According to research, most Turnstile challenges are implicit
-          // Increased timeout to 15 seconds for server IPs (datacenter IPs need more time)
-          await page.waitForFunction(() => {
-            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
-            return !!(responseInput && responseInput.value && responseInput.value.length > 0);
-          }, {
-            timeout: 15000, // Wait up to 15 seconds for implicit pass (longer for server IPs)
-            polling: 1000 // Check every 1 second
-          });
+          // Increased timeout to 30 seconds for server IPs (datacenter IPs need more time)
+          // Try to improve implicit pass rate by simulating user activity
+          await Promise.race([
+            // Wait for token
+            page.waitForFunction(() => {
+              const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+              return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+            }, {
+              timeout: 30000, // Wait up to 30 seconds for implicit pass (longer for server IPs)
+              polling: 2000 // Check every 2 seconds
+            }),
+            // Simulate subtle user activity while waiting (helps with implicit pass)
+            (async () => {
+              // Wait a bit first, then do subtle movements
+              await page.waitForTimeout(5000);
+              // Small mouse movements to simulate human presence
+              for (let i = 0; i < 5; i++) {
+                await page.mouse.move(100 + i * 10, 100 + i * 5);
+                await page.waitForTimeout(2000);
+                // Check if token appeared during movement
+                const hasToken = await page.evaluate(() => {
+                  const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                  return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+                });
+                if (hasToken) {
+                  return; // Token found, exit
+                }
+              }
+              // Continue waiting...
+              await new Promise(resolve => setTimeout(resolve, 20000));
+            })()
+          ]);
           
           // Check if we got an implicit pass
           const implicitToken = await page.evaluate(() => {
