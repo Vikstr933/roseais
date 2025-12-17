@@ -13,7 +13,8 @@ import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 const logger = new SimpleLogger('PersonalAssistantAgent');
 
 // Max messages to keep per session (rolling window)
-const MAX_MESSAGES_PER_SESSION = 15;
+// Reduced to 10 to prevent prompt too long errors
+const MAX_MESSAGES_PER_SESSION = 10;
 
 /**
  * Personal Assistant Agent - Your AI-powered productivity companion
@@ -1797,9 +1798,9 @@ If no projectId is provided, will use the currently selected project from the co
         }
       );
 
-      // Keep only last N messages (rolling window)
-      if (history.length > MAX_MESSAGES_PER_SESSION * 2) {
-        history.splice(0, history.length - MAX_MESSAGES_PER_SESSION * 2);
+      // Keep only last N messages (rolling window) - reduced to prevent prompt too long errors
+      if (history.length > MAX_MESSAGES_PER_SESSION) {
+        history.splice(0, history.length - MAX_MESSAGES_PER_SESSION);
       }
       this.conversationHistory.set(sessionId, history);
       
@@ -2743,15 +2744,17 @@ ${discordContext.isPublicChannel ? `
           playgroundInfo += `\n--- Full Content Files (${fullFiles.length}) ---\n`;
           
           // Hard cap: only include first N full files to avoid token explosion
-          const MAX_FULL_FILES = 3;
+          // Reduced to 1 file max to prevent prompt too long errors
+          const MAX_FULL_FILES = 1;
           const filesToShow = fullFiles.slice(0, MAX_FULL_FILES);
 
           filesToShow.forEach((file: any, idx: number) => {
             playgroundInfo += `\nFile ${idx + 1}: ${file.path} (${file.language || 'text'})`;
 
             // Always truncate content to a safe length to stay within model token limits
+            // Reduced from 2000 to 1000 chars to prevent prompt too long errors
             const rawContent = typeof file.content === 'string' ? file.content : String(file.content || '');
-            const MAX_CHARS = 2000;
+            const MAX_CHARS = 1000;
             const truncatedContent = rawContent.length > MAX_CHARS 
               ? rawContent.substring(0, MAX_CHARS) + '\n// [truncated]\n'
               : rawContent;
@@ -3074,7 +3077,7 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
           eq(assistantMessages.sessionId, sessionId)
         ))
         .orderBy(desc(assistantMessages.createdAt))
-        .limit(MAX_MESSAGES_PER_SESSION * 2);
+        .limit(MAX_MESSAGES_PER_SESSION);
 
       // Convert to Anthropic format (reverse to get chronological order)
       const history: Anthropic.MessageParam[] = messages.reverse().map(msg => ({
@@ -3160,11 +3163,11 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
           eq(assistantMessages.sessionId, sessionId)
         ))
         .orderBy(desc(assistantMessages.createdAt))
-        .limit(MAX_MESSAGES_PER_SESSION * 2);
+        .limit(MAX_MESSAGES_PER_SESSION);
 
       const keepIds = recentMessages.map(m => m.id);
 
-      if (keepIds.length >= MAX_MESSAGES_PER_SESSION * 2) {
+      if (keepIds.length >= MAX_MESSAGES_PER_SESSION) {
         // Count total messages
         const allMessages = await db
           .select({ id: assistantMessages.id })

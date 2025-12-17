@@ -208,8 +208,9 @@ ${memories.map(m => `- ${m.category}/${m.key}: ${m.value}`).join('\n')}`;
   }
 
   private buildKnowledgeSection(knowledgeItems: KnowledgeItem[]): string {
+    // Reduced to 5 items and 150 chars each to prevent prompt too long errors
     return `**Relevant Context:**
-${knowledgeItems.slice(0, 10).map(item => `- ${item.title}: ${item.content.substring(0, 200)}`).join('\n')}`;
+${knowledgeItems.slice(0, 5).map(item => `- ${item.title}: ${item.content.substring(0, 150)}`).join('\n')}`;
   }
 
   private buildPlaygroundSection(playgroundContext: any): string {
