@@ -1128,10 +1128,11 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       logger.info(`Turnstile info: sitekey=${turnstileInfo.sitekey}, callback=${turnstileInfo.callback || 'none'}`);
       
       if (turnstileInfo.hasTurnstile) {
-        // KEY INSIGHT: Turnstile often gives implicit pass (no interaction needed)
-        // Wait 3-5 seconds first to see if Turnstile auto-solves
-        logger.info('Turnstile detected - waiting for implicit pass (3-5 seconds)...');
-        actions.push('Waiting for Turnstile implicit pass');
+        // CRITICAL STRATEGY: Focus on implicit pass to avoid session mismatch
+        // Implicit pass = Turnstile solves in OUR session = no session mismatch
+        // 2Captcha causes session mismatch (Error 600010) because token generated in different session
+        logger.info('Turnstile detected - focusing on implicit pass strategy (best way to avoid session mismatch)');
+        actions.push('Turnstile detected - waiting for implicit pass');
         
         try {
           // Wait for Turnstile to potentially auto-solve (implicit pass)
@@ -1139,28 +1140,34 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           // Increased timeout to 30 seconds for server IPs (datacenter IPs need more time)
           // Try to improve implicit pass rate by simulating subtle user activity
           
-          // SOLVE SESSION MISMATCH: Improve implicit pass rate through realistic user simulation
-          // The key is to get Turnstile to solve in OUR session, not 2Captcha's session
-          // Strategy: Simulate human behavior to encourage implicit pass
+          // CRITICAL: Focus on implicit pass to avoid session mismatch completely
+          // Implicit pass = Turnstile solves in OUR session = ZERO session mismatch issues
+          // Strategy: Wait longer with realistic user simulation to encourage implicit pass
           
-          // Start realistic user activity simulation in background (helps with implicit pass)
+          logger.info('Waiting up to 60 seconds for implicit pass with user simulation...');
+          
+          // Start realistic user activity simulation (critical for implicit pass)
+          let implicitPassSuccess = false;
           const userActivityPromise = (async () => {
             try {
-              // Wait a bit first for page to settle
-              await page.waitForTimeout(2000);
+              // Initial wait for page to settle
+              await page.waitForTimeout(3000);
               
-              // Simulate reading/scroll behavior (subtle movements)
-              for (let i = 0; i < 15; i++) {
-                // Small, natural mouse movements (simulating reading)
-                const x = 200 + Math.sin(i * 0.5) * 50;
-                const y = 300 + Math.cos(i * 0.3) * 30;
-                await page.mouse.move(x, y, { steps: 5 }); // Use steps for smooth movement
-                await page.waitForTimeout(2000 + Math.random() * 1000); // Random timing
+              // Extended simulation: Simulate reading/interacting with page
+              // This helps Turnstile see legitimate user behavior
+              for (let i = 0; i < 20; i++) {
+                // Natural mouse movements (simulating reading/interaction)
+                const x = 300 + Math.sin(i * 0.4) * 100;
+                const y = 400 + Math.cos(i * 0.3) * 80;
+                await page.mouse.move(x, y, { steps: 8 }); // Smooth movement
                 
-                // Occasionally scroll slightly (human behavior)
-                if (i % 3 === 0) {
-                  await page.mouse.wheel(0, 50 + Math.random() * 50);
-                  await page.waitForTimeout(1000);
+                // Random delay (human-like timing)
+                await page.waitForTimeout(2500 + Math.random() * 1500);
+                
+                // Periodic scrolling (simulates reading)
+                if (i % 4 === 0) {
+                  await page.mouse.wheel(0, 30 + Math.random() * 40);
+                  await page.waitForTimeout(800 + Math.random() * 400);
                 }
                 
                 // Check if token appeared during activity
@@ -1168,34 +1175,50 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                   return !!(responseInput && responseInput.value && responseInput.value.length > 0);
                 });
+                
                 if (hasToken) {
+                  implicitPassSuccess = true;
+                  logger.info(`✅ Implicit pass detected during user simulation (iteration ${i + 1})!`);
                   return; // Token found, exit early
                 }
               }
-            } catch {
-              // Ignore errors in user activity simulation
+            } catch (err) {
+              logger.debug(`User activity simulation error: ${err instanceof Error ? err.message : String(err)}`);
             }
           })();
           
-          // Wait for token (this is the main wait for implicit pass)
-          // Implicit pass is the BEST solution - no session mismatch!
+          // Main wait for token (parallel with user simulation)
           try {
             await page.waitForFunction(() => {
               const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
               return !!(responseInput && responseInput.value && responseInput.value.length > 0);
             }, {
-              timeout: 45000, // Wait up to 45 seconds for implicit pass (server IPs need time)
+              timeout: 60000, // Wait up to 60 seconds for implicit pass (generous timeout)
               polling: 2000 // Check every 2 seconds
             });
             
-            logger.info('✅ Implicit pass detected during wait!');
+            implicitPassSuccess = true;
+            logger.info('✅ Implicit pass detected during main wait!');
           } catch {
-            // Timeout is expected if implicit pass doesn't happen - we'll try 2Captcha
-            logger.debug('Implicit pass timeout - will try 2Captcha if needed');
+            // Timeout is expected if implicit pass doesn't happen
+            logger.debug('Implicit pass timeout after 60 seconds');
           }
           
-          // Don't await user activity - let it finish in background (already checked above)
-          userActivityPromise.catch(() => {});
+          // Wait for user activity to finish (or catch errors)
+          await userActivityPromise.catch(() => {});
+          
+          // Final check for token
+          const finalTokenCheck = await page.evaluate(() => {
+            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+            return !!(responseInput && responseInput.value && responseInput.value.length > 0);
+          });
+          
+          if (finalTokenCheck || implicitPassSuccess) {
+            logger.info('✅ Turnstile implicit pass successful! No session mismatch issues.');
+            actions.push('Turnstile implicit pass successful');
+            // Skip 2Captcha entirely - we have a token from implicit pass!
+            // This avoids session mismatch completely
+          }
           
           // Check if we got an implicit pass
           const implicitToken = await page.evaluate(() => {
@@ -1213,18 +1236,24 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             actions.push('No implicit pass - trying active solving');
           }
         } catch (timeoutError) {
-          // Timeout waiting for implicit pass - this is normal, continue with active solving
-          logger.info('Implicit pass timeout (expected) - trying active solving methods...');
-          actions.push('Implicit pass timeout - trying active solving');
+          // Timeout waiting for implicit pass - this is expected if implicit pass doesn't work
+          logger.info('Implicit pass timeout after extended wait');
+          actions.push('Implicit pass timeout');
         }
         
-        // Only try active solving if we don't already have a token
+        // Only try 2Captcha if we don't already have a token from implicit pass
+        // NOTE: 2Captcha has session mismatch issues (Error 600010), so prefer implicit pass
         const currentToken = await page.evaluate(() => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           return responseInput?.value || null;
         });
         
         if (!currentToken || currentToken.length === 0) {
+          // WARNING: 2Captcha will likely cause Error 600010 (session mismatch)
+          // Only use as absolute last resort
+          logger.warn('No implicit pass token found. Trying 2Captcha as last resort (may cause session mismatch Error 600010)...');
+          actions.push('No implicit pass - trying 2Captcha (last resort, may fail due to session mismatch)');
+          
           // Try to solve using 2Captcha (reliable, human-powered service)
           // Only if implicit pass didn't work
           if (turnstileInfo.sitekey) {
@@ -2128,17 +2157,22 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             return indicators;
           });
           
-          if (successCheck.hasSuccessMessage) {
-            successIndicators.push('Success message detected');
-            formSubmitted = true;
-          } else if (successCheck.modalClosed && successCheck.urlChanged) {
-            successIndicators.push('Modal closed and URL changed');
-            formSubmitted = true;
-          } else if (successCheck.hasError) {
-            successIndicators.push('Error message detected - form may not have been submitted');
-            formSubmitted = false;
-          } else {
-            successIndicators.push('No clear success/error indicators');
+          // Use the more thorough checks we did above
+          // (This block is now redundant but kept for compatibility)
+          if (!accountCreated) {
+            if (successCheck.hasSuccessMessage) {
+              successIndicators.push('Success message detected (fallback check)');
+              accountCreated = true;
+            } else if (successCheck.modalClosed && successCheck.urlChanged) {
+              successIndicators.push('Modal closed and URL changed (fallback check)');
+              accountCreated = true;
+            } else if (successCheck.hasError) {
+              successIndicators.push('Error message detected - account NOT created');
+              accountCreated = false;
+            } else {
+              successIndicators.push('No clear success/error indicators - assume NOT created');
+              accountCreated = false; // Default to false if unclear
+            }
           }
         } catch {
           // Could not verify, assume submitted if button was clicked
@@ -2176,9 +2210,13 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         });
       }
       
-      const message = formSubmitted 
-        ? `Registration form filled and submitted successfully. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`
-        : `Registration form filled but submission may have failed. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`;
+      // CRITICAL: Report accurately whether account was actually created
+      // Elon has been reporting success when accounts aren't actually created
+      const message = accountCreated
+        ? `✅ Account created successfully! Registration form filled and submitted. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`
+        : formSubmitted
+        ? `⚠️ Registration form filled and submitted, but account creation could not be verified. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : 'No clear success indicators found.'} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''} Please check manually if account was created.`
+        : `❌ Registration form filled but submission may have failed. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`;
       
       return {
         message,
@@ -2188,6 +2226,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           password: finalPassword,
           passwordAdjusted: finalPassword !== password,
           formSubmitted,
+          accountCreated, // CRITICAL: Report actual account creation status
           successIndicators,
           consoleMessages: relevantConsoleMessages.length > 0 ? relevantConsoleMessages : undefined,
           networkRequests: relevantNetworkRequests.length > 0 ? relevantNetworkRequests : undefined
