@@ -100,8 +100,10 @@ export class SystemPromptBuilder {
   }
 
   private buildMemoriesSection(memories: Array<{key: string; value: string; category: string}>): string {
+    // Limit to 3 most relevant memories to prevent prompt too long errors
+    const limitedMemories = memories.slice(0, 3);
     return `**Long-term Memories (Facts I remember about this user):**
-${memories.map(m => `- ${m.category}/${m.key}: ${m.value}`).join('\n')}`;
+${limitedMemories.map(m => `- ${m.category}/${m.key}: ${m.value.substring(0, 100)}`).join('\n')}${memories.length > 3 ? `\n[${memories.length - 3} additional memories omitted to save tokens]` : ''}`;
   }
 
   private buildPersonalitySection(): string {

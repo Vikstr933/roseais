@@ -13,8 +13,8 @@ import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 const logger = new SimpleLogger('PersonalAssistantAgent');
 
 // Max messages to keep per session (rolling window)
-// Reduced to 10 to prevent prompt too long errors
-const MAX_MESSAGES_PER_SESSION = 10;
+// Reduced to 5 to prevent prompt too long errors (especially in Discord)
+const MAX_MESSAGES_PER_SESSION = 5;
 
 /**
  * Personal Assistant Agent - Your AI-powered productivity companion
