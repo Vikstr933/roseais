@@ -1076,37 +1076,38 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           // Wait for Turnstile to potentially auto-solve (implicit pass)
           // According to research, most Turnstile challenges are implicit
           // Increased timeout to 30 seconds for server IPs (datacenter IPs need more time)
-          // Try to improve implicit pass rate by simulating user activity
-          await Promise.race([
-            // Wait for token
-            page.waitForFunction(() => {
+          // Try to improve implicit pass rate by simulating subtle user activity
+          
+          // Start mouse movement simulation in background (helps with implicit pass)
+          const mouseMovementPromise = (async () => {
+            try {
+              // Wait a bit first, then do subtle movements
+              await page.waitForTimeout(5000);
+              // Small mouse movements to simulate human presence
+              for (let i = 0; i < 10; i++) {
+                await page.mouse.move(100 + i * 5, 100 + i * 3);
+                await page.waitForTimeout(3000);
+              }
+            } catch {
+              // Ignore errors in mouse movement
+            }
+          })();
+          
+          // Wait for token (this is the main wait)
+          try {
+            await page.waitForFunction(() => {
               const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
               return !!(responseInput && responseInput.value && responseInput.value.length > 0);
             }, {
               timeout: 30000, // Wait up to 30 seconds for implicit pass (longer for server IPs)
               polling: 2000 // Check every 2 seconds
-            }),
-            // Simulate subtle user activity while waiting (helps with implicit pass)
-            (async () => {
-              // Wait a bit first, then do subtle movements
-              await page.waitForTimeout(5000);
-              // Small mouse movements to simulate human presence
-              for (let i = 0; i < 5; i++) {
-                await page.mouse.move(100 + i * 10, 100 + i * 5);
-                await page.waitForTimeout(2000);
-                // Check if token appeared during movement
-                const hasToken = await page.evaluate(() => {
-                  const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
-                  return !!(responseInput && responseInput.value && responseInput.value.length > 0);
-                });
-                if (hasToken) {
-                  return; // Token found, exit
-                }
-              }
-              // Continue waiting...
-              await new Promise(resolve => setTimeout(resolve, 20000));
-            })()
-          ]);
+            });
+          } catch {
+            // Timeout is expected if implicit pass doesn't happen
+          }
+          
+          // Don't await mouse movement - let it finish in background
+          mouseMovementPromise.catch(() => {});
           
           // Check if we got an implicit pass
           const implicitToken = await page.evaluate(() => {
