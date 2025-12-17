@@ -2137,47 +2137,85 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         if (pageErrors.length > 0) {
           logger.warn(`Error messages detected on page after submission: ${pageErrors.join('; ')}`);
           actions.push(`Errors detected: ${pageErrors.join('; ')}`);
+          accountCreated = false; // Errors indicate failure
+        }
+        
+        // Check URL change - important indicator
+        const urlChanged = currentUrl !== originalUrl && 
+                          !currentUrl.includes('/register') && 
+                          !currentUrl.includes('/signup');
+        
+        if (urlChanged) {
+          logger.info('URL changed after submission - likely success');
+          successIndicators.push('URL changed');
+          accountCreated = true;
+        }
+        
+        // Check for specific error messages that indicate account was NOT created
+        const specificErrors = await page.evaluate(() => {
+          const bodyText = document.body.innerText.toLowerCase();
+          return {
+            hasFailedToAuthorize: bodyText.includes('failed to authorize') || 
+                                 bodyText.includes('authorization failed') ||
+                                 bodyText.includes('authorize your account'),
+            hasAccountCreationFailed: bodyText.includes('account creation failed') ||
+                                     bodyText.includes('registration failed'),
+            hasTurnstileError: bodyText.includes('turnstile') && bodyText.includes('error')
+          };
+        });
+        
+        if (specificErrors.hasFailedToAuthorize || specificErrors.hasAccountCreationFailed) {
+          logger.warn('Specific error detected indicating account was NOT created');
+          accountCreated = false;
+          if (specificErrors.hasFailedToAuthorize) {
+            successIndicators.push('Error: Failed to authorize account');
+          }
+          if (specificErrors.hasAccountCreationFailed) {
+            successIndicators.push('Error: Account creation failed');
+          }
         }
         
         // Check for success indicators
         try {
           const successCheck = await page.evaluate(() => {
-            const indicators = {
-              hasSuccessMessage: document.body.innerText.toLowerCase().includes('success') ||
-                               document.body.innerText.toLowerCase().includes('created') ||
-                               document.body.innerText.toLowerCase().includes('registered') ||
-                               document.body.innerText.toLowerCase().includes('welcome') ||
-                               document.body.innerText.toLowerCase().includes('account created'),
-              modalClosed: !document.querySelector('dialog[open], .modal:not([style*="display: none"]), [role="dialog"]:not([style*="display: none"])'),
+            const bodyText = document.body.innerText.toLowerCase();
+            return {
+              hasSuccessMessage: bodyText.includes('account created') ||
+                               bodyText.includes('registration successful') ||
+                               bodyText.includes('successfully registered') ||
+                               bodyText.includes('welcome'),
+              hasSuccessElements: document.querySelectorAll('[class*="success" i], .alert-success, .notification.success').length > 0,
+              modalClosed: !document.querySelector('dialog[open], .modal.show, .modal:not([style*="display: none"])'),
               urlChanged: !window.location.href.includes('/register') && !window.location.href.includes('/signup'),
-              hasError: document.body.innerText.toLowerCase().includes('error') ||
-                       document.body.innerText.toLowerCase().includes('failed') ||
-                       document.body.innerText.toLowerCase().includes('invalid') ||
-                       document.body.innerText.toLowerCase().includes('captcha') ||
-                       document.body.innerText.toLowerCase().includes('turnstile')
+              hasError: bodyText.includes('error') ||
+                       bodyText.includes('failed') ||
+                       bodyText.includes('invalid')
             };
-            return indicators;
           });
           
-          // Use the more thorough checks we did above
-          // (This block is now redundant but kept for compatibility)
-          if (!accountCreated) {
-            if (successCheck.hasSuccessMessage) {
-              successIndicators.push('Success message detected (fallback check)');
+          // Determine account creation status based on indicators
+          if (!accountCreated) { // Only set if not already set by error detection above
+            if (successCheck.hasSuccessMessage || successCheck.hasSuccessElements) {
+              successIndicators.push('Success message/elements detected');
               accountCreated = true;
-            } else if (successCheck.modalClosed && successCheck.urlChanged) {
-              successIndicators.push('Modal closed and URL changed (fallback check)');
+            } else if (successCheck.modalClosed && urlChanged) {
+              successIndicators.push('Modal closed and URL changed');
               accountCreated = true;
             } else if (successCheck.hasError) {
               successIndicators.push('Error message detected - account NOT created');
               accountCreated = false;
             } else {
+              // Default to false if unclear (conservative approach)
               successIndicators.push('No clear success/error indicators - assume NOT created');
-              accountCreated = false; // Default to false if unclear
+              accountCreated = false;
             }
           }
         } catch {
-          // Could not verify, assume submitted if button was clicked
+          // Could not verify, default to false (conservative)
+          if (!accountCreated) {
+            accountCreated = false;
+            successIndicators.push('Could not verify account creation');
+          }
         }
       }
       
