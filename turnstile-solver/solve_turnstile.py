@@ -7,6 +7,14 @@ browser_type: chromium (default), camoufox, chrome, msedge
 import asyncio
 import sys
 import json
+
+# Check if camoufox is available before importing async_solver
+try:
+    import camoufox
+    CAMOUFOX_AVAILABLE = True
+except ImportError:
+    CAMOUFOX_AVAILABLE = False
+
 from async_solver import get_turnstile_token
 
 async def main():
@@ -16,8 +24,18 @@ async def main():
     
     url = sys.argv[1]
     sitekey = sys.argv[2]
-    # Use camoufox by default for better bot evasion, fallback to chromium if not available
-    browser_type = sys.argv[3] if len(sys.argv) > 3 else "camoufox"
+    # Use camoufox by default if available, otherwise use chromium
+    requested_browser = sys.argv[3] if len(sys.argv) > 3 else None
+    
+    # Determine which browser to use
+    if requested_browser:
+        browser_type = requested_browser
+    elif CAMOUFOX_AVAILABLE:
+        browser_type = "camoufox"
+    else:
+        browser_type = "chromium"
+        # Log that we're using chromium fallback
+        print(json.dumps({"status": "info", "message": "camoufox not available, using chromium"}), file=sys.stderr)
     
     try:
         result = await get_turnstile_token(
@@ -30,9 +48,10 @@ async def main():
         )
         print(json.dumps(result))
     except Exception as e:
-        # If camoufox fails, try chromium as fallback
-        if browser_type == "camoufox":
+        # If camoufox was requested but failed, try chromium as fallback
+        if browser_type == "camoufox" and CAMOUFOX_AVAILABLE:
             try:
+                print(json.dumps({"status": "info", "message": "camoufox failed, trying chromium fallback"}), file=sys.stderr)
                 result = await get_turnstile_token(
                     url=url,
                     sitekey=sitekey,

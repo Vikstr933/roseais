@@ -1502,10 +1502,25 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           stdio: 'pipe',
         });
         
-        await new Promise<void>((resolve, reject) => {
+        let checkOutput = '';
+        checkProc.stdout?.on('data', (data) => {
+          checkOutput += data.toString();
+        });
+        checkProc.stderr?.on('data', (data) => {
+          checkOutput += data.toString();
+        });
+        
+        await new Promise<void>((resolve) => {
+          const checkTimeout = setTimeout(() => {
+            checkProc.kill('SIGKILL');
+            logger.debug('Dependency check timed out, proceeding with chromium fallback');
+            resolve();
+          }, 3000); // 3 second timeout for check
+          
           checkProc.on('exit', (code) => {
+            clearTimeout(checkTimeout);
             if (code !== 0) {
-              // camoufox not available, try to install
+              // camoufox not available, try to install (but don't wait too long)
               logger.warn('Python dependencies not found, attempting runtime installation...');
               const installProc = spawn(pythonCmd, ['-m', 'pip', 'install', '--user', '-r', 'requirements.txt'], {
                 cwd: this.turnstileSolverPath,
@@ -1513,23 +1528,49 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 stdio: 'pipe',
               });
               
+              let installOutput = '';
+              installProc.stdout?.on('data', (data) => {
+                installOutput += data.toString();
+              });
+              installProc.stderr?.on('data', (data) => {
+                installOutput += data.toString();
+              });
+              
+              const installTimeout = setTimeout(() => {
+                installProc.kill('SIGKILL');
+                logger.warn('Python dependency installation timed out, will use chromium fallback');
+                resolve();
+              }, 30000); // 30 second timeout for installation
+              
               installProc.on('exit', (installCode) => {
+                clearTimeout(installTimeout);
                 if (installCode === 0) {
                   logger.info('Python dependencies installed successfully at runtime');
                 } else {
-                  logger.warn('Failed to install Python dependencies at runtime');
+                  logger.warn(`Failed to install Python dependencies at runtime (code: ${installCode})`);
+                  if (installOutput) {
+                    logger.debug(`Install output: ${installOutput.substring(0, 500)}`);
+                  }
                 }
                 resolve();
               });
               
-              installProc.on('error', () => resolve());
+              installProc.on('error', (err) => {
+                clearTimeout(installTimeout);
+                logger.warn(`Error during Python dependency installation: ${err.message}`);
+                resolve();
+              });
             } else {
+              logger.debug('Python dependencies (camoufox) are available');
               resolve();
             }
           });
           
-          checkProc.on('error', () => resolve());
-          setTimeout(() => resolve(), 5000); // Timeout after 5 seconds
+          checkProc.on('error', (err) => {
+            clearTimeout(checkTimeout);
+            logger.debug(`Dependency check error: ${err.message}, proceeding with chromium fallback`);
+            resolve();
+          });
         });
       } catch (error) {
         logger.debug(`Dependency check failed, proceeding anyway: ${error instanceof Error ? error.message : String(error)}`);
