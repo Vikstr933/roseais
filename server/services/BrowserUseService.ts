@@ -2088,8 +2088,10 @@ Use CSS selectors, IDs, or text content to identify elements.`;
 
       const finalPassword = validPassword || password;
       
-      // Verify that form was actually submitted by checking for success indicators
+      // CRITICAL: Verify that form was actually submitted and account was created
+      // This is important because Elon reports success but accounts aren't actually created
       let formSubmitted = submitted;
+      let accountCreated = false; // Declare early
       let successIndicators: string[] = [];
       
       if (submitted) {
