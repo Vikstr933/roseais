@@ -1117,7 +1117,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               
               // Enhanced token application using Turnstile API
               // IMPORTANT: For 2Captcha tokens, we need to set the token properly before calling callbacks
-              const tokenSet = await page.evaluate((tokenValue: string, callbackName: string | null) => {
+              const tokenSet = await page.evaluate(({ tokenValue, callbackName }: { tokenValue: string; callbackName: string | null }) => {
                 // Find and fill the response input
                 const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                 if (!responseInput) {
@@ -1255,7 +1255,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   widgetId: widgetId,
                   tokenLength: responseInput.value?.length || 0
                 };
-              }, token, turnstileInfo.callback || 'onRegisterTurnstileSuccess') as { success: boolean; apiSuccess: boolean; widgetId: string | null; tokenLength: number };
+              }, { tokenValue: token, callbackName: turnstileInfo.callback || 'onRegisterTurnstileSuccess' }) as { success: boolean; apiSuccess: boolean; widgetId: string | null; tokenLength: number };
               
               if (tokenSet.success) {
                 logger.info(`Turnstile token set successfully (API: ${tokenSet.apiSuccess ? 'yes' : 'no'}, length: ${tokenSet.tokenLength})`);
@@ -1328,7 +1328,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                       logger.debug(`Token present but not accepted yet (waiting ${Math.round((Date.now() - startTime) / 1000)}s)...`);
                       
                       // Try to trigger Turnstile callback manually
-                      await page.evaluate((callbackName: string | null) => {
+                      await page.evaluate(({ callbackName }: { callbackName: string | null }) => {
                         // Try to call success callback if it exists
                         const callbackNames = callbackName ? [callbackName] : ['onRegisterTurnstileSuccess', 'onLoginTurnstileSuccess', 'onTurnstileSuccess'];
                         for (const cbName of callbackNames) {
@@ -1345,12 +1345,12 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                             }
                           }
                         }
-                      }, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
+                      }, { callbackName: turnstileInfo.callback || 'onRegisterTurnstileSuccess' });
                     }
                   } else {
                     logger.warn('Token was cleared - re-setting...');
                     // Re-set token if it was cleared
-                    await page.evaluate((tokenValue: string, callbackName: string | null) => {
+                    await page.evaluate(({ tokenValue, callbackName }: { tokenValue: string; callbackName: string | null }) => {
                       const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
                       if (responseInput) {
                         responseInput.value = tokenValue;
@@ -1368,7 +1368,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                           }
                         }
                       }
-                    }, token, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
+                    }, { tokenValue: token, callbackName: turnstileInfo.callback || 'onRegisterTurnstileSuccess' });
                   }
                 }
                 
@@ -1400,7 +1400,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   await page.waitForTimeout(2000);
                 }
               } else {
-                logger.warn(`Failed to set Turnstile token: ${tokenSet.reason || 'unknown'}`);
+                logger.warn(`Failed to set Turnstile token: token not found in input`);
                 actions.push('Failed to set Turnstile token');
               }
               
@@ -1731,7 +1731,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               }
             }
           }
-        }, saved2CaptchaToken, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
+        }, { tokenValue: saved2CaptchaToken, callbackName: turnstileInfo.callback || 'onRegisterTurnstileSuccess' });
         
         // Wait for Turnstile to process the callback
         await page.waitForTimeout(2000);
@@ -1766,7 +1766,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 }
               }
             }
-          }, saved2CaptchaToken, turnstileInfo.callback || 'onRegisterTurnstileSuccess');
+          }, { tokenValue: saved2CaptchaToken, callbackName: turnstileInfo.callback || 'onRegisterTurnstileSuccess' });
           await page.waitForTimeout(1000);
         }
       }
