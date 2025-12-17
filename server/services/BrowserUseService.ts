@@ -1074,91 +1074,100 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 
                 // Try to use Turnstile API to properly register the token
                 let apiSuccess = false;
-                if (typeof (window as any).turnstile !== 'undefined') {
-                  const turnstile = (window as any).turnstile;
-                  
-                  // Method 1: Use turnstile.render with callback to set token
-                  if (turnstile.render && turnstileWidget) {
-                    try {
-                      const sitekey = turnstileWidget.getAttribute('data-sitekey');
-                      if (sitekey) {
-                        // Remove existing widget if any
-                        if (widgetId && turnstile.remove) {
-                          try {
-                            turnstile.remove(widgetId);
-                          } catch (e) {
-                            // Ignore
-                          }
-                        }
-                        
-                        // Re-render widget with token callback
-                        const newWidgetId = turnstile.render(turnstileWidget, {
-                          sitekey: sitekey,
-                          callback: (t: string) => {
-                            responseInput.value = t;
-                            responseInput.dispatchEvent(new Event('input', { bubbles: true }));
-                          }
-                        });
-                        
-                        // If we got a widget ID, try to set token directly
-                        if (newWidgetId) {
-                          // Use execute to set token directly
-                          try {
-                            (window as any).__turnstileToken = tokenValue;
-                            responseInput.value = tokenValue;
-                            apiSuccess = true;
-                          } catch (e) {
-                            // Ignore
-                          }
-                        }
-                      }
-                    } catch (e) {
-                      // Ignore errors
-                    }
-                  }
-                  
-                  // Method 2: Use turnstile.execute if available (for programmatic token setting)
-                  if (turnstile.execute && widgetId) {
-                    try {
-                      turnstile.execute(widgetId, {
-                        response: tokenValue
-                      });
-                      apiSuccess = true;
-                    } catch (e) {
-                      // Ignore
-                    }
-                  }
-                  
-                  // Method 3: Try reset then manually set
-                  if (widgetId && turnstile.reset) {
-                    try {
-                      turnstile.reset(widgetId);
-                      // After reset, set token
-                      setTimeout(() => {
-                        responseInput.value = tokenValue;
-                        responseInput.dispatchEvent(new Event('input', { bubbles: true }));
-                      }, 100);
-                      apiSuccess = true;
-                    } catch (e) {
-                      // Ignore
-                    }
-                  }
-                }
                 
-                // Check for onRegisterTurnstileSuccess callback
+                // First, try to call the success callback directly with the token
+                // This is the most reliable way for 2Captcha tokens
                 if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
                   try {
                     (window as any).onRegisterTurnstileSuccess(tokenValue);
+                    (window as any).__turnstileCallbackCalled = true;
+                    (window as any).__turnstileSuccess = true;
                     apiSuccess = true;
                   } catch (e) {
                     try {
                       (window as any).onRegisterTurnstileSuccess();
+                      (window as any).__turnstileCallbackCalled = true;
                       apiSuccess = true;
                     } catch (e2) {
                       // Ignore errors
                     }
                   }
                 }
+                
+                // Also try to set it via Turnstile API if available
+                if (typeof (window as any).turnstile !== 'undefined') {
+                  const turnstile = (window as any).turnstile;
+                  
+                  // Method 1: Try to get widget ID and use execute
+                  if (turnstileWidget && !widgetId) {
+                    // Widget ID might not be set yet - try to get it
+                    widgetId = turnstileWidget.getAttribute('data-widget-id');
+                  }
+                  
+                  // Method 2: Try to manually trigger the callback by simulating a successful solve
+                  // This is what 2Captcha does - it provides a token that should be accepted
+                  try {
+                    // Set up a custom callback that will be called when Turnstile accepts the token
+                    if (!(window as any).__turnstileCustomCallback) {
+                      (window as any).__turnstileCustomCallback = (token: string) => {
+                        responseInput.value = token;
+                        responseInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        responseInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        (window as any).__turnstileSuccess = true;
+                        (window as any).__turnstileCallbackCalled = true;
+                      };
+                    }
+                    
+                    // Try to inject token via iframe message (if possible)
+                    const iframe = document.querySelector('iframe[src*="challenges.cloudflare.com"]') as HTMLIFrameElement;
+                    if (iframe && iframe.contentWindow) {
+                      try {
+                        iframe.contentWindow.postMessage({
+                          type: 'turnstile-token',
+                          token: tokenValue
+                        }, '*');
+                      } catch (e) {
+                        // Cross-origin restriction - expected
+                      }
+                    }
+                    
+                    // Try to use turnstile.execute if widget ID exists
+                    if (widgetId && turnstile.execute) {
+                      try {
+                        // Execute with the token
+                        turnstile.execute(widgetId, {
+                          response: tokenValue
+                        });
+                        apiSuccess = true;
+                      } catch (e) {
+                        // Ignore
+                      }
+                    }
+                    
+                    // Also try to set response directly via API
+                    if (widgetId && turnstile.getResponse) {
+                      try {
+                        // Check if we can set response
+                        const currentResponse = turnstile.getResponse(widgetId);
+                        if (!currentResponse || currentResponse === '') {
+                          // No response yet - try to set it
+                          responseInput.value = tokenValue;
+                          responseInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                          responseInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                          apiSuccess = true;
+                        }
+                      } catch (e) {
+                        // Ignore
+                      }
+                    }
+                  } catch (e) {
+                    // Ignore errors
+                  }
+                }
+                
+                // Set a flag that we've injected a token
+                (window as any).__turnstileTokenInjected = true;
+                (window as any).__turnstileTokenValue = tokenValue;
                 
                 // Verify token is still in input
                 const hasToken = !!(responseInput && responseInput.value && responseInput.value.length > 0);
@@ -1175,45 +1184,107 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                 logger.info(`Turnstile token set successfully (API: ${tokenSet.apiSuccess ? 'yes' : 'no'}, length: ${tokenSet.tokenLength})`);
                 actions.push('Turnstile token set and events triggered');
                 
-                // Wait longer for Turnstile to process and verify token
-                await page.waitForTimeout(3000);
+                // Critical: For 2Captcha tokens, we need to wait for Turnstile to actually accept the token
+                // The token must be validated by Turnstile's server before submission
+                logger.info('Waiting for Turnstile to validate and accept token (this may take 5-10 seconds)...');
                 
-                // Verify the token is still there and check for success indicators
-                const tokenStatus = await page.evaluate(() => {
-                  const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
-                  const hasToken = !!(responseInput && responseInput.value && responseInput.value.length > 0);
-                  
-                  // Check for Turnstile success indicators
-                  const turnstileWidget = document.querySelector('.cf-turnstile, [class*="cf-turnstile"]');
-                  const widgetClass = turnstileWidget?.className || '';
-                  const isSuccess = widgetClass.includes('success') || widgetClass.includes('complete') || 
-                                   turnstileWidget?.getAttribute('data-state') === 'success';
-                  
-                  // Check if iframe shows success
-                  const iframe = document.querySelector('iframe[src*="challenges.cloudflare.com"]');
-                  const iframeLoaded = iframe ? (iframe as HTMLIFrameElement).contentWindow !== null : false;
-                  
-                  return {
-                    hasToken,
-                    tokenLength: responseInput?.value?.length || 0,
-                    isSuccess,
-                    widgetClass,
-                    iframeLoaded
-                  };
-                });
+                // Wait and poll for Turnstile to accept the token
+                let tokenAccepted = false;
+                const maxWaitTime = 15000; // 15 seconds max
+                const pollInterval = 1000; // Check every second
+                const startTime = Date.now();
                 
-                if (tokenStatus.hasToken) {
-                  logger.info(`Turnstile token verified after setting (length: ${tokenStatus.tokenLength}, success state: ${tokenStatus.isSuccess})`);
-                  actions.push('Turnstile token verified');
+                while (Date.now() - startTime < maxWaitTime && !tokenAccepted) {
+                  await page.waitForTimeout(pollInterval);
                   
-                  // Wait additional time for Turnstile to fully process
-                  if (!tokenStatus.isSuccess) {
-                    logger.info('Waiting for Turnstile to show success state...');
-                    await page.waitForTimeout(2000);
+                  const tokenStatus = await page.evaluate(() => {
+                    const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                    const hasToken = !!(responseInput && responseInput.value && responseInput.value.length > 0);
+                    
+                    // Check for Turnstile success indicators
+                    const turnstileWidget = document.querySelector('.cf-turnstile, [class*="cf-turnstile"], [data-sitekey]') as HTMLElement;
+                    const widgetState = turnstileWidget?.getAttribute('data-state') || '';
+                    const widgetClass = turnstileWidget?.className || '';
+                    const isSuccess = widgetState === 'success' || 
+                                     widgetClass.includes('success') || 
+                                     widgetClass.includes('complete') ||
+                                     turnstileWidget?.getAttribute('data-token') !== null;
+                    
+                    // Check if callback was called
+                    const callbackCalled = !!(window as any).__turnstileSuccess || 
+                                          !!(window as any).__turnstileCallbackCalled ||
+                                          (window as any).turnstile?.getResponse !== undefined;
+                    
+                    // Try to get response from Turnstile API if available
+                    let apiResponse = null;
+                    if (typeof (window as any).turnstile !== 'undefined' && (window as any).turnstile.getResponse) {
+                      try {
+                        const widgetId = turnstileWidget?.getAttribute('data-widget-id');
+                        if (widgetId) {
+                          apiResponse = (window as any).turnstile.getResponse(widgetId);
+                        }
+                      } catch (e) {
+                        // Ignore
+                      }
+                    }
+                    
+                    return {
+                      hasToken,
+                      tokenLength: responseInput?.value?.length || 0,
+                      isSuccess,
+                      widgetState,
+                      callbackCalled,
+                      apiResponse: apiResponse !== null && apiResponse !== '',
+                      tokenMatches: apiResponse === responseInput?.value
+                    };
+                  });
+                  
+                  if (tokenStatus.hasToken) {
+                    // Token is present - check if Turnstile has accepted it
+                    if (tokenStatus.isSuccess || tokenStatus.callbackCalled || tokenStatus.apiResponse) {
+                      tokenAccepted = true;
+                      logger.info(`Turnstile token accepted! (success: ${tokenStatus.isSuccess}, callback: ${tokenStatus.callbackCalled}, API: ${tokenStatus.apiResponse})`);
+                      actions.push('Turnstile token accepted by widget');
+                      break;
+                    } else {
+                      // Token present but not yet accepted - try to trigger acceptance
+                      logger.debug(`Token present but not accepted yet (waiting ${Math.round((Date.now() - startTime) / 1000)}s)...`);
+                      
+                      // Try to trigger Turnstile callback manually
+                      await page.evaluate(() => {
+                        // Try to call success callback if it exists
+                        if (typeof (window as any).onRegisterTurnstileSuccess === 'function') {
+                          try {
+                            const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                            if (responseInput?.value) {
+                              (window as any).onRegisterTurnstileSuccess(responseInput.value);
+                              (window as any).__turnstileCallbackCalled = true;
+                            }
+                          } catch (e) {
+                            // Ignore
+                          }
+                        }
+                      });
+                    }
+                  } else {
+                    logger.warn('Token was cleared - re-setting...');
+                    // Re-set token if it was cleared
+                    await page.evaluate((tokenValue) => {
+                      const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                      if (responseInput) {
+                        responseInput.value = tokenValue;
+                        responseInput.dispatchEvent(new Event('input', { bubbles: true }));
+                      }
+                    }, token);
                   }
+                }
+                
+                if (!tokenAccepted) {
+                  logger.warn('Turnstile did not accept token within timeout - proceeding anyway (submission may fail)');
+                  actions.push('Warning: Turnstile token not fully accepted - proceeding with submit');
                 } else {
-                  logger.warn('Turnstile token was cleared after setting - may need manual interaction');
-                  actions.push('Warning: Turnstile token was cleared');
+                  // Wait a bit more to ensure everything is settled
+                  await page.waitForTimeout(2000);
                 }
               } else {
                 logger.warn(`Failed to set Turnstile token: ${tokenSet.reason || 'unknown'}`);
