@@ -1383,11 +1383,55 @@ Use CSS selectors, IDs, or text content to identify elements.`;
 
       logger.info(`Solving Turnstile directly using Python (url: ${url}, sitekey: ${sitekey})`);
       
+      // Try to ensure Python dependencies are installed (runtime fallback)
+      const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+      const requirementsPath = join(this.turnstileSolverPath, 'requirements.txt');
+      
+      try {
+        // Quick check if camoufox is importable
+        const checkProc = spawn(pythonCmd, ['-c', 'import camoufox'], {
+          cwd: this.turnstileSolverPath,
+          env: { ...process.env },
+          stdio: 'pipe',
+        });
+        
+        await new Promise<void>((resolve, reject) => {
+          checkProc.on('exit', (code) => {
+            if (code !== 0) {
+              // camoufox not available, try to install
+              logger.warn('Python dependencies not found, attempting runtime installation...');
+              const installProc = spawn(pythonCmd, ['-m', 'pip', 'install', '--user', '-r', 'requirements.txt'], {
+                cwd: this.turnstileSolverPath,
+                env: { ...process.env },
+                stdio: 'pipe',
+              });
+              
+              installProc.on('exit', (installCode) => {
+                if (installCode === 0) {
+                  logger.info('Python dependencies installed successfully at runtime');
+                } else {
+                  logger.warn('Failed to install Python dependencies at runtime');
+                }
+                resolve();
+              });
+              
+              installProc.on('error', () => resolve());
+            } else {
+              resolve();
+            }
+          });
+          
+          checkProc.on('error', () => resolve());
+          setTimeout(() => resolve(), 5000); // Timeout after 5 seconds
+        });
+      } catch (error) {
+        logger.debug(`Dependency check failed, proceeding anyway: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      
       // Use standalone solve script
       const solveScript = join(this.turnstileSolverPath, 'solve_turnstile.py');
       
       return new Promise((resolve) => {
-        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
         const proc = spawn(pythonCmd, [solveScript, url, sitekey], {
           cwd: this.turnstileSolverPath,
           env: { ...process.env, PYTHONUNBUFFERED: '1' },
