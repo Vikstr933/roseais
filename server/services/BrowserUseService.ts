@@ -169,17 +169,18 @@ export class BrowserUseService {
         }
       };
 
-      // Override getBattery to return realistic values
-      if (navigator.getBattery) {
-        const originalGetBattery = navigator.getBattery;
-        navigator.getBattery = function() {
+      // Override getBattery to return realistic values (if available)
+      const nav = navigator as any;
+      if (nav.getBattery) {
+        const originalGetBattery = nav.getBattery;
+        nav.getBattery = function() {
           return originalGetBattery.call(navigator).catch(() => {
             return Promise.resolve({
               charging: true,
               chargingTime: 0,
               dischargingTime: Infinity,
               level: 1
-            } as BatteryManager);
+            });
           });
         };
       }
