@@ -1011,6 +1011,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           return responseInput?.value || null;
         });
         
+        // Store whether we successfully set a token via 2Captcha
+        let tokenSetVia2Captcha = false;
+        
         if (!currentToken || currentToken.length === 0) {
           // Try to solve using 2Captcha (reliable, human-powered service)
           // Only if implicit pass didn't work
@@ -1289,12 +1292,14 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         } // End of "if we don't have a token yet" block
         
         // Final check: Do we have a token now (either from implicit pass or active solving)?
+        // IMPORTANT: If we set token via 2Captcha, skip manual handling to avoid clearing it
         const tokenAlreadySet = await page.evaluate(() => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           return !!(responseInput && responseInput.value && responseInput.value.length > 0);
         });
         
-        if (!tokenAlreadySet) {
+        // If we set token via 2Captcha, don't do manual handling - it might clear the token
+        if (!tokenAlreadySet && !tokenSetVia2Captcha) {
           logger.info('Cloudflare Turnstile detected, attempting to interact manually...');
           actions.push('Cloudflare Turnstile detected - manual handling');
         
