@@ -1826,12 +1826,22 @@ Use CSS selectors, IDs, or text content to identify elements.`;
 
   /**
    * Solve Cloudflare Turnstile using 2Captcha service (paid service, reliable fallback)
+   * Uses the new 2Captcha API v2 (createTask/getTaskResult)
    * @param url The URL where the Turnstile is located
    * @param sitekey The Turnstile sitekey
+   * @param action Optional action parameter (for Cloudflare Challenge pages)
+   * @param cData Optional cData parameter (for Cloudflare Challenge pages)
+   * @param chlPageData Optional chlPageData parameter (for Cloudflare Challenge pages)
    * @returns The Turnstile token if solved successfully, null otherwise
    */
-  private async solveTurnstileWith2Captcha(url: string, sitekey: string): Promise<string | null> {
-    const apiKey = process.env.TWOCAPTCHA_API_KEY || process.env.CAPTCHA_API_KEY;
+  private async solveTurnstileWith2Captcha(
+    url: string, 
+    sitekey: string, 
+    action?: string, 
+    cData?: string, 
+    chlPageData?: string
+  ): Promise<string | null> {
+    const apiKey = process.env.TWOCAPTCHA_API_KEY || process.env.CAPTCHA_API_KEY || '21011299571af0a6a09db29cdec3249f';
     
     if (!apiKey) {
       logger.debug('2Captcha API key not configured, skipping 2Captcha solver');
@@ -1839,68 +1849,88 @@ Use CSS selectors, IDs, or text content to identify elements.`;
     }
 
     try {
-      logger.info(`Solving Turnstile using 2Captcha (url: ${url}, sitekey: ${sitekey})`);
+      logger.info(`Solving Turnstile using 2Captcha API v2 (url: ${url}, sitekey: ${sitekey})`);
       
-      // Step 1: Submit Turnstile task to 2Captcha
-      const submitUrl = 'https://2captcha.com/in.php';
-      const submitParams = new URLSearchParams({
-        key: apiKey,
-        method: 'turnstile',
-        sitekey: sitekey,
-        pageurl: url,
-        json: '1'
-      });
+      // Step 1: Create task using new API
+      const createTaskUrl = 'https://api.2captcha.com/createTask';
+      
+      const taskPayload: any = {
+        type: 'TurnstileTaskProxyless',
+        websiteURL: url,
+        websiteKey: sitekey
+      };
+      
+      // Add optional parameters for Cloudflare Challenge pages
+      if (action) {
+        taskPayload.action = action;
+      }
+      if (cData) {
+        taskPayload.data = cData;
+      }
+      if (chlPageData) {
+        taskPayload.pagedata = chlPageData;
+      }
 
-      const submitResponse = await fetch(`${submitUrl}?${submitParams.toString()}`, {
+      const createTaskResponse = await fetch(createTaskUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          clientKey: apiKey,
+          task: taskPayload
+        }),
       });
 
-      const submitData = await submitResponse.json();
+      const createTaskData = await createTaskResponse.json();
       
-      if (submitData.status !== 1) {
-        logger.warn(`2Captcha submission failed: ${submitData.request || 'Unknown error'}`);
+      if (createTaskData.errorId !== 0) {
+        logger.warn(`2Captcha task creation failed: ${createTaskData.errorCode || 'Unknown error'} - ${createTaskData.errorDescription || ''}`);
         return null;
       }
 
-      const taskId = submitData.request;
+      const taskId = createTaskData.taskId;
       logger.info(`2Captcha task created: ${taskId}`);
 
       // Step 2: Poll for result (max 2 minutes, check every 5 seconds)
       const maxAttempts = 24; // 24 attempts * 5 seconds = 2 minutes max
       const pollInterval = 5000; // 5 seconds between polls
+      const getTaskResultUrl = 'https://api.2captcha.com/getTaskResult';
 
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-        const resultUrl = 'https://2captcha.com/res.php';
-        const resultParams = new URLSearchParams({
-          key: apiKey,
-          action: 'get',
-          id: taskId,
-          json: '1'
+        const getTaskResultResponse = await fetch(getTaskResultUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            clientKey: apiKey,
+            taskId: taskId
+          }),
         });
 
-        const resultResponse = await fetch(`${resultUrl}?${resultParams.toString()}`, {
-          method: 'GET',
-        });
+        const resultData = await getTaskResultResponse.json();
 
-        const resultData = await resultResponse.json();
+        if (resultData.errorId !== 0) {
+          logger.warn(`2Captcha returned error: ${resultData.errorCode || 'Unknown'} - ${resultData.errorDescription || ''}`);
+          return null;
+        }
 
-        if (resultData.status === 1 && resultData.request) {
+        if (resultData.status === 1 && resultData.solution?.token) {
           // Success! Token received
-          const token = resultData.request;
-          logger.info(`2Captcha solved Turnstile successfully in ${(attempt + 1) * 5} seconds`);
+          const token = resultData.solution.token;
+          const solveTime = resultData.endTime - resultData.createTime;
+          logger.info(`2Captcha solved Turnstile successfully in ${solveTime} seconds (cost: ${resultData.cost || 'unknown'})`);
           return token;
-        } else if (resultData.request === 'CAPCHA_NOT_READY') {
+        } else if (resultData.status === 0) {
           // Still processing, continue polling
-          logger.debug(`2Captcha task ${taskId} not ready yet (attempt ${attempt + 1}/${maxAttempts})`);
+          logger.debug(`2Captcha task ${taskId} processing... (attempt ${attempt + 1}/${maxAttempts})`);
           continue;
         } else {
-          // Error
-          logger.warn(`2Captcha returned error: ${resultData.request || 'Unknown error'}`);
+          // Unknown status
+          logger.warn(`2Captcha returned unknown status: ${resultData.status}`);
           return null;
         }
       }
