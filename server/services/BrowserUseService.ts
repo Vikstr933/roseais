@@ -1893,12 +1893,19 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       logger.info(`2Captcha task created: ${taskId}`);
 
       // Step 2: Poll for result (max 2 minutes, check every 5 seconds)
+      // According to 2Captcha docs: wait at least 5 seconds before first poll
       const maxAttempts = 24; // 24 attempts * 5 seconds = 2 minutes max
-      const pollInterval = 5000; // 5 seconds between polls
+      const pollInterval = 5000; // 5 seconds between polls (2Captcha recommendation)
       const getTaskResultUrl = 'https://api.2captcha.com/getTaskResult';
 
+      // Wait before first poll (2Captcha recommendation: at least 5 seconds)
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        // Wait between polls (except before first poll which we already did)
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
 
         const getTaskResultResponse = await fetch(getTaskResultUrl, {
           method: 'POST',
@@ -1918,32 +1925,54 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           return null;
         }
 
-        // Handle different status values
-        // Status can be: 0 (processing), 1 (ready), or string "processing"/"ready"
+        // Handle status according to 2Captcha API v2 specification
+        // Status should be: 0 (processing) or 1 (ready)
+        // But API sometimes returns strings, so we handle both
         const status = resultData.status;
-        const isReady = status === 1 || status === 'ready' || (typeof status === 'string' && status.toLowerCase() === 'ready');
-        const isProcessing = status === 0 || status === 'processing' || (typeof status === 'string' && status.toLowerCase() === 'processing');
+        const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
+        const statusStr = String(status).toLowerCase();
+        
+        // Check if ready (status === 1 or "ready" or "1")
+        const isReady = statusNum === 1 || statusStr === 'ready' || statusStr === '1';
+        // Check if processing (status === 0 or "processing" or "0")
+        const isProcessing = statusNum === 0 || statusStr === 'processing' || statusStr === '0';
 
-        if (isReady && resultData.solution?.token) {
-          // Success! Token received
-          const token = resultData.solution.token;
-          const solveTime = resultData.endTime && resultData.createTime 
-            ? resultData.endTime - resultData.createTime 
-            : (attempt + 1) * pollInterval / 1000;
-          logger.info(`2Captcha solved Turnstile successfully in ${solveTime} seconds (cost: ${resultData.cost || 'unknown'})`);
-          return token;
+        if (isReady) {
+          // Check if we have a token
+          const token = resultData.solution?.token;
+          if (token) {
+            // Success! Token received
+            const solveTime = resultData.endTime && resultData.createTime 
+              ? resultData.endTime - resultData.createTime 
+              : (attempt + 1) * pollInterval / 1000;
+            logger.info(`2Captcha solved Turnstile successfully in ${solveTime} seconds (cost: ${resultData.cost || 'unknown'})`);
+            return token;
+          } else {
+            // Status is ready but no token - this shouldn't happen, but log it
+            logger.warn(`2Captcha status is ready but no token in solution (attempt ${attempt + 1}/${maxAttempts})`);
+            // Continue polling in case token arrives in next response
+            if (attempt < maxAttempts - 1) {
+              continue;
+            } else {
+              return null;
+            }
+          }
         } else if (isProcessing) {
           // Still processing, continue polling
           logger.debug(`2Captcha task ${taskId} processing... (attempt ${attempt + 1}/${maxAttempts}, status: ${status})`);
           continue;
         } else {
-          // Unknown status - log for debugging but continue polling
-          logger.debug(`2Captcha returned status: ${status} (attempt ${attempt + 1}/${maxAttempts})`);
-          // Continue polling in case it's a transient state
+          // Unknown status - log for debugging
+          logger.debug(`2Captcha returned status: ${status} (type: ${typeof status}, attempt ${attempt + 1}/${maxAttempts})`);
+          // Log full response for debugging
+          if (attempt === 0) {
+            logger.debug(`2Captcha first response: ${JSON.stringify(resultData).substring(0, 500)}`);
+          }
+          // Continue polling in case it's a transient state or different format
           if (attempt < maxAttempts - 1) {
             continue;
           } else {
-            logger.warn(`2Captcha task ${taskId} ended with unknown status: ${status}`);
+            logger.warn(`2Captcha task ${taskId} ended with unknown status: ${status} after ${maxAttempts} attempts`);
             return null;
           }
         }
