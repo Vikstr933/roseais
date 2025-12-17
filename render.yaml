@@ -7,7 +7,7 @@ services:
     plan: free
     branch: main
     rootDir: .
-    buildCommand: npm install && npx playwright install --with-deps chromium || npx playwright install chromium || echo "Playwright installation failed, will retry at runtime" && cd turnstile-solver && python3 -m pip install --user --upgrade pip setuptools wheel 2>/dev/null || python3 -m ensurepip --user 2>/dev/null || true && python3 -m pip install --user -r requirements.txt && cd .. && npm run build:backend
+    buildCommand: npm install && npx playwright install --with-deps chromium || npx playwright install chromium || echo "Playwright installation failed, will retry at runtime" && cd turnstile-solver && python3 -m pip install --user --upgrade pip setuptools wheel 2>/dev/null || python3 -m ensurepip --user 2>/dev/null || true && python3 -m pip install --user -r requirements.txt && python3 -m pip install --user camoufox>=1.0.0 patchright>=1.0.0 quart>=0.19.0 || echo "Python dependencies installation failed, will retry at runtime" && cd .. && npm run build:backend
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
