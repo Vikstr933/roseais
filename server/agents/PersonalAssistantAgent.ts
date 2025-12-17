@@ -1570,10 +1570,31 @@ If no projectId is provided, will use the currently selected project from the co
       const validPluginTools = pluginTools.filter(t => t && t.name && typeof t.name === 'string' && t.name.trim().length > 0);
       const validAdditionalTools = (additionalToolsForUser || []).filter(t => t && t.name && typeof t.name === 'string' && t.name.trim().length > 0);
       
-      const tools = [...validBuiltInTools, ...validPluginTools, ...validAdditionalTools];
+      // Combine all tools, then ensure tool names are UNIQUE before sending to Anthropic
+      const allTools = [...validBuiltInTools, ...validPluginTools, ...validAdditionalTools];
+      const seenToolNames = new Set<string>();
+      const tools: Tool[] = [];
 
-      if (builtInTools.length !== validBuiltInTools.length || pluginTools.length !== validPluginTools.length || (additionalToolsForUser?.length || 0) !== validAdditionalTools.length) {
-        logger.warn(`Filtered out invalid tools: builtInTools=${builtInTools.length - validBuiltInTools.length}, pluginTools=${pluginTools.length - validPluginTools.length}, additionalTools=${(additionalToolsForUser?.length || 0) - validAdditionalTools.length}`);
+      for (const tool of allTools) {
+        if (seenToolNames.has(tool.name)) {
+          // Duplicate tool name detected – keep the first instance only
+          logger.warn(`Duplicate tool name detected and filtered out: ${tool.name}`);
+          continue;
+        }
+        seenToolNames.add(tool.name);
+        tools.push(tool);
+      }
+
+      if (
+        builtInTools.length !== validBuiltInTools.length ||
+        pluginTools.length !== validPluginTools.length ||
+        (additionalToolsForUser?.length || 0) !== validAdditionalTools.length
+      ) {
+        logger.warn(
+          `Filtered out invalid tools: builtInTools=${builtInTools.length - validBuiltInTools.length}, ` +
+          `pluginTools=${pluginTools.length - validPluginTools.length}, ` +
+          `additionalTools=${(additionalToolsForUser?.length || 0) - validAdditionalTools.length}`
+        );
       }
 
       logger.info(`Tools available for PersonalAssistantAgent: userId=${userId}, totalTools=${tools.length}, pluginToolsCount=${validPluginTools.length}, toolNames=${tools.map(t => t.name).join(', ')}`);
