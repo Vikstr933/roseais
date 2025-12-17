@@ -449,6 +449,72 @@ Use CSS selectors, IDs, or text content to identify elements.`;
    */
   private async executeRegistrationFallback(page: Page, task: BrowserUseTask): Promise<{ message: string; data?: Record<string, any> }> {
     const actions: string[] = [];
+    
+    // Set up console message logging to capture errors and warnings from browser
+    const consoleMessages: Array<{ type: string; text: string; url?: string }> = [];
+    page.on('console', (msg) => {
+      const type = msg.type();
+      const text = msg.text();
+      const location = msg.location();
+      
+      // Filter for relevant messages (errors, warnings, and Turnstile-related logs)
+      if (type === 'error' || type === 'warning' || 
+          text.toLowerCase().includes('turnstile') || 
+          text.toLowerCase().includes('captcha') ||
+          text.toLowerCase().includes('cf-') ||
+          text.toLowerCase().includes('cloudflare')) {
+        consoleMessages.push({
+          type,
+          text,
+          url: location?.url
+        });
+        logger.debug(`[Browser Console ${type.toUpperCase()}]: ${text}${location?.url ? ` (${location.url})` : ''}`);
+      }
+    });
+    
+    // Set up network request/response logging
+    const networkRequests: Array<{ url: string; method: string; status?: number; statusText?: string }> = [];
+    page.on('request', (request) => {
+      const url = request.url();
+      // Log registration/API requests
+      if (url.includes('/register') || url.includes('/signup') || url.includes('/api/') || url.includes('turnstile') || url.includes('challenges.cloudflare.com')) {
+        networkRequests.push({
+          url,
+          method: request.method()
+        });
+        logger.debug(`[Network Request] ${request.method()} ${url}`);
+      }
+    });
+    
+    page.on('response', (response) => {
+      const url = response.url();
+      // Log registration/API responses
+      if (url.includes('/register') || url.includes('/signup') || url.includes('/api/') || url.includes('turnstile') || url.includes('challenges.cloudflare.com')) {
+        const existing = networkRequests.find(r => r.url === url && !r.status);
+        if (existing) {
+          existing.status = response.status();
+          existing.statusText = response.statusText();
+        } else {
+          networkRequests.push({
+            url,
+            method: response.request().method(),
+            status: response.status(),
+            statusText: response.statusText()
+          });
+        }
+        logger.debug(`[Network Response] ${response.status()} ${response.statusText()} ${url}`);
+      }
+    });
+    
+    // Set up page error logging
+    page.on('pageerror', (error) => {
+      logger.warn(`[Page Error]: ${error.message}`);
+      consoleMessages.push({
+        type: 'error',
+        text: error.message,
+        url: page.url()
+      });
+    });
 
     // Extract account name, username, password, confirm password from task description
     const emailMatch = task.task.match(/email[:\s]+([^\s\n]+@[^\s\n]+)/i) || 
