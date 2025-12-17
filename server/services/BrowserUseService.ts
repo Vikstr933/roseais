@@ -1032,6 +1032,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
               actions.push('Turnstile solved');
               
               // Enhanced token application using Turnstile API
+              // IMPORTANT: For 2Captcha tokens, we need to set the token properly before calling callbacks
               const tokenSet = await page.evaluate((tokenValue) => {
                 // Find and fill the response input
                 const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
@@ -1039,8 +1040,15 @@ Use CSS selectors, IDs, or text content to identify elements.`;
                   return { success: false, reason: 'input_not_found' };
                 }
                 
-                // Set the token value first
+                // CRITICAL: Set the token value FIRST before triggering any events or callbacks
+                // This ensures the token is in place when Turnstile validates it
                 responseInput.value = tokenValue;
+                
+                // Also set it as a hidden input if it exists
+                const hiddenInput = document.querySelector('input[type="hidden"][name="cf-turnstile-response"]') as HTMLInputElement;
+                if (hiddenInput) {
+                  hiddenInput.value = tokenValue;
+                }
                 
                 // Trigger all necessary events to ensure Turnstile recognizes the token
                 const events = ['input', 'change', 'blur', 'focus'];
