@@ -386,12 +386,39 @@ export class PlaygroundAssistantAgent {
           const tool = tools.find(t => t.name === toolCall.name);
           if (!tool) {
             logger.warn(`Tool ${toolCall.name} not found`);
+            // In chat mode, if generate_code is requested, provide helpful error
+            if (toolCall.name === 'generate_code' && isChatMode) {
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content: JSON.stringify({
+                  success: false,
+                  error: 'generate_code is not available in Chat Mode',
+                  message: 'I understand you want to generate code, but I\'m currently in Chat Mode where code generation is disabled. Please switch to Code Mode to generate code. In Chat Mode, I can help you plan, discuss architecture, and provide code examples in my responses.'
+                }, null, 2)
+              });
+              continue;
+            }
             continue;
           }
 
           try {
             // Special handling for generate_code - improve prompt first
             if (toolCall.name === 'generate_code') {
+              // Double-check: if in chat mode, don't allow generate_code
+              if (isChatMode) {
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: toolCall.id,
+                  content: JSON.stringify({
+                    success: false,
+                    error: 'generate_code is not available in Chat Mode',
+                    message: 'I understand you want to generate code, but I\'m currently in Chat Mode where code generation is disabled. Please switch to Code Mode to generate code. In Chat Mode, I can help you plan, discuss architecture, and provide code examples in my responses.'
+                  }, null, 2)
+                });
+                continue;
+              }
+              
               const originalPrompt = (toolCall.input as any).prompt;
               const improved = await this.improvePrompt(originalPrompt, options?.existingFiles || []);
               improvedPrompt = improved;
@@ -637,38 +664,50 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
     connectorContext?: string
   ): string {
     const chatModeNote = isChatMode 
-      ? `\n\n**🔵 CHAT MODE ACTIVE - IMPORTANT:**
-You are currently in CHAT-ONLY mode. This is critical:
+      ? `\n\n**🔵 CHAT MODE ACTIVE - CRITICAL INSTRUCTIONS:**
+You are currently in CHAT-ONLY mode. This is VERY IMPORTANT:
 
-1. **DO NOT generate code** - The generate_code tool is DISABLED
+1. **DO NOT generate code** - The generate_code tool is DISABLED and will cause errors if you try to use it
 2. **DO NOT create/modify/delete files** - Those tools are DISABLED  
 3. **INSTEAD: Have a conversation** - Answer questions, discuss ideas, help plan
 
-**What you SHOULD do in Chat Mode:**
-- Answer the user's questions directly and thoroughly
-- Discuss architecture, design patterns, best practices
-- Help them think through their project requirements
-- Explain how you would approach building something
-- Provide code examples IN YOUR TEXT RESPONSE (not via tools)
-- Analyze existing code if they have any (read_file is available)
-- Help them plan before they switch to Code Mode to build
+**What you SHOULD do in Chat Mode when user asks to build/create something:**
+- Explain what you would build and how
+- Discuss the architecture, components, and structure
+- Provide detailed planning and requirements
+- Give code examples IN YOUR TEXT RESPONSE (as markdown code blocks, not via tools)
+- Help them understand what needs to be built
+- Then suggest: "When you're ready to build this, switch to Code Mode and I'll generate all the files for you!"
 
 **Example interaction in Chat Mode:**
-User: "Build a python app for overtime calculation"
-YOU: "Great idea! Here's what an overtime calculator should include:
+User: "Hade du utifrån detta projektet och dess filer kunna skapa en frontend webUI som spelare kan använda för att se hur många som är online, highscores och så vidare?"
 
-1. **Employee data management**: Track employees, their hourly rates, and schedules
-2. **Time entry**: Allow input of worked hours per day/week
-3. **Overtime rules**:
-   - Standard overtime (e.g., 1.5x after 40 hours/week)
-   - Weekend/holiday rates (e.g., 2x)
-   - Different rules for different employee types
-4. **Calculation engine**: Apply the rules to time entries
-5. **Reporting**: Show overtime hours and calculated pay
+YOU: "Absolut! Jag kan hjälpa dig planera en frontend webUI för din OpenTibia server. Här är vad jag skulle bygga:
 
-Would you like me to elaborate on any of these components? When you're ready to build, switch to Code Mode and I'll generate the app!"
+**Komponenter:**
+1. **Server Status Dashboard** - Visa antal spelare online, server uptime, max players
+2. **Online Players List** - Lista med spelare som är online (namn, level, vocation, location)
+3. **Highscores Section** - Topplistor för level, experience, skills
+4. **Server Information** - IP, port, rates (XP, loot, skill), server version
 
-NEVER try to call generate_code - it's not available to you in Chat Mode.
+**Teknisk lösning:**
+- React + TypeScript för frontend
+- API endpoints som hämtar data från din OpenTibia server
+- Modern, gaming-inspirerad design med dark theme
+- Real-time updates (auto-refresh var 30:e sekund)
+- Responsive design för mobil och desktop
+
+**Filer som skulle skapas:**
+- `src/App.tsx` - Huvudkomponent
+- `src/components/ServerStatus.tsx` - Server status display
+- `src/components/OnlinePlayers.tsx` - Spelarlista
+- `src/components/Highscores.tsx` - Highscores
+- `src/services/api.ts` - API-anrop till servern
+- `package.json`, `tsconfig.json`, etc.
+
+När du är redo att bygga detta, byt till Code Mode så genererar jag alla filer åt dig! Vill du att jag förklarar någon del mer i detalj?"
+
+**CRITICAL: NEVER try to call generate_code - it will cause an error. Always explain and suggest Code Mode instead.**
 `
       : '';
 
