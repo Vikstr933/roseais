@@ -434,30 +434,36 @@ export class BrowserUseService {
       let proxyConfig = await this.getProxyConfig(task);
       let allProxies: Array<{ server: string; username?: string; password?: string }> = [];
       
-      // For registration tasks, ALWAYS fetch multiple proxies for retry capability
+      // ALWAYS fetch multiple proxies from API for retry capability
       // This is critical because proxy connections can fail and we need backups
-      if (isRegistrationTask) {
-        // Always fetch proxies from API for registration tasks (even if we have an explicit proxy)
-        allProxies = await this.fetchAllProxiesFromAPI();
-        
-        if (allProxies.length > 0) {
-          // If we have an explicit proxy, use it first, then add API proxies as backups
-          // Otherwise, just use API proxies
-          if (proxyConfig) {
-            logger.info(`Using explicit proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} with ${allProxies.length} backup proxies from API`);
-          } else {
-            proxyConfig = allProxies[Math.floor(Math.random() * allProxies.length)];
-            logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} with ${allProxies.length - 1} backup proxies - This significantly improves Turnstile implicit pass rate!`);
-          }
-        } else if (proxyConfig) {
-          logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
+      // Fetch proxies from API (for both registration and non-registration tasks)
+      allProxies = await this.fetchAllProxiesFromAPI();
+      
+      if (allProxies.length > 0) {
+        // If we have an explicit proxy, use it first, then add API proxies as backups
+        // Otherwise, just use API proxies
+        if (proxyConfig) {
+          logger.info(`Using explicit proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} with ${allProxies.length} backup proxies from API`);
         } else {
-          logger.warn('⚠️ No proxies available for registration task - this may cause issues with Turnstile');
+          proxyConfig = allProxies[Math.floor(Math.random() * allProxies.length)];
+          if (isRegistrationTask) {
+            logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} with ${allProxies.length - 1} backup proxies - This significantly improves Turnstile implicit pass rate!`);
+          } else {
+            logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} with ${allProxies.length - 1} backup proxies`);
+          }
         }
       } else if (proxyConfig) {
-        logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
+        if (isRegistrationTask) {
+          logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
+        } else {
+          logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''}`);
+        }
       } else {
-        logger.debug('No proxy configured - using direct connection (datacenter IP may reduce Turnstile implicit pass rate)');
+        if (isRegistrationTask) {
+          logger.warn('⚠️ No proxies available for registration task - this may cause issues with Turnstile');
+        } else {
+          logger.debug('No proxy configured - using direct connection');
+        }
       }
       
       // Create browser context with realistic settings (critical for Turnstile implicit pass)
@@ -490,7 +496,7 @@ export class BrowserUseService {
       // Try navigation with proxy (or multiple proxies if first fails)
       const navigationTimeout = task.options?.timeout || 60000; // Default 60 seconds
       let navigationSuccess = false;
-      const maxProxyRetries = isRegistrationTask ? 10 : 1; // For registration, try up to 10 proxies
+      const maxProxyRetries = isRegistrationTask ? 10 : 5; // For registration, try up to 10 proxies; for others, try up to 5
       
       // Build list of proxies to try:
       // 1. If we have explicit proxy, use it first
@@ -498,8 +504,8 @@ export class BrowserUseService {
       // 3. Shuffle to avoid always using the same proxies in the same order
       let proxiesToTry: Array<{ server: string; username?: string; password?: string }> = [];
       
-      if (isRegistrationTask && allProxies.length > 0) {
-        // For registration tasks, build a list with explicit proxy first (if any), then API proxies
+      if (allProxies.length > 0) {
+        // Build a list with explicit proxy first (if any), then API proxies
         if (proxyConfig) {
           // Check if explicit proxy is in the API list to avoid duplicates
           const explicitProxyInList = allProxies.some(p => 
@@ -527,11 +533,8 @@ export class BrowserUseService {
           if (proxiesToTry.length >= maxProxyRetries) break;
         }
       } else if (proxyConfig) {
-        // Non-registration task or no API proxies - just use explicit proxy
+        // No API proxies but we have explicit proxy - just use it
         proxiesToTry = [proxyConfig];
-      } else if (allProxies.length > 0) {
-        // No explicit proxy but we have API proxies
-        proxiesToTry = allProxies.slice(0, maxProxyRetries);
       }
       
       if (proxiesToTry.length === 0 && isRegistrationTask) {
