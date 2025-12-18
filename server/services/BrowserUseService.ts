@@ -2093,6 +2093,32 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         ? `⚠️ Registration form filled and submitted, but account creation could not be verified. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : 'No clear success indicators found.'} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''} Please check manually if account was created.`
         : `❌ Registration form filled but submission may have failed. Actions: ${actions.join(', ')}. ${successIndicators.length > 0 ? `Verification: ${successIndicators.join(', ')}.` : ''} ${finalPassword !== password ? `Note: Password was adjusted to meet requirements (${finalPassword}).` : ''}`;
       
+      // Summarize console messages and network requests to reduce prompt size
+      // Only include summary, not full arrays, to prevent prompt length errors
+      const consoleSummary = relevantConsoleMessages.length > 0 
+        ? {
+            total: consoleMessages.length,
+            relevant: relevantConsoleMessages.length,
+            samples: relevantConsoleMessages.slice(0, 5).map(msg => ({
+              type: msg.type,
+              text: msg.text.substring(0, 200) // Truncate long messages
+            }))
+          }
+        : undefined;
+      
+      const networkSummary = relevantNetworkRequests.length > 0
+        ? {
+            total: networkRequests.length,
+            relevant: relevantNetworkRequests.length,
+            samples: relevantNetworkRequests.slice(0, 10).map(req => ({
+              method: req.method,
+              url: req.url.substring(0, 150), // Truncate long URLs
+              status: req.status,
+              statusText: req.statusText
+            }))
+          }
+        : undefined;
+      
       return {
         message,
         data: { 
@@ -2103,8 +2129,8 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           formSubmitted,
           accountCreated, // CRITICAL: Report actual account creation status
           successIndicators,
-          consoleMessages: relevantConsoleMessages.length > 0 ? relevantConsoleMessages : undefined,
-          networkRequests: relevantNetworkRequests.length > 0 ? relevantNetworkRequests : undefined
+          consoleMessages: consoleSummary,
+          networkRequests: networkSummary
         }
       };
     } catch (error) {
