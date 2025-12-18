@@ -95,6 +95,34 @@ export function OmniAssistant() {
   const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
   
   // Voice mode hook
+  let voiceModeResult;
+  try {
+    console.log('[OmniAssistant] Initializing useVoiceMode hook...');
+    voiceModeResult = useVoiceMode();
+    console.log('[OmniAssistant] useVoiceMode hook initialized successfully');
+  } catch (error) {
+    console.error('[OmniAssistant] Error initializing useVoiceMode:', error);
+    // Fallback to prevent crash
+    voiceModeResult = {
+      isListening: false,
+      isSpeaking: false,
+      transcript: '',
+      error: null,
+      isSupported: false,
+      isInCall: false,
+      selectedVoice: null,
+      startListening: () => {},
+      stopListening: () => {},
+      getTranscript: () => '',
+      speak: () => {},
+      speakStreaming: () => {},
+      stopSpeaking: () => {},
+      clearError: () => {},
+      startCall: () => {},
+      endCall: () => {},
+    };
+  }
+
   const {
     isListening,
     isSpeaking,
@@ -112,7 +140,7 @@ export function OmniAssistant() {
     clearError,
     startCall,
     endCall,
-  } = useVoiceMode();
+  } = voiceModeResult;
   
   // Listen for custom event to open Elon from Navigation
   // Also check if we're on the dedicated Elon chat page

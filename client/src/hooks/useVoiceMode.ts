@@ -20,6 +20,8 @@ export interface VoiceModeState {
 }
 
 export function useVoiceMode() {
+  console.log('[useVoiceMode] Hook initialized');
+  
   const [state, setState] = useState<VoiceModeState>({
     isListening: false,
     isSpeaking: false,
@@ -49,33 +51,46 @@ export function useVoiceMode() {
   useEffect(() => {
     const checkKBWhisper = async () => {
       try {
+        console.log('[useVoiceMode] Checking KB-Whisper availability...');
         const sessionToken = localStorage.getItem('sessionToken');
         
         // Only check if user is logged in
         if (!sessionToken) {
+          console.log('[useVoiceMode] No sessionToken found, skipping KB-Whisper check');
           setState(prev => ({ ...prev, kbWhisperAvailable: false }));
           return;
         }
 
+        console.log('[useVoiceMode] SessionToken found, checking KB-Whisper status...');
         const API_BASE = import.meta.env.VITE_API_URL || '';
-        const response = await fetch(`${API_BASE}/api/whisper/status`, {
+        const url = `${API_BASE}/api/whisper/status`;
+        console.log('[useVoiceMode] Fetching:', url);
+        
+        const response = await fetch(url, {
           headers: {
             'Authorization': `Bearer ${sessionToken}`,
           },
         });
         
+        console.log('[useVoiceMode] Response status:', response.status, response.statusText);
+        
         if (response.ok) {
           const data = await response.json();
+          console.log('[useVoiceMode] KB-Whisper status:', data);
           setState(prev => ({ ...prev, kbWhisperAvailable: data.available || false }));
         } else {
           // If auth fails (401, 403), don't try KB-Whisper
           if (response.status === 401 || response.status === 403) {
+            console.warn('[useVoiceMode] Auth failed for KB-Whisper check:', response.status);
+            setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+          } else {
+            console.warn('[useVoiceMode] KB-Whisper check failed with status:', response.status);
             setState(prev => ({ ...prev, kbWhisperAvailable: false }));
           }
         }
       } catch (error) {
-        // Silently fail - use Web Speech API fallback
-        // Don't log error to avoid console spam
+        // Log error for debugging
+        console.error('[useVoiceMode] Error checking KB-Whisper:', error);
         setState(prev => ({ ...prev, kbWhisperAvailable: false }));
       }
     };
@@ -83,29 +98,38 @@ export function useVoiceMode() {
     // Listen for storage changes (when user logs in/out)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'sessionToken') {
+        console.log('[useVoiceMode] Storage event: sessionToken changed');
         // Re-check when sessionToken changes
-        setTimeout(checkKBWhisper, 100);
+        setTimeout(() => {
+          console.log('[useVoiceMode] Re-checking KB-Whisper after storage change');
+          checkKBWhisper();
+        }, 100);
       }
     };
 
     // Add a small delay to ensure auth is ready on initial mount
+    console.log('[useVoiceMode] Setting up KB-Whisper check (500ms delay)');
     const timeoutId = setTimeout(() => {
+      console.log('[useVoiceMode] Initial KB-Whisper check triggered');
       checkKBWhisper();
     }, 500);
 
     // Listen for storage events (cross-tab)
     window.addEventListener('storage', handleStorageChange);
+    console.log('[useVoiceMode] Storage event listener added');
 
     // Also check periodically if sessionToken exists (for same-tab login)
     const intervalId = setInterval(() => {
       const token = localStorage.getItem('sessionToken');
       if (token && !state.kbWhisperAvailable) {
         // Token exists but we haven't checked yet, check now
+        console.log('[useVoiceMode] Interval check: token exists, checking KB-Whisper');
         checkKBWhisper();
       }
     }, 2000);
 
     return () => {
+      console.log('[useVoiceMode] Cleaning up KB-Whisper check');
       clearTimeout(timeoutId);
       clearInterval(intervalId);
       window.removeEventListener('storage', handleStorageChange);
@@ -114,12 +138,15 @@ export function useVoiceMode() {
 
   // Initialize Web Speech API
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const speechSynthesis = window.speechSynthesis;
+    try {
+      console.log('[useVoiceMode] Initializing Web Speech API...');
+      const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const speechSynthesis = window.speechSynthesis;
 
-    const isSupported = !!SpeechRecognition && !!speechSynthesis;
+      const isSupported = !!SpeechRecognition && !!speechSynthesis;
+      console.log('[useVoiceMode] Web Speech API supported:', isSupported);
 
-    setState(prev => ({ ...prev, isSupported }));
+      setState(prev => ({ ...prev, isSupported }));
 
     if (isSupported && SpeechRecognition) {
       const recognition = new SpeechRecognition();
@@ -222,9 +249,11 @@ export function useVoiceMode() {
       };
 
       recognitionRef.current = recognition;
+      console.log('[useVoiceMode] SpeechRecognition initialized');
     }
 
     synthesisRef.current = speechSynthesis;
+    console.log('[useVoiceMode] SpeechSynthesis initialized');
 
     // Find and select a female Swedish voice
     const findFemaleVoice = () => {
@@ -273,22 +302,31 @@ export function useVoiceMode() {
     } else {
       speechSynthesis.onvoiceschanged = findFemaleVoice;
     }
+    } catch (error) {
+      console.error('[useVoiceMode] Error initializing Web Speech API:', error);
+      setState(prev => ({ ...prev, isSupported: false, error: 'Failed to initialize voice features' }));
+    }
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (currentUtteranceRef.current) {
-        synthesisRef.current?.cancel();
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (pauseTimerRef.current) {
-        clearTimeout(pauseTimerRef.current);
+      console.log('[useVoiceMode] Cleaning up Web Speech API');
+      try {
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
+        }
+        if (currentUtteranceRef.current) {
+          synthesisRef.current?.cancel();
+        }
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
+        if (pauseTimerRef.current) {
+          clearTimeout(pauseTimerRef.current);
+        }
+      } catch (error) {
+        console.error('[useVoiceMode] Error during cleanup:', error);
       }
     };
   }, []);
