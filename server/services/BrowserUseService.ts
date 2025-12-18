@@ -237,7 +237,7 @@ export class BrowserUseService {
       'Sec-Fetch-Mode': 'navigate',
       'Sec-Fetch-Site': 'none',
       'Sec-Fetch-User': '?1',
-      'Upgrade-Insecure-Requests': '1',
+      // Removed 'Upgrade-Insecure-Requests' to avoid CORS issues
       'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
       'sec-ch-ua-mobile': '?0',
       'sec-ch-ua-platform': '"Windows"'
@@ -441,7 +441,7 @@ export class BrowserUseService {
           'Sec-Fetch-Mode': 'navigate',
           'Sec-Fetch-Site': 'none',
           'Sec-Fetch-User': '?1',
-          'Upgrade-Insecure-Requests': '1',
+          // Removed 'Upgrade-Insecure-Requests' to avoid CORS issues
           'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': '"Windows"'
