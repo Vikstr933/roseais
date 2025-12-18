@@ -14,7 +14,7 @@
  */
 
 import { SimpleLogger } from '../utils/SimpleLogger';
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import { MultiModelAIService } from './MultiModelAIService';
 import { spawn } from 'child_process';
 import { join } from 'path';
@@ -506,6 +506,7 @@ export class BrowserUseService {
           browserPage = await browserContext.newPage();
           
           // Setup stealth features and realistic headers
+          if (!browserPage) throw new Error('Failed to create browser page');
           await this.setupStealthPage(browserPage, task.url);
           
           // Simulate human behavior before navigation
@@ -532,6 +533,7 @@ export class BrowserUseService {
               }
             } else {
               // Not a proxy error, try domcontentloaded as fallback
+              if (!browserPage) throw new Error('Browser page is null');
               logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
               try {
                 await browserPage.goto(task.url, { 
@@ -543,8 +545,9 @@ export class BrowserUseService {
                 break;
               } catch (domError) {
                 // Last resort: just wait for the page to be accessible
+                if (!browserPage) throw new Error('Browser page is null');
                 logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
-                await browserPage.goto(task.url, { 
+                await browserPage.goto(task.url, {
                   waitUntil: 'commit', 
                   timeout: navigationTimeout 
                 });
