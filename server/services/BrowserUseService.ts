@@ -16,6 +16,7 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import { MultiModelAIService } from './MultiModelAIService';
+import { agentLearningService } from './AgentLearningService';
 import { spawn } from 'child_process';
 import { join } from 'path';
 
@@ -581,12 +582,52 @@ export class BrowserUseService {
             timeout: navigationTimeout 
           });
             logger.info(`✅ Successfully navigated to ${task.url}${currentProxy ? ` with proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}` : ''}`);
+            
+            // Record successful solution if we had previous failures
+            if (proxyIndex > 0 && currentProxy) {
+              agentLearningService.recordSolution({
+                agentType: 'browser_use',
+                problemPattern: 'proxy_connection_failed',
+                solutionStrategy: `Use proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')} after trying ${proxyIndex} other proxies`,
+                solutionContext: {
+                  url: task.url,
+                  successfulProxy: {
+                    server: currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, ''),
+                    hasAuth: !!(currentProxy.username && currentProxy.password)
+                  },
+                  proxiesTried: proxyIndex,
+                  isGeneralSolution: true
+                },
+                discoveredBy: 'system'
+              }).catch(err => logger.warn('Failed to record solution for learning', err));
+            }
+            
             navigationSuccess = true;
             break;
           } catch (navError: any) {
             const errorMessage = navError?.message || String(navError);
             if (errorMessage.includes('ERR_PROXY_CONNECTION_FAILED') || errorMessage.includes('proxy')) {
               logger.warn(`Proxy ${proxyIndex + 1}/${proxiesToTry.length} failed: ${errorMessage}`);
+              
+              // Record failure for learning
+              agentLearningService.recordFailure({
+                agentType: 'browser_use',
+                failureType: 'error',
+                errorCode: 'ERR_PROXY_CONNECTION_FAILED',
+                errorMessage,
+                context: {
+                  url: task.url,
+                  proxy: currentProxy ? {
+                    server: currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, ''),
+                    hasAuth: !!(currentProxy.username && currentProxy.password)
+                  } : null,
+                  proxyIndex: proxyIndex + 1,
+                  totalProxies: proxiesToTry.length,
+                  task: task.task
+                },
+                taskDescription: task.task
+              }).catch(err => logger.warn('Failed to record failure for learning', err));
+              
               if (proxyIndex < proxiesToTry.length - 1) {
                 logger.info(`Retrying with next proxy...`);
                 continue; // Try next proxy
@@ -621,7 +662,27 @@ export class BrowserUseService {
             }
           }
         } catch (contextError) {
-          logger.warn(`Failed to create context with proxy ${proxyIndex + 1}: ${contextError instanceof Error ? contextError.message : String(contextError)}`);
+          const errorMessage = contextError instanceof Error ? contextError.message : String(contextError);
+          logger.warn(`Failed to create context with proxy ${proxyIndex + 1}: ${errorMessage}`);
+          
+          // Record failure for learning
+          agentLearningService.recordFailure({
+            agentType: 'browser_use',
+            failureType: 'error',
+            errorCode: 'CONTEXT_CREATION_FAILED',
+            errorMessage,
+            context: {
+              url: task.url,
+              proxy: currentProxy ? {
+                server: currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, ''),
+                hasAuth: !!(currentProxy.username && currentProxy.password)
+              } : null,
+              proxyIndex: proxyIndex + 1,
+              task: task.task
+            },
+            taskDescription: task.task
+          }).catch(err => logger.warn('Failed to record failure for learning', err));
+          
           if (proxyIndex < proxiesToTry.length - 1) {
             continue; // Try next proxy
           } else {

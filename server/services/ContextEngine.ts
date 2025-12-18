@@ -6,6 +6,7 @@
 
 import type { ConversationMemoryService } from './ConversationMemoryService';
 import type { ProjectService } from './ProjectService';
+import { contextLearningService } from './ContextLearningService';
 import { db } from '../../db';
 import { workspaces, codeGenerationSessions, chatMessages } from '../../db/schema-pg';
 import { eq, desc } from 'drizzle-orm';
@@ -61,10 +62,17 @@ export class ContextEngine {
     ]);
 
     // Generate suggested actions based on context
-    const suggestedActions = await this.generateSuggestedActions(
+    const baseSuggestedActions = await this.generateSuggestedActions(
       contextType,
       recentActivity,
       conversationContext
+    );
+
+    // Use learning system to improve suggestions based on user patterns
+    const suggestedActions = await contextLearningService.getImprovedSuggestions(
+      userId,
+      contextType,
+      baseSuggestedActions
     );
 
     // Gather relevant data based on context type

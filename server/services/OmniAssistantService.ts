@@ -15,6 +15,7 @@ import { PersonalAssistantAgent } from '../agents/PersonalAssistantAgent';
 import { ConversationMemoryService } from './ConversationMemoryService';
 import { ContextEngine } from './ContextEngine';
 import { ProjectService } from './ProjectService';
+import { contextLearningService } from './ContextLearningService';
 import type { MultiModelAIService } from './MultiModelAIService';
 
 export interface OmniAssistantOptions {
@@ -110,6 +111,18 @@ export class OmniAssistantService {
         suggestions: userContext.suggestedActions.length,
       });
 
+      // Learn from suggested actions (async, don't block)
+      // This will be used when user actually takes an action
+      if (userContext.suggestedActions.length > 0) {
+        contextLearningService.learnFromSuggestedActions(
+          userId,
+          userContext,
+          userContext.suggestedActions
+        ).catch((err: Error) => {
+          console.error('⚠️ OmniAssistant: Failed to learn from suggestions', err);
+        });
+      }
+
       // Check if user needs proactive help
       if (generateInsights) {
         await this.contextEngine.detectNeedForHelp(userId, userContext.recentActivity);
@@ -175,14 +188,67 @@ export class OmniAssistantService {
       }
     }
 
+    // Get improved suggestions from learning system if ContextEngine was used
+    let finalSuggestions = result.suggestions || [];
+    if (useContextEngine && finalSuggestions.length > 0) {
+      try {
+        const contextType = this.contextEngine['mapPageToContextType'](currentPage);
+        finalSuggestions = await contextLearningService.getImprovedSuggestions(
+          userId,
+          contextType,
+          finalSuggestions
+        );
+      } catch (error) {
+        console.error('⚠️ OmniAssistant: Failed to get improved suggestions', error);
+        // Fallback to original suggestions
+      }
+    }
+
     return {
       response: result.response,
       toolsUsed: result.toolsUsed,
       contextUsed: result.contextUsed,
-      suggestions: result.suggestions,
+      suggestions: finalSuggestions, // Use improved suggestions
       conversationId,
       insights,
     };
+  }
+
+  /**
+   * Track when user takes a suggested action
+   */
+  async trackUserAction(
+    userId: string,
+    action: string,
+    context: {
+      currentPage?: string;
+      workspaceId?: number;
+      success?: boolean;
+    }
+  ): Promise<void> {
+    try {
+      if (!context.currentPage) {
+        return;
+      }
+
+      const userContext = await this.contextEngine.analyzeContext(
+        userId,
+        context.currentPage,
+        context.workspaceId
+      );
+
+      await contextLearningService.learnFromUserAction(
+        userId,
+        userContext,
+        action,
+        context.success !== false, // Default to success
+        {
+          workspaceId: context.workspaceId
+        }
+      );
+    } catch (error) {
+      console.error('⚠️ OmniAssistant: Failed to track user action', error);
+    }
   }
 
   /**

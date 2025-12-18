@@ -402,6 +402,31 @@ export function OmniAssistant() {
   const handleSuggestionClick = async (suggestion: string) => {
     if (isLoading) return;
     
+    // Track that user took this action (for learning)
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || '';
+      const sessionToken = localStorage.getItem('sessionToken');
+      const workspaceId = getActiveWorkspaceId();
+      
+      await fetch(`${API_BASE}/api/omniassistant/track-action`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: suggestion,
+          currentPage: window.location.pathname,
+          workspaceId,
+          success: true
+        })
+      }).catch(() => {
+        // Silently fail - tracking is optional
+      });
+    } catch (error) {
+      // Silently fail - tracking is optional
+    }
+    
     // Suggestions are for continuing conversation with Elon, not for playground
     // Send the suggestion as a message to Elon (no hardcoded acknowledgment needed)
     const playgroundContext = buildPlaygroundContext();

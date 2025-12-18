@@ -165,6 +165,16 @@ export class CodeGeneratorAgent extends BaseAgent {
       return { files };
     } catch (error) {
       this.logger.error('Code generation failed', error as Error);
+      
+      // Record failure for learning
+      this.recordFailure(error as Error, {
+        prompt,
+        componentName,
+        features,
+        filesGenerated: files.length
+      }, 'error').catch(err => {
+        this.logger.warn('Failed to record failure for learning', err);
+      });
       // Return minimal fallback
       return {
         files: [

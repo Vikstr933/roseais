@@ -453,6 +453,17 @@ export class OrchestrationAgent extends BaseAgent {
       ]);
       result.errors.push(`Agent ${agentId} failed: ${errorMessage}`);
       this.logger.error(`Agent execution failed: agentId=${agentId}, workflowId=${workflowId}, phase=${phase}`, error as Error);
+      
+      // Record failure for learning
+      this.recordFailure(error as Error, {
+        agentId,
+        workflowId,
+        phase,
+        task: context.task.prompt
+      }, 'error').catch(err => {
+        this.logger.warn('Failed to record failure for learning', err);
+      });
+      
       const errorEvent = {
         type: 'AGENT_ERROR',
         agent: agentId,

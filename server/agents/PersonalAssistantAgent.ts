@@ -5,6 +5,7 @@ import { Tool, KnowledgeItem } from '../plugins/BaseProductivityPlugin';
 import axios from 'axios';
 import { discordService } from '../services/DiscordService';
 import { agentEventEmitter } from '../index';
+import { agentLearningService } from '../services/AgentLearningService';
 import { db } from '../../db';
 import { assistantMessages, assistantMemories, assistantSessions } from '../../db/schema-pg';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
@@ -1732,6 +1733,25 @@ If no projectId is provided, will use the currently selected project from the co
             const result = await tool.execute(toolCall.input as Record<string, any>);
             toolsUsed.push(toolCall.name);
 
+            // Record successful tool execution for learning (if result indicates success)
+            if (result && (typeof result === 'object' && (result as any).success !== false)) {
+              agentLearningService.recordSolution({
+                agentType: 'personal_assistant',
+                problemPattern: `tool_execution_${toolCall.name}`,
+                solutionStrategy: `Successfully executed tool '${toolCall.name}'`,
+                solutionContext: {
+                  toolName: toolCall.name,
+                  toolInput: toolCall.input,
+                  userId,
+                  sessionId: options?.sessionId,
+                  isGeneralSolution: false
+                },
+                discoveredBy: 'system'
+              }).catch(err => {
+                logger.warn('Failed to record solution for learning', err);
+              });
+            }
+
             toolResults.push({
               type: 'tool_result',
               tool_use_id: toolCall.id,
@@ -1740,6 +1760,24 @@ If no projectId is provided, will use the currently selected project from the co
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             logger.error(`Tool execution failed: userId=${userId}, toolName=${toolCall.name}, errorMessage=${errorMessage}, toolInput=${JSON.stringify(toolCall.input)}`, error as Error);
+            
+            // Record failure for learning
+            agentLearningService.recordFailure({
+              agentType: 'personal_assistant',
+              failureType: 'error',
+              errorCode: error instanceof Error ? error.name : 'ToolExecutionError',
+              errorMessage: `Tool '${toolCall.name}' failed: ${errorMessage}`,
+              context: {
+                toolName: toolCall.name,
+                toolInput: toolCall.input,
+                userId,
+                sessionId: options?.sessionId
+              },
+              taskDescription: `Execute tool: ${toolCall.name}`,
+              userId
+            }).catch(err => {
+              logger.warn('Failed to record failure for learning', err);
+            });
             
             // Always return a tool_result, even on error, so the AI can handle it
             toolResults.push({
@@ -1767,6 +1805,24 @@ If no projectId is provided, will use the currently selected project from the co
           anthropicToolsIteration = this.convertToolsToAnthropicFormat(tools);
         } catch (error) {
           logger.error(`Failed to convert tools to Anthropic format (iteration ${toolIteration}): ${error instanceof Error ? error.message : String(error)} (userId: ${userId}, toolCount: ${tools.length})`, error as Error);
+          
+          // Record failure for learning
+          agentLearningService.recordFailure({
+            agentType: 'personal_assistant',
+            failureType: 'error',
+            errorCode: 'ToolConversionError',
+            errorMessage: `Failed to convert tools to Anthropic format: ${error instanceof Error ? error.message : String(error)}`,
+            context: {
+              toolCount: tools.length,
+              userId,
+              iteration: toolIteration
+            },
+            taskDescription: 'Convert tools to Anthropic format',
+            userId
+          }).catch(err => {
+            logger.warn('Failed to record failure for learning', err);
+          });
+          
           // Continue with empty tools array rather than failing completely
           anthropicToolsIteration = [];
         }
@@ -1785,6 +1841,23 @@ If no projectId is provided, will use the currently selected project from the co
 
       if (toolIteration >= maxToolIterations) {
         logger.warn(`Reached max tool iterations (${maxToolIterations}) for userId=${userId}`);
+        
+        // Record timeout failure for learning
+        agentLearningService.recordFailure({
+          agentType: 'personal_assistant',
+          failureType: 'timeout',
+          errorCode: 'MaxToolIterationsReached',
+          errorMessage: `Reached maximum tool iterations (${maxToolIterations})`,
+          context: {
+            userId,
+            toolsUsed: toolsUsed.join(', '),
+            userMessage: userMessage.substring(0, 200) // Truncate for context
+          },
+          taskDescription: userMessage.substring(0, 100),
+          userId
+        }).catch(err => {
+          logger.warn('Failed to record failure for learning', err);
+        });
       }
 
       // Update conversation history

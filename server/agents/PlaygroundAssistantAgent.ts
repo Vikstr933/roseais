@@ -1121,6 +1121,10 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
             timestamp: Date.now(),
           });
 
+          // Track workflow start for learning
+          const workflowStartTime = Date.now();
+          const workflowSteps: string[] = [];
+
           // Generate code incrementally
           const result = await orchestrator.generateIncrementally(
             plan,
@@ -1128,6 +1132,7 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
             formatKnowledgeContext(knowledgeContext),
             existingProjectFiles,
             (phase, progress, message) => {
+              workflowSteps.push(`Phase ${phase}: ${message}`);
               agentEventEmitter.emit('agent-event', {
                 type: 'PHASE_PROGRESS',
                 agent: 'playground-assistant',
@@ -1161,6 +1166,40 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
               });
             }
           );
+
+          // Learn from successful workflow
+          if (result.success) {
+            const { contextLearningService } = await import('../services/ContextLearningService');
+            const { ContextEngine } = await import('../services/ContextEngine');
+            const { ConversationMemoryService } = await import('../services/ConversationMemoryService');
+            const { ProjectService } = await import('../services/ProjectService');
+            
+            try {
+              const { MultiModelAIService } = await import('../services/MultiModelAIService');
+              const projectService = new ProjectService();
+              const multiModelAI = new MultiModelAIService();
+              const conversationMemory = new ConversationMemoryService(multiModelAI);
+              const contextEngine = new ContextEngine(conversationMemory, projectService);
+              
+              const userContext = await contextEngine.analyzeContext(
+                userId,
+                '/playground',
+                targetProjectId
+              );
+
+              await contextLearningService.learnFromSuccessfulWorkflow(
+                userId,
+                userContext,
+                {
+                  steps: workflowSteps,
+                  result: result.success ? 'success' : 'failed',
+                  duration: Date.now() - workflowStartTime
+                }
+              );
+            } catch (err) {
+              logger.warn('Failed to learn from workflow', err as Error);
+            }
+          }
           
           // Save files to project
           if (result.allFiles.length > 0) {
@@ -1208,6 +1247,18 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
           });
         } catch (error) {
           logger.error('Code generation failed', error as Error);
+          
+          // Record failure for learning
+          const { agentLearningService } = await import('../services/AgentLearningService');
+          agentLearningService.recordCodeGenerationFailure(
+            error as Error,
+            {
+              prompt: prompt, // Use the prompt variable that's in scope
+              projectId: targetProjectId?.toString(),
+              phase: 'generation'
+            }
+          ).catch(err => logger.warn('Failed to record failure for learning', err));
+          
           agentEventEmitter.emit('agent-event', {
             type: 'GENERATION_ERROR',
             agent: 'playground-assistant',

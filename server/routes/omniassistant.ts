@@ -402,6 +402,41 @@ router.post('/clear-session', authenticateUser, async (req, res) => {
 });
 
 /**
+ * POST /api/omniassistant/track-action
+ * Track when user takes a suggested action (for learning)
+ */
+router.post('/track-action', authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const { action, currentPage, workspaceId, success } = req.body;
+
+    if (!action || typeof action !== 'string') {
+      return res.status(400).json({
+        error: 'Action is required',
+        code: 'INVALID_ACTION',
+      });
+    }
+
+    await omniAssistant.trackUserAction(userId, action, {
+      currentPage: currentPage || req.headers.referer,
+      workspaceId,
+      success: success !== false, // Default to success
+    });
+
+    res.json({
+      success: true,
+      message: 'Action tracked',
+    });
+  } catch (error) {
+    console.error('❌ OmniAssistant: Failed to track action', error);
+    res.status(500).json({
+      error: 'Failed to track action',
+      code: 'TRACK_ERROR',
+    });
+  }
+});
+
+/**
  * GET /api/omniassistant/status
  * Get OmniAssistant system status and feature availability
  */
