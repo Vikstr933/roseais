@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../../db';
 import { codeGenerationSessions, chatMessages, workspaces } from '../../db/schema-pg';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
 import { SimpleLogger } from '../utils/SimpleLogger';
 
@@ -57,6 +57,16 @@ router.get('/', authenticateUser, async (req, res) => {
         // Reverse to get chronological order (oldest first)
         const orderedHistory = history.reverse();
 
+        // Get total count efficiently (only count, don't select all data)
+        let chatHistoryCount = 0;
+        if (session.workspaceId) {
+          const countResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(chatMessages as any)
+            .where(eq((chatMessages as any).projectId, session.workspaceId));
+          chatHistoryCount = countResult[0]?.count || 0;
+        }
+
         return {
           id: session.id,
           name: session.title,
@@ -69,13 +79,7 @@ router.get('/', authenticateUser, async (req, res) => {
             timestamp: msg.createdAt?.getTime() || Date.now(),
             files: msg.metadata?.files || []
           })),
-          chatHistoryCount: session.workspaceId 
-            ? await db
-                .select()
-                .from(chatMessages as any)
-                .where(eq((chatMessages as any).projectId, session.workspaceId))
-                .then(results => results.length)
-            : 0,
+          chatHistoryCount,
           generatedFiles: session.metadata?.generatedFiles || [],
           currentPrompt: session.metadata?.currentPrompt,
           metadata: session.metadata
