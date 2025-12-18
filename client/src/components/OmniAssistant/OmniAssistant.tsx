@@ -35,8 +35,13 @@ import {
   FolderOpen,
   ArrowRight,
   Download,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { useOmniAssistant, type OmniAssistantMessage } from '@/hooks/useOmniAssistant'; // Hook keeps same name for backward compatibility
+import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -66,8 +71,41 @@ export function OmniAssistant() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [isMobile, setIsMobile] = useState(false);
+  const [voiceModeEnabled, setVoiceModeEnabled] = useState(() => {
+    // Restore from localStorage
+    try {
+      const stored = localStorage.getItem('elon_voice_mode_enabled');
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [autoSpeakEnabled, setAutoSpeakEnabled] = useState(() => {
+    // Restore from localStorage
+    try {
+      const stored = localStorage.getItem('elon_auto_speak_enabled');
+      return stored !== 'false'; // Default to true
+    } catch {
+      return true;
+    }
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const displayedMessagesRef = useRef<Set<string>>(new Set()); // Track messages that have been displayed with typewriter
+  
+  // Voice mode hook
+  const {
+    isListening,
+    isSpeaking,
+    transcript,
+    error: voiceError,
+    isSupported: voiceSupported,
+    startListening,
+    stopListening,
+    getTranscript,
+    speak,
+    stopSpeaking,
+    clearError,
+  } = useVoiceMode();
   
   // Listen for custom event to open Elon from Navigation
   // Also check if we're on the dedicated Elon chat page
@@ -112,6 +150,69 @@ export function OmniAssistant() {
     sendMessage,
     clearSession,
   } = useOmniAssistant();
+
+  // Update input message when voice transcript is available
+  useEffect(() => {
+    if (transcript && !isListening) {
+      // When listening stops, update the input field with the transcript
+      const finalTranscript = getTranscript();
+      if (finalTranscript) {
+        setInputMessage(prev => prev + (prev ? ' ' : '') + finalTranscript);
+      }
+    }
+  }, [transcript, isListening, getTranscript]);
+
+  // Auto-speak assistant responses when voice mode is enabled
+  useEffect(() => {
+    if (autoSpeakEnabled && voiceModeEnabled && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'assistant' && lastMessage.content && !isSpeaking) {
+        // Wait a bit for the message to finish streaming
+        const timer = setTimeout(() => {
+          // Only speak if the message is complete (not streaming)
+          if (lastMessage.content.trim().length > 0) {
+            // Remove markdown and code blocks for cleaner speech
+            const cleanText = lastMessage.content
+              .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+              .replace(/`([^`]+)`/g, '$1') // Remove inline code
+              .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+              .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+              .replace(/#{1,6}\s+/g, '') // Remove headers
+              .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
+              .trim();
+            
+            if (cleanText.length > 0) {
+              speak(cleanText, { lang: 'sv-SE', rate: 1.0 });
+            }
+          }
+        }, 1000);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [messages, autoSpeakEnabled, voiceModeEnabled, isSpeaking]);
+
+  // Persist voice mode settings
+  useEffect(() => {
+    localStorage.setItem('elon_voice_mode_enabled', String(voiceModeEnabled));
+  }, [voiceModeEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('elon_auto_speak_enabled', String(autoSpeakEnabled));
+  }, [autoSpeakEnabled]);
+
+  // Handle voice input toggle
+  const handleVoiceToggle = () => {
+    if (isListening) {
+      stopListening();
+      const finalTranscript = getTranscript();
+      if (finalTranscript) {
+        setInputMessage(prev => prev + (prev ? ' ' : '') + finalTranscript);
+      }
+    } else {
+      startListening('sv-SE');
+    }
+  };
 
   // Get WorkspaceContext methods for prompt forwarding
   const userDisplayName = user?.displayName || user?.email || 'You';
@@ -910,13 +1011,52 @@ export function OmniAssistant() {
                   )}
                   <div className="flex gap-2">
                     <Input
-                      placeholder="Ask me anything about your digital office..."
+                      placeholder={isListening ? "Lyssnar..." : "Ask me anything about your digital office..."}
                       value={inputMessage}
                       onChange={e => setInputMessage(e.target.value)}
                       onKeyPress={handleKeyPress}
                       disabled={isLoading}
                       className="flex-1"
                     />
+                    {voiceSupported && (
+                      <Button
+                        variant={voiceModeEnabled ? "default" : "outline"}
+                        size="icon"
+                        onClick={() => setVoiceModeEnabled(!voiceModeEnabled)}
+                        title={voiceModeEnabled ? "Stäng av röstläge" : "Aktivera röstläge"}
+                        className={voiceModeEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+                      >
+                        <Mic className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {voiceModeEnabled && (
+                      <Button
+                        variant={isListening ? "destructive" : "outline"}
+                        size="icon"
+                        onClick={handleVoiceToggle}
+                        disabled={isLoading}
+                        title={isListening ? "Stoppa inspelning" : "Starta inspelning"}
+                        className={isListening ? "animate-pulse" : ""}
+                      >
+                        {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      </Button>
+                    )}
+                    {voiceModeEnabled && (
+                      <Button
+                        variant={autoSpeakEnabled ? "default" : "outline"}
+                        size="icon"
+                        onClick={() => {
+                          if (autoSpeakEnabled) {
+                            stopSpeaking();
+                          }
+                          setAutoSpeakEnabled(!autoSpeakEnabled);
+                        }}
+                        title={autoSpeakEnabled ? "Stäng av uppläsning" : "Aktivera uppläsning"}
+                        className={autoSpeakEnabled ? "bg-blue-600 hover:bg-blue-700" : ""}
+                      >
+                        {autoSpeakEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                      </Button>
+                    )}
                     <Button
                       onClick={handleSendMessage}
                       disabled={!inputMessage.trim() || isLoading}
@@ -934,6 +1074,34 @@ export function OmniAssistant() {
                       )}
                     </Button>
                   </div>
+                  {isListening && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="h-2 w-2 bg-red-500 rounded-full"
+                      />
+                      <span>Lyssnar... {transcript && `"${transcript}"`}</span>
+                    </div>
+                  )}
+                  {isSpeaking && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="h-2 w-2 bg-blue-500 rounded-full"
+                      />
+                      <span>Elon pratar...</span>
+                    </div>
+                  )}
+                  {voiceError && (
+                    <div className="text-sm text-red-500 mt-2 flex items-center justify-between">
+                      <span>{voiceError}</span>
+                      <Button variant="ghost" size="sm" onClick={clearError} className="h-6 px-2">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </SheetContent>
             </Sheet>
@@ -1067,13 +1235,52 @@ export function OmniAssistant() {
 
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Ask me anything about your digital office..."
+                    placeholder={isListening ? "Lyssnar..." : "Ask me anything about your digital office..."}
                     value={inputMessage}
                     onChange={e => setInputMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
                     disabled={isLoading}
                     className="flex-1"
                   />
+                  {voiceSupported && (
+                    <Button
+                      variant={voiceModeEnabled ? "default" : "outline"}
+                      size="icon"
+                      onClick={() => setVoiceModeEnabled(!voiceModeEnabled)}
+                      title={voiceModeEnabled ? "Stäng av röstläge" : "Aktivera röstläge"}
+                      className={voiceModeEnabled ? "bg-purple-600 hover:bg-purple-700" : ""}
+                    >
+                      <Mic className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {voiceModeEnabled && (
+                    <Button
+                      variant={isListening ? "destructive" : "outline"}
+                      size="icon"
+                      onClick={handleVoiceToggle}
+                      disabled={isLoading}
+                      title={isListening ? "Stoppa inspelning" : "Starta inspelning"}
+                      className={isListening ? "animate-pulse" : ""}
+                    >
+                      {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                    </Button>
+                  )}
+                  {voiceModeEnabled && (
+                    <Button
+                      variant={autoSpeakEnabled ? "default" : "outline"}
+                      size="icon"
+                      onClick={() => {
+                        if (autoSpeakEnabled) {
+                          stopSpeaking();
+                        }
+                        setAutoSpeakEnabled(!autoSpeakEnabled);
+                      }}
+                      title={autoSpeakEnabled ? "Stäng av uppläsning" : "Aktivera uppläsning"}
+                      className={autoSpeakEnabled ? "bg-blue-600 hover:bg-blue-700" : ""}
+                    >
+                      {autoSpeakEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                    </Button>
+                  )}
                   <Button
                     onClick={handleSendMessage}
                     disabled={!inputMessage.trim() || isLoading}
@@ -1091,6 +1298,34 @@ export function OmniAssistant() {
                     )}
                   </Button>
                 </div>
+                {isListening && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 1, repeat: Infinity }}
+                      className="h-2 w-2 bg-red-500 rounded-full"
+                    />
+                    <span>Lyssnar... {transcript && `"${transcript}"`}</span>
+                  </div>
+                )}
+                {isSpeaking && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 1, repeat: Infinity }}
+                      className="h-2 w-2 bg-blue-500 rounded-full"
+                    />
+                    <span>Elon pratar...</span>
+                  </div>
+                )}
+                {voiceError && (
+                  <div className="text-sm text-red-500 mt-2 flex items-center justify-between">
+                    <span>{voiceError}</span>
+                    <Button variant="ghost" size="sm" onClick={clearError} className="h-6 px-2">
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </Card>
           </motion.div>
@@ -1131,6 +1366,58 @@ export function OmniAssistant() {
                       Enabled
                     </Badge>
                   </div>
+
+                  {voiceSupported && (
+                    <>
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <div className="space-y-0.5">
+                          <Label className="text-sm font-medium flex items-center gap-2">
+                            <Mic className="h-4 w-4" />
+                            Voice Mode
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Prata med Elon istället för att skriva
+                          </p>
+                        </div>
+                        <Switch
+                          checked={voiceModeEnabled}
+                          onCheckedChange={setVoiceModeEnabled}
+                        />
+                      </div>
+
+                      {voiceModeEnabled && (
+                        <div className="flex items-center justify-between pl-4">
+                          <div className="space-y-0.5">
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <Volume2 className="h-4 w-4" />
+                              Auto-speak Responses
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Låt Elon läsa upp sina svar automatiskt
+                            </p>
+                          </div>
+                          <Switch
+                            checked={autoSpeakEnabled}
+                            onCheckedChange={(checked) => {
+                              if (!checked) {
+                                stopSpeaking();
+                              }
+                              setAutoSpeakEnabled(checked);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {!voiceSupported && (
+                    <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
+                      <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                        <Mic className="h-3 w-3 inline mr-1" />
+                        Voice mode är inte tillgängligt i din webbläsare. Använd Chrome eller Edge för bästa stöd.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t">
