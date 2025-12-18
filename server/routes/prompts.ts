@@ -1923,7 +1923,7 @@ async function handleIncrementalGeneration(
     const { AISyntaxFixer } = await import('../services/AISyntaxFixer');
     const aiFixer = new AISyntaxFixer();
     
-    // Validate and fix with AI (Opus 4.5) - this happens BEFORE users see any errors
+    // Validate and fix with AI (Sonnet 4.5) - this happens BEFORE users see any errors
     const finalFixResult = await aiFixer.validateAndFix(result.allFiles);
     
     if (finalFixResult.success) {

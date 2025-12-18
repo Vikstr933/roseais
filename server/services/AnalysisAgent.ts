@@ -112,8 +112,9 @@ export class AnalysisAgent {
       const agentConfig = await this.getAgentConfig();
       this.logger.info(`Using component-architect agent for analysis - model: ${agentConfig.model}, temperature: ${agentConfig.temperature}`);
       
-      // Force Opus 4.5 for delegation/analysis tasks (highest quality reasoning)
-      const preferredModel = 'claude-opus-4-5-20251101';
+      // Use Sonnet 4.5 for analysis (cost-effective, high quality)
+      // Opus should only be used for critical/complex reasoning tasks
+      // Sonnet 4.5 is excellent for code generation planning and analysis
       const response = await this.multiModelAI.generate({
         prompt: analysisPrompt,
         systemPrompt: agentConfig.systemPrompt,
@@ -121,7 +122,7 @@ export class AnalysisAgent {
         temperature: agentConfig.temperature,
         useCase: 'code_generation',
         priority: 'quality',
-        preferredModel // Request Opus 4.5 specifically for delegation
+        // No preferredModel - let MultiModelAIService select best model (will use Sonnet for quality priority)
       });
 
       // Parse the response to extract the plan
@@ -1038,14 +1039,14 @@ IMPORTANT - SEQUENTIAL DEPENDENCIES:
       this.logger.warn('component-architect agent not found in database, using defaults');
       return {
         systemPrompt: this.getDefaultPrompt(),
-        model: 'claude-opus-4-5-20251101', // Use Opus 4.5 as default for delegation
+        model: 'claude-sonnet-4-5-20250929', // Use Sonnet 4.5 (cost-effective, high quality)
         temperature: 0.3
       };
     } catch (error) {
       this.logger.error('Failed to load component-architect agent from database', error as Error);
       return {
         systemPrompt: this.getDefaultPrompt(),
-        model: 'claude-opus-4-5-20251101', // Use Opus 4.5 as default for delegation
+        model: 'claude-sonnet-4-5-20250929', // Use Sonnet 4.5 (cost-effective, high quality)
         temperature: 0.3
       };
     }

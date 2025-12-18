@@ -250,7 +250,9 @@ Return the COMPLETE fixed code that compiles without errors. Do not include mark
       temperature: 0.1, // Low temperature for precise fixes
       useCase: 'code_generation', // Using code_generation for syntax fixes
       priority: 'quality',
-      preferredModel: 'claude-opus-4-5-20251101' // Use Opus 4.5 for best quality fixes
+      // Use Sonnet 4.5 for syntax fixes (cost-effective, excellent quality)
+      // Opus should only be used for critical/complex reasoning tasks
+      // No preferredModel - let MultiModelAIService select best model (will use Sonnet for quality priority)
     };
 
     const response = await multiModelAI.generate(aiRequest);
