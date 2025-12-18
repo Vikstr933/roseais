@@ -69,11 +69,20 @@ export class ContextEngine {
     );
 
     // Use learning system to improve suggestions based on user patterns
-    const suggestedActions = await contextLearningService.getImprovedSuggestions(
-      userId,
-      contextType,
-      baseSuggestedActions
-    );
+    // Wrap in try-catch to prevent learning system errors from blocking main flow
+    let suggestedActions = baseSuggestedActions;
+    try {
+      suggestedActions = await contextLearningService.getImprovedSuggestions(
+        userId,
+        contextType,
+        baseSuggestedActions
+      );
+    } catch (error) {
+      // If learning system fails, fallback to base suggestions
+      // Log error but don't block the request
+      console.error('⚠️ ContextEngine: Failed to get improved suggestions, using base suggestions', error);
+      // suggestedActions already set to baseSuggestedActions above
+    }
 
     // Gather relevant data based on context type
     const relevantData = await this.gatherRelevantData(userId, contextType, validWorkspaceId);
