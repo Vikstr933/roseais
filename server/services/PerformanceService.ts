@@ -52,13 +52,26 @@ export class AdvancedCache {
   set(key: string, value: any, ttl?: number): void {
     if (!this.config.enabled) return;
 
+    const entrySize = this.calculateSize(value);
+    const maxEntrySize = 5 * 1024 * 1024; // 5MB max per entry
+    
+    // Don't cache entries larger than 5MB to prevent memory bloat
+    if (entrySize > maxEntrySize) {
+      logger.warn('Cache entry too large, skipping cache', { 
+        key, 
+        size: entrySize, 
+        maxSize: maxEntrySize 
+      });
+      return;
+    }
+
     const expiresAt = Date.now() + (ttl || this.config.defaultTTL) * 1000;
     const entry: CacheEntry = {
       value,
       expiresAt,
       createdAt: Date.now(),
       lastAccessed: Date.now(),
-      size: this.calculateSize(value)
+      size: entrySize
     };
 
     // Check if we need to evict entries
@@ -143,7 +156,12 @@ export class AdvancedCache {
 
     if (currentSize + newEntrySize <= maxSizeBytes) return;
 
-    const entriesToRemove = Math.ceil(this.cache.size * 0.2); // Remove 20%
+    // If new entry is very large, remove more entries (up to 50%)
+    const removalPercentage = newEntrySize > 5 * 1024 * 1024 ? 0.5 : 0.2;
+    const entriesToRemove = Math.max(
+      Math.ceil(this.cache.size * removalPercentage),
+      1 // Always remove at least 1 entry
+    );
     const sortedEntries = Array.from(this.cache.entries());
 
     switch (this.config.strategy) {

@@ -37,17 +37,25 @@ router.get('/', authenticateUser, async (req, res) => {
       .orderBy(desc((codeGenerationSessions as any).updatedAt))
       .limit(50);
 
-    // Load chat history for each session
+    // Load only recent chat history for each session (limit to prevent memory issues)
+    // Only load last 10 messages per session to reduce memory usage
+    const MAX_CHAT_MESSAGES_PER_SESSION = 10;
+    
     const sessionsWithHistory = await Promise.all(
       sessions.map(async (session) => {
         // Use workspaceId (integer) instead of session.id (string) for chat messages
+        // Only load recent messages to prevent memory bloat
         const history = session.workspaceId
           ? await db
               .select()
               .from(chatMessages as any)
               .where(eq((chatMessages as any).projectId, session.workspaceId))
-              .orderBy((chatMessages as any).createdAt)
+              .orderBy(desc((chatMessages as any).createdAt))
+              .limit(MAX_CHAT_MESSAGES_PER_SESSION)
           : [];
+
+        // Reverse to get chronological order (oldest first)
+        const orderedHistory = history.reverse();
 
         return {
           id: session.id,
@@ -55,12 +63,19 @@ router.get('/', authenticateUser, async (req, res) => {
           type: session.metadata?.type || 'playground',
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
-          chatHistory: history.map(msg => ({
+          chatHistory: orderedHistory.map(msg => ({
             role: msg.role,
             content: msg.content,
             timestamp: msg.createdAt?.getTime() || Date.now(),
             files: msg.metadata?.files || []
           })),
+          chatHistoryCount: session.workspaceId 
+            ? await db
+                .select()
+                .from(chatMessages as any)
+                .where(eq((chatMessages as any).projectId, session.workspaceId))
+                .then(results => results.length)
+            : 0,
           generatedFiles: session.metadata?.generatedFiles || [],
           currentPrompt: session.metadata?.currentPrompt,
           metadata: session.metadata
