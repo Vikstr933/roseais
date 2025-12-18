@@ -434,13 +434,25 @@ export class BrowserUseService {
       let proxyConfig = await this.getProxyConfig(task);
       let allProxies: Array<{ server: string; username?: string; password?: string }> = [];
       
-      // For registration tasks, fetch all proxies for retry capability
-      if (isRegistrationTask && !proxyConfig) {
-        // If no explicit proxy, fetch from API
+      // For registration tasks, ALWAYS fetch multiple proxies for retry capability
+      // This is critical because proxy connections can fail and we need backups
+      if (isRegistrationTask) {
+        // Always fetch proxies from API for registration tasks (even if we have an explicit proxy)
         allProxies = await this.fetchAllProxiesFromAPI();
+        
         if (allProxies.length > 0) {
-          proxyConfig = allProxies[Math.floor(Math.random() * allProxies.length)];
+          // If we have an explicit proxy, use it first, then add API proxies as backups
+          // Otherwise, just use API proxies
+          if (proxyConfig) {
+            logger.info(`Using explicit proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} with ${allProxies.length} backup proxies from API`);
+          } else {
+            proxyConfig = allProxies[Math.floor(Math.random() * allProxies.length)];
+            logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} with ${allProxies.length - 1} backup proxies - This significantly improves Turnstile implicit pass rate!`);
+          }
+        } else if (proxyConfig) {
           logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
+        } else {
+          logger.warn('⚠️ No proxies available for registration task - this may cause issues with Turnstile');
         }
       } else if (proxyConfig) {
         logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
@@ -478,8 +490,55 @@ export class BrowserUseService {
       // Try navigation with proxy (or multiple proxies if first fails)
       const navigationTimeout = task.options?.timeout || 60000; // Default 60 seconds
       let navigationSuccess = false;
-      const maxProxyRetries = isRegistrationTask ? 5 : 1; // For registration, try up to 5 proxies
-      const proxiesToTry = proxyConfig ? [proxyConfig] : (allProxies.length > 0 ? allProxies.slice(0, maxProxyRetries) : []);
+      const maxProxyRetries = isRegistrationTask ? 10 : 1; // For registration, try up to 10 proxies
+      
+      // Build list of proxies to try:
+      // 1. If we have explicit proxy, use it first
+      // 2. Then add API proxies (excluding the one we might have selected)
+      // 3. Shuffle to avoid always using the same proxies in the same order
+      let proxiesToTry: Array<{ server: string; username?: string; password?: string }> = [];
+      
+      if (isRegistrationTask && allProxies.length > 0) {
+        // For registration tasks, build a list with explicit proxy first (if any), then API proxies
+        if (proxyConfig) {
+          // Check if explicit proxy is in the API list to avoid duplicates
+          const explicitProxyInList = allProxies.some(p => 
+            p.server === proxyConfig!.server && 
+            p.username === proxyConfig!.username && 
+            p.password === proxyConfig!.password
+          );
+          
+          if (!explicitProxyInList) {
+            proxiesToTry.push(proxyConfig);
+          }
+        }
+        
+        // Add API proxies (shuffle them for better distribution)
+        const shuffledProxies = [...allProxies].sort(() => Math.random() - 0.5);
+        for (const proxy of shuffledProxies) {
+          // Skip if it's the same as explicit proxy
+          if (proxyConfig && 
+              proxy.server === proxyConfig.server && 
+              proxy.username === proxyConfig.username && 
+              proxy.password === proxyConfig.password) {
+            continue;
+          }
+          proxiesToTry.push(proxy);
+          if (proxiesToTry.length >= maxProxyRetries) break;
+        }
+      } else if (proxyConfig) {
+        // Non-registration task or no API proxies - just use explicit proxy
+        proxiesToTry = [proxyConfig];
+      } else if (allProxies.length > 0) {
+        // No explicit proxy but we have API proxies
+        proxiesToTry = allProxies.slice(0, maxProxyRetries);
+      }
+      
+      if (proxiesToTry.length === 0 && isRegistrationTask) {
+        throw new Error('No proxies available for registration task - proxy is required for Turnstile implicit pass');
+      }
+      
+      logger.info(`Will try ${proxiesToTry.length} proxy/proxies for navigation`);
       
       for (let proxyIndex = 0; proxyIndex < proxiesToTry.length && !navigationSuccess; proxyIndex++) {
         const currentProxy = proxiesToTry[proxyIndex];
