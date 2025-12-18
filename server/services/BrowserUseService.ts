@@ -268,19 +268,18 @@ export class BrowserUseService {
   }
 
   /**
-   * Fetch proxy from Webshare API
-   * Returns proxy in format: { server: string, username?: string, password?: string }
-   * Supports rotating proxies by randomly selecting one from the list
+   * Fetch all proxies from Webshare API
+   * Returns array of proxies in format: { server: string, username?: string, password?: string }[]
    */
-  private async fetchProxyFromAPI(): Promise<{ server: string; username?: string; password?: string } | null> {
+  private async fetchAllProxiesFromAPI(): Promise<Array<{ server: string; username?: string; password?: string }>> {
     const proxyApiKey = process.env.WEBSHARE_PROXY_API_KEY || process.env.PROXY_API_KEY;
     
     if (!proxyApiKey) {
-      return null; // No proxy API key configured
+      return []; // No proxy API key configured
     }
 
     try {
-      logger.info('Fetching proxy from Webshare API...');
+      logger.info('Fetching proxies from Webshare API...');
       
       // Webshare API endpoint for proxy list
       const proxyListUrl = 'https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=100';
@@ -301,7 +300,7 @@ export class BrowserUseService {
         } else {
           logger.warn(`Webshare API returned status ${response.status}`);
         }
-        return null;
+        return [];
       }
 
       const data = await response.json();
@@ -309,61 +308,72 @@ export class BrowserUseService {
       // Webshare API returns: { count: number, next: string | null, previous: string | null, results: Array }
       if (!data.results || !Array.isArray(data.results) || data.results.length === 0) {
         logger.warn('No proxies available from Webshare API');
-        return null;
+        return [];
       }
 
-      // Randomly select a proxy from the list (for rotation)
-      const randomProxy = data.results[Math.floor(Math.random() * data.results.length)];
+      // Convert all proxies to the format we need
+      const proxyConfigs: Array<{ server: string; username?: string; password?: string }> = [];
       
-      // Webshare proxy format: { proxy_address: "ip:port", username: string, password: string, ... }
-      // or: { ip: string, port: number, username: string, password: string, ... }
-      let proxyServer: string;
-      
-      if (randomProxy.proxy_address) {
-        // Format: "ip:port" - proxy_address already contains both IP and port
-        // Ensure it has http:// prefix
-        proxyServer = randomProxy.proxy_address.includes('://') 
-          ? randomProxy.proxy_address 
-          : `http://${randomProxy.proxy_address}`;
-      } else if (randomProxy.ip && randomProxy.port) {
-        // Format: separate ip and port
-        const protocol = randomProxy.type === 'socks5' ? 'socks5' : randomProxy.type || 'http';
-        proxyServer = `${protocol}://${randomProxy.ip}:${randomProxy.port}`;
-      } else {
-        // Log proxy object for debugging
-        logger.warn(`Unsupported proxy format from Webshare API. Proxy object keys: ${Object.keys(randomProxy).join(', ')}`);
-        logger.debug(`Proxy object: ${JSON.stringify(randomProxy).substring(0, 500)}`);
-        return null;
+      for (const randomProxy of data.results) {
+        let proxyServer: string;
+        
+        if (randomProxy.proxy_address) {
+          // Format: "ip:port" - proxy_address already contains both IP and port
+          // Ensure it has http:// prefix
+          proxyServer = randomProxy.proxy_address.includes('://') 
+            ? randomProxy.proxy_address 
+            : `http://${randomProxy.proxy_address}`;
+        } else if (randomProxy.ip && randomProxy.port) {
+          // Format: separate ip and port
+          const protocol = randomProxy.type === 'socks5' ? 'socks5' : randomProxy.type || 'http';
+          proxyServer = `${protocol}://${randomProxy.ip}:${randomProxy.port}`;
+        } else {
+          // Skip unsupported format
+          continue;
+        }
+
+        const proxyConfig: { server: string; username?: string; password?: string } = {
+          server: proxyServer,
+        };
+
+        // Add authentication if provided
+        if (randomProxy.username) {
+          proxyConfig.username = randomProxy.username;
+        }
+        if (randomProxy.password) {
+          proxyConfig.password = randomProxy.password;
+        }
+
+        // Validate proxy configuration before adding
+        if (proxyConfig.server && proxyConfig.server.includes('://')) {
+          proxyConfigs.push(proxyConfig);
+        }
       }
 
-      const proxyConfig: { server: string; username?: string; password?: string } = {
-        server: proxyServer,
-      };
-
-      // Add authentication if provided
-      if (randomProxy.username) {
-        proxyConfig.username = randomProxy.username;
-      }
-      if (randomProxy.password) {
-        proxyConfig.password = randomProxy.password;
-      }
-
-      // Validate proxy configuration before returning
-      if (!proxyConfig.server || !proxyConfig.server.includes('://')) {
-        logger.warn(`Invalid proxy server format: ${proxyConfig.server}`);
-        return null;
-      }
-
-      const proxyInfo = randomProxy.proxy_address || `${randomProxy.ip}:${randomProxy.port}`;
-      const location = randomProxy.country ? ` (${randomProxy.country}${randomProxy.city ? `, ${randomProxy.city}` : ''})` : '';
-      const authInfo = proxyConfig.username ? ' (authenticated)' : ' (no auth)';
-      logger.info(`✅ Selected Webshare proxy: ${proxyInfo}${location}${authInfo} (${data.results.length} available on this page, ${data.count || '?'} total in account)`);
-      logger.debug(`Proxy config: server=${proxyConfig.server}, username=${proxyConfig.username ? '***' : 'none'}, password=${proxyConfig.password ? '***' : 'none'}`);
-      return proxyConfig;
+      logger.info(`✅ Fetched ${proxyConfigs.length} proxies from Webshare API (${data.count || '?'} total in account)`);
+      return proxyConfigs;
     } catch (error) {
-      logger.warn(`Failed to fetch proxy from Webshare API: ${error instanceof Error ? error.message : String(error)}`);
+      logger.warn(`Failed to fetch proxies from Webshare API: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch a single proxy from Webshare API (for backward compatibility)
+   * Returns proxy in format: { server: string, username?: string, password?: string }
+   * Supports rotating proxies by randomly selecting one from the list
+   */
+  private async fetchProxyFromAPI(): Promise<{ server: string; username?: string; password?: string } | null> {
+    const allProxies = await this.fetchAllProxiesFromAPI();
+    if (allProxies.length === 0) {
       return null;
     }
+    
+    // Randomly select one proxy
+    const selectedProxy = allProxies[Math.floor(Math.random() * allProxies.length)];
+    logger.info(`✅ Selected Webshare proxy: ${selectedProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')} (${allProxies.length} available)`);
+    logger.debug(`Proxy config: server=${selectedProxy.server}, username=${selectedProxy.username ? '***' : 'none'}, password=${selectedProxy.password ? '***' : 'none'}`);
+    return selectedProxy;
   }
 
   /**
@@ -414,9 +424,26 @@ export class BrowserUseService {
       const browser = await this.getBrowser();
       
       // Get proxy configuration (from task, env var, or API)
-      const proxyConfig = await this.getProxyConfig(task);
-      if (proxyConfig) {
-        logger.info(`Using proxy: ${proxyConfig.server}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
+      // For registration tasks, we MUST use proxy - fetch multiple proxies for retry
+      const isRegistrationTask = task.task.toLowerCase().includes('register') || 
+                                task.task.toLowerCase().includes('create account') ||
+                                task.task.toLowerCase().includes('sign up') ||
+                                task.task.toLowerCase().includes('account creation') ||
+                                task.task.toLowerCase().includes('registration');
+      
+      let proxyConfig = await this.getProxyConfig(task);
+      let allProxies: Array<{ server: string; username?: string; password?: string }> = [];
+      
+      // For registration tasks, fetch all proxies for retry capability
+      if (isRegistrationTask && !proxyConfig) {
+        // If no explicit proxy, fetch from API
+        allProxies = await this.fetchAllProxiesFromAPI();
+        if (allProxies.length > 0) {
+          proxyConfig = allProxies[Math.floor(Math.random() * allProxies.length)];
+          logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
+        }
+      } else if (proxyConfig) {
+        logger.info(`Using proxy: ${proxyConfig.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
       } else {
         logger.debug('No proxy configured - using direct connection (datacenter IP may reduce Turnstile implicit pass rate)');
       }
@@ -424,8 +451,8 @@ export class BrowserUseService {
       // Create browser context with realistic settings (critical for Turnstile implicit pass)
       // Based on research: Turnstile often gives implicit pass with good fingerprints
       // Using residential proxy significantly improves implicit pass rate
-      // Try with proxy first, but fallback to direct connection if proxy fails
-      let browserContext;
+      // CRITICAL: For registration tasks, we MUST use proxy - retry with multiple proxies if needed
+      let browserContext: BrowserContext | null = null;
       const contextConfig: any = {
         viewport: { width: 1920, height: 1080 },
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -448,113 +475,107 @@ export class BrowserUseService {
         }
       };
       
-      // Add proxy configuration if provided (CRITICAL for improving Turnstile implicit pass rate)
-      // Residential proxies make the browser look more legitimate to Cloudflare
-      if (proxyConfig) {
-        contextConfig.proxy = proxyConfig;
-      }
+      // Try navigation with proxy (or multiple proxies if first fails)
+      const navigationTimeout = task.options?.timeout || 60000; // Default 60 seconds
+      let navigationSuccess = false;
+      const maxProxyRetries = isRegistrationTask ? 5 : 1; // For registration, try up to 5 proxies
+      const proxiesToTry = proxyConfig ? [proxyConfig] : (allProxies.length > 0 ? allProxies.slice(0, maxProxyRetries) : []);
       
-      browserContext = await browser.newContext(contextConfig);
-      
-      browserPage = await browserContext.newPage();
-      
-      // Setup stealth features and realistic headers
-      await this.setupStealthPage(browserPage, task.url);
-      
-      try {
-        // Simulate human behavior before navigation
-        await this.simulateHumanBehavior(browserPage);
+      for (let proxyIndex = 0; proxyIndex < proxiesToTry.length && !navigationSuccess; proxyIndex++) {
+        const currentProxy = proxiesToTry[proxyIndex];
         
-        // Navigate to URL with longer timeout and less strict wait condition
-        // Use 'load' instead of 'networkidle' to avoid timeouts on slow sites
-        const navigationTimeout = task.options?.timeout || 60000; // Default 60 seconds
+        // Close previous context if it exists
+        if (browserContext) {
+          try {
+            if (browserPage) await browserPage.close();
+            await browserContext.close();
+          } catch (closeError) {
+            // Ignore close errors
+          }
+        }
+        
+        // Create new context with current proxy
+        const currentContextConfig = { ...contextConfig };
+        if (currentProxy) {
+          currentContextConfig.proxy = currentProxy;
+          logger.info(`Attempting navigation with proxy ${proxyIndex + 1}/${proxiesToTry.length}: ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}`);
+        }
+        
         try {
-          await browserPage.goto(task.url, { 
-            waitUntil: 'load', 
-            timeout: navigationTimeout 
-          });
-          logger.info(`Navigated to ${task.url}`);
-        } catch (navError: any) {
-          // Check if it's a proxy connection error
-          const errorMessage = navError?.message || String(navError);
-          if (errorMessage.includes('ERR_PROXY_CONNECTION_FAILED') || errorMessage.includes('proxy')) {
-            logger.warn('Proxy connection failed, retrying without proxy (fallback to direct connection)...');
-            
-            // Close current context and page
-            try {
-              await browserPage.close();
-              await browserContext.close();
-            } catch (closeError) {
-              // Ignore close errors
-            }
-            
-            // Create new context without proxy
-            browserContext = await browser.newContext({
-              viewport: { width: 1920, height: 1080 },
-              userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              locale: 'en-US',
-              timezoneId: 'America/New_York',
-              extraHTTPHeaders: contextConfig.extraHTTPHeaders
+          browserContext = await browser.newContext(currentContextConfig);
+          browserPage = await browserContext.newPage();
+          
+          // Setup stealth features and realistic headers
+          await this.setupStealthPage(browserPage, task.url);
+          
+          // Simulate human behavior before navigation
+          await this.simulateHumanBehavior(browserPage);
+          
+          // Try navigation
+          try {
+            await browserPage.goto(task.url, { 
+              waitUntil: 'load', 
+              timeout: navigationTimeout 
             });
-            
-            browserPage = await browserContext.newPage();
-            await this.setupStealthPage(browserPage, task.url);
-            await this.simulateHumanBehavior(browserPage);
-            
-            // Retry navigation without proxy
-            try {
-              await browserPage.goto(task.url, { 
-                waitUntil: 'load', 
-                timeout: navigationTimeout 
-              });
-              logger.info(`Navigated to ${task.url} (without proxy)`);
-            } catch (retryError) {
-              logger.warn(`Navigation with 'load' timed out after proxy fallback, trying 'domcontentloaded'...`);
+            logger.info(`✅ Successfully navigated to ${task.url}${currentProxy ? ` with proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}` : ''}`);
+            navigationSuccess = true;
+            break;
+          } catch (navError: any) {
+            const errorMessage = navError?.message || String(navError);
+            if (errorMessage.includes('ERR_PROXY_CONNECTION_FAILED') || errorMessage.includes('proxy')) {
+              logger.warn(`Proxy ${proxyIndex + 1}/${proxiesToTry.length} failed: ${errorMessage}`);
+              if (proxyIndex < proxiesToTry.length - 1) {
+                logger.info(`Retrying with next proxy...`);
+                continue; // Try next proxy
+              } else {
+                throw new Error(`All ${proxiesToTry.length} proxy attempts failed. Last error: ${errorMessage}`);
+              }
+            } else {
+              // Not a proxy error, try domcontentloaded as fallback
+              logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
               try {
                 await browserPage.goto(task.url, { 
                   waitUntil: 'domcontentloaded', 
                   timeout: navigationTimeout 
                 });
-                logger.info(`Navigated to ${task.url} (domcontentloaded, without proxy)`);
+                logger.info(`✅ Navigated to ${task.url} (domcontentloaded)${currentProxy ? ` with proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}` : ''}`);
+                navigationSuccess = true;
+                break;
               } catch (domError) {
+                // Last resort: just wait for the page to be accessible
                 logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
                 await browserPage.goto(task.url, { 
                   waitUntil: 'commit', 
                   timeout: navigationTimeout 
                 });
                 await browserPage.waitForTimeout(3000);
-                logger.info(`Navigated to ${task.url} (commit, without proxy)`);
+                logger.info(`✅ Navigated to ${task.url} (commit)${currentProxy ? ` with proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}` : ''}`);
+                navigationSuccess = true;
+                break;
               }
             }
+          }
+        } catch (contextError) {
+          logger.warn(`Failed to create context with proxy ${proxyIndex + 1}: ${contextError instanceof Error ? contextError.message : String(contextError)}`);
+          if (proxyIndex < proxiesToTry.length - 1) {
+            continue; // Try next proxy
           } else {
-            // If it's not a proxy error, try domcontentloaded as before
-          logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
-          try {
-            await browserPage.goto(task.url, { 
-              waitUntil: 'domcontentloaded', 
-              timeout: navigationTimeout 
-            });
-            logger.info(`Navigated to ${task.url} (domcontentloaded)`);
-          } catch (domError) {
-            // Last resort: just wait for the page to be accessible
-            logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
-            await browserPage.goto(task.url, { 
-              waitUntil: 'commit', 
-              timeout: navigationTimeout 
-            });
-            await browserPage.waitForTimeout(3000);
-            logger.info(`Navigated to ${task.url} (commit)`);
-            }
+            throw contextError;
           }
         }
+      }
+      
+      if (!navigationSuccess) {
+        throw new Error(`Failed to navigate to ${task.url} after trying ${proxiesToTry.length} proxy/proxies`);
+      }
+      
+      // Ensure we have valid browserPage and browserContext
+      if (!browserPage || !browserContext) {
+        throw new Error('Failed to create browser context and page');
+      }
+      
+      try {
 
-        // Check if this is a registration/account creation task
-        const isRegistrationTask = task.task.toLowerCase().includes('register') || 
-                                  task.task.toLowerCase().includes('create account') ||
-                                  task.task.toLowerCase().includes('sign up') ||
-                                  task.task.toLowerCase().includes('account creation') ||
-                                  task.task.toLowerCase().includes('registration');
-        
         let result: { message: string; data?: Record<string, any> };
         
         // For registration tasks, use the robust fallback method directly
