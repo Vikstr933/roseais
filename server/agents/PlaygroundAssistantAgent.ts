@@ -698,12 +698,12 @@ YOU: "Absolut! Jag kan hjälpa dig planera en frontend webUI för din OpenTibia 
 - Responsive design för mobil och desktop
 
 **Filer som skulle skapas:**
-- `src/App.tsx` - Huvudkomponent
-- `src/components/ServerStatus.tsx` - Server status display
-- `src/components/OnlinePlayers.tsx` - Spelarlista
-- `src/components/Highscores.tsx` - Highscores
-- `src/services/api.ts` - API-anrop till servern
-- `package.json`, `tsconfig.json`, etc.
+- src/App.tsx - Huvudkomponent
+- src/components/ServerStatus.tsx - Server status display
+- src/components/OnlinePlayers.tsx - Spelarlista
+- src/components/Highscores.tsx - Highscores
+- src/services/api.ts - API-anrop till servern
+- package.json, tsconfig.json, etc.
 
 När du är redo att bygga detta, byt till Code Mode så genererar jag alla filer åt dig! Vill du att jag förklarar någon del mer i detalj?"
 
