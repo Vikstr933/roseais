@@ -566,20 +566,20 @@ export class BrowserUseService {
             timeout: proxyConnectionTimeout
           });
           browserPage = await browserContext.newPage();
-          
-          // Setup stealth features and realistic headers
+      
+      // Setup stealth features and realistic headers
           if (!browserPage) throw new Error('Failed to create browser page');
-          await this.setupStealthPage(browserPage, task.url);
-          
-          // Simulate human behavior before navigation
-          await this.simulateHumanBehavior(browserPage);
-          
+      await this.setupStealthPage(browserPage, task.url);
+      
+        // Simulate human behavior before navigation
+        await this.simulateHumanBehavior(browserPage);
+        
           // Try navigation with longer timeout for proxy connections
-          try {
-            await browserPage.goto(task.url, { 
-              waitUntil: 'load', 
-              timeout: navigationTimeout 
-            });
+        try {
+          await browserPage.goto(task.url, { 
+            waitUntil: 'load', 
+            timeout: navigationTimeout 
+          });
             logger.info(`✅ Successfully navigated to ${task.url}${currentProxy ? ` with proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}` : ''}`);
             navigationSuccess = true;
             break;
@@ -596,24 +596,24 @@ export class BrowserUseService {
             } else {
               // Not a proxy error, try domcontentloaded as fallback
               if (!browserPage) throw new Error('Browser page is null');
-              logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
-              try {
-                await browserPage.goto(task.url, { 
-                  waitUntil: 'domcontentloaded', 
-                  timeout: navigationTimeout 
-                });
+          logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
+          try {
+            await browserPage.goto(task.url, { 
+              waitUntil: 'domcontentloaded', 
+              timeout: navigationTimeout 
+            });
                 logger.info(`✅ Navigated to ${task.url} (domcontentloaded)${currentProxy ? ` with proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}` : ''}`);
                 navigationSuccess = true;
                 break;
-              } catch (domError) {
-                // Last resort: just wait for the page to be accessible
+          } catch (domError) {
+            // Last resort: just wait for the page to be accessible
                 if (!browserPage) throw new Error('Browser page is null');
-                logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
-                await browserPage.goto(task.url, {
-                  waitUntil: 'commit', 
-                  timeout: navigationTimeout 
-                });
-                await browserPage.waitForTimeout(3000);
+            logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
+            await browserPage.goto(task.url, { 
+              waitUntil: 'commit', 
+              timeout: navigationTimeout 
+            });
+            await browserPage.waitForTimeout(3000);
                 logger.info(`✅ Navigated to ${task.url} (commit)${currentProxy ? ` with proxy ${currentProxy.server.replace(/^https?:\/\//, '').replace(/^socks5:\/\//, '')}` : ''}`);
                 navigationSuccess = true;
                 break;
@@ -640,7 +640,7 @@ export class BrowserUseService {
       }
       
       try {
-
+        
         let result: { message: string; data?: Record<string, any> };
         
         // For registration tasks, use the robust fallback method directly
@@ -910,7 +910,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       // First, look for Register button in top right corner (common pattern)
       // Try multiple strategies to find the Register button
       const registerSelectors = [
-        // Retrotales specific
+        // Common registration button patterns (works with most sites)
         'button#reg-openModal',
         'button[id="reg-openModal"]',
         // Top right corner patterns
@@ -1068,7 +1068,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       // Fill Account Name field (first field, usually)
       if (accountName) {
         const accountNameSelectors = [
-          // Retrotales specific
+          // Common username field patterns (works with most sites)
           'input[name="reg-username"]',
           'input[id="reg-username"]',
           // Generic selectors
@@ -1183,7 +1183,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       // Fill password field (first password field)
       if (validPassword) {
         const passwordSelectors = [
-          // Retrotales specific
+          // Common password field patterns (works with most sites)
           'input[name="reg-password"]',
           'input[id="reg-password"]',
           // Generic selectors
@@ -1266,7 +1266,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       const confirmPasswordValue = confirmPassword || validPassword;
       if (confirmPasswordValue) {
         const confirmPasswordSelectors = [
-          // Retrotales specific (try both underscore and hyphen variations)
+          // Common confirm password field patterns (works with most sites)
           'input[id="password-confirmation"]',
           'input[id="password_again"]',
           'input[name="password_again"]',
@@ -1840,7 +1840,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
 
       // Submit form - look for submit button in dialog/modal
       const submitSelectors = [
-        // Retrotales specific
+        // Common submit button patterns (works with most sites)
         'button#register-submit-btn',
         'button[id="register-submit-btn"]',
         // Generic selectors
