@@ -495,8 +495,9 @@ export class BrowserUseService {
       
       // Try navigation with proxy (or multiple proxies if first fails)
       const navigationTimeout = task.options?.timeout || 60000; // Default 60 seconds
+      const proxyConnectionTimeout = 10000; // 10 seconds for proxy connection (shorter than navigation timeout)
       let navigationSuccess = false;
-      const maxProxyRetries = isRegistrationTask ? 10 : 5; // For registration, try up to 10 proxies; for others, try up to 5
+      const maxProxyRetries = isRegistrationTask ? 20 : 10; // For registration, try up to 20 proxies; for others, try up to 10
       
       // Build list of proxies to try:
       // 1. If we have explicit proxy, use it first
@@ -558,7 +559,12 @@ export class BrowserUseService {
         }
         
         try {
-          browserContext = await browser.newContext(currentContextConfig);
+          // Create context with proxy - add timeout for proxy connection
+          browserContext = await browser.newContext({
+            ...currentContextConfig,
+            // Add proxy-specific timeout settings
+            timeout: proxyConnectionTimeout
+          });
           browserPage = await browserContext.newPage();
           
           // Setup stealth features and realistic headers
@@ -568,7 +574,7 @@ export class BrowserUseService {
           // Simulate human behavior before navigation
           await this.simulateHumanBehavior(browserPage);
           
-          // Try navigation
+          // Try navigation with longer timeout for proxy connections
           try {
             await browserPage.goto(task.url, { 
               waitUntil: 'load', 
