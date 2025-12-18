@@ -1655,13 +1655,24 @@ If no projectId is provided, will use the currently selected project from the co
         anthropicTools = [];
       }
 
+      // Filter out messages with empty content before sending to Anthropic
+      const filteredHistory = history.filter(msg => {
+        if (typeof msg.content === 'string') {
+          return msg.content.trim().length > 0;
+        } else if (Array.isArray(msg.content)) {
+          // For array content (tool results, etc.), check if any item has content
+          return msg.content.length > 0;
+        }
+        return false;
+      });
+
       // Call Claude with tools (increased token limit for more detailed responses)
       const response = await this.anthropic.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 8192,
         system: systemPrompt,
         messages: [
-          ...history,
+          ...filteredHistory,
           {
             role: 'user',
             content: enhancedMessage
@@ -1674,8 +1685,11 @@ If no projectId is provided, will use the currently selected project from the co
       const toolsUsed: string[] = [];
       let finalResponse = '';
       let currentResponse = response;
+      // Filter out messages with empty content
+      const filteredHistoryForConversation = filteredHistory;
+      
       let conversationMessages: Anthropic.MessageParam[] = [
-        ...history,
+        ...filteredHistoryForConversation,
         {
           role: 'user',
           content: enhancedMessage
@@ -1698,11 +1712,22 @@ If no projectId is provided, will use the currently selected project from the co
           }
         }
 
-        // Add assistant response to conversation
-        conversationMessages.push({
-          role: 'assistant',
-          content: currentResponse.content
+        // Add assistant response to conversation (only if it has content)
+        const hasContent = currentResponse.content.some(item => {
+          if (item.type === 'text') {
+            return item.text.trim().length > 0;
+          } else if (item.type === 'tool_use') {
+            return true; // Tool use is valid content
+          }
+          return false;
         });
+        
+        if (hasContent) {
+          conversationMessages.push({
+            role: 'assistant',
+            content: currentResponse.content
+          });
+        }
 
         // If no tool calls, we're done
         if (toolCalls.length === 0) {
@@ -1860,17 +1885,19 @@ If no projectId is provided, will use the currently selected project from the co
         });
       }
 
-      // Update conversation history
-      history.push(
-        {
+      // Update conversation history (only add non-empty messages)
+      if (userMessage.trim().length > 0) {
+        history.push({
           role: 'user',
           content: userMessage
-        },
-        {
+        });
+      }
+      if (finalResponse.trim().length > 0) {
+        history.push({
           role: 'assistant',
           content: finalResponse
-        }
-      );
+        });
+      }
 
       // Keep only last N messages (rolling window) - reduced to prevent prompt too long errors
       if (history.length > MAX_MESSAGES_PER_SESSION) {
@@ -3154,10 +3181,21 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
         .limit(MAX_MESSAGES_PER_SESSION);
 
       // Convert to Anthropic format (reverse to get chronological order)
-      const history: Anthropic.MessageParam[] = messages.reverse().map(msg => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content
-      }));
+      // Filter out messages with empty content
+      const history: Anthropic.MessageParam[] = messages
+        .reverse()
+        .map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content
+        }))
+        .filter(msg => {
+          if (typeof msg.content === 'string') {
+            return msg.content.trim().length > 0;
+          } else if (Array.isArray(msg.content)) {
+            return msg.content.length > 0;
+          }
+          return false;
+        });
 
       if (history.length > 0) {
         logger.info(`Loaded ${history.length} messages from DB for session ${sessionId}`);

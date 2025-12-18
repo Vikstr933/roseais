@@ -39,6 +39,8 @@ import {
   MicOff,
   Volume2,
   VolumeX,
+  Phone,
+  PhoneOff,
 } from 'lucide-react';
 import { useOmniAssistant, type OmniAssistantMessage } from '@/hooks/useOmniAssistant'; // Hook keeps same name for backward compatibility
 import { useVoiceMode } from '@/hooks/useVoiceMode';
@@ -99,12 +101,17 @@ export function OmniAssistant() {
     transcript,
     error: voiceError,
     isSupported: voiceSupported,
+    isInCall,
+    selectedVoice,
     startListening,
     stopListening,
     getTranscript,
     speak,
+    speakStreaming,
     stopSpeaking,
     clearError,
+    startCall,
+    endCall,
   } = useVoiceMode();
   
   // Listen for custom event to open Elon from Navigation
@@ -151,46 +158,77 @@ export function OmniAssistant() {
     clearSession,
   } = useOmniAssistant();
 
-  // Update input message when voice transcript is available
+  // Handle auto-send in call mode
+  const handleCallMessage = useCallback(async (messageText: string) => {
+    if (!messageText.trim() || isLoading) return;
+
+    const playgroundContext = buildPlaygroundContext();
+    const workspaceId = getActiveWorkspaceId();
+
+    await sendMessage(messageText, {
+      currentPage: window.location.pathname,
+      workspaceId,
+      playgroundContext,
+    });
+  }, [isLoading, sendMessage]);
+
+  // Update input message when voice transcript is available (only if not in call mode)
   useEffect(() => {
-    if (transcript && !isListening) {
+    if (transcript && !isListening && !isInCall) {
       // When listening stops, update the input field with the transcript
       const finalTranscript = getTranscript();
       if (finalTranscript) {
         setInputMessage(prev => prev + (prev ? ' ' : '') + finalTranscript);
       }
     }
-  }, [transcript, isListening, getTranscript]);
+  }, [transcript, isListening, isInCall, getTranscript]);
 
   // Auto-speak assistant responses when voice mode is enabled
   useEffect(() => {
     if (autoSpeakEnabled && voiceModeEnabled && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === 'assistant' && lastMessage.content && !isSpeaking) {
-        // Wait a bit for the message to finish streaming
-        const timer = setTimeout(() => {
-          // Only speak if the message is complete (not streaming)
-          if (lastMessage.content.trim().length > 0) {
-            // Remove markdown and code blocks for cleaner speech
-            const cleanText = lastMessage.content
-              .replace(/```[\s\S]*?```/g, '') // Remove code blocks
-              .replace(/`([^`]+)`/g, '$1') // Remove inline code
-              .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
-              .replace(/\*([^*]+)\*/g, '$1') // Remove italic
-              .replace(/#{1,6}\s+/g, '') // Remove headers
-              .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
-              .trim();
-            
-            if (cleanText.length > 0) {
-              speak(cleanText, { lang: 'sv-SE', rate: 1.0 });
-            }
+      if (lastMessage.role === 'assistant' && lastMessage.content) {
+        // In call mode, use streaming speech
+        if (isInCall) {
+          // Use streaming speech for call mode - speaks as text arrives
+          const cleanText = lastMessage.content
+            .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+            .replace(/`([^`]+)`/g, '$1') // Remove inline code
+            .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+            .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+            .replace(/#{1,6}\s+/g, '') // Remove headers
+            .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
+            .trim();
+          
+          if (cleanText.length > 20 && !isSpeaking) {
+            speakStreaming(cleanText, { lang: 'sv-SE', rate: 1.0 });
           }
-        }, 1000);
-        
-        return () => clearTimeout(timer);
+        } else {
+          // Normal mode - wait for message to complete
+          if (!isSpeaking) {
+            const timer = setTimeout(() => {
+              if (lastMessage.content.trim().length > 0) {
+                const cleanText = lastMessage.content
+                  .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+                  .replace(/`([^`]+)`/g, '$1') // Remove inline code
+                  .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+                  .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+                  .replace(/#{1,6}\s+/g, '') // Remove headers
+                  .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
+                  .trim();
+                
+                if (cleanText.length > 0) {
+                  speak(cleanText, { lang: 'sv-SE', rate: 1.0 });
+                }
+              }
+            }, 1000);
+            
+            return () => clearTimeout(timer);
+          }
+        }
       }
     }
-  }, [messages, autoSpeakEnabled, voiceModeEnabled, isSpeaking]);
+  }, [messages, autoSpeakEnabled, voiceModeEnabled, isSpeaking, isInCall, speak, speakStreaming]);
 
   // Persist voice mode settings
   useEffect(() => {
@@ -205,12 +243,24 @@ export function OmniAssistant() {
   const handleVoiceToggle = () => {
     if (isListening) {
       stopListening();
-      const finalTranscript = getTranscript();
-      if (finalTranscript) {
-        setInputMessage(prev => prev + (prev ? ' ' : '') + finalTranscript);
+      if (!isInCall) {
+        const finalTranscript = getTranscript();
+        if (finalTranscript) {
+          setInputMessage(prev => prev + (prev ? ' ' : '') + finalTranscript);
+        }
       }
     } else {
-      startListening('sv-SE');
+      startListening('sv-SE', false);
+    }
+  };
+
+  // Handle call mode toggle
+  const handleCallToggle = () => {
+    if (isInCall) {
+      endCall();
+      stopSpeaking();
+    } else {
+      startCall(handleCallMessage, 'sv-SE');
     }
   };
 
@@ -1405,6 +1455,13 @@ export function OmniAssistant() {
                               setAutoSpeakEnabled(checked);
                             }}
                           />
+                        </div>
+                      )}
+                      {selectedVoice && (
+                        <div className="pl-4 pt-2">
+                          <p className="text-xs text-muted-foreground">
+                            🎤 Röst: <span className="font-medium text-foreground">{selectedVoice}</span>
+                          </p>
                         </div>
                       )}
                     </>
