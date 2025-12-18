@@ -2049,20 +2049,26 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       }
       
       // Collect browser console messages and network requests for debugging
-      const relevantConsoleMessages = consoleMessages.filter(msg => 
-        msg.text.toLowerCase().includes('error') ||
-        msg.text.toLowerCase().includes('turnstile') ||
-        msg.text.toLowerCase().includes('captcha') ||
-        msg.text.toLowerCase().includes('failed') ||
-        msg.text.toLowerCase().includes('invalid')
-      );
+      // Limit to most relevant messages to avoid prompt length issues
+      const relevantConsoleMessages = consoleMessages
+        .filter(msg => 
+          msg.text.toLowerCase().includes('error') ||
+          msg.text.toLowerCase().includes('turnstile') ||
+          msg.text.toLowerCase().includes('captcha') ||
+          msg.text.toLowerCase().includes('failed') ||
+          msg.text.toLowerCase().includes('invalid')
+        )
+        .slice(0, 20); // Limit to 20 most relevant console messages
       
-      const relevantNetworkRequests = networkRequests.filter(req =>
-        req.url.includes('/register') ||
-        req.url.includes('/signup') ||
-        req.url.includes('turnstile') ||
-        req.url.includes('challenges.cloudflare.com')
-      );
+      // Limit network requests to most important ones (registration endpoints, errors)
+      const relevantNetworkRequests = networkRequests
+        .filter(req =>
+          req.url.includes('/register') ||
+          req.url.includes('/signup') ||
+          req.url.includes('turnstile') ||
+          req.url.includes('challenges.cloudflare.com')
+        )
+        .slice(0, 30); // Limit to 30 most relevant network requests
       
       // Log summary of console messages and network requests
       if (relevantConsoleMessages.length > 0) {
