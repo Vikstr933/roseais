@@ -320,14 +320,19 @@ export class BrowserUseService {
       let proxyServer: string;
       
       if (randomProxy.proxy_address) {
-        // Format: "ip:port"
-        proxyServer = `http://${randomProxy.proxy_address}`;
+        // Format: "ip:port" - proxy_address already contains both IP and port
+        // Ensure it has http:// prefix
+        proxyServer = randomProxy.proxy_address.includes('://') 
+          ? randomProxy.proxy_address 
+          : `http://${randomProxy.proxy_address}`;
       } else if (randomProxy.ip && randomProxy.port) {
         // Format: separate ip and port
-        const protocol = randomProxy.type === 'socks5' ? 'socks5' : 'http';
+        const protocol = randomProxy.type === 'socks5' ? 'socks5' : randomProxy.type || 'http';
         proxyServer = `${protocol}://${randomProxy.ip}:${randomProxy.port}`;
       } else {
-        logger.warn('Unsupported proxy format from Webshare API');
+        // Log proxy object for debugging
+        logger.warn(`Unsupported proxy format from Webshare API. Proxy object keys: ${Object.keys(randomProxy).join(', ')}`);
+        logger.debug(`Proxy object: ${JSON.stringify(randomProxy).substring(0, 500)}`);
         return null;
       }
 
@@ -343,9 +348,17 @@ export class BrowserUseService {
         proxyConfig.password = randomProxy.password;
       }
 
+      // Validate proxy configuration before returning
+      if (!proxyConfig.server || !proxyConfig.server.includes('://')) {
+        logger.warn(`Invalid proxy server format: ${proxyConfig.server}`);
+        return null;
+      }
+
       const proxyInfo = randomProxy.proxy_address || `${randomProxy.ip}:${randomProxy.port}`;
       const location = randomProxy.country ? ` (${randomProxy.country}${randomProxy.city ? `, ${randomProxy.city}` : ''})` : '';
-      logger.info(`✅ Selected Webshare proxy: ${proxyInfo}${location} (${data.results.length} available on this page, ${data.count || '?'} total in account)`);
+      const authInfo = proxyConfig.username ? ' (authenticated)' : ' (no auth)';
+      logger.info(`✅ Selected Webshare proxy: ${proxyInfo}${location}${authInfo} (${data.results.length} available on this page, ${data.count || '?'} total in account)`);
+      logger.debug(`Proxy config: server=${proxyConfig.server}, username=${proxyConfig.username ? '***' : 'none'}, password=${proxyConfig.password ? '***' : 'none'}`);
       return proxyConfig;
     } catch (error) {
       logger.warn(`Failed to fetch proxy from Webshare API: ${error instanceof Error ? error.message : String(error)}`);
@@ -411,14 +424,13 @@ export class BrowserUseService {
       // Create browser context with realistic settings (critical for Turnstile implicit pass)
       // Based on research: Turnstile often gives implicit pass with good fingerprints
       // Using residential proxy significantly improves implicit pass rate
-      const browserContext = await browser.newContext({
+      // Try with proxy first, but fallback to direct connection if proxy fails
+      let browserContext;
+      const contextConfig: any = {
         viewport: { width: 1920, height: 1080 },
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         locale: 'en-US',
         timezoneId: 'America/New_York',
-        // Add proxy configuration if provided (CRITICAL for improving Turnstile implicit pass rate)
-        // Residential proxies make the browser look more legitimate to Cloudflare
-        ...(proxyConfig ? { proxy: proxyConfig } : {}),
         // Add extra HTTP headers for better fingerprint
         extraHTTPHeaders: {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -434,7 +446,15 @@ export class BrowserUseService {
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': '"Windows"'
         }
-      });
+      };
+      
+      // Add proxy configuration if provided (CRITICAL for improving Turnstile implicit pass rate)
+      // Residential proxies make the browser look more legitimate to Cloudflare
+      if (proxyConfig) {
+        contextConfig.proxy = proxyConfig;
+      }
+      
+      browserContext = await browser.newContext(contextConfig);
       
       browserPage = await browserContext.newPage();
       
@@ -454,25 +474,77 @@ export class BrowserUseService {
             timeout: navigationTimeout 
           });
           logger.info(`Navigated to ${task.url}`);
-        } catch (navError) {
-          // If load times out, try with domcontentloaded (less strict)
-          logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
-          try {
-            await browserPage.goto(task.url, { 
-              waitUntil: 'domcontentloaded', 
-              timeout: navigationTimeout 
+        } catch (navError: any) {
+          // Check if it's a proxy connection error
+          const errorMessage = navError?.message || String(navError);
+          if (errorMessage.includes('ERR_PROXY_CONNECTION_FAILED') || errorMessage.includes('proxy')) {
+            logger.warn('Proxy connection failed, retrying without proxy (fallback to direct connection)...');
+            
+            // Close current context and page
+            try {
+              await browserPage.close();
+              await browserContext.close();
+            } catch (closeError) {
+              // Ignore close errors
+            }
+            
+            // Create new context without proxy
+            browserContext = await browser.newContext({
+              viewport: { width: 1920, height: 1080 },
+              userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              locale: 'en-US',
+              timezoneId: 'America/New_York',
+              extraHTTPHeaders: contextConfig.extraHTTPHeaders
             });
-            logger.info(`Navigated to ${task.url} (domcontentloaded)`);
-          } catch (domError) {
-            // Last resort: just wait for the page to be accessible
-            logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
-            await browserPage.goto(task.url, { 
-              waitUntil: 'commit', 
-              timeout: navigationTimeout 
-            });
-            // Give it a moment to load
-            await browserPage.waitForTimeout(3000);
-            logger.info(`Navigated to ${task.url} (commit)`);
+            
+            browserPage = await browserContext.newPage();
+            await this.setupStealthPage(browserPage, task.url);
+            await this.simulateHumanBehavior(browserPage);
+            
+            // Retry navigation without proxy
+            try {
+              await browserPage.goto(task.url, { 
+                waitUntil: 'load', 
+                timeout: navigationTimeout 
+              });
+              logger.info(`Navigated to ${task.url} (without proxy)`);
+            } catch (retryError) {
+              logger.warn(`Navigation with 'load' timed out after proxy fallback, trying 'domcontentloaded'...`);
+              try {
+                await browserPage.goto(task.url, { 
+                  waitUntil: 'domcontentloaded', 
+                  timeout: navigationTimeout 
+                });
+                logger.info(`Navigated to ${task.url} (domcontentloaded, without proxy)`);
+              } catch (domError) {
+                logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
+                await browserPage.goto(task.url, { 
+                  waitUntil: 'commit', 
+                  timeout: navigationTimeout 
+                });
+                await browserPage.waitForTimeout(3000);
+                logger.info(`Navigated to ${task.url} (commit, without proxy)`);
+              }
+            }
+          } else {
+            // If it's not a proxy error, try domcontentloaded as before
+            logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
+            try {
+              await browserPage.goto(task.url, { 
+                waitUntil: 'domcontentloaded', 
+                timeout: navigationTimeout 
+              });
+              logger.info(`Navigated to ${task.url} (domcontentloaded)`);
+            } catch (domError) {
+              // Last resort: just wait for the page to be accessible
+              logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
+              await browserPage.goto(task.url, { 
+                waitUntil: 'commit', 
+                timeout: navigationTimeout 
+              });
+              await browserPage.waitForTimeout(3000);
+              logger.info(`Navigated to ${task.url} (commit)`);
+            }
           }
         }
 
