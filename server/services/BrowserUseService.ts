@@ -506,23 +506,17 @@ export class BrowserUseService {
       
       if (allProxies.length > 0) {
         // Build a list with explicit proxy first (if any), then API proxies
+        // ALWAYS add proxyConfig first if it exists, even if it's in allProxies
+        // This ensures we try the selected proxy first
         if (proxyConfig) {
-          // Check if explicit proxy is in the API list to avoid duplicates
-          const explicitProxyInList = allProxies.some(p => 
-            p.server === proxyConfig!.server && 
-            p.username === proxyConfig!.username && 
-            p.password === proxyConfig!.password
-          );
-          
-          if (!explicitProxyInList) {
-            proxiesToTry.push(proxyConfig);
-          }
+          proxiesToTry.push(proxyConfig);
         }
         
         // Add API proxies (shuffle them for better distribution)
+        // Skip the one that matches proxyConfig to avoid duplicates
         const shuffledProxies = [...allProxies].sort(() => Math.random() - 0.5);
         for (const proxy of shuffledProxies) {
-          // Skip if it's the same as explicit proxy
+          // Skip if it's the same as explicit proxy (already added)
           if (proxyConfig && 
               proxy.server === proxyConfig.server && 
               proxy.username === proxyConfig.username && 
