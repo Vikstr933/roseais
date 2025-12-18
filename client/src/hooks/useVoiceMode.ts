@@ -15,6 +15,8 @@ export interface VoiceModeState {
   isInCall: boolean;
   finalTranscript: string;
   selectedVoice: string | null;
+  useKBWhisper: boolean; // Use KB-Whisper instead of Web Speech API
+  kbWhisperAvailable: boolean;
 }
 
 export function useVoiceMode() {
@@ -27,7 +29,13 @@ export function useVoiceMode() {
     isInCall: false,
     finalTranscript: '',
     selectedVoice: null,
+    useKBWhisper: true, // Prefer KB-Whisper for better Swedish support
+    kbWhisperAvailable: false,
   });
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
@@ -37,7 +45,74 @@ export function useVoiceMode() {
   const accumulatedTextRef = useRef<string>('');
   const selectedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
 
-  // Check browser support
+  // Check KB-Whisper availability and browser support
+  useEffect(() => {
+    const checkKBWhisper = async () => {
+      try {
+        const sessionToken = localStorage.getItem('sessionToken');
+        
+        // Only check if user is logged in
+        if (!sessionToken) {
+          setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+          return;
+        }
+
+        const API_BASE = import.meta.env.VITE_API_URL || '';
+        const response = await fetch(`${API_BASE}/api/whisper/status`, {
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setState(prev => ({ ...prev, kbWhisperAvailable: data.available || false }));
+        } else {
+          // If auth fails (401, 403), don't try KB-Whisper
+          if (response.status === 401 || response.status === 403) {
+            setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+          }
+        }
+      } catch (error) {
+        // Silently fail - use Web Speech API fallback
+        // Don't log error to avoid console spam
+        setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+      }
+    };
+
+    // Listen for storage changes (when user logs in/out)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'sessionToken') {
+        // Re-check when sessionToken changes
+        setTimeout(checkKBWhisper, 100);
+      }
+    };
+
+    // Add a small delay to ensure auth is ready on initial mount
+    const timeoutId = setTimeout(() => {
+      checkKBWhisper();
+    }, 500);
+
+    // Listen for storage events (cross-tab)
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also check periodically if sessionToken exists (for same-tab login)
+    const intervalId = setInterval(() => {
+      const token = localStorage.getItem('sessionToken');
+      if (token && !state.kbWhisperAvailable) {
+        // Token exists but we haven't checked yet, check now
+        checkKBWhisper();
+      }
+    }, 2000);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [state.kbWhisperAvailable]);
+
+  // Initialize Web Speech API
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
     const speechSynthesis = window.speechSynthesis;
@@ -206,13 +281,194 @@ export function useVoiceMode() {
       if (currentUtteranceRef.current) {
         synthesisRef.current?.cancel();
       }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (pauseTimerRef.current) {
+        clearTimeout(pauseTimerRef.current);
+      }
     };
   }, []);
+
+  /**
+   * Start recording audio for KB-Whisper transcription
+   */
+  const startKBWhisperRecording = useCallback(async (language: string = 'sv', continuous: boolean = false) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus',
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (audioChunksRef.current.length === 0) {
+          // If in call mode, restart recording immediately
+          if (continuous && state.isInCall && !state.isSpeaking) {
+            setTimeout(() => {
+              if (streamRef.current && mediaRecorderRef.current) {
+                audioChunksRef.current = [];
+                mediaRecorderRef.current.start();
+                setState(prev => ({ ...prev, transcript: 'Spelar in...' }));
+              }
+            }, 100);
+          }
+          return;
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        audioChunksRef.current = [];
+
+        // Convert to base64
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64Audio = (reader.result as string).split(',')[1];
+
+          try {
+            setState(prev => ({ ...prev, transcript: 'Transkriberar...' }));
+
+            const API_BASE = import.meta.env.VITE_API_URL || '';
+            const sessionToken = localStorage.getItem('sessionToken');
+            const response = await fetch(`${API_BASE}/api/whisper/transcribe`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                audioData: base64Audio,
+                language,
+                task: 'transcribe',
+                returnTimestamps: false,
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error('Transcription failed');
+            }
+
+            const data = await response.json();
+            if (data.success && data.text && data.text.trim()) {
+              const newText = data.text.trim();
+              setState(prev => ({
+                ...prev,
+                transcript: '',
+                finalTranscript: prev.finalTranscript + (prev.finalTranscript ? ' ' : '') + newText,
+              }));
+              accumulatedTextRef.current = state.finalTranscript + (state.finalTranscript ? ' ' : '') + newText;
+
+              // If in call mode, auto-send after pause
+              if (continuous && state.isInCall && onFinalTranscriptRef.current) {
+                // Clear existing timer
+                if (pauseTimerRef.current) {
+                  clearTimeout(pauseTimerRef.current);
+                }
+                // Wait 2 seconds of silence before auto-sending
+                pauseTimerRef.current = setTimeout(() => {
+                  const textToSend = accumulatedTextRef.current.trim();
+                  if (textToSend && onFinalTranscriptRef.current) {
+                    onFinalTranscriptRef.current(textToSend);
+                    accumulatedTextRef.current = '';
+                    setState(prev => ({ ...prev, finalTranscript: '' }));
+                  }
+                }, 2000);
+              }
+            }
+
+            // If in call mode, restart recording immediately
+            if (continuous && state.isInCall && !state.isSpeaking && streamRef.current) {
+              setTimeout(() => {
+                if (streamRef.current && mediaRecorderRef.current) {
+                  audioChunksRef.current = [];
+                  mediaRecorderRef.current.start();
+                  setState(prev => ({ ...prev, transcript: 'Spelar in...' }));
+                }
+              }, 100);
+            } else if (!continuous) {
+              setState(prev => ({ ...prev, isListening: false }));
+            }
+          } catch (error) {
+            console.error('KB-Whisper transcription error:', error);
+            setState(prev => ({
+              ...prev,
+              error: 'Kunde inte transkribera audio. Försök igen.',
+              isListening: false,
+            }));
+          }
+        };
+        reader.readAsDataURL(audioBlob);
+      };
+
+      setState(prev => ({
+        ...prev,
+        isListening: true,
+        transcript: 'Spelar in...',
+        error: null,
+        isInCall: continuous,
+      }));
+
+      // Start recording
+      mediaRecorder.start();
+
+      // For call mode, record in chunks (5 seconds each)
+      // For single mode, stop after 5 seconds
+      if (continuous) {
+        // In call mode, record in 5-second chunks
+        const recordChunk = () => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        };
+        // Stop and restart every 5 seconds for continuous transcription
+        const chunkInterval = setInterval(() => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        }, 5000);
+        // Store interval for cleanup
+        (mediaRecorderRef.current as any).chunkInterval = chunkInterval;
+      } else {
+        // Single mode: stop after 5 seconds
+        setTimeout(() => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+            setState(prev => ({ ...prev, isListening: false }));
+          }
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      setState(prev => ({
+        ...prev,
+        error: 'Kunde inte komma åt mikrofonen. Kontrollera dina inställningar.',
+        isListening: false,
+      }));
+    }
+  }, [state.isInCall, state.finalTranscript]);
 
   /**
    * Start listening for voice input
    */
   const startListening = useCallback((language: string = 'sv-SE', continuous: boolean = false) => {
+    // Use KB-Whisper if available and preferred
+    if (state.useKBWhisper && state.kbWhisperAvailable) {
+      startKBWhisperRecording(language === 'sv-SE' ? 'sv' : language, continuous);
+      return;
+    }
+
+    // Fallback to Web Speech API
     if (!recognitionRef.current) {
       setState(prev => ({
         ...prev,
@@ -239,7 +495,7 @@ export function useVoiceMode() {
         error: 'Kunde inte starta taligenkänning. Försök igen.',
       }));
     }
-  }, []);
+  }, [state.useKBWhisper, state.kbWhisperAvailable, startKBWhisperRecording]);
 
   /**
    * Stop listening for voice input
@@ -249,10 +505,31 @@ export function useVoiceMode() {
       clearTimeout(pauseTimerRef.current);
       pauseTimerRef.current = null;
     }
+
+    // Stop KB-Whisper recording if active
+    if (mediaRecorderRef.current) {
+      // Clear chunk interval if exists
+      const chunkInterval = (mediaRecorderRef.current as any).chunkInterval;
+      if (chunkInterval) {
+        clearInterval(chunkInterval);
+      }
+      if (mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+    }
+
+    // Stop media stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    // Stop Web Speech API if active
     if (recognitionRef.current && state.isListening) {
       recognitionRef.current.stop();
-      setState(prev => ({ ...prev, isInCall: false }));
     }
+
+    setState(prev => ({ ...prev, isInCall: false, isListening: false }));
   }, [state.isListening]);
 
   /**
@@ -409,6 +686,10 @@ export function useVoiceMode() {
     clearError,
     startCall,
     endCall,
+    // Toggle between KB-Whisper and Web Speech API
+    setUseKBWhisper: (use: boolean) => {
+      setState(prev => ({ ...prev, useKBWhisper: use }));
+    },
   };
 }
 
