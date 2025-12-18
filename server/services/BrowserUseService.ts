@@ -528,22 +528,22 @@ export class BrowserUseService {
             }
           } else {
             // If it's not a proxy error, try domcontentloaded as before
-            logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
-            try {
-              await browserPage.goto(task.url, { 
-                waitUntil: 'domcontentloaded', 
-                timeout: navigationTimeout 
-              });
-              logger.info(`Navigated to ${task.url} (domcontentloaded)`);
-            } catch (domError) {
-              // Last resort: just wait for the page to be accessible
-              logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
-              await browserPage.goto(task.url, { 
-                waitUntil: 'commit', 
-                timeout: navigationTimeout 
-              });
-              await browserPage.waitForTimeout(3000);
-              logger.info(`Navigated to ${task.url} (commit)`);
+          logger.warn(`Navigation with 'load' timed out, trying 'domcontentloaded'...`);
+          try {
+            await browserPage.goto(task.url, { 
+              waitUntil: 'domcontentloaded', 
+              timeout: navigationTimeout 
+            });
+            logger.info(`Navigated to ${task.url} (domcontentloaded)`);
+          } catch (domError) {
+            // Last resort: just wait for the page to be accessible
+            logger.warn(`Navigation with 'domcontentloaded' also timed out, waiting for page...`);
+            await browserPage.goto(task.url, { 
+              waitUntil: 'commit', 
+              timeout: navigationTimeout 
+            });
+            await browserPage.waitForTimeout(3000);
+            logger.info(`Navigated to ${task.url} (commit)`);
             }
           }
         }
@@ -790,12 +790,12 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       
       // Special handling for Turnstile Error 600010
       if (errorMessage.includes('Turnstile') && errorMessage.includes('600010')) {
-        logger.error('[CRITICAL] Turnstile Error 600010 detected - this usually means the token was rejected by Cloudflare. Possible causes:');
-        logger.error('  1. Token from 2Captcha does not match the current browser session/IP');
-        logger.error('  2. Token has expired or was already used');
-        logger.error('  3. Browser fingerprint does not match the session where token was generated');
-        logger.error('  This is a known limitation when using 2Captcha tokens in a different session than where they were generated.');
-        actions.push('Turnstile Error 600010: Token rejected by Cloudflare (session mismatch)');
+        logger.warn('[Turnstile Error 600010] Cloudflare rejected the Turnstile token. This may indicate:');
+        logger.warn('  - Browser fingerprint mismatch');
+        logger.warn('  - Token expired or invalid');
+        logger.warn('  - Session/IP mismatch');
+        logger.warn('  Continuing with implicit pass strategy...');
+        actions.push('Turnstile Error 600010: Token rejected (continuing with implicit pass)');
       }
       
       consoleMessages.push({
@@ -1291,9 +1291,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       logger.info('Checking for Cloudflare Turnstile...');
       actions.push('Checking for Cloudflare Turnstile');
       
-      // Store whether we successfully set a token via 2Captcha and the token value (accessible throughout function)
-      let tokenSetVia2Captcha = false;
-      let saved2CaptchaToken: string | null = null;
+      // Track Turnstile token status (for implicit pass only - no external solving)
       
       // Check if Cloudflare Turnstile is present and extract sitekey
       const turnstileInfo = await page.evaluate(() => {
@@ -1346,7 +1344,6 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       if (turnstileInfo.hasTurnstile) {
         // CRITICAL STRATEGY: Focus on implicit pass to avoid session mismatch
         // Implicit pass = Turnstile solves in OUR session = no session mismatch
-        // 2Captcha causes session mismatch (Error 600010) because token generated in different session
         logger.info('Turnstile detected - focusing on implicit pass strategy (best way to avoid session mismatch)');
         actions.push('Turnstile detected - waiting for implicit pass');
         
@@ -1406,7 +1403,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           // Main wait for token (parallel with user simulation)
           try {
             await page.waitForFunction(() => {
-              const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
+                const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
               return !!(responseInput && responseInput.value && responseInput.value.length > 0);
             }, {
               timeout: 60000, // Wait up to 60 seconds for implicit pass (generous timeout)
@@ -1446,7 +1443,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             logger.info('✅ Turnstile gave implicit pass! Token received automatically.');
             actions.push('Turnstile implicit pass - token received automatically');
             // Skip all solving attempts - we already have a token!
-          } else {
+            } else {
             // No implicit pass, continue with active solving below
             logger.info('No implicit pass received, trying active solving methods...');
             actions.push('No implicit pass - trying active solving');
@@ -1457,21 +1454,17 @@ Use CSS selectors, IDs, or text content to identify elements.`;
           actions.push('Implicit pass timeout');
         }
         
-        // Only try 2Captcha if we don't already have a token from implicit pass
-        // NOTE: 2Captcha has session mismatch issues (Error 600010), so prefer implicit pass
+        // Check if we have a token from implicit pass
         const currentToken = await page.evaluate(() => {
           const responseInput = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement;
           return responseInput?.value || null;
         });
         
         if (!currentToken || currentToken.length === 0) {
-          // CRITICAL: 2Captcha causes Error 600010 (session mismatch) - completely disabled
-          // Focus only on implicit pass which solves in our session
-          logger.warn('No implicit pass token found after extended wait. 2Captcha completely disabled (causes Error 600010). Proceeding with form submission - some sites may accept forms even without explicit Turnstile token.');
-          actions.push('No implicit pass - proceeding without token (2Captcha disabled due to Error 600010)');
-          
-          // 2Captcha completely removed - causes Error 600010 session mismatch
-          // Proceed directly to form submission - implicit pass is our only strategy
+          // No implicit pass token found - proceed with form submission anyway
+          // Some sites may accept forms even without explicit Turnstile token
+          logger.warn('No implicit pass token found after extended wait. Proceeding with form submission - some sites may accept forms even without explicit Turnstile token.');
+          actions.push('No implicit pass - proceeding without token');
         }
         
         // Final check: Do we have a token now (either from implicit pass)?
@@ -1700,9 +1693,9 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // Token exists - wait additional time to ensure Turnstile has verified it
         logger.info(`Cloudflare Turnstile token verified (length: ${turnstileStatus.tokenLength}, success: ${turnstileStatus.isSuccess}, callback: ${turnstileStatus.callbackCalled})`);
         
-        // If token was set via 2Captcha, wait longer for Turnstile to verify
+        // If token exists but not yet verified, wait longer for Turnstile to verify
         if (!turnstileStatus.isSuccess && !turnstileStatus.callbackCalled) {
-          logger.info('Waiting for Turnstile to verify token (2Captcha token needs verification)...');
+          logger.info('Waiting for Turnstile to verify token...');
           await page.waitForTimeout(5000); // Wait 5 more seconds for verification
           
           // Check again
@@ -1724,7 +1717,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             actions.push('Turnstile token present - proceeding with submit');
           }
         } else {
-          actions.push('Cloudflare Turnstile token verified - ready to submit');
+        actions.push('Cloudflare Turnstile token verified - ready to submit');
         }
       } else {
         logger.info('No Cloudflare Turnstile detected - proceeding with submit');
@@ -1758,7 +1751,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
       } else {
         logger.warn('No Turnstile token found before submit - proceeding anyway (some sites may accept)');
       }
-      
+
       // Submit form - look for submit button in dialog/modal
       const submitSelectors = [
         // Retrotales specific
@@ -1990,7 +1983,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
         // Check for specific error messages that indicate account was NOT created
         const specificErrors = await page.evaluate(() => {
           const bodyText = document.body.innerText.toLowerCase();
-          return {
+      return {
             hasFailedToAuthorize: bodyText.includes('failed to authorize') || 
                                  bodyText.includes('authorization failed') ||
                                  bodyText.includes('authorize your account'),
@@ -2040,7 +2033,7 @@ Use CSS selectors, IDs, or text content to identify elements.`;
             } else if (successCheck.hasError) {
               successIndicators.push('Error message detected - account NOT created');
               accountCreated = false;
-            } else {
+              } else {
               // Default to false if unclear (conservative approach)
               successIndicators.push('No clear success/error indicators - assume NOT created');
               accountCreated = false;
