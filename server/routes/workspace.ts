@@ -67,6 +67,17 @@ router.get('/', authenticateUser, async (req, res) => {
           chatHistoryCount = countResult[0]?.count || 0;
         }
 
+        // Limit generatedFiles to prevent huge responses
+        // Only include file paths and sizes, not full content
+        const allGeneratedFiles = session.metadata?.generatedFiles || [];
+        const limitedGeneratedFiles = allGeneratedFiles.slice(0, 20).map((file: any) => ({
+          path: file.path,
+          language: file.language,
+          size: file.content?.length || 0,
+          // Don't include full content in list view to reduce response size
+          // Content will be available when opening specific session
+        }));
+
         return {
           id: session.id,
           name: session.title,
@@ -80,9 +91,14 @@ router.get('/', authenticateUser, async (req, res) => {
             files: msg.metadata?.files || []
           })),
           chatHistoryCount,
-          generatedFiles: session.metadata?.generatedFiles || [],
+          generatedFiles: limitedGeneratedFiles,
+          generatedFilesCount: allGeneratedFiles.length,
           currentPrompt: session.metadata?.currentPrompt,
-          metadata: session.metadata
+          // Don't include full metadata to reduce size - only essential fields
+          metadata: {
+            type: session.metadata?.type,
+            // Exclude large nested objects from metadata
+          }
         };
       })
     );
