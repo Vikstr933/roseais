@@ -29,6 +29,11 @@ export interface BrowserUseTask {
     headless?: boolean;
     waitForNavigation?: boolean;
     screenshot?: boolean;
+    proxy?: {
+      server: string; // e.g., "http://proxy.example.com:8080"
+      username?: string;
+      password?: string;
+    } | string; // Simple string format: "http://proxy.example.com:8080" or "http://user:pass@proxy.example.com:8080"
   };
 }
 
@@ -263,6 +268,129 @@ export class BrowserUseService {
   }
 
   /**
+   * Fetch proxy from Webshare API
+   * Returns proxy in format: { server: string, username?: string, password?: string }
+   * Supports rotating proxies by randomly selecting one from the list
+   */
+  private async fetchProxyFromAPI(): Promise<{ server: string; username?: string; password?: string } | null> {
+    const proxyApiKey = process.env.WEBSHARE_PROXY_API_KEY || process.env.PROXY_API_KEY;
+    
+    if (!proxyApiKey) {
+      return null; // No proxy API key configured
+    }
+
+    try {
+      logger.info('Fetching proxy from Webshare API...');
+      
+      // Webshare API endpoint for proxy list
+      const proxyListUrl = 'https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=100';
+      
+      const response = await fetch(proxyListUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Token ${proxyApiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          logger.warn('Webshare API authentication failed - check your API key');
+        } else if (response.status === 429) {
+          logger.warn('Webshare API rate limit exceeded - waiting 60 seconds before retry');
+        } else {
+          logger.warn(`Webshare API returned status ${response.status}`);
+        }
+        return null;
+      }
+
+      const data = await response.json();
+      
+      // Webshare API returns: { count: number, next: string | null, previous: string | null, results: Array }
+      if (!data.results || !Array.isArray(data.results) || data.results.length === 0) {
+        logger.warn('No proxies available from Webshare API');
+        return null;
+      }
+
+      // Randomly select a proxy from the list (for rotation)
+      const randomProxy = data.results[Math.floor(Math.random() * data.results.length)];
+      
+      // Webshare proxy format: { proxy_address: "ip:port", username: string, password: string, ... }
+      // or: { ip: string, port: number, username: string, password: string, ... }
+      let proxyServer: string;
+      
+      if (randomProxy.proxy_address) {
+        // Format: "ip:port"
+        proxyServer = `http://${randomProxy.proxy_address}`;
+      } else if (randomProxy.ip && randomProxy.port) {
+        // Format: separate ip and port
+        const protocol = randomProxy.type === 'socks5' ? 'socks5' : 'http';
+        proxyServer = `${protocol}://${randomProxy.ip}:${randomProxy.port}`;
+      } else {
+        logger.warn('Unsupported proxy format from Webshare API');
+        return null;
+      }
+
+      const proxyConfig: { server: string; username?: string; password?: string } = {
+        server: proxyServer,
+      };
+
+      // Add authentication if provided
+      if (randomProxy.username) {
+        proxyConfig.username = randomProxy.username;
+      }
+      if (randomProxy.password) {
+        proxyConfig.password = randomProxy.password;
+      }
+
+      const proxyInfo = randomProxy.proxy_address || `${randomProxy.ip}:${randomProxy.port}`;
+      const location = randomProxy.country ? ` (${randomProxy.country}${randomProxy.city ? `, ${randomProxy.city}` : ''})` : '';
+      logger.info(`✅ Selected Webshare proxy: ${proxyInfo}${location} (${data.results.length} available on this page, ${data.count || '?'} total in account)`);
+      return proxyConfig;
+    } catch (error) {
+      logger.warn(`Failed to fetch proxy from Webshare API: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get proxy configuration from task options, environment variable, or API
+   */
+  private async getProxyConfig(task: BrowserUseTask): Promise<{ server: string; username?: string; password?: string } | undefined> {
+    // Priority 1: Explicit proxy in task options
+    if (task.options?.proxy) {
+      if (typeof task.options.proxy === 'string') {
+        const proxyUrl = new URL(task.options.proxy);
+        return {
+          server: `${proxyUrl.protocol}//${proxyUrl.host}`,
+          username: proxyUrl.username || undefined,
+          password: proxyUrl.password || undefined,
+        };
+      }
+      return task.options.proxy;
+    }
+
+    // Priority 2: Environment variable
+    const envProxy = process.env.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+    if (envProxy) {
+      try {
+        const proxyUrl = new URL(envProxy);
+        return {
+          server: `${proxyUrl.protocol}//${proxyUrl.host}`,
+          username: proxyUrl.username || process.env.PROXY_USERNAME || undefined,
+          password: proxyUrl.password || process.env.PROXY_PASSWORD || undefined,
+        };
+      } catch {
+        logger.warn('Invalid PROXY_URL format in environment variable');
+      }
+    }
+
+    // Priority 3: Fetch from API (for rotating proxies)
+    const apiProxy = await this.fetchProxyFromAPI();
+    return apiProxy || undefined;
+  }
+
+  /**
    * Execute a browser automation task using Playwright
    */
   async executeTask(task: BrowserUseTask): Promise<BrowserUseResult> {
@@ -272,13 +400,25 @@ export class BrowserUseService {
 
       const browser = await this.getBrowser();
       
+      // Get proxy configuration (from task, env var, or API)
+      const proxyConfig = await this.getProxyConfig(task);
+      if (proxyConfig) {
+        logger.info(`Using proxy: ${proxyConfig.server}${proxyConfig.username ? ' (authenticated)' : ''} - This significantly improves Turnstile implicit pass rate!`);
+      } else {
+        logger.debug('No proxy configured - using direct connection (datacenter IP may reduce Turnstile implicit pass rate)');
+      }
+      
       // Create browser context with realistic settings (critical for Turnstile implicit pass)
       // Based on research: Turnstile often gives implicit pass with good fingerprints
+      // Using residential proxy significantly improves implicit pass rate
       const browserContext = await browser.newContext({
         viewport: { width: 1920, height: 1080 },
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         locale: 'en-US',
         timezoneId: 'America/New_York',
+        // Add proxy configuration if provided (CRITICAL for improving Turnstile implicit pass rate)
+        // Residential proxies make the browser look more legitimate to Cloudflare
+        ...(proxyConfig ? { proxy: proxyConfig } : {}),
         // Add extra HTTP headers for better fingerprint
         extraHTTPHeaders: {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
