@@ -620,7 +620,9 @@ export function useVoiceMode() {
    * Start call mode - continuous listening with auto-send
    */
   const startCall = useCallback((onFinalTranscript: (text: string) => void, language: string = 'sv-SE') => {
+    console.log('[useVoiceMode] startCall called, setting up callback');
     onFinalTranscriptRef.current = onFinalTranscript;
+    setState(prev => ({ ...prev, isInCall: true }));
     startListening(language, true);
   }, [startListening]);
 
