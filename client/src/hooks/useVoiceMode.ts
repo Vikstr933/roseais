@@ -693,10 +693,6 @@ export function useVoiceMode() {
     [state.isInCall, state.isListening]
   );
 
-  // Store accumulated streaming text
-  const streamingTextRef = useRef<string>('');
-  const streamingTimerRef = useRef<NodeJS.Timeout | null>(null);
-
   /**
    * Stream text to speech - speaks as text arrives (for streaming responses)
    */
