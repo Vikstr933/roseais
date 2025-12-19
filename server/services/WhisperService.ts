@@ -367,7 +367,7 @@ except Exception as e:
         };
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
-        logger.warn(`[WhisperService] ${cmd} failed:`, err.message);
+        logger.warn(`[WhisperService] ${cmd} failed:`, { error: err.message, command: cmd });
         lastError = err;
         // Try next Python command
         continue;
