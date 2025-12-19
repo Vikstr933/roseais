@@ -116,7 +116,11 @@ if (!rootElement) {
   throw new Error('Root element not found!');
 }
 
+console.log('[main.tsx] Starting app render...');
+console.log('[main.tsx] Root element found:', !!rootElement);
+
 try {
+  console.log('[main.tsx] Creating React root...');
   createRoot(rootElement).render(
     <StrictMode>
       <ErrorBoundary
@@ -142,8 +146,9 @@ try {
       </ErrorBoundary>
     </StrictMode>
   );
+  console.log('[main.tsx] App rendered successfully');
 } catch (error) {
-  console.error('Failed to render app:', error);
+  console.error('[main.tsx] Failed to render app:', error);
   rootElement.innerHTML = `
     <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0a0a0a; color: #fff; padding: 2rem; text-align: center;">
       <div>
