@@ -131,19 +131,31 @@ return_timestamps = ${returnTimestamps}
 
 try:
     # Load model (will download on first use)
+    # Optimized for speed and cost:
+    # - int8 quantization: faster inference, less memory
+    # - cpu device: no GPU required (free)
+    # - condition_on_previous_text=False: faster, no context dependency
     model = WhisperModel(
         model_id,
-        device="cpu",  # Use "cuda" if GPU available
-        compute_type="int8",  # Use "float16" if GPU available
+        device="cpu",  # Use "cuda" if GPU available (faster but requires GPU)
+        compute_type="int8",  # Fastest CPU inference, 4x faster than float32
         download_root="${this.cacheDir}"
     )
     
-    # Transcribe
+    # Transcribe with speed optimizations
     segments, info = model.transcribe(
         audio_file,
         language=language if language != "auto" else None,
         task=task,
-        condition_on_previous_text=False
+        condition_on_previous_text=False,  # Faster, no context dependency
+        beam_size=1,  # Greedy decoding (fastest, slight quality trade-off)
+        best_of=1,  # No beam search (faster)
+        temperature=0,  # Deterministic (faster)
+        compression_ratio_threshold=2.4,  # Skip silence detection (faster)
+        log_prob_threshold=-1.0,  # Lower threshold for faster processing
+        no_speech_threshold=0.6,  # Skip empty audio faster
+        vad_filter=True,  # Voice activity detection (skip silence)
+        vad_parameters=dict(min_silence_duration_ms=500)  # Skip short silences
     )
     
     # Collect results
