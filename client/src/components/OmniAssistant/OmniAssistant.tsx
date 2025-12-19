@@ -1039,6 +1039,95 @@ export function OmniAssistant() {
                     </div>
                   </div>
                 </SheetHeader>
+                {/* Voice Call Mode Layout for Mobile */}
+                {isInCall ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-b from-purple-50/50 to-background dark:from-purple-950/20">
+                    {/* Large pulsing microphone */}
+                    <div className="relative flex items-center justify-center mb-8">
+                      {/* Pulsing rings */}
+                      <motion.div
+                        className="absolute inset-0 rounded-full border-4 border-purple-500/30"
+                        animate={{
+                          scale: [1, 1.5, 2],
+                          opacity: [0.6, 0.3, 0],
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeOut",
+                        }}
+                      />
+                      <motion.div
+                        className="absolute inset-0 rounded-full border-4 border-purple-500/30"
+                        animate={{
+                          scale: [1, 1.3, 1.6],
+                          opacity: [0.6, 0.3, 0],
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: 0.5,
+                          ease: "easeOut",
+                        }}
+                      />
+                      {/* Microphone button */}
+                      <motion.div
+                        className="relative z-10 w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center shadow-2xl cursor-pointer"
+                        animate={{
+                          scale: isListening ? [1, 1.1, 1] : 1,
+                        }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: isListening ? Infinity : 0,
+                        }}
+                        onClick={handleVoiceToggle}
+                      >
+                        {isListening ? (
+                          <MicOff className="h-10 w-10 text-white" />
+                        ) : (
+                          <Mic className="h-10 w-10 text-white" />
+                        )}
+                      </motion.div>
+                    </div>
+
+                    {/* Status text */}
+                    <div className="text-center space-y-4">
+                      <motion.div
+                        animate={{ opacity: [0.5, 1, 0.5] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="text-lg font-semibold text-foreground"
+                      >
+                        {isListening ? "Lyssnar..." : isSpeaking ? "Elon pratar..." : "I samtal"}
+                      </motion.div>
+                      
+                      {/* Live transcript */}
+                      {transcript && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="max-w-sm px-4 py-3 bg-card border border-border rounded-lg shadow-lg"
+                        >
+                          <p className="text-sm text-muted-foreground mb-1">Du säger:</p>
+                          <p className="text-base font-medium">{transcript}</p>
+                        </motion.div>
+                      )}
+
+                      {/* Hang up button */}
+                      <Button
+                        variant="destructive"
+                        size="lg"
+                        onClick={() => {
+                          endCall();
+                          setVoiceModeEnabled(false);
+                        }}
+                        className="mt-6 rounded-full px-6 py-5 h-auto"
+                      >
+                        <PhoneOff className="h-5 w-5 mr-2" />
+                        Avsluta samtal
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
                 <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
                   <div className="space-y-4">
                     {messages.length === 0 ? (
@@ -1061,6 +1150,8 @@ export function OmniAssistant() {
                     <div ref={messagesEndRef} />
                   </div>
                 </div>
+                )}
+                {!isInCall && (
                 <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-card">
                   {/* Project Selector - only show when not on playground */}
                   {!window.location.pathname.startsWith('/playground') && userProjects.length > 0 && (
@@ -1261,6 +1352,95 @@ export function OmniAssistant() {
                 </div>
               </CardHeader>
 
+              {/* Voice Call Mode Layout for Desktop */}
+              {isInCall ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-b from-purple-50/50 to-background dark:from-purple-950/20">
+                    {/* Large pulsing microphone */}
+                    <div className="relative flex items-center justify-center mb-8">
+                      {/* Pulsing rings */}
+                      <motion.div
+                        className="absolute inset-0 rounded-full border-4 border-purple-500/30"
+                        animate={{
+                          scale: [1, 1.5, 2],
+                          opacity: [0.6, 0.3, 0],
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeOut",
+                        }}
+                      />
+                      <motion.div
+                        className="absolute inset-0 rounded-full border-4 border-purple-500/30"
+                        animate={{
+                          scale: [1, 1.3, 1.6],
+                          opacity: [0.6, 0.3, 0],
+                        }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          delay: 0.5,
+                          ease: "easeOut",
+                        }}
+                      />
+                      {/* Microphone button */}
+                      <motion.div
+                        className="relative z-10 w-24 h-24 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center shadow-2xl cursor-pointer"
+                        animate={{
+                          scale: isListening ? [1, 1.1, 1] : 1,
+                        }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: isListening ? Infinity : 0,
+                        }}
+                        onClick={handleVoiceToggle}
+                      >
+                        {isListening ? (
+                          <MicOff className="h-12 w-12 text-white" />
+                        ) : (
+                          <Mic className="h-12 w-12 text-white" />
+                        )}
+                      </motion.div>
+                    </div>
+
+                    {/* Status text */}
+                    <div className="text-center space-y-4">
+                      <motion.div
+                        animate={{ opacity: [0.5, 1, 0.5] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="text-lg font-semibold text-foreground"
+                      >
+                        {isListening ? "Lyssnar..." : isSpeaking ? "Elon pratar..." : "I samtal"}
+                      </motion.div>
+                      
+                      {/* Live transcript */}
+                      {transcript && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="max-w-md px-4 py-3 bg-card border border-border rounded-lg shadow-lg"
+                        >
+                          <p className="text-sm text-muted-foreground mb-1">Du säger:</p>
+                          <p className="text-base font-medium">{transcript}</p>
+                        </motion.div>
+                      )}
+
+                      {/* Hang up button */}
+                      <Button
+                        variant="destructive"
+                        size="lg"
+                        onClick={() => {
+                          endCall();
+                          setVoiceModeEnabled(false);
+                        }}
+                        className="mt-6 rounded-full px-8 py-6 h-auto"
+                      >
+                        <PhoneOff className="h-5 w-5 mr-2" />
+                        Avsluta samtal
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
               <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
                 <div className="space-y-4">
                   {messages.length === 0 ? (
@@ -1283,35 +1463,37 @@ export function OmniAssistant() {
                   <div ref={messagesEndRef} />
                 </div>
               </div>
+              )}
 
+              {!isInCall && (
               <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-card">
-                {/* Project Selector - only show when not on playground */}
-                {!window.location.pathname.startsWith('/playground') && userProjects.length > 0 && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <Select
-                      value={selectedProjectId?.toString() || "none"}
-                      onValueChange={(value) => setSelectedProjectId(value === "none" ? null : parseInt(value))}
-                    >
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue placeholder="Select a project for context..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No project selected</SelectItem>
-                        {userProjects.map((project) => (
-                          <SelectItem key={project.id} value={project.id.toString()}>
-                            {project.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedProjectId && projectFiles.length > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {projectFiles.length} files
-                      </Badge>
-                    )}
-                  </div>
-                )}
+                  {/* Project Selector - only show when not on playground */}
+                  {!window.location.pathname.startsWith('/playground') && userProjects.length > 0 && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <Select
+                        value={selectedProjectId?.toString() || "none"}
+                        onValueChange={(value) => setSelectedProjectId(value === "none" ? null : parseInt(value))}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Select a project for context..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No project selected</SelectItem>
+                          {userProjects.map((project) => (
+                            <SelectItem key={project.id} value={project.id.toString()}>
+                              {project.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedProjectId && projectFiles.length > 0 && (
+                        <Badge variant="secondary" className="text-xs">
+                          {projectFiles.length} files
+                        </Badge>
+                      )}
+                    </div>
+                  )}
 
                 <div className="flex gap-2">
                   <Input
