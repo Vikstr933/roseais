@@ -49,15 +49,32 @@ export function useVoiceMode() {
 
   // Check KB-Whisper availability and browser support
   useEffect(() => {
+    let isMounted = true;
+    
     const checkKBWhisper = async () => {
       try {
+        if (!isMounted) return;
+        
         console.log('[useVoiceMode] Checking KB-Whisper availability...');
-        const sessionToken = localStorage.getItem('sessionToken');
+        
+        // Safely access localStorage
+        let sessionToken: string | null = null;
+        try {
+          sessionToken = localStorage.getItem('sessionToken');
+        } catch (e) {
+          console.warn('[useVoiceMode] Cannot access localStorage:', e);
+          if (isMounted) {
+            setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+          }
+          return;
+        }
         
         // Only check if user is logged in
         if (!sessionToken) {
           console.log('[useVoiceMode] No sessionToken found, skipping KB-Whisper check');
-          setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+          if (isMounted) {
+            setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+          }
           return;
         }
 
@@ -72,26 +89,36 @@ export function useVoiceMode() {
           },
         });
         
+        if (!isMounted) return;
+        
         console.log('[useVoiceMode] Response status:', response.status, response.statusText);
         
         if (response.ok) {
           const data = await response.json();
           console.log('[useVoiceMode] KB-Whisper status:', data);
-          setState(prev => ({ ...prev, kbWhisperAvailable: data.available || false }));
+          if (isMounted) {
+            setState(prev => ({ ...prev, kbWhisperAvailable: data.available || false }));
+          }
         } else {
           // If auth fails (401, 403), don't try KB-Whisper
           if (response.status === 401 || response.status === 403) {
             console.warn('[useVoiceMode] Auth failed for KB-Whisper check:', response.status);
-            setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+            if (isMounted) {
+              setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+            }
           } else {
             console.warn('[useVoiceMode] KB-Whisper check failed with status:', response.status);
-            setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+            if (isMounted) {
+              setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+            }
           }
         }
       } catch (error) {
         // Log error for debugging
         console.error('[useVoiceMode] Error checking KB-Whisper:', error);
-        setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+        if (isMounted) {
+          setState(prev => ({ ...prev, kbWhisperAvailable: false }));
+        }
       }
     };
 
