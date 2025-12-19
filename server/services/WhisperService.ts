@@ -210,6 +210,7 @@ try:
     )
     
     # Transcribe with speed optimizations
+    # Note: Lower no_speech_threshold and less aggressive VAD for better detection
     segments, info = model.transcribe(
         audio_file,
         language=language if language != "auto" else None,
@@ -218,11 +219,14 @@ try:
         beam_size=1,  # Greedy decoding (fastest, slight quality trade-off)
         best_of=1,  # No beam search (faster)
         temperature=0,  # Deterministic (faster)
-        compression_ratio_threshold=2.4,  # Skip silence detection (faster)
+        compression_ratio_threshold=2.4,  # Default threshold
         log_prob_threshold=-1.0,  # Lower threshold for faster processing
-        no_speech_threshold=0.6,  # Skip empty audio faster
+        no_speech_threshold=0.3,  # Lower threshold to detect more speech (was 0.6)
         vad_filter=True,  # Voice activity detection (skip silence)
-        vad_parameters=dict(min_silence_duration_ms=500)  # Skip short silences
+        vad_parameters=dict(
+            min_silence_duration_ms=250,  # Shorter silence detection (was 500)
+            threshold=0.3  # Lower VAD threshold for better detection
+        )
     )
     
     # Collect results

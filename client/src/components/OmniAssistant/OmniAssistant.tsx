@@ -228,41 +228,41 @@ export function OmniAssistant() {
   }, [transcript, isListening, isInCall, getTranscript]);
 
   // Auto-speak assistant responses when voice mode is enabled
+  const lastSpokenMessageRef = useRef<string>('');
+  
   useEffect(() => {
     if (autoSpeakEnabled && voiceModeEnabled && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage.role === 'assistant' && lastMessage.content) {
-        // In call mode, use streaming speech
+        const cleanText = lastMessage.content
+          .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+          .replace(/`([^`]+)`/g, '$1') // Remove inline code
+          .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
+          .replace(/\*([^*]+)\*/g, '$1') // Remove italic
+          .replace(/#{1,6}\s+/g, '') // Remove headers
+          .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
+          .trim();
+        
+        // In call mode, wait for message to be complete before speaking (avoid hacky interruptions)
         if (isInCall) {
-          // Use streaming speech for call mode - speaks as text arrives
-          // This triggers every time the message content updates (streaming)
-          const cleanText = lastMessage.content
-            .replace(/```[\s\S]*?```/g, '') // Remove code blocks
-            .replace(/`([^`]+)`/g, '$1') // Remove inline code
-            .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
-            .replace(/\*([^*]+)\*/g, '$1') // Remove italic
-            .replace(/#{1,6}\s+/g, '') // Remove headers
-            .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
-            .trim();
+          // Only speak if message is complete (not streaming) or if it's a new message
+          const isComplete = !isLoading && lastMessage.content.trim().length > 0;
+          const isNewMessage = cleanText !== lastSpokenMessageRef.current;
           
-          // Always try to speak streaming text (even if already speaking, it will queue)
-          if (cleanText.length > 10) {
-            speakStreaming(cleanText, { lang: 'sv-SE', rate: 1.0 });
+          if (isComplete && isNewMessage && cleanText.length > 10 && !isSpeaking) {
+            lastSpokenMessageRef.current = cleanText;
+            // Wait a bit to ensure message is fully loaded
+            const timer = setTimeout(() => {
+              speak(cleanText, { lang: 'sv-SE', rate: 1.0 });
+            }, 500);
+            return () => clearTimeout(timer);
           }
         } else {
           // Normal mode - wait for message to complete
-          if (!isSpeaking) {
+          if (!isSpeaking && !isLoading) {
             const timer = setTimeout(() => {
-              if (lastMessage.content.trim().length > 0) {
-                const cleanText = lastMessage.content
-                  .replace(/```[\s\S]*?```/g, '') // Remove code blocks
-                  .replace(/`([^`]+)`/g, '$1') // Remove inline code
-                  .replace(/\*\*([^*]+)\*\*/g, '$1') // Remove bold
-                  .replace(/\*([^*]+)\*/g, '$1') // Remove italic
-                  .replace(/#{1,6}\s+/g, '') // Remove headers
-                  .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
-                  .trim();
-                
+              if (lastMessage.content.trim().length > 0 && cleanText !== lastSpokenMessageRef.current) {
+                lastSpokenMessageRef.current = cleanText;
                 if (cleanText.length > 0) {
                   speak(cleanText, { lang: 'sv-SE', rate: 1.0 });
                 }
@@ -274,7 +274,7 @@ export function OmniAssistant() {
         }
       }
     }
-  }, [messages, autoSpeakEnabled, voiceModeEnabled, isSpeaking, isInCall, speak, speakStreaming]);
+  }, [messages, autoSpeakEnabled, voiceModeEnabled, isSpeaking, isInCall, isLoading, speak]);
 
   // Persist voice mode settings
   useEffect(() => {
