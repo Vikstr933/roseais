@@ -41,20 +41,40 @@ export class WhisperService {
    */
   async checkDependencies(): Promise<boolean> {
     // FIRST: Always check venv first (where we install faster-whisper)
-    const venvPath = process.cwd() + '/venv-whisper';
-    const venvPython = process.platform === 'win32' 
-      ? `${venvPath}/Scripts/python.exe`
-      : `${venvPath}/bin/python3`;
+    // Use cached result if we've already checked (to avoid repeated file system calls)
+    if (this.venvChecked && this.venvExists) {
+      try {
+        await execAsync(`"${this.venvPython}" -c "import faster_whisper"`);
+        return true;
+      } catch {
+        // Venv might have been deleted, reset cache
+        this.venvChecked = false;
+        this.venvExists = false;
+      }
+    }
     
     try {
-      // Check if venv exists
-      await fs.access(venvPython);
-      // Check if faster-whisper is installed in venv
-      await execAsync(`"${venvPython}" -c "import faster_whisper"`);
-      logger.info(`✅ faster-whisper found in venv: ${venvPython}`);
-      return true;
+      // Check if venv Python executable exists using stat (more reliable than access)
+      try {
+        const stats = await fs.stat(this.venvPython);
+        if (stats.isFile()) {
+          // Venv Python exists, check if faster-whisper is installed
+          await execAsync(`"${this.venvPython}" -c "import faster_whisper"`);
+          logger.info(`✅ faster-whisper found in venv: ${this.venvPython}`);
+          this.venvChecked = true;
+          this.venvExists = true;
+          return true;
+        }
+      } catch (statError) {
+        // Venv doesn't exist
+        this.venvChecked = true;
+        this.venvExists = false;
+        logger.debug('Venv not found, checking system Python...');
+      }
     } catch (venvError) {
-      logger.debug('Venv not found or faster-whisper not in venv, checking system Python...');
+      logger.debug('Venv check failed, checking system Python...', { error: venvError instanceof Error ? venvError.message : String(venvError) });
+      this.venvChecked = true;
+      this.venvExists = false;
     }
     
     // FALLBACK: Try system Python (for development/local setups)
@@ -95,19 +115,25 @@ export class WhisperService {
    */
   async installDependencies(): Promise<void> {
     // ALWAYS use venv - this is the preferred method
-    const venvPath = process.cwd() + '/venv-whisper';
-    const venvPython = process.platform === 'win32' 
-      ? `${venvPath}/Scripts/python.exe`
-      : `${venvPath}/bin/python3`;
     
     // First, check if venv already exists and has faster-whisper
     try {
-      await fs.access(venvPython);
-      await execAsync(`"${venvPython}" -c "import faster_whisper"`);
-      logger.info('✅ faster-whisper already available in venv');
-      return;
+      const stats = await fs.stat(this.venvPython);
+      if (stats.isFile()) {
+        // Venv exists, check if faster-whisper is installed
+        try {
+          await execAsync(`"${this.venvPython}" -c "import faster_whisper"`);
+          logger.info('✅ faster-whisper already available in venv');
+          this.venvChecked = true;
+          this.venvExists = true;
+          return;
+        } catch {
+          // Venv exists but faster-whisper not installed, install it
+          logger.info('Venv exists but faster-whisper not installed, installing...');
+        }
+      }
     } catch {
-      // Venv doesn't exist or doesn't have faster-whisper, create/install it
+      // Venv doesn't exist, create it
       logger.info('Creating venv and installing faster-whisper...');
     }
     
@@ -122,10 +148,13 @@ export class WhisperService {
         const versionResult = await execAsync(`${cmd} --version`);
         logger.info(`Creating venv using: ${cmd} (${versionResult.stdout.trim()})`);
         
-        // Create venv
-        await execAsync(`${cmd} -m venv venv-whisper`);
+        // Create venv using absolute path
+        await execAsync(`${cmd} -m venv "${this.venvPath}"`);
         venvCreated = true;
-        logger.info('✅ Venv created successfully');
+        logger.info(`✅ Venv created successfully at: ${this.venvPath}`);
+        // Reset cache since we just created venv
+        this.venvChecked = false;
+        this.venvExists = false;
         break;
       } catch (error) {
         logger.warn(`Venv creation failed with ${cmd}, trying next...`, { error: error instanceof Error ? error.message : String(error) });
@@ -139,13 +168,25 @@ export class WhisperService {
     
     // Install faster-whisper in venv
     try {
-      logger.info('Installing faster-whisper in venv...');
-      await execAsync(`"${venvPython}" -m pip install --upgrade pip`);
-      await execAsync(`"${venvPython}" -m pip install faster-whisper`);
+      logger.info(`Installing faster-whisper in venv at: ${this.venvPath}`);
+      // Verify venv Python exists before installing
+      const stats = await fs.stat(this.venvPython);
+      if (!stats.isFile()) {
+        throw new Error(`Venv Python not found at: ${this.venvPython}`);
+      }
+      
+      await execAsync(`"${this.venvPython}" -m pip install --upgrade pip`);
+      await execAsync(`"${this.venvPython}" -m pip install faster-whisper`);
       logger.info('✅ faster-whisper installed successfully in venv');
+      // Update cache
+      this.venvChecked = true;
+      this.venvExists = true;
       return;
     } catch (error) {
       logger.error('Failed to install faster-whisper in venv', error instanceof Error ? error : new Error(String(error)));
+      // Reset cache on error
+      this.venvChecked = false;
+      this.venvExists = false;
       throw new Error(`Failed to install faster-whisper in venv: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
