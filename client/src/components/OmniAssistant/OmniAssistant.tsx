@@ -1116,10 +1116,7 @@ export function OmniAssistant() {
                       <Button
                         variant="destructive"
                         size="lg"
-                        onClick={() => {
-                          endCall();
-                          setVoiceModeEnabled(false);
-                        }}
+                        onClick={handleCallToggle}
                         className="mt-6 rounded-full px-6 py-5 h-auto"
                       >
                         <PhoneOff className="h-5 w-5 mr-2" />
@@ -1227,9 +1224,21 @@ export function OmniAssistant() {
                         {autoSpeakEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
                       </Button>
                     )}
+                    {voiceSupported && (
+                      <Button
+                        variant={isInCall ? "default" : "outline"}
+                        size="icon"
+                        onClick={handleCallToggle}
+                        disabled={isLoading}
+                        title={isInCall ? "Avsluta samtal" : "Starta röstsamtal"}
+                        className={isInCall ? "bg-green-600 hover:bg-green-700" : ""}
+                      >
+                        {isInCall ? <PhoneOff className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                      </Button>
+                    )}
                     <Button
                       onClick={handleSendMessage}
-                      disabled={!inputMessage.trim() || isLoading}
+                      disabled={!inputMessage.trim() || isLoading || isInCall}
                       className="brand-gradient text-white hover:opacity-90"
                     >
                       {isLoading ? (
@@ -1430,10 +1439,7 @@ export function OmniAssistant() {
                       <Button
                         variant="destructive"
                         size="lg"
-                        onClick={() => {
-                          endCall();
-                          setVoiceModeEnabled(false);
-                        }}
+                        onClick={handleCallToggle}
                         className="mt-6 rounded-full px-8 py-6 h-auto"
                       >
                         <PhoneOff className="h-5 w-5 mr-2" />
@@ -1542,9 +1548,21 @@ export function OmniAssistant() {
                       {autoSpeakEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
                     </Button>
                   )}
+                  {voiceSupported && (
+                    <Button
+                      variant={isInCall ? "default" : "outline"}
+                      size="icon"
+                      onClick={handleCallToggle}
+                      disabled={isLoading}
+                      title={isInCall ? "Avsluta samtal" : "Starta röstsamtal"}
+                      className={isInCall ? "bg-green-600 hover:bg-green-700" : ""}
+                    >
+                      {isInCall ? <PhoneOff className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                    </Button>
+                  )}
                   <Button
                     onClick={handleSendMessage}
-                    disabled={!inputMessage.trim() || isLoading}
+                    disabled={!inputMessage.trim() || isLoading || isInCall}
                     className="brand-gradient text-white hover:opacity-90"
                   >
                     {isLoading ? (
