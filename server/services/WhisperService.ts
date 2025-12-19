@@ -294,8 +294,9 @@ except Exception as e:
         segments: result.segments || undefined,
       };
     } catch (venvError) {
-      logger.debug('Venv Python not available, trying system Python...', venvError instanceof Error ? venvError : new Error(String(venvError)));
-      lastError = venvError instanceof Error ? venvError : new Error(String(venvError));
+      const error = venvError instanceof Error ? venvError : new Error(String(venvError));
+      logger.debug('Venv Python not available, trying system Python...', { error: error.message });
+      lastError = error;
     }
 
     // Fallback to system Python commands
