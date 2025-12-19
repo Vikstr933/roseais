@@ -281,7 +281,7 @@ except Exception as e:
       });
       
       if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
-        logger.warn('[WhisperService] Python stderr:', stderr.substring(0, 500));
+        logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
       }
 
       if (!stdout || stdout.trim().length === 0) {
@@ -335,7 +335,7 @@ except Exception as e:
         });
       
         if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
-          logger.warn('[WhisperService] Python stderr:', stderr.substring(0, 500));
+          logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
         }
 
         if (!stdout || stdout.trim().length === 0) {
