@@ -40,14 +40,28 @@ export class WhisperService {
    * Tries multiple Python commands (py, python3, python) for cross-platform support
    */
   async checkDependencies(): Promise<boolean> {
-    // Try multiple Python commands in order of preference
-    // On Render/Linux: python3 is most common
-    // On Windows: py or python
+    // FIRST: Always check venv first (where we install faster-whisper)
+    const venvPath = process.cwd() + '/venv-whisper';
+    const venvPython = process.platform === 'win32' 
+      ? `${venvPath}/Scripts/python.exe`
+      : `${venvPath}/bin/python3`;
+    
+    try {
+      // Check if venv exists
+      await fs.access(venvPython);
+      // Check if faster-whisper is installed in venv
+      await execAsync(`"${venvPython}" -c "import faster_whisper"`);
+      logger.info(`✅ faster-whisper found in venv: ${venvPython}`);
+      return true;
+    } catch (venvError) {
+      logger.debug('Venv not found or faster-whisper not in venv, checking system Python...');
+    }
+    
+    // FALLBACK: Try system Python (for development/local setups)
     const pythonCommands = process.platform === 'win32' 
       ? ['py', 'python', 'python3']
       : ['python3', 'python', 'py'];
     
-    // First, try checking if faster-whisper is available in system Python
     for (const cmd of pythonCommands) {
       try {
         // Check if Python is available
@@ -57,21 +71,9 @@ export class WhisperService {
         // Check if faster-whisper is installed
         try {
           await execAsync(`${cmd} -c "import faster_whisper"`);
-          logger.info(`✅ faster-whisper found using: ${cmd}`);
+          logger.info(`✅ faster-whisper found using system Python: ${cmd}`);
           return true;
         } catch (importError) {
-          // Try checking in virtual environment if it exists
-          const venvPath = process.cwd() + '/venv-whisper';
-          try {
-            const venvPython = process.platform === 'win32' 
-              ? `${venvPath}/Scripts/python.exe`
-              : `${venvPath}/bin/python3`;
-            await execAsync(`${venvPython} -c "import faster_whisper"`);
-            logger.info(`✅ faster-whisper found in venv: ${venvPython}`);
-            return true;
-          } catch {
-            // Continue to next Python command
-          }
           logger.warn(`faster-whisper not found with ${cmd}, trying next...`);
           // Try next Python command
           continue;
@@ -92,66 +94,60 @@ export class WhisperService {
    * Tries multiple Python commands for cross-platform support
    */
   async installDependencies(): Promise<void> {
-    // Try multiple Python commands in order of preference
-    const pythonCommands = process.platform === 'win32' 
-      ? ['py', 'python', 'python3']
-      : ['python3', 'python', 'py'];
-    
-    // First, try to use existing virtual environment if it exists
+    // ALWAYS use venv - this is the preferred method
     const venvPath = process.cwd() + '/venv-whisper';
     const venvPython = process.platform === 'win32' 
       ? `${venvPath}/Scripts/python.exe`
       : `${venvPath}/bin/python3`;
     
+    // First, check if venv already exists and has faster-whisper
     try {
-      // Check if venv exists and has faster-whisper
-      await execAsync(`${venvPython} -c "import faster_whisper"`);
+      await fs.access(venvPython);
+      await execAsync(`"${venvPython}" -c "import faster_whisper"`);
       logger.info('✅ faster-whisper already available in venv');
       return;
     } catch {
-      // Venv doesn't exist or doesn't have faster-whisper, try to create/install
-      try {
-        // Try to create venv and install
-        for (const cmd of pythonCommands) {
-          try {
-            const versionResult = await execAsync(`${cmd} --version`);
-            logger.info(`Creating venv and installing faster-whisper using: ${cmd} (${versionResult.stdout.trim()})`);
-            
-            // Create venv
-            await execAsync(`${cmd} -m venv venv-whisper`);
-            
-            // Install faster-whisper in venv
-            await execAsync(`${venvPython} -m pip install --upgrade pip`);
-            await execAsync(`${venvPython} -m pip install faster-whisper`);
-            
-            logger.info('✅ faster-whisper installed successfully in venv');
-            return;
-          } catch (error) {
-            logger.warn(`Venv creation/installation failed with ${cmd}, trying next...`, error instanceof Error ? error : new Error(String(error)));
-            continue;
-          }
-        }
-      } catch (error) {
-        logger.warn('Venv installation failed, trying system installation with --break-system-packages...', error instanceof Error ? error : new Error(String(error)));
-      }
+      // Venv doesn't exist or doesn't have faster-whisper, create/install it
+      logger.info('Creating venv and installing faster-whisper...');
     }
     
-    // Fallback: Try system installation with --break-system-packages (for externally managed environments)
+    // Find Python command to create venv
+    const pythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3', 'python', 'py'];
+    
+    let venvCreated = false;
     for (const cmd of pythonCommands) {
       try {
         const versionResult = await execAsync(`${cmd} --version`);
-        logger.info(`Installing faster-whisper using: ${cmd} (${versionResult.stdout.trim()}) with --break-system-packages`);
-        // Use --break-system-packages for externally managed environments (like Render)
-        await execAsync(`${cmd} -m pip install --break-system-packages faster-whisper`);
-        logger.info('✅ faster-whisper installed successfully');
-        return;
+        logger.info(`Creating venv using: ${cmd} (${versionResult.stdout.trim()})`);
+        
+        // Create venv
+        await execAsync(`${cmd} -m venv venv-whisper`);
+        venvCreated = true;
+        logger.info('✅ Venv created successfully');
+        break;
       } catch (error) {
-        logger.warn(`Installation failed with ${cmd}, trying next...`, error instanceof Error ? error : new Error(String(error)));
+        logger.warn(`Venv creation failed with ${cmd}, trying next...`, { error: error instanceof Error ? error.message : String(error) });
         continue;
       }
     }
     
-    throw new Error('Failed to install faster-whisper. Please install manually: py -m pip install faster-whisper (Windows) or pip3 install faster-whisper (macOS/Linux)');
+    if (!venvCreated) {
+      throw new Error('Failed to create venv. No Python command found.');
+    }
+    
+    // Install faster-whisper in venv
+    try {
+      logger.info('Installing faster-whisper in venv...');
+      await execAsync(`"${venvPython}" -m pip install --upgrade pip`);
+      await execAsync(`"${venvPython}" -m pip install faster-whisper`);
+      logger.info('✅ faster-whisper installed successfully in venv');
+      return;
+    } catch (error) {
+      logger.error('Failed to install faster-whisper in venv', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to install faster-whisper in venv: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
