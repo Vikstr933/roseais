@@ -1128,31 +1128,30 @@ export function OmniAssistant() {
                     </div>
                   </div>
                 ) : (
-                <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
-                  <div className="space-y-4">
-                    {messages.length === 0 ? (
-                      <div className="rounded-lg border border-border bg-muted/70 p-4 text-muted-foreground">
-                        Ask me anything about your digital office, projects, or building stellar experiences.
+                  <>
+                    <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
+                      <div className="space-y-4">
+                        {messages.length === 0 ? (
+                          <div className="rounded-lg border border-border bg-muted/70 p-4 text-muted-foreground">
+                            Ask me anything about your digital office, projects, or building stellar experiences.
+                          </div>
+                        ) : (
+                          messages.map((msg, idx) => (
+                            <MessageBubble
+                              key={idx}
+                              message={msg}
+                              userName={userDisplayName}
+                              onSuggestionClick={handleSuggestionClick}
+                              onSendToPlayground={handleSendToPlayground}
+                              onApplyChanges={handleApplyChanges}
+                              displayedMessagesRef={displayedMessagesRef}
+                            />
+                          ))
+                        )}
+                        <div ref={messagesEndRef} />
                       </div>
-                    ) : (
-                      messages.map((msg, idx) => (
-                        <MessageBubble
-                          key={idx}
-                          message={msg}
-                          userName={userDisplayName}
-                          onSuggestionClick={handleSuggestionClick}
-                          onSendToPlayground={handleSendToPlayground}
-                          onApplyChanges={handleApplyChanges}
-                          displayedMessagesRef={displayedMessagesRef}
-                        />
-                      ))
-                    )}
-                    <div ref={messagesEndRef} />
-                  </div>
-                </div>
-                )}
-                {!isInCall && (
-                <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-card">
+                    </div>
+                    <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-card">
                   {/* Project Selector - only show when not on playground */}
                   {!window.location.pathname.startsWith('/playground') && userProjects.length > 0 && (
                     <div className="flex items-center gap-2 mb-2">
@@ -1273,7 +1272,9 @@ export function OmniAssistant() {
                       </Button>
                     </div>
                   )}
-                </div>
+                    </div>
+                  </>
+                )}
               </SheetContent>
             </Sheet>
             )}
@@ -1441,32 +1442,30 @@ export function OmniAssistant() {
                     </div>
                   </div>
                 ) : (
-              <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
-                <div className="space-y-4">
-                  {messages.length === 0 ? (
-                    <div className="rounded-lg border border-border bg-muted/70 p-4 text-muted-foreground">
-                      Ask me anything about your digital office, projects, or building stellar experiences.
+                  <>
+                    <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
+                      <div className="space-y-4">
+                        {messages.length === 0 ? (
+                          <div className="rounded-lg border border-border bg-muted/70 p-4 text-muted-foreground">
+                            Ask me anything about your digital office, projects, or building stellar experiences.
+                          </div>
+                        ) : (
+                          messages.map((msg, idx) => (
+                            <MessageBubble
+                              key={idx}
+                              message={msg}
+                              userName={userDisplayName}
+                              onSuggestionClick={handleSuggestionClick}
+                              onSendToPlayground={handleSendToPlayground}
+                              onApplyChanges={handleApplyChanges}
+                              displayedMessagesRef={displayedMessagesRef}
+                            />
+                          ))
+                        )}
+                        <div ref={messagesEndRef} />
+                      </div>
                     </div>
-                  ) : (
-                    messages.map((msg, idx) => (
-                      <MessageBubble
-                        key={idx}
-                        message={msg}
-                        userName={userDisplayName}
-                        onSuggestionClick={handleSuggestionClick}
-                        onSendToPlayground={handleSendToPlayground}
-                        onApplyChanges={handleApplyChanges}
-                        displayedMessagesRef={displayedMessagesRef}
-                      />
-                    ))
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-              </div>
-              )}
-
-              {!isInCall && (
-              <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-card">
+                    <div className="px-4 py-3 border-t border-border flex-shrink-0 bg-card">
                   {/* Project Selector - only show when not on playground */}
                   {!window.location.pathname.startsWith('/playground') && userProjects.length > 0 && (
                     <div className="flex items-center gap-2 mb-2">
@@ -1588,9 +1587,11 @@ export function OmniAssistant() {
                     </Button>
                   </div>
                 )}
-              </div>
-            </Card>
-          </motion.div>
+                    </div>
+                  </>
+                )}
+              </Card>
+            </motion.div>
             )}
           </>
         )}
