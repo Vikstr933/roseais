@@ -417,6 +417,7 @@ export function useVoiceMode() {
               },
               body: JSON.stringify({
                 audioData: base64Audio,
+                audioFormat: 'webm', // MediaRecorder creates WebM files
                 language,
                 task: 'transcribe',
                 returnTimestamps: false,

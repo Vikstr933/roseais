@@ -271,31 +271,52 @@ except Exception as e:
     // Try venv Python first
     try {
       await fs.access(venvPython);
-      logger.info(`Using venv Python: ${venvPython}`);
-      const { stdout, stderr } = await execAsync(`"${venvPython}" "${scriptPath}"`);
+      logger.info(`[WhisperService] Using venv Python: ${venvPython}`);
+      logger.info(`[WhisperService] Executing script: ${scriptPath}`);
+      logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
       
-      if (stderr && !stderr.includes('WARNING')) {
-        logger.warn('Whisper stderr', { stderr });
+      const { stdout, stderr } = await execAsync(`"${venvPython}" "${scriptPath}"`, {
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+        timeout: 120000, // 2 minute timeout
+      });
+      
+      if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
+        logger.warn('[WhisperService] Python stderr:', stderr.substring(0, 500));
       }
 
+      if (!stdout || stdout.trim().length === 0) {
+        throw new Error('Python script returned empty output');
+      }
+
+      logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
       const result = JSON.parse(stdout.trim());
     
       if (result.error) {
+        logger.error('[WhisperService] Python script error:', result.error);
         throw new Error(`Transcription failed: ${result.error}`);
+      }
+
+      if (!result.text) {
+        logger.warn('[WhisperService] No text in result, but no error either');
       }
 
       // Clean up script
       await fs.unlink(scriptPath).catch(() => {});
 
+      logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
+
       return {
-        text: result.text,
-        language: result.language,
-        languageProbability: result.languageProbability,
+        text: result.text || '',
+        language: result.language || language,
+        languageProbability: result.languageProbability || 0,
         segments: result.segments || undefined,
       };
     } catch (venvError) {
       const error = venvError instanceof Error ? venvError : new Error(String(venvError));
-      logger.debug('Venv Python not available, trying system Python...', { error: error.message });
+      logger.warn('[WhisperService] Venv Python failed, trying system Python...', { 
+        error: error.message,
+        stack: error.stack?.substring(0, 200)
+      });
       lastError = error;
     }
 
@@ -306,30 +327,48 @@ except Exception as e:
     
     for (const cmd of pythonCommands) {
       try {
+        logger.info(`[WhisperService] Trying system Python: ${cmd}`);
         // Execute Python script
-        const { stdout, stderr } = await execAsync(`${cmd} "${scriptPath}"`);
+        const { stdout, stderr } = await execAsync(`${cmd} "${scriptPath}"`, {
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+          timeout: 120000, // 2 minute timeout
+        });
       
-        if (stderr && !stderr.includes('WARNING')) {
-          logger.warn('Whisper stderr', { stderr });
+        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
+          logger.warn('[WhisperService] Python stderr:', stderr.substring(0, 500));
         }
 
+        if (!stdout || stdout.trim().length === 0) {
+          throw new Error('Python script returned empty output');
+        }
+
+        logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
         const result = JSON.parse(stdout.trim());
       
-      if (result.error) {
-        throw new Error(`Transcription failed: ${result.error}`);
-      }
+        if (result.error) {
+          logger.error('[WhisperService] Python script error:', result.error);
+          throw new Error(`Transcription failed: ${result.error}`);
+        }
+
+        if (!result.text) {
+          logger.warn('[WhisperService] No text in result, but no error either');
+        }
 
         // Clean up script
         await fs.unlink(scriptPath).catch(() => {});
 
+        logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
+
         return {
-          text: result.text,
-          language: result.language,
-          languageProbability: result.languageProbability,
+          text: result.text || '',
+          language: result.language || language,
+          languageProbability: result.languageProbability || 0,
           segments: result.segments || undefined,
         };
       } catch (error) {
-        lastError = error as Error;
+        const err = error instanceof Error ? error : new Error(String(error));
+        logger.warn(`[WhisperService] ${cmd} failed:`, err.message);
+        lastError = err;
         // Try next Python command
         continue;
       }
@@ -357,23 +396,39 @@ except Exception as e:
       language?: string;
       task?: 'transcribe' | 'translate';
       returnTimestamps?: boolean;
+      audioFormat?: string;
     } = {}
   ): Promise<TranscriptionResult> {
-    // Save buffer to temporary file
+    const { audioFormat = 'webm' } = options;
+    
+    logger.info(`[WhisperService] transcribeBuffer called, buffer size: ${audioBuffer.length}, format: ${audioFormat}`);
+    
+    // Save buffer to temporary file with correct extension
     const tempDir = path.join(process.cwd(), 'temp', 'audio');
     await fs.mkdir(tempDir, { recursive: true });
     
-    const tempFilePath = path.join(tempDir, `audio_${Date.now()}.wav`);
+    // Use the provided format or default to webm (MediaRecorder default)
+    const extension = audioFormat === 'webm' ? 'webm' : audioFormat === 'ogg' ? 'ogg' : 'wav';
+    const tempFilePath = path.join(tempDir, `audio_${Date.now()}.${extension}`);
+    
+    logger.info(`[WhisperService] Saving audio to temp file: ${tempFilePath}`);
     
     try {
       await fs.writeFile(tempFilePath, audioBuffer);
+      logger.info(`[WhisperService] Audio file saved, size: ${audioBuffer.length} bytes`);
+      
       const result = await this.transcribe(tempFilePath, options);
       
+      logger.info(`[WhisperService] Transcription completed, text: "${result.text?.substring(0, 50)}..."`);
+      
       // Clean up temp file
-      await fs.unlink(tempFilePath).catch(() => {});
+      await fs.unlink(tempFilePath).catch((err) => {
+        logger.warn('[WhisperService] Failed to delete temp file', err);
+      });
       
       return result;
     } catch (error) {
+      logger.error('[WhisperService] transcribeBuffer error', error instanceof Error ? error : new Error(String(error)));
       // Clean up temp file on error
       await fs.unlink(tempFilePath).catch(() => {});
       throw error;
