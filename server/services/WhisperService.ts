@@ -93,7 +93,7 @@ export class WhisperService {
         logger.info('✅ faster-whisper installed successfully');
         return;
       } catch (error) {
-        logger.warn(`Installation failed with ${cmd}, trying next...`, error);
+        logger.warn(`Installation failed with ${cmd}, trying next...`, error instanceof Error ? error : new Error(String(error)));
         continue;
       }
     }
