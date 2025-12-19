@@ -24,6 +24,7 @@
     "setup:components": "tsx scripts/setup-component-generation.ts",
     "setup:stripe": "tsx scripts/setup-stripe-products.ts",
     "postinstall": "npx playwright install --with-deps chromium || npx playwright install chromium || echo 'Playwright browser installation failed - will retry at runtime if needed'",
+    "postinstall:whisper": "python3 -m pip install faster-whisper || py -m pip install faster-whisper || pip3 install faster-whisper || pip install faster-whisper || echo 'faster-whisper installation failed - KB-Whisper will not be available'",
     "test": "vitest run"
   },
   "dependencies": {
