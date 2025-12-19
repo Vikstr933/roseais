@@ -79,16 +79,21 @@ export class WhisperService {
    * Tries multiple Python commands for cross-platform support
    */
   async installDependencies(): Promise<void> {
-    const pythonCommands = ['py', 'python3', 'python'];
+    // Try multiple Python commands in order of preference
+    const pythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3', 'python', 'py'];
     
     for (const cmd of pythonCommands) {
       try {
-        await execAsync(`${cmd} --version`);
-        logger.info(`Installing faster-whisper using: ${cmd}`);
-        await execAsync(`${cmd} -m pip install faster-whisper`);
+        const versionResult = await execAsync(`${cmd} --version`);
+        logger.info(`Installing faster-whisper using: ${cmd} (${versionResult.stdout.trim()})`);
+        // Use --user flag to install in user directory (works on Render)
+        await execAsync(`${cmd} -m pip install --user faster-whisper`);
         logger.info('✅ faster-whisper installed successfully');
         return;
-      } catch {
+      } catch (error) {
+        logger.warn(`Installation failed with ${cmd}, trying next...`, error);
         continue;
       }
     }

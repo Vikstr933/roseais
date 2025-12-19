@@ -114,7 +114,22 @@ router.post('/transcribe-buffer', authenticateUser, async (req, res) => {
 router.get('/status', authenticateUser, async (req, res) => {
   try {
     logger.info('Checking KB-Whisper status for user:', req.user?.id);
-    const isAvailable = await whisperService.checkDependencies();
+    let isAvailable = await whisperService.checkDependencies();
+    
+    // If not available, try to install it (runtime installation as fallback)
+    if (!isAvailable) {
+      logger.info('faster-whisper not found, attempting runtime installation...');
+      try {
+        await whisperService.installDependencies();
+        // Check again after installation
+        isAvailable = await whisperService.checkDependencies();
+        if (isAvailable) {
+          logger.info('✅ faster-whisper installed successfully at runtime');
+        }
+      } catch (installError) {
+        logger.warn('Runtime installation failed (this is OK if faster-whisper is not available on this system)', installError);
+      }
+    }
     
     logger.info('KB-Whisper status check result:', { available: isAvailable, userId: req.user?.id });
     
