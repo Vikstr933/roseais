@@ -194,7 +194,7 @@ model_id = "${this.modelPath}"
 audio_file = "${audioFilePath}"
 language = "${language}"
 task = "${task}"
-return_timestamps = ${returnTimestamps}
+return_timestamps = ${returnTimestamps ? 'True' : 'False'}
 
 try:
     # Load model (will download on first use)
