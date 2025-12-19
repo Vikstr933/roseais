@@ -310,17 +310,13 @@ except Exception as e:
     await fs.writeFile(scriptPath, pythonScript);
 
     // First, try to use venv Python if it exists
-    const venvPath = process.cwd() + '/venv-whisper';
-    const venvPython = process.platform === 'win32' 
-      ? `${venvPath}/Scripts/python.exe`
-      : `${venvPath}/bin/python3`;
-    
     let lastError: Error | null = null;
     
     // Try venv Python first
     try {
-      await fs.access(venvPython);
-      logger.info(`[WhisperService] Using venv Python: ${venvPython}`);
+      const stats = await fs.stat(this.venvPython);
+      if (stats.isFile()) {
+        logger.info(`[WhisperService] Using venv Python: ${this.venvPython}`);
       logger.info(`[WhisperService] Executing script: ${scriptPath}`);
       logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
       
