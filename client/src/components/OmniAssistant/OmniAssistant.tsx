@@ -290,6 +290,11 @@ export function OmniAssistant() {
       endCall();
       stopSpeaking();
     } else {
+      // Enable voice mode if not already enabled
+      if (!voiceModeEnabled) {
+        setVoiceModeEnabled(true);
+      }
+      // Start the call
       startCall(handleCallMessage, 'sv-SE');
     }
   };
