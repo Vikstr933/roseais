@@ -47,6 +47,7 @@ export class WhisperService {
       ? ['py', 'python', 'python3']
       : ['python3', 'python', 'py'];
     
+    // First, try checking if faster-whisper is available in system Python
     for (const cmd of pythonCommands) {
       try {
         // Check if Python is available
@@ -59,6 +60,18 @@ export class WhisperService {
           logger.info(`✅ faster-whisper found using: ${cmd}`);
           return true;
         } catch (importError) {
+          // Try checking in virtual environment if it exists
+          const venvPath = process.cwd() + '/venv-whisper';
+          try {
+            const venvPython = process.platform === 'win32' 
+              ? `${venvPath}/Scripts/python.exe`
+              : `${venvPath}/bin/python3`;
+            await execAsync(`${venvPython} -c "import faster_whisper"`);
+            logger.info(`✅ faster-whisper found in venv: ${venvPython}`);
+            return true;
+          } catch {
+            // Continue to next Python command
+          }
           logger.warn(`faster-whisper not found with ${cmd}, trying next...`);
           // Try next Python command
           continue;
@@ -84,12 +97,52 @@ export class WhisperService {
       ? ['py', 'python', 'python3']
       : ['python3', 'python', 'py'];
     
+    // First, try to use existing virtual environment if it exists
+    const venvPath = process.cwd() + '/venv-whisper';
+    const venvPython = process.platform === 'win32' 
+      ? `${venvPath}/Scripts/python.exe`
+      : `${venvPath}/bin/python3`;
+    
+    try {
+      // Check if venv exists and has faster-whisper
+      await execAsync(`${venvPython} -c "import faster_whisper"`);
+      logger.info('✅ faster-whisper already available in venv');
+      return;
+    } catch {
+      // Venv doesn't exist or doesn't have faster-whisper, try to create/install
+      try {
+        // Try to create venv and install
+        for (const cmd of pythonCommands) {
+          try {
+            const versionResult = await execAsync(`${cmd} --version`);
+            logger.info(`Creating venv and installing faster-whisper using: ${cmd} (${versionResult.stdout.trim()})`);
+            
+            // Create venv
+            await execAsync(`${cmd} -m venv venv-whisper`);
+            
+            // Install faster-whisper in venv
+            await execAsync(`${venvPython} -m pip install --upgrade pip`);
+            await execAsync(`${venvPython} -m pip install faster-whisper`);
+            
+            logger.info('✅ faster-whisper installed successfully in venv');
+            return;
+          } catch (error) {
+            logger.warn(`Venv creation/installation failed with ${cmd}, trying next...`, error instanceof Error ? error : new Error(String(error)));
+            continue;
+          }
+        }
+      } catch (error) {
+        logger.warn('Venv installation failed, trying system installation with --break-system-packages...', error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+    
+    // Fallback: Try system installation with --break-system-packages (for externally managed environments)
     for (const cmd of pythonCommands) {
       try {
         const versionResult = await execAsync(`${cmd} --version`);
-        logger.info(`Installing faster-whisper using: ${cmd} (${versionResult.stdout.trim()})`);
-        // Use --user flag to install in user directory (works on Render)
-        await execAsync(`${cmd} -m pip install --user faster-whisper`);
+        logger.info(`Installing faster-whisper using: ${cmd} (${versionResult.stdout.trim()}) with --break-system-packages`);
+        // Use --break-system-packages for externally managed environments (like Render)
+        await execAsync(`${cmd} -m pip install --break-system-packages faster-whisper`);
         logger.info('✅ faster-whisper installed successfully');
         return;
       } catch (error) {
@@ -207,9 +260,48 @@ except Exception as e:
 
     await fs.writeFile(scriptPath, pythonScript);
 
-    // Try multiple Python commands for cross-platform support
-    const pythonCommands = ['py', 'python3', 'python'];
+    // First, try to use venv Python if it exists
+    const venvPath = process.cwd() + '/venv-whisper';
+    const venvPython = process.platform === 'win32' 
+      ? `${venvPath}/Scripts/python.exe`
+      : `${venvPath}/bin/python3`;
+    
     let lastError: Error | null = null;
+    
+    // Try venv Python first
+    try {
+      await fs.access(venvPython);
+      logger.info(`Using venv Python: ${venvPython}`);
+      const { stdout, stderr } = await execAsync(`"${venvPython}" "${scriptPath}"`);
+      
+      if (stderr && !stderr.includes('WARNING')) {
+        logger.warn('Whisper stderr', { stderr });
+      }
+
+      const result = JSON.parse(stdout.trim());
+    
+      if (result.error) {
+        throw new Error(`Transcription failed: ${result.error}`);
+      }
+
+      // Clean up script
+      await fs.unlink(scriptPath).catch(() => {});
+
+      return {
+        text: result.text,
+        language: result.language,
+        languageProbability: result.languageProbability,
+        segments: result.segments || undefined,
+      };
+    } catch (venvError) {
+      logger.debug('Venv Python not available, trying system Python...', venvError instanceof Error ? venvError : new Error(String(venvError)));
+      lastError = venvError instanceof Error ? venvError : new Error(String(venvError));
+    }
+
+    // Fallback to system Python commands
+    const pythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3', 'python', 'py'];
     
     for (const cmd of pythonCommands) {
       try {
