@@ -190,17 +190,17 @@ export function OmniAssistant() {
 
   // Handle auto-send in call mode
   const handleCallMessage = useCallback(async (messageText: string) => {
-    console.log('[OmniAssistant] handleCallMessage called with:', messageText);
+    console.log('[OmniAssistant] 📞 handleCallMessage called with:', messageText);
     if (!messageText.trim()) {
-      console.warn('[OmniAssistant] Empty message, skipping');
+      console.warn('[OmniAssistant] ⚠️ Empty message, skipping');
       return;
     }
     if (isLoading) {
-      console.warn('[OmniAssistant] Already loading, skipping');
+      console.warn('[OmniAssistant] ⏳ Already loading, skipping');
       return;
     }
 
-    console.log('[OmniAssistant] Sending message to AI...');
+    console.log('[OmniAssistant] 📤 Sending message to AI...');
     const playgroundContext = buildPlaygroundContext();
     const workspaceId = getActiveWorkspaceId();
 
@@ -210,9 +210,9 @@ export function OmniAssistant() {
         workspaceId,
         playgroundContext,
       });
-      console.log('[OmniAssistant] Message sent successfully');
+      console.log('[OmniAssistant] ✅ Message sent successfully');
     } catch (error) {
-      console.error('[OmniAssistant] Error sending message:', error);
+      console.error('[OmniAssistant] ❌ Error sending message:', error);
     }
   }, [isLoading, sendMessage]);
 

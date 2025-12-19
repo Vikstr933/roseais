@@ -437,33 +437,77 @@ export function useVoiceMode() {
                 const updatedFinal = prev.finalTranscript + (prev.finalTranscript ? ' ' : '') + newText;
                 accumulatedTextRef.current = updatedFinal;
                 
-                console.log('[useVoiceMode] Call mode:', continuous, 'isInCall:', prev.isInCall, 'hasCallback:', !!onFinalTranscriptRef.current);
+                console.log('[useVoiceMode] Call mode check:', {
+                  continuous,
+                  isInCall: prev.isInCall,
+                  hasCallback: !!onFinalTranscriptRef.current,
+                  updatedFinal,
+                  isSpeaking: prev.isSpeaking
+                });
                 
                 // If in call mode, auto-send after pause
-                if (continuous && prev.isInCall && onFinalTranscriptRef.current) {
-                  console.log('[useVoiceMode] Setting up auto-send timer for:', updatedFinal);
+                if (continuous && prev.isInCall && onFinalTranscriptRef.current && !prev.isSpeaking) {
+                  console.log('[useVoiceMode] ✅ Setting up auto-send timer for:', updatedFinal);
                   // Clear existing timer
                   if (pauseTimerRef.current) {
                     clearTimeout(pauseTimerRef.current);
+                    pauseTimerRef.current = null;
                   }
                   // Wait 2 seconds of silence before auto-sending
                   pauseTimerRef.current = setTimeout(() => {
                     const textToSend = accumulatedTextRef.current.trim();
-                    console.log('[useVoiceMode] Auto-send timer triggered, sending:', textToSend);
+                    console.log('[useVoiceMode] ⏰ Auto-send timer triggered, sending:', textToSend);
+                    console.log('[useVoiceMode] Callback check:', {
+                      hasText: !!textToSend,
+                      hasCallback: !!onFinalTranscriptRef.current,
+                      callbackType: typeof onFinalTranscriptRef.current
+                    });
                     if (textToSend && onFinalTranscriptRef.current) {
-                      onFinalTranscriptRef.current(textToSend);
-                      accumulatedTextRef.current = '';
-                      setState(prevState => ({ ...prevState, finalTranscript: '' }));
+                      try {
+                        console.log('[useVoiceMode] 📤 Calling callback with:', textToSend);
+                        onFinalTranscriptRef.current(textToSend);
+                        accumulatedTextRef.current = '';
+                        setState(prevState => ({ ...prevState, finalTranscript: '' }));
+                        console.log('[useVoiceMode] ✅ Callback executed successfully');
+                      } catch (error) {
+                        console.error('[useVoiceMode] ❌ Error in callback:', error);
+                      }
                     } else {
-                      console.warn('[useVoiceMode] Auto-send failed - no text or callback');
+                      console.warn('[useVoiceMode] ⚠️ Auto-send failed - no text or callback', {
+                        hasText: !!textToSend,
+                        hasCallback: !!onFinalTranscriptRef.current
+                      });
                     }
+                    pauseTimerRef.current = null;
                   }, 2000);
                 } else {
-                  console.log('[useVoiceMode] Not in call mode or missing callback:', {
+                  console.log('[useVoiceMode] ⏸️ Not auto-sending:', {
                     continuous,
                     isInCall: prev.isInCall,
-                    hasCallback: !!onFinalTranscriptRef.current
+                    hasCallback: !!onFinalTranscriptRef.current,
+                    isSpeaking: prev.isSpeaking
                   });
+                }
+                
+                // If in call mode, restart recording immediately (but not if speaking)
+                if (continuous && prev.isInCall && !prev.isSpeaking && streamRef.current) {
+                  setTimeout(() => {
+                    setState(currentState => {
+                      // Double-check state hasn't changed
+                      if (currentState.isInCall && !currentState.isSpeaking && streamRef.current && mediaRecorderRef.current) {
+                        audioChunksRef.current = [];
+                        try {
+                          mediaRecorderRef.current.start();
+                          console.log('[useVoiceMode] 🔄 Restarted recording');
+                          return { ...currentState, transcript: 'Spelar in...' };
+                        } catch (error) {
+                          console.warn('[useVoiceMode] Failed to restart recording:', error);
+                          return currentState;
+                        }
+                      }
+                      return currentState;
+                    });
+                  }, 100);
                 }
                 
                 return {
@@ -472,19 +516,28 @@ export function useVoiceMode() {
                   finalTranscript: updatedFinal,
                 };
               });
-            }
-
-            // If in call mode, restart recording immediately
-            if (continuous && state.isInCall && !state.isSpeaking && streamRef.current) {
-              setTimeout(() => {
-                if (streamRef.current && mediaRecorderRef.current) {
-                  audioChunksRef.current = [];
-                  mediaRecorderRef.current.start();
-                  setState(prev => ({ ...prev, transcript: 'Spelar in...' }));
-                }
-              }, 100);
-            } else if (!continuous) {
-              setState(prev => ({ ...prev, isListening: false }));
+            } else {
+              // If in call mode, restart recording even if no text was transcribed
+              if (continuous) {
+                setState(prev => {
+                  if (prev.isInCall && !prev.isSpeaking && streamRef.current) {
+                    setTimeout(() => {
+                      if (streamRef.current && mediaRecorderRef.current) {
+                        audioChunksRef.current = [];
+                        try {
+                          mediaRecorderRef.current.start();
+                          console.log('[useVoiceMode] 🔄 Restarted recording (no text)');
+                        } catch (error) {
+                          console.warn('[useVoiceMode] Failed to restart recording:', error);
+                        }
+                      }
+                    }, 100);
+                  }
+                  return prev;
+                });
+              } else {
+                setState(prev => ({ ...prev, isListening: false }));
+              }
             }
           } catch (error) {
             console.error('KB-Whisper transcription error:', error);
@@ -623,10 +676,19 @@ export function useVoiceMode() {
    * Start call mode - continuous listening with auto-send
    */
   const startCall = useCallback((onFinalTranscript: (text: string) => void, language: string = 'sv-SE') => {
-    console.log('[useVoiceMode] startCall called, setting up callback');
+    console.log('[useVoiceMode] 📞 startCall called, setting up callback');
+    console.log('[useVoiceMode] Callback function:', typeof onFinalTranscript, onFinalTranscript);
     onFinalTranscriptRef.current = onFinalTranscript;
-    setState(prev => ({ ...prev, isInCall: true }));
-    startListening(language, true);
+    console.log('[useVoiceMode] Callback ref set:', !!onFinalTranscriptRef.current);
+    setState(prev => {
+      console.log('[useVoiceMode] Setting isInCall to true');
+      return { ...prev, isInCall: true };
+    });
+    // Use setTimeout to ensure state is updated before starting
+    setTimeout(() => {
+      console.log('[useVoiceMode] Starting listening in call mode...');
+      startListening(language, true);
+    }, 100);
   }, [startListening]);
 
   /**
