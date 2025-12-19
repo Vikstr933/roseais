@@ -221,6 +221,7 @@ export function OmniAssistant() {
         // In call mode, use streaming speech
         if (isInCall) {
           // Use streaming speech for call mode - speaks as text arrives
+          // This triggers every time the message content updates (streaming)
           const cleanText = lastMessage.content
             .replace(/```[\s\S]*?```/g, '') // Remove code blocks
             .replace(/`([^`]+)`/g, '$1') // Remove inline code
@@ -230,7 +231,8 @@ export function OmniAssistant() {
             .replace(/\n{2,}/g, '. ') // Replace multiple newlines with period
             .trim();
           
-          if (cleanText.length > 20 && !isSpeaking) {
+          // Always try to speak streaming text (even if already speaking, it will queue)
+          if (cleanText.length > 10) {
             speakStreaming(cleanText, { lang: 'sv-SE', rate: 1.0 });
           }
         } else {
@@ -1102,8 +1104,29 @@ export function OmniAssistant() {
                         transition={{ duration: 2, repeat: Infinity }}
                         className="text-lg font-semibold text-foreground"
                       >
-                        {isListening ? "Lyssnar..." : isSpeaking ? "Elon pratar..." : "I samtal"}
+                        {isListening ? "Lyssnar..." : isSpeaking ? "Elon pratar..." : isLoading ? "Elon tänker..." : "I samtal"}
                       </motion.div>
+                      
+                      {/* Thinking indicator */}
+                      {isLoading && !isSpeaking && (
+                        <motion.div
+                          className="flex items-center justify-center gap-2 text-sm text-muted-foreground"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                        >
+                          <motion.div
+                            className="flex gap-1"
+                            animate={{ scale: [1, 1.2, 1] }}
+                            transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
+                          >
+                            <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                            <div className="w-2 h-2 bg-purple-500 rounded-full" style={{ animationDelay: '0.2s' }} />
+                            <div className="w-2 h-2 bg-purple-500 rounded-full" style={{ animationDelay: '0.4s' }} />
+                          </motion.div>
+                          <span>Bearbetar ditt meddelande...</span>
+                        </motion.div>
+                      )}
                       
                       {/* Live transcript */}
                       {transcript && (
@@ -1418,39 +1441,60 @@ export function OmniAssistant() {
                       </motion.div>
                     </div>
 
-                    {/* Status text */}
-                    <div className="text-center space-y-4">
+                  {/* Status text */}
+                  <div className="text-center space-y-4">
+                    <motion.div
+                      animate={{ opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="text-lg font-semibold text-foreground"
+                    >
+                      {isListening ? "Lyssnar..." : isSpeaking ? "Elon pratar..." : isLoading ? "Elon tänker..." : "I samtal"}
+                    </motion.div>
+                    
+                    {/* Thinking indicator */}
+                    {isLoading && !isSpeaking && (
                       <motion.div
-                        animate={{ opacity: [0.5, 1, 0.5] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="text-lg font-semibold text-foreground"
+                        className="flex items-center justify-center gap-2 text-sm text-muted-foreground"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
                       >
-                        {isListening ? "Lyssnar..." : isSpeaking ? "Elon pratar..." : "I samtal"}
-                      </motion.div>
-                      
-                      {/* Live transcript */}
-                      {transcript && (
                         <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="max-w-md px-4 py-3 bg-card border border-border rounded-lg shadow-lg"
+                          className="flex gap-1"
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
                         >
-                          <p className="text-sm text-muted-foreground mb-1">Du säger:</p>
-                          <p className="text-base font-medium">{transcript}</p>
+                          <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                          <div className="w-2 h-2 bg-purple-500 rounded-full" style={{ animationDelay: '0.2s' }} />
+                          <div className="w-2 h-2 bg-purple-500 rounded-full" style={{ animationDelay: '0.4s' }} />
                         </motion.div>
-                      )}
-
-                      {/* Hang up button */}
-                      <Button
-                        variant="destructive"
-                        size="lg"
-                        onClick={handleCallToggle}
-                        className="mt-6 rounded-full px-8 py-6 h-auto"
+                        <span>Bearbetar ditt meddelande...</span>
+                      </motion.div>
+                    )}
+                    
+                    {/* Live transcript */}
+                    {transcript && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="max-w-md px-4 py-3 bg-card border border-border rounded-lg shadow-lg"
                       >
-                        <PhoneOff className="h-5 w-5 mr-2" />
-                        Avsluta samtal
-                      </Button>
-                    </div>
+                        <p className="text-sm text-muted-foreground mb-1">Du säger:</p>
+                        <p className="text-base font-medium">{transcript}</p>
+                      </motion.div>
+                    )}
+
+                    {/* Hang up button */}
+                    <Button
+                      variant="destructive"
+                      size="lg"
+                      onClick={handleCallToggle}
+                      className="mt-6 rounded-full px-8 py-6 h-auto"
+                    >
+                      <PhoneOff className="h-5 w-5 mr-2" />
+                      Avsluta samtal
+                    </Button>
+                  </div>
                   </div>
                 ) : (
                   <>

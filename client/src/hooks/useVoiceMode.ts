@@ -46,6 +46,8 @@ export function useVoiceMode() {
   const onFinalTranscriptRef = useRef<((text: string) => void) | null>(null);
   const accumulatedTextRef = useRef<string>('');
   const selectedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const streamingTextRef = useRef<string>('');
+  const streamingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check KB-Whisper availability and browser support
   useEffect(() => {
@@ -691,19 +693,16 @@ export function useVoiceMode() {
     [state.isInCall, state.isListening]
   );
 
+  // Store accumulated streaming text
+  const streamingTextRef = useRef<string>('');
+  const streamingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   /**
    * Stream text to speech - speaks as text arrives (for streaming responses)
    */
   const speakStreaming = useCallback(
     (text: string, options?: { lang?: string; rate?: number; pitch?: number; volume?: number }) => {
       if (!synthesisRef.current) {
-        return;
-      }
-
-      // For streaming, we want to speak chunks as they arrive
-      // But we need to be smart about it - don't interrupt if already speaking
-      if (state.isSpeaking) {
-        // Queue the text or append to current utterance
         return;
       }
 
@@ -716,8 +715,50 @@ export function useVoiceMode() {
         .replace(/#{1,6}\s+/g, '') // Remove headers
         .trim();
 
-      if (cleanText.length > 20) { // Only speak if we have substantial text
+      // Accumulate streaming text
+      streamingTextRef.current = cleanText;
+
+      // If already speaking, wait for it to finish or accumulate more text
+      if (state.isSpeaking) {
+        // Clear existing timer
+        if (streamingTimerRef.current) {
+          clearTimeout(streamingTimerRef.current);
+        }
+        // Wait a bit and check if we have more text to speak
+        streamingTimerRef.current = setTimeout(() => {
+          if (streamingTextRef.current.length > 50) {
+            // If we have accumulated enough text, speak it
+            const textToSpeak = streamingTextRef.current;
+            streamingTextRef.current = '';
+            speak(textToSpeak, options);
+          }
+        }, 500);
+        return;
+      }
+
+      // If we have enough text to start speaking (reduced threshold for faster response)
+      if (cleanText.length > 30) {
+        // Clear any pending timer
+        if (streamingTimerRef.current) {
+          clearTimeout(streamingTimerRef.current);
+          streamingTimerRef.current = null;
+        }
+        // Start speaking immediately
         speak(cleanText, options);
+        streamingTextRef.current = '';
+      } else {
+        // Wait a bit for more text to accumulate
+        if (streamingTimerRef.current) {
+          clearTimeout(streamingTimerRef.current);
+        }
+        streamingTimerRef.current = setTimeout(() => {
+          if (streamingTextRef.current.length > 30) {
+            const textToSpeak = streamingTextRef.current;
+            streamingTextRef.current = '';
+            speak(textToSpeak, options);
+          }
+          streamingTimerRef.current = null;
+        }, 800); // Wait 800ms for more text
       }
     },
     [speak, state.isSpeaking]
