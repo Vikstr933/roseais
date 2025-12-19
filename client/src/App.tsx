@@ -190,9 +190,28 @@ function AppContent() {
 
           {/* Elon - AI Assistant with Web Search */}
           <ErrorBoundary
+            onError={(error, errorInfo) => {
+              console.error('[App] OmniAssistant ErrorBoundary caught error:', error);
+              console.error('[App] Error info:', errorInfo);
+              // Also log to window for visibility
+              (window as any).__OMNI_ASSISTANT_ERROR__ = { error, errorInfo };
+            }}
             fallback={
-              <div className="fixed bottom-4 right-4 p-4 bg-destructive text-destructive-foreground rounded-lg shadow-lg">
-                <p className="text-sm">Elon Assistant failed to load. Check console for details.</p>
+              <div className="fixed bottom-4 right-4 p-4 bg-destructive text-destructive-foreground rounded-lg shadow-lg max-w-md z-50">
+                <p className="text-sm font-semibold mb-2">Elon Assistant failed to load</p>
+                <p className="text-xs mb-2">Check browser console (F12) for details.</p>
+                <p className="text-xs opacity-75">
+                  Error: {(window as any).__OMNI_ASSISTANT_ERROR__?.error?.message || 'Unknown error'}
+                </p>
+                <button
+                  onClick={() => {
+                    console.log('[App] Full error details:', (window as any).__OMNI_ASSISTANT_ERROR__);
+                    window.location.reload();
+                  }}
+                  className="mt-2 text-xs underline"
+                >
+                  Reload page
+                </button>
               </div>
             }
           >

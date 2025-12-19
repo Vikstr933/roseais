@@ -129,6 +129,7 @@ export function useVoiceMode() {
     }, 2000);
 
     return () => {
+      isMounted = false;
       console.log('[useVoiceMode] Cleaning up KB-Whisper check');
       clearTimeout(timeoutId);
       clearInterval(intervalId);
