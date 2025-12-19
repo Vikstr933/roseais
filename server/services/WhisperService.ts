@@ -255,7 +255,7 @@ try:
     )
     
     # Transcribe with speed optimizations
-    # Note: Lower no_speech_threshold and less aggressive VAD for better detection
+    # Note: Very permissive settings to catch all speech, even quiet or short audio
     segments, info = model.transcribe(
         audio_file,
         language=language if language != "auto" else None,
@@ -266,26 +266,29 @@ try:
         temperature=0,  # Deterministic (faster)
         compression_ratio_threshold=2.4,  # Default threshold
         log_prob_threshold=-1.0,  # Lower threshold for faster processing
-        no_speech_threshold=0.3,  # Lower threshold to detect more speech (was 0.6)
-        vad_filter=True,  # Voice activity detection (skip silence)
-        vad_parameters=dict(
-            min_silence_duration_ms=250,  # Shorter silence detection (was 500)
-            threshold=0.3  # Lower VAD threshold for better detection
-        )
+        no_speech_threshold=0.1,  # Very low threshold to detect even quiet speech (was 0.3)
+        vad_filter=False,  # DISABLE VAD to catch all audio (was True)
+        # Removed vad_parameters since VAD is disabled
     )
     
     # Collect results
     text_parts = []
     segments_list = []
+    segment_count = 0
     
     for segment in segments:
-        text_parts.append(segment.text)
+        segment_count += 1
+        if segment.text and segment.text.strip():
+            text_parts.append(segment.text.strip())
         if return_timestamps:
             segments_list.append({
                 "start": segment.start,
                 "end": segment.end,
                 "text": segment.text
             })
+    
+    # Log transcription info for debugging
+    print(f"DEBUG: Found {segment_count} segments, language: {info.language}, probability: {info.language_probability}", file=sys.stderr)
     
     result = {
         "text": " ".join(text_parts).strip(),
