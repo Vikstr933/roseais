@@ -40,28 +40,37 @@ export class WhisperService {
    * Tries multiple Python commands (py, python3, python) for cross-platform support
    */
   async checkDependencies(): Promise<boolean> {
-    const pythonCommands = ['py', 'python3', 'python'];
+    // Try multiple Python commands in order of preference
+    // On Render/Linux: python3 is most common
+    // On Windows: py or python
+    const pythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3', 'python', 'py'];
     
     for (const cmd of pythonCommands) {
       try {
         // Check if Python is available
-        await execAsync(`${cmd} --version`);
+        const versionResult = await execAsync(`${cmd} --version`);
+        logger.info(`Python found: ${cmd} - ${versionResult.stdout.trim()}`);
+        
         // Check if faster-whisper is installed
         try {
           await execAsync(`${cmd} -c "import faster_whisper"`);
           logger.info(`✅ faster-whisper found using: ${cmd}`);
           return true;
-        } catch {
+        } catch (importError) {
+          logger.warn(`faster-whisper not found with ${cmd}, trying next...`);
           // Try next Python command
           continue;
         }
-      } catch {
-        // Try next Python command
+      } catch (versionError) {
+        // Python command not found, try next
         continue;
       }
     }
     
     logger.warn('faster-whisper not found. Install with: py -m pip install faster-whisper (Windows) or pip3 install faster-whisper (macOS/Linux)');
+    logger.warn('On Render, faster-whisper should be installed during build. Check build logs.');
     return false;
   }
 
