@@ -431,44 +431,47 @@ export function useVoiceMode() {
             if (data.success && data.text && data.text.trim()) {
               const newText = data.text.trim();
               console.log('[useVoiceMode] KB-Whisper transcription received:', newText);
-              console.log('[useVoiceMode] Call mode:', continuous, 'isInCall:', state.isInCall, 'hasCallback:', !!onFinalTranscriptRef.current);
               
-              // Update accumulated text
-              const updatedFinal = state.finalTranscript + (state.finalTranscript ? ' ' : '') + newText;
-              accumulatedTextRef.current = updatedFinal;
-              
-              setState(prev => ({
-                ...prev,
-                transcript: '',
-                finalTranscript: updatedFinal,
-              }));
-
-              // If in call mode, auto-send after pause
-              if (continuous && state.isInCall && onFinalTranscriptRef.current) {
-                console.log('[useVoiceMode] Setting up auto-send timer for:', updatedFinal);
-                // Clear existing timer
-                if (pauseTimerRef.current) {
-                  clearTimeout(pauseTimerRef.current);
-                }
-                // Wait 2 seconds of silence before auto-sending
-                pauseTimerRef.current = setTimeout(() => {
-                  const textToSend = accumulatedTextRef.current.trim();
-                  console.log('[useVoiceMode] Auto-send timer triggered, sending:', textToSend);
-                  if (textToSend && onFinalTranscriptRef.current) {
-                    onFinalTranscriptRef.current(textToSend);
-                    accumulatedTextRef.current = '';
-                    setState(prev => ({ ...prev, finalTranscript: '' }));
-                  } else {
-                    console.warn('[useVoiceMode] Auto-send failed - no text or callback');
+              // Update accumulated text using functional update to get latest state
+              setState(prev => {
+                const updatedFinal = prev.finalTranscript + (prev.finalTranscript ? ' ' : '') + newText;
+                accumulatedTextRef.current = updatedFinal;
+                
+                console.log('[useVoiceMode] Call mode:', continuous, 'isInCall:', prev.isInCall, 'hasCallback:', !!onFinalTranscriptRef.current);
+                
+                // If in call mode, auto-send after pause
+                if (continuous && prev.isInCall && onFinalTranscriptRef.current) {
+                  console.log('[useVoiceMode] Setting up auto-send timer for:', updatedFinal);
+                  // Clear existing timer
+                  if (pauseTimerRef.current) {
+                    clearTimeout(pauseTimerRef.current);
                   }
-                }, 2000);
-              } else {
-                console.log('[useVoiceMode] Not in call mode or missing callback:', {
-                  continuous,
-                  isInCall: state.isInCall,
-                  hasCallback: !!onFinalTranscriptRef.current
-                });
-              }
+                  // Wait 2 seconds of silence before auto-sending
+                  pauseTimerRef.current = setTimeout(() => {
+                    const textToSend = accumulatedTextRef.current.trim();
+                    console.log('[useVoiceMode] Auto-send timer triggered, sending:', textToSend);
+                    if (textToSend && onFinalTranscriptRef.current) {
+                      onFinalTranscriptRef.current(textToSend);
+                      accumulatedTextRef.current = '';
+                      setState(prevState => ({ ...prevState, finalTranscript: '' }));
+                    } else {
+                      console.warn('[useVoiceMode] Auto-send failed - no text or callback');
+                    }
+                  }, 2000);
+                } else {
+                  console.log('[useVoiceMode] Not in call mode or missing callback:', {
+                    continuous,
+                    isInCall: prev.isInCall,
+                    hasCallback: !!onFinalTranscriptRef.current
+                  });
+                }
+                
+                return {
+                  ...prev,
+                  transcript: '',
+                  finalTranscript: updatedFinal,
+                };
+              });
             }
 
             // If in call mode, restart recording immediately
