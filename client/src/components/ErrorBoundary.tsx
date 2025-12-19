@@ -35,18 +35,46 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log detailed error info for debugging
-    console.error('🚨 ErrorBoundary caught an error:');
-    console.error('Error:', error);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    console.error('Component stack:', errorInfo.componentStack);
+    console.error('🚨 [ErrorBoundary] Caught an error:');
+    console.error('[ErrorBoundary] Error:', error);
+    console.error('[ErrorBoundary] Error message:', error.message);
+    console.error('[ErrorBoundary] Error stack:', error.stack);
+    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack);
     
     // Log current URL for context
-    console.error('Current URL:', window.location.href);
+    console.error('[ErrorBoundary] Current URL:', window.location.href);
     
     // Log any auth state if available
     const sessionToken = localStorage.getItem('sessionToken') || sessionStorage.getItem('sessionToken');
-    console.error('Has session token:', !!sessionToken);
+    console.error('[ErrorBoundary] Has session token:', !!sessionToken);
+    
+    // Check if error is related to voice mode
+    const isVoiceModeError = 
+      error.message?.includes('useVoiceMode') ||
+      error.message?.includes('SpeechRecognition') ||
+      error.message?.includes('SpeechSynthesis') ||
+      error.message?.includes('KB-Whisper') ||
+      errorInfo.componentStack?.includes('useVoiceMode') ||
+      errorInfo.componentStack?.includes('OmniAssistant');
+    
+    if (isVoiceModeError) {
+      console.error('[ErrorBoundary] ⚠️ This error appears to be related to voice mode!');
+      console.error('[ErrorBoundary] Voice mode error details:', {
+        message: error.message,
+        stack: error.stack,
+        componentStack: errorInfo.componentStack,
+      });
+    }
+    
+    // Log React state if available
+    try {
+      const reactDevTools = (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__;
+      if (reactDevTools) {
+        console.error('[ErrorBoundary] React DevTools available');
+      }
+    } catch (e) {
+      // Ignore
+    }
     
     this.setState({
       error,

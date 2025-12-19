@@ -11,13 +11,38 @@ import './index.css';
 // Initialize Sentry for error tracking
 frontendSentryService.initialize();
 
-// Global error handler
+// Global error handler with detailed logging
 window.addEventListener('error', (event) => {
-  console.error('Global error:', event.error);
+  console.error('[Global Error Handler] Error caught:', {
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno,
+    error: event.error,
+    stack: event.error?.stack,
+    timestamp: new Date().toISOString(),
+  });
+  
+  // Log to Sentry if available
+  if (frontendSentryService.isInitialized()) {
+    frontendSentryService.captureException(event.error || new Error(event.message));
+  }
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason);
+  console.error('[Global Error Handler] Unhandled promise rejection:', {
+    reason: event.reason,
+    promise: event.promise,
+    stack: event.reason?.stack,
+    timestamp: new Date().toISOString(),
+  });
+  
+  // Log to Sentry if available
+  if (frontendSentryService.isInitialized()) {
+    frontendSentryService.captureException(
+      event.reason instanceof Error ? event.reason : new Error(String(event.reason))
+    );
+  }
 });
 
 // Register Service Worker for PWA
