@@ -28,11 +28,19 @@ export class WhisperService {
   private modelPath: string;
   private cacheDir: string;
   private isInitialized: boolean = false;
+  private venvPath: string;
+  private venvPython: string;
+  private venvChecked: boolean = false;
+  private venvExists: boolean = false;
 
   constructor() {
     // Use KB-Whisper Base model from KBLab
     this.modelPath = 'KBLab/kb-whisper-base';
     this.cacheDir = path.join(process.cwd(), 'cache', 'whisper-models');
+    this.venvPath = path.join(process.cwd(), 'venv-whisper');
+    this.venvPython = process.platform === 'win32' 
+      ? path.join(this.venvPath, 'Scripts', 'python.exe')
+      : path.join(this.venvPath, 'bin', 'python3');
   }
 
   /**
@@ -316,7 +324,7 @@ except Exception as e:
       logger.info(`[WhisperService] Executing script: ${scriptPath}`);
       logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
       
-      const { stdout, stderr } = await execAsync(`"${venvPython}" "${scriptPath}"`, {
+      const { stdout, stderr } = await execAsync(`"${this.venvPython}" "${scriptPath}"`, {
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
         timeout: 120000, // 2 minute timeout
       });
