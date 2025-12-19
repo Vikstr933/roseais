@@ -68,6 +68,8 @@ interface ProjectFile {
 }
 
 export function OmniAssistant() {
+  console.log('[OmniAssistant] Component mounting...');
+  
   const [viewState, setViewState] = useState<ViewState>('closed');
   const [inputMessage, setInputMessage] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);

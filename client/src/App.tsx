@@ -4,6 +4,7 @@ import { Navigation } from './components/Navigation';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WorkspaceProvider, useWorkspace } from './contexts/WorkspaceContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // App version - force cache bust
 const APP_VERSION = '2025.11.03.1';
@@ -188,7 +189,15 @@ function AppContent() {
           /> */}
 
           {/* Elon - AI Assistant with Web Search */}
-          <OmniAssistant />
+          <ErrorBoundary
+            fallback={
+              <div className="fixed bottom-4 right-4 p-4 bg-destructive text-destructive-foreground rounded-lg shadow-lg">
+                <p className="text-sm">Elon Assistant failed to load. Check console for details.</p>
+              </div>
+            }
+          >
+            <OmniAssistant />
+          </ErrorBoundary>
           <InsightsPanel />
 
           <BackgroundTasksPanel />
