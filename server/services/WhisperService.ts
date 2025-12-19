@@ -317,45 +317,46 @@ except Exception as e:
       const stats = await fs.stat(this.venvPython);
       if (stats.isFile()) {
         logger.info(`[WhisperService] Using venv Python: ${this.venvPython}`);
-      logger.info(`[WhisperService] Executing script: ${scriptPath}`);
-      logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
-      
-      const { stdout, stderr } = await execAsync(`"${this.venvPython}" "${scriptPath}"`, {
-        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
-        timeout: 120000, // 2 minute timeout
-      });
-      
-      if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
-        logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
-      }
+        logger.info(`[WhisperService] Executing script: ${scriptPath}`);
+        logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
+        
+        const { stdout, stderr } = await execAsync(`"${this.venvPython}" "${scriptPath}"`, {
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+          timeout: 120000, // 2 minute timeout
+        });
+        
+        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
+          logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
+        }
 
-      if (!stdout || stdout.trim().length === 0) {
-        throw new Error('Python script returned empty output');
-      }
+        if (!stdout || stdout.trim().length === 0) {
+          throw new Error('Python script returned empty output');
+        }
 
-      logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
-      const result = JSON.parse(stdout.trim());
+        logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
+        const result = JSON.parse(stdout.trim());
     
-      if (result.error) {
-        logger.error('[WhisperService] Python script error:', result.error);
-        throw new Error(`Transcription failed: ${result.error}`);
+        if (result.error) {
+          logger.error('[WhisperService] Python script error:', result.error);
+          throw new Error(`Transcription failed: ${result.error}`);
+        }
+
+        if (!result.text) {
+          logger.warn('[WhisperService] No text in result, but no error either');
+        }
+
+        // Clean up script
+        await fs.unlink(scriptPath).catch(() => {});
+
+        logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
+
+        return {
+          text: result.text || '',
+          language: result.language || language,
+          languageProbability: result.languageProbability || 0,
+          segments: result.segments || undefined,
+        };
       }
-
-      if (!result.text) {
-        logger.warn('[WhisperService] No text in result, but no error either');
-      }
-
-      // Clean up script
-      await fs.unlink(scriptPath).catch(() => {});
-
-      logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
-
-      return {
-        text: result.text || '',
-        language: result.language || language,
-        languageProbability: result.languageProbability || 0,
-        segments: result.segments || undefined,
-      };
     } catch (venvError) {
       const error = venvError instanceof Error ? venvError : new Error(String(venvError));
       logger.warn('[WhisperService] Venv Python failed, trying system Python...', { 
