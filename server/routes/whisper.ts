@@ -113,7 +113,10 @@ router.post('/transcribe-buffer', authenticateUser, async (req, res) => {
  */
 router.get('/status', authenticateUser, async (req, res) => {
   try {
+    logger.info('Checking KB-Whisper status for user:', req.user?.id);
     const isAvailable = await whisperService.checkDependencies();
+    
+    logger.info('KB-Whisper status check result:', { available: isAvailable, userId: req.user?.id });
     
     res.json({
       success: true,
