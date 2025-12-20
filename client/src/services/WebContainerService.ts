@@ -113,6 +113,118 @@ export class WebContainerService {
   }
 
   /**
+   * Ensure required files exist (index.html, main.tsx, etc.)
+   */
+  private async ensureRequiredFiles(container: WebContainer, structure: any): Promise<void> {
+    const cwd = (structure.isMonorepo && structure.hasClient) ? 'client' : '.';
+    
+    try {
+      // Check for index.html
+      let hasIndexHtml = false;
+      try {
+        await container.fs.readFile(`${cwd}/index.html`, 'utf-8');
+        hasIndexHtml = true;
+        console.log('✅ index.html found');
+      } catch {
+        console.warn('⚠️ index.html missing - creating default');
+        const defaultIndexHtml = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>`;
+        await container.fs.writeFile(`${cwd}/index.html`, defaultIndexHtml);
+        console.log('✅ Created default index.html');
+      }
+      
+      // Check for src/main.tsx
+      let hasMainTsx = false;
+      try {
+        await container.fs.readFile(`${cwd}/src/main.tsx`, 'utf-8');
+        hasMainTsx = true;
+        console.log('✅ src/main.tsx found');
+      } catch {
+        console.warn('⚠️ src/main.tsx missing - creating default');
+        // Ensure src directory exists
+        try {
+          await container.fs.mkdir(`${cwd}/src`, { recursive: true });
+        } catch {
+          // Directory might already exist
+        }
+        
+        // Check if App.tsx exists to import it
+        let appImport = "import App from './App';";
+        try {
+          await container.fs.readFile(`${cwd}/src/App.tsx`, 'utf-8');
+        } catch {
+          // App.tsx doesn't exist, create a simple one
+          appImport = '';
+          const defaultApp = `import React from 'react';
+
+export default function App() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
+      <h1>Welcome to your app</h1>
+      <p>Edit src/App.tsx to get started.</p>
+    </div>
+  );
+}`;
+          await container.fs.writeFile(`${cwd}/src/App.tsx`, defaultApp);
+          console.log('✅ Created default src/App.tsx');
+        }
+        
+        const defaultMainTsx = `import React from 'react';
+import ReactDOM from 'react-dom/client';
+${appImport}
+import './index.css';
+
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Root element not found!');
+}
+
+ReactDOM.createRoot(rootElement).render(
+  <React.StrictMode>
+    ${appImport ? '<App />' : '<div>App component not found. Please create src/App.tsx</div>'}
+  </React.StrictMode>
+);`;
+        await container.fs.writeFile(`${cwd}/src/main.tsx`, defaultMainTsx);
+        console.log('✅ Created default src/main.tsx');
+      }
+      
+      // Check for src/index.css
+      try {
+        await container.fs.readFile(`${cwd}/src/index.css`, 'utf-8');
+        console.log('✅ src/index.css found');
+      } catch {
+        console.warn('⚠️ src/index.css missing - creating default');
+        const defaultCss = `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+}`;
+        await container.fs.writeFile(`${cwd}/src/index.css`, defaultCss);
+        console.log('✅ Created default src/index.css');
+      }
+      
+    } catch (error) {
+      console.error('Failed to ensure required files:', error);
+      // Don't throw - let the server start anyway and show errors
+    }
+  }
+
+  /**
    * Create placeholder images for missing image files referenced in code
    */
   private async createMissingPlaceholderImages(
@@ -507,6 +619,9 @@ export class WebContainerService {
 
     // Detect project structure
     const structure = await this.detectProjectStructure(container);
+    
+    // Verify and create required files before starting server
+    await this.ensureRequiredFiles(container, structure);
     
     // Check if client/package.json exists (even if structure detection didn't find it)
     let hasClientPackage = structure.hasClient;
