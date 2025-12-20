@@ -1402,6 +1402,92 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
     const { personalAssistantAgent } = await import('./PersonalAssistantAgent');
     return await (personalAssistantAgent as any).deployToVercel(params);
   }
+
+  /**
+   * Fix project issues
+   */
+  private async fixProject(params: Record<string, any>): Promise<{
+    success: boolean;
+    message: string;
+    issuesFixed?: number;
+    filesModified?: number;
+  }> {
+    const userId = params._userId as string;
+    const sessionId = params._sessionId as string;
+    const targetProjectId = params.projectId || (sessionId ? this.selectedProjects.get(sessionId)?.projectId : undefined);
+
+    if (!userId || !targetProjectId) {
+      return {
+        success: false,
+        message: 'I need your user ID and a project to fix.'
+      };
+    }
+
+    try {
+      logger.info(`Fixing project ${targetProjectId} for user ${userId}`);
+
+      // Load project files
+      const { projectFiles } = await import('../../db/schema-pg');
+      const { eq, and } = await import('drizzle-orm');
+      const { db } = await import('../../db');
+      
+      const files = await db
+        .select()
+        .from(projectFiles as any)
+        .where(
+          and(
+            eq((projectFiles as any).projectId, parseInt(targetProjectId)),
+            eq((projectFiles as any).isActive, 1)
+          )
+        );
+      
+      const existingFiles = files.map((f: any) => ({
+        path: f.filePath,
+        content: f.fileContent
+      }));
+
+      if (existingFiles.length === 0) {
+        return {
+          success: false,
+          message: 'No files found in this project.'
+        };
+      }
+
+      // Analyze and fix project
+      const { ProjectFixer } = await import('../services/ProjectFixer');
+      const projectFixer = new ProjectFixer();
+      
+      const analysis = await projectFixer.analyzeProject(existingFiles);
+      const fixedFiles = await projectFixer.fixProject(existingFiles, analysis);
+
+      // Save fixed files back to database
+      const { projectService } = await import('../services/ProjectService');
+      await projectService.exportToProject(
+        parseInt(targetProjectId),
+        userId,
+        fixedFiles,
+        'Fixed Project'
+      );
+
+      const issuesFixed = analysis.totalIssues;
+      const filesModified = fixedFiles.length - existingFiles.length;
+
+      logger.info(`Fixed ${issuesFixed} issues, modified ${filesModified} files`);
+
+      return {
+        success: true,
+        message: `Fixed ${issuesFixed} issue(s) in the project. ${filesModified > 0 ? `Created/modified ${filesModified} file(s).` : 'All issues resolved in existing files.'} The project should now start without problems.`,
+        issuesFixed,
+        filesModified
+      };
+    } catch (error) {
+      logger.error('Failed to fix project', error as Error);
+      return {
+        success: false,
+        message: `Failed to fix project: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
 }
 
 // Export singleton instance
