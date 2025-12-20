@@ -386,21 +386,59 @@ export class IncrementalOrchestrator {
       // Continue anyway - not critical
     }
 
+    // CRITICAL: Final validation and auto-fix before returning
+    // This ensures projects are functional after first generation
+    let finalFiles = allFilesArray;
+    let validationIssuesFixed = 0;
+    
+    try {
+      if (progressCallback) {
+        progressCallback('validation', 98, 'Validating and fixing project to ensure it works...');
+      }
+
+      const { ProjectValidator } = await import('./ProjectValidator');
+      const validator = new ProjectValidator();
+      const validationResult = await validator.validateAndFixProject(allFilesArray);
+
+      finalFiles = validationResult.validatedFiles;
+      validationIssuesFixed = validationResult.issuesFixed;
+
+      if (validationResult.issuesFixed > 0) {
+        this.logger.info(`✅ Auto-fixed ${validationResult.issuesFixed} issues during final validation`);
+      }
+
+      if (!validationResult.canStart) {
+        this.logger.warn(`⚠️ Project has ${validationResult.criticalIssues} critical issues that prevent startup`);
+        if (validationResult.errors.length > 0) {
+          this.logger.warn(`Errors: ${validationResult.errors.join(', ')}`);
+        }
+      } else {
+        this.logger.info(`✅ Project validated: Can start successfully`);
+      }
+
+      if (validationResult.warnings.length > 0) {
+        this.logger.info(`Warnings: ${validationResult.warnings.slice(0, 5).join(', ')}${validationResult.warnings.length > 5 ? '...' : ''}`);
+      }
+    } catch (error) {
+      this.logger.warn('Final validation failed, continuing with generated files', error as Error);
+      // Continue anyway - don't fail entire generation
+    }
+
     // Consider generation successful if we have files, even if some phases had warnings
     // Only mark as failed if NO files were generated at all
-    const hasFiles = allFilesArray.length > 0;
+    const hasFiles = finalFiles.length > 0;
     const allPhasesSuccessful = phaseResults.every(p => p.success);
     const success = hasFiles && (allPhasesSuccessful || phaseResults.some(p => p.files.length > 0));
 
     const phasesWithWarnings = phaseResults.filter(p => p.errors && p.errors.length > 0).length;
-    this.logger.info(`Incremental generation completed. Success: ${success}, Total phases: ${phaseResults.length}, Duration: ${totalDuration}ms, Files generated: ${allFilesArray.length}, Phases with warnings: ${phasesWithWarnings}`);
+    this.logger.info(`Incremental generation completed. Success: ${success}, Total phases: ${phaseResults.length}, Duration: ${totalDuration}ms, Files generated: ${finalFiles.length}, Issues auto-fixed: ${validationIssuesFixed}, Phases with warnings: ${phasesWithWarnings}`);
 
-    // Always return files, even if there were warnings
+    // Always return validated and fixed files
     return {
       success,
       plan,
       phases: phaseResults,
-      allFiles: allFilesArray,
+      allFiles: finalFiles,
       totalDuration,
       errors: success ? undefined : phaseResults.filter(p => !p.success && p.files.length === 0).flatMap(p => p.errors || [])
     };
