@@ -622,6 +622,20 @@ All code MUST handle undefined/null values safely:
 - Initialize state with valid defaults, not undefined
 Example: const startTime = entry?.startTime ? new Date(entry.startTime) : new Date();
 
+**CRITICAL - REQUIRED FILES FOR REACT/TYPESCRIPT PROJECTS:**
+If this is a base phase for a React/TypeScript project, you MUST generate ALL of these files:
+- package.json (with vite, @vitejs/plugin-react, react, react-dom)
+- tsconfig.json (TypeScript configuration)
+- vite.config.ts (Vite configuration with React plugin)
+- index.html (HTML entry point with script tag pointing to /src/main.tsx)
+- src/main.tsx (React entry point that imports App and renders to #root)
+
+If this is a core phase, you MUST generate:
+- src/App.tsx (main app component with default export)
+- src/index.css (global styles)
+
+**DO NOT skip any required files - the app will not work without them!**
+
 OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
   }
 

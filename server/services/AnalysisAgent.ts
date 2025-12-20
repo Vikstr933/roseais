@@ -474,14 +474,23 @@ CRITICAL REQUIREMENTS FOR LANDING PAGES:
 Create a plan with the following structure:
 
 PHASE 1: BASE FOUNDATION
-- Files: package.json, tsconfig.json, index.html, src/main.tsx
+- Files: package.json, tsconfig.json, vite.config.ts, index.html, src/main.tsx
 - Purpose: Set up project configuration and entry points
 - Dependencies: None
+- **CRITICAL**: This phase MUST include ALL of these files:
+  * package.json - with "dev": "vite" script, vite in devDependencies, @vitejs/plugin-react
+  * tsconfig.json - TypeScript configuration
+  * vite.config.ts - Vite configuration with React plugin
+  * index.html - HTML entry point with <script type="module" src="/src/main.tsx"></script>
+  * src/main.tsx - React entry point that imports App and renders to #root
 
 PHASE 2: CORE COMPONENT WITH STYLING
 - Files: src/App.tsx, src/index.css (with FULL, MODERN styling)
 - Purpose: Create main application component and comprehensive, visually appealing styling
 - Dependencies: Phase 1
+- **CRITICAL**: This phase MUST include:
+  * src/App.tsx - Main app component (default export) that src/main.tsx imports
+  * src/index.css - Global styles (required for app to render properly)
 - **CRITICAL FOR LANDING PAGES**: The CSS file MUST include:
   * **Modern color palette**: CSS variables for primary/secondary/accent colors, gradients for hero sections
   * **Typography system**: Large hero headings (3-4rem), readable body text (1rem), proper font weights (400, 600, 700)
@@ -597,7 +606,7 @@ First, detect what language/framework the user wants:
     {
       "phase": "base",
       "description": "Project foundation and configuration",
-      "files": ["package.json", "tsconfig.json", "index.html", "src/main.tsx"],
+      "files": ["package.json", "tsconfig.json", "vite.config.ts", "index.html", "src/main.tsx"],
       "dependencies": [],
       "agentId": "component-developer"
     },
