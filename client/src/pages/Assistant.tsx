@@ -126,11 +126,16 @@ export default function Assistant() {
         throw new Error('No response body');
       }
 
+      // Read stream with proper error handling
+      let streamReadComplete = false;
       try {
         while (true) {
           const { done, value } = await reader.read();
           
-          if (done) break;
+          if (done) {
+            streamReadComplete = true;
+            break;
+          }
 
           // Handle null/undefined values and ensure proper type
           if (value) {
@@ -145,49 +150,50 @@ export default function Assistant() {
           const lines = buffer.split('\n');
           buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.type === 'chunk') {
-                // Append text chunk to message
-                setMessages(prev => {
-                  const updated = [...prev];
-                  const lastMessage = updated[updated.length - 1];
-                  if (lastMessage && lastMessage.role === 'assistant') {
-                    lastMessage.content += data.text || '';
-                  }
-                  return updated;
-                });
-              } else if (data.type === 'tools_used') {
-                // Update tools used
-                setMessages(prev => {
-                  const updated = [...prev];
-                  const lastMessage = updated[updated.length - 1];
-                  if (lastMessage && lastMessage.role === 'assistant') {
-                    lastMessage.toolsUsed = data.tools || [];
-                  }
-                  return updated;
-                });
-              } else if (data.type === 'complete') {
-                // Final message with all metadata
-                setMessages(prev => {
-                  const updated = [...prev];
-                  const lastMessage = updated[updated.length - 1];
-                  if (lastMessage && lastMessage.role === 'assistant') {
-                    lastMessage.content = data.response || lastMessage.content;
-                    lastMessage.toolsUsed = data.toolsUsed || [];
-                    lastMessage.contextUsed = data.contextUsed || [];
-                    lastMessage.suggestions = data.suggestions || [];
-                  }
-                  return updated;
-                });
-              } else if (data.type === 'error') {
-                throw new Error(data.message || 'Streaming error');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.type === 'chunk') {
+                  // Append text chunk to message
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const lastMessage = updated[updated.length - 1];
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      lastMessage.content += data.text || '';
+                    }
+                    return updated;
+                  });
+                } else if (data.type === 'tools_used') {
+                  // Update tools used
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const lastMessage = updated[updated.length - 1];
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      lastMessage.toolsUsed = data.tools || [];
+                    }
+                    return updated;
+                  });
+                } else if (data.type === 'complete') {
+                  // Final message with all metadata
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const lastMessage = updated[updated.length - 1];
+                    if (lastMessage && lastMessage.role === 'assistant') {
+                      lastMessage.content = data.response || lastMessage.content;
+                      lastMessage.toolsUsed = data.toolsUsed || [];
+                      lastMessage.contextUsed = data.contextUsed || [];
+                      lastMessage.suggestions = data.suggestions || [];
+                    }
+                    return updated;
+                  });
+                } else if (data.type === 'error') {
+                  throw new Error(data.message || 'Streaming error');
+                }
+              } catch (parseError) {
+                console.error('Failed to parse SSE data:', parseError);
               }
-            } catch (parseError) {
-              console.error('Failed to parse SSE data:', parseError);
             }
           }
         }
@@ -198,13 +204,15 @@ export default function Assistant() {
         } else {
           console.error('Error reading stream:', streamError);
         }
-      } finally {
-        // Ensure reader is released
-        try {
+      }
+      
+      // Ensure reader is released (moved outside try-catch-finally to avoid esbuild parsing issues)
+      try {
+        if (!streamReadComplete) {
           reader.releaseLock();
-        } catch (e) {
-          // Ignore errors when releasing lock
         }
+      } catch (e) {
+        // Ignore errors when releasing lock
       }
     } catch (err) {
       console.error('Failed to send message:', err);
