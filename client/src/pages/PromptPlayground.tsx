@@ -1103,13 +1103,21 @@ export default function PromptPlayground() {
           const localUrlMatch = line.match(/(?:Local:\s+|started at\s+)(https?:\/\/[^\s]+)/i);
           if (localUrlMatch && localUrlMatch[1]) {
             const url = localUrlMatch[1];
-            setActiveTab('preview');
+            // Only auto-switch to preview if user is still on desktop tab
+            // This allows them to see the generation animation first
             setTimeout(() => {
               setLivePreviewUrl(url);
-              addChatMessage({
-                role: 'assistant',
-                content: `Dev server ready at ${url}. Switching to Preview`,
-                timestamp: Date.now()
+              // Auto-switch to preview only if still on desktop (to see the result)
+              setActiveTab((currentTab) => {
+                if (currentTab === 'desktop') {
+                  addChatMessage({
+                    role: 'assistant',
+                    content: `Dev server ready at ${url}. Switching to Preview…`,
+                    timestamp: Date.now()
+                  });
+                  return 'preview';
+                }
+                return currentTab; // Keep current tab if user manually switched
               });
             }, 100);
           }
@@ -1136,10 +1144,16 @@ export default function PromptPlayground() {
                   const localUrlMatch = line.match(/(?:Local:\s+|started at\s+)(https?:\/\/[^\s]+)/i);
                   if (localUrlMatch && localUrlMatch[1]) {
                     const url = localUrlMatch[1];
-                    setActiveTab('preview');
+                    // Only auto-switch to preview if user is still on desktop tab
                     setTimeout(() => {
                       setLivePreviewUrl(url);
-                      addChatMessage({ role: 'assistant', content: `Dev server ready at ${url}. Switching to Preview…`, timestamp: Date.now() });
+                      setActiveTab((currentTab) => {
+                        if (currentTab === 'desktop') {
+                          addChatMessage({ role: 'assistant', content: `Dev server ready at ${url}. Switching to Preview…`, timestamp: Date.now() });
+                          return 'preview';
+                        }
+                        return currentTab; // Keep current tab if user manually switched
+                      });
                     }, 100);
                   }
                 }
@@ -1675,9 +1689,14 @@ export default function PromptPlayground() {
 
         console.log('WebContainer dev server URL:', devServerUrl);
 
-        // Switch to preview tab FIRST, then set URL after tab is visible
-        // This prevents race condition where iframe tries to load while hidden
-        setActiveTab('preview');
+        // Only auto-switch to preview if user is still on desktop tab
+        // This allows them to see the generation animation first
+        setActiveTab((currentTab) => {
+          if (currentTab === 'desktop') {
+            return 'preview';
+          }
+          return currentTab; // Keep current tab if user manually switched
+        });
 
         // Wait for tab switch to render before setting preview URL
         // This ensures iframe is visible when it starts loading
@@ -1721,8 +1740,13 @@ export default function PromptPlayground() {
         if (response.ok) {
       const result = await safeJsonParse(response);
           if (result.deploymentUrl) {
-            // Switch to preview tab FIRST, then set URL
-            setActiveTab('preview');
+            // Only auto-switch to preview if user is still on desktop tab
+            setActiveTab((currentTab) => {
+              if (currentTab === 'desktop') {
+                return 'preview';
+              }
+              return currentTab; // Keep current tab if user manually switched
+            });
 
             // Wait for tab switch to render before setting preview URL
             setTimeout(() => {
@@ -2245,11 +2269,18 @@ export default function PromptPlayground() {
                           text: '',
                           files: [generatedFile]
                         };
-                        // Auto-select first file when it arrives
+                        // Auto-select first file when it arrives, but only if still on desktop
+                        // This allows user to see generation animation first
                         if (data.data.index === 1 && filePath) {
                           setTimeout(() => {
                             setSelectedFileIndex(0);
-                            setActiveTab('preview');
+                            setActiveTab((currentTab) => {
+                              // Only switch if still on desktop (to see first file)
+                              if (currentTab === 'desktop') {
+                                return 'preview';
+                              }
+                              return currentTab;
+                            });
                             setEditorLanguage(getFileLanguage(filePath));
                           }, 0);
                         }
@@ -2286,13 +2317,20 @@ export default function PromptPlayground() {
                         fileIndex = updatedFiles.length - 1;
                       }
 
-                      // 🎯 AUTO-SWITCH TO CURRENTLY GENERATING FILE - Watch code appear in real-time!
+                      // 🎯 AUTO-SWITCH TO CURRENTLY GENERATING FILE - but only if still on desktop
+                      // This allows user to see generation animation first, then switch when files appear
                       if (filePath) {
                         setTimeout(() => {
                           setSelectedFileIndex(fileIndex);
-                          setActiveTab('preview');
+                          setActiveTab((currentTab) => {
+                            // Only switch if still on desktop (to see files being generated)
+                            if (currentTab === 'desktop') {
+                              console.log(`👁️ Switching to preview to see file ${fileIndex + 1}/${updatedFiles.length}: ${filePath}`);
+                              return 'preview';
+                            }
+                            return currentTab; // Keep current tab if user manually switched
+                          });
                           setEditorLanguage(getFileLanguage(filePath));
-                          console.log(`👁️ Switched to file ${fileIndex + 1}/${updatedFiles.length}: ${filePath}`);
                         }, 0);
                       }
 
