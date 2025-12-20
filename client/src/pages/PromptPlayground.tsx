@@ -3258,6 +3258,9 @@ export default function PromptPlayground() {
                     }}
                     webContainerService={webContainerService}
                     isWebContainerReady={webContainerReady}
+                    isLoading={isLoading}
+                    currentStep={currentStep}
+                    progress={overallProgress}
                   />
                 </div>
                 

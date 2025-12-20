@@ -1,4 +1,5 @@
 import { DesktopView } from "../../../components/DesktopView";
+import { GenerationOverlay } from "../../../components/GenerationOverlay";
 import type { WebContainerService } from "../../../services/WebContainerService";
 import { Monitor, Power } from "lucide-react";
 
@@ -10,6 +11,9 @@ interface DesktopTabProps {
   onEditProject: (projectId: number) => void;
   webContainerService: WebContainerService;
   isWebContainerReady: boolean;
+  isLoading?: boolean;
+  currentStep?: string;
+  progress?: number;
 }
 
 export function DesktopTab({
@@ -20,6 +24,9 @@ export function DesktopTab({
   onEditProject,
   webContainerService,
   isWebContainerReady,
+  isLoading = false,
+  currentStep,
+  progress = 0,
 }: DesktopTabProps) {
   // Fixed desktop dimensions (16:10 aspect ratio, common for monitors)
   const DESKTOP_WIDTH = 800;
@@ -69,6 +76,13 @@ export function DesktopTab({
                 onEditProject={onEditProject}
                 webContainerService={webContainerService}
                 isWebContainerReady={isWebContainerReady}
+              />
+              {/* Generation Overlay - Shows when code is being generated */}
+              <GenerationOverlay
+                isLoading={isLoading}
+                currentStep={currentStep}
+                progress={progress}
+                style="hologram" // Can be changed to: 'matrix', 'particles', 'circuit', 'code-rain', 'hologram', 'minimal'
               />
             </div>
           </div>
