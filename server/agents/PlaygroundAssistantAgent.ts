@@ -37,6 +37,7 @@ export class PlaygroundAssistantAgent {
   private checkTypesTool: Tool;
   private findErrorsTool: Tool;
   private suggestImprovementsTool: Tool;
+  private fixProjectTool: Tool;
 
   constructor() {
     this.anthropic = new Anthropic({
@@ -256,6 +257,23 @@ export class PlaygroundAssistantAgent {
         required: []
       },
       execute: this.deployToVercel.bind(this)
+    };
+
+    // Fix project tool
+    this.fixProjectTool = {
+      name: 'fix_project',
+      description: 'Analyze and fix all issues in the current project to ensure it starts and runs without problems. Use this when the user asks to fix problems, repair the project, make it work, or ensure it starts correctly. This will automatically detect and fix: missing files, syntax errors, import errors, configuration errors, dependency issues, and runtime errors.',
+      parameters: {
+        type: 'object',
+        properties: {
+          projectId: {
+            type: 'string',
+            description: 'Optional project ID. If not provided, uses the currently selected project.'
+          }
+        },
+        required: []
+      },
+      execute: this.fixProject.bind(this)
     };
   }
 
@@ -838,6 +856,14 @@ You are part of a multi-agent AI system. Here's how it works:
 - ALWAYS improve the prompt before calling this tool
 - This delegates to IncrementalOrchestrator which coordinates specialized agents (you don't write code yourself)
 - For code modifications, you can use read_file + edit_file instead of generate_code if the change is simple
+
+**fix_project:**
+- When the user asks to fix problems, repair the project, make it work, or ensure it starts correctly
+- When the user says the project doesn't work, has errors, or won't start
+- When the user wants to fix all issues in the project automatically
+- This tool analyzes the entire project and automatically fixes: missing files, syntax errors, import errors, configuration errors, dependency issues, and runtime errors
+- Use this INSTEAD of manually fixing individual files when the user wants comprehensive project repair
+- Examples: "Fixa till problemen i projektet", "Fix the project so it starts", "Repair the project", "Make it work"
 
 **deploy_to_vercel:**
 - Only when the user explicitly asks to deploy, publish, or share their app
