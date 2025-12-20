@@ -223,7 +223,7 @@ export class MissingFileGenerator {
       }
 
       // Check vite.config.ts
-      if (!analysis.viteConfig.exists && analysis.packageJson?.devDependencies?.vite) {
+      if (analysis.viteConfig && !analysis.viteConfig.exists && analysis.packageJson?.devDependencies?.vite) {
         missing.push({
           path: `${cwd}/vite.config.ts`,
           reason: 'Required Vite configuration',
@@ -266,15 +266,14 @@ export class MissingFileGenerator {
       const prompt = this.buildGenerationPrompt(missing, context);
 
       const response = await this.aiService.generate({
-        model: 'claude-sonnet-4-5-20250929',
-        messages: [{
-          role: 'user',
-          content: prompt
-        }],
-        maxTokens: 2000
+        prompt: prompt,
+        useCase: 'code_generation',
+        preferredModel: 'claude-sonnet-4-5-20250929',
+        maxTokens: 2000,
+        priority: 'quality'
       });
 
-      return response.text || null;
+      return response.content || null;
     } catch (error) {
       logger.error('Failed to generate file content with AI', error as Error);
       return missing.suggestedContent || null;
