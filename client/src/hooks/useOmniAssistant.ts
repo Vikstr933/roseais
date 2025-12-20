@@ -177,14 +177,24 @@ export function useOmniAssistant() {
           throw new Error('No response body');
         }
 
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) break;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+            // Handle null/undefined values and ensure proper type
+            if (value) {
+              try {
+                // TextDecoder.decode accepts Uint8Array directly
+                buffer += decoder.decode(value, { stream: true });
+              } catch (decodeError) {
+                console.warn('TextDecoder decode error, skipping chunk:', decodeError);
+                // Skip this chunk and continue
+              }
+            }
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -231,6 +241,20 @@ export function useOmniAssistant() {
                 console.error('Failed to parse SSE data:', parseError);
               }
             }
+          }
+        } catch (streamError) {
+          // Handle stream errors gracefully (stream might be closed)
+          if (streamError instanceof TypeError && streamError.message.includes('ReadableStream')) {
+            console.warn('Stream was closed, ending read operation');
+          } else {
+            console.error('Error reading stream:', streamError);
+          }
+        } finally {
+          // Ensure reader is released
+          try {
+            reader.releaseLock();
+          } catch (e) {
+            // Ignore errors when releasing lock
           }
         }
 

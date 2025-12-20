@@ -85,10 +85,10 @@ class WebContainerServiceClass {
     await this.mountFiles(webcontainer, files);
 
     // Install dependencies
-    await this.installDependencies(webcontainer);
+    await this._installDependencies(webcontainer);
 
     // Start dev server
-    const url = await this.startDevServer(webcontainer);
+    const url = await this._startDevServer(webcontainer);
 
     const instance: WebContainerInstance = {
       id: instanceId,
@@ -145,9 +145,9 @@ class WebContainerServiceClass {
   }
 
   /**
-   * Install dependencies
+   * Install dependencies (internal method)
    */
-  private async installDependencies(webcontainer: WebContainer): Promise<void> {
+  private async _installDependencies(webcontainer: WebContainer): Promise<void> {
     const installProcess = await webcontainer.spawn('npm', ['install']);
 
     return new Promise((resolve, reject) => {
@@ -173,9 +173,9 @@ class WebContainerServiceClass {
   }
 
   /**
-   * Start dev server
+   * Start dev server (internal method)
    */
-  private async startDevServer(webcontainer: WebContainer): Promise<string> {
+  private async _startDevServer(webcontainer: WebContainer): Promise<string> {
     const port = this.nextPort++;
     const devProcess = await webcontainer.spawn('npm', ['run', 'dev', '--', '--port', port.toString(), '--host']);
 
@@ -233,7 +233,7 @@ class WebContainerServiceClass {
   /**
    * Install dependencies with progress callback
    */
-  async installDependencies(onProgress?: (message: string) => void): Promise<void> {
+  public async installDependencies(onProgress?: (message: string) => void): Promise<void> {
     const webcontainer = await this.boot();
     
     const installProcess = await webcontainer.spawn('npm', ['install']);
@@ -267,7 +267,7 @@ class WebContainerServiceClass {
   private devServerProcess: any = null;
   private devServerUrl: string | null = null;
 
-  async startDevServer(onProgress?: (message: string) => void): Promise<string> {
+  public async startDevServer(onProgress?: (message: string) => void): Promise<string> {
     const webcontainer = await this.boot();
     const port = this.nextPort++;
 
@@ -279,6 +279,19 @@ class WebContainerServiceClass {
     this.devServerProcess = await webcontainer.spawn('npm', ['run', 'dev', '--', '--port', port.toString(), '--host']);
 
     return new Promise((resolve, reject) => {
+      let resolved = false;
+
+      // Listen for WebContainer's server-ready event (gives us the actual URL)
+      webcontainer.on('server-ready', (serverPort: number, url: string) => {
+        if (!resolved && serverPort === port) {
+          resolved = true;
+          this.devServerUrl = url;
+          console.log('✅ WebContainer server ready:', url);
+          resolve(url);
+        }
+      });
+
+      // Also listen to output for progress and fallback URL detection
       this.devServerProcess.output.pipeTo(
         new WritableStream({
           write(data) {
@@ -286,12 +299,19 @@ class WebContainerServiceClass {
             onProgress?.(message);
             console.log('🚀 Dev server:', message);
 
-            // Check if server is ready
-            const urlMatch = message.match(/Local:\s+(https?:\/\/[^\s]+)/) || 
-                           message.match(/localhost:(\d+)/);
-            if (urlMatch) {
-              this.devServerUrl = urlMatch[1] || `http://localhost:${port}`;
-              resolve(this.devServerUrl);
+            // Check if server is ready (fallback if server-ready event doesn't fire)
+            if (!resolved) {
+              const urlMatch = message.match(/Local:\s+(https?:\/\/[^\s]+)/) || 
+                             message.match(/localhost:(\d+)/);
+              if (urlMatch) {
+                // For WebContainer, localhost URLs work in browser but not for backend analysis
+                // Use the matched URL or construct localhost URL
+                this.devServerUrl = urlMatch[1] || `http://localhost:${port}`;
+                if (!resolved) {
+                  resolved = true;
+                  resolve(this.devServerUrl);
+                }
+              }
             }
           },
         })
@@ -299,9 +319,10 @@ class WebContainerServiceClass {
 
       // Timeout after 30 seconds
       setTimeout(() => {
-        if (!this.devServerUrl) {
-          // Fallback URL
+        if (!resolved) {
+          // Fallback URL - localhost works in browser iframe
           this.devServerUrl = `http://localhost:${port}`;
+          resolved = true;
           resolve(this.devServerUrl);
         }
       }, 30000);

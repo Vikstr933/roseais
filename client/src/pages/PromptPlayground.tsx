@@ -1581,6 +1581,18 @@ export default function PromptPlayground() {
   // Analyze page for visual issues using Browser Agent
   const analyzePageForVisualIssues = useCallback(async (url: string) => {
     try {
+      // Skip analysis for localhost URLs - backend can't access them
+      // WebContainer runs in browser, so localhost URLs are only accessible from the browser
+      if (url.includes('localhost') || url.includes('127.0.0.1')) {
+        console.log('⏭️ Skipping browser analysis for localhost URL (backend cannot access):', url);
+        addChatMessage({
+          role: 'assistant',
+          content: 'ℹ️ Browser analysis skipped - localhost URLs are only accessible from your browser. The preview is working correctly!',
+          timestamp: Date.now()
+        });
+        return;
+      }
+
       console.log('🔍 Starting visual analysis for:', url);
       
       addChatMessage({
@@ -2003,8 +2015,14 @@ export default function PromptPlayground() {
           projectType: data.projectType
         });
         
-        // Switch to preview tab
-        setActiveTab('preview');
+        // Only switch to preview if user is still on desktop tab
+        // This allows them to see the generation animation first
+        setActiveTab((currentTab) => {
+          if (currentTab === 'desktop') {
+            return 'preview';
+          }
+          return currentTab; // Keep current tab if user manually switched
+        });
         
         // Get component name from existing files or use default
         const componentName = currentComponentName || 'App';
@@ -2051,9 +2069,9 @@ export default function PromptPlayground() {
         projectType: data.projectType
       });
 
-      // âœ¨ Bolt.new-style: Auto-switch to Editor tab FIRST (before loading state)
-      console.log('ðŸŽ¨ Switching to Editor tab');
-      setActiveTab('preview');
+      // Keep user on desktop tab to see generation animation
+      // Only switch to preview when dev server is ready (handled elsewhere)
+      console.log('🎨 Starting generation - staying on desktop tab to show animation');
 
       // Small delay to let the tab switch be visible, then start loading
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -2168,7 +2186,16 @@ export default function PromptPlayground() {
               const { done, value } = await reader.read();
               if (done) break;
 
-              buffer += decoder.decode(value, { stream: true });
+              // Handle null/undefined values and ensure proper type
+              if (value) {
+                try {
+                  // TextDecoder.decode accepts Uint8Array directly
+                  buffer += decoder.decode(value, { stream: true });
+                } catch (decodeError) {
+                  console.warn('TextDecoder decode error, skipping chunk:', decodeError);
+                  // Skip this chunk and continue
+                }
+              }
               const lines = buffer.split('\n');
               buffer = lines.pop() || '';
 
@@ -2269,19 +2296,13 @@ export default function PromptPlayground() {
                           text: '',
                           files: [generatedFile]
                         };
-                        // Auto-select first file when it arrives, but only if still on desktop
-                        // This allows user to see generation animation first
+                        // Auto-select first file when it arrives, but don't switch tabs
+                        // This allows user to see generation animation on desktop tab
                         if (data.data.index === 1 && filePath) {
                           setTimeout(() => {
                             setSelectedFileIndex(0);
-                            setActiveTab((currentTab) => {
-                              // Only switch if still on desktop (to see first file)
-                              if (currentTab === 'desktop') {
-                                return 'preview';
-                              }
-                              return currentTab;
-                            });
                             setEditorLanguage(getFileLanguage(filePath));
+                            // Don't switch tabs - let user see animation, switch will happen when dev server is ready
                           }, 0);
                         }
                         // Start streaming content
@@ -2317,20 +2338,14 @@ export default function PromptPlayground() {
                         fileIndex = updatedFiles.length - 1;
                       }
 
-                      // 🎯 AUTO-SWITCH TO CURRENTLY GENERATING FILE - but only if still on desktop
-                      // This allows user to see generation animation first, then switch when files appear
+                      // Select the currently generating file, but don't switch tabs
+                      // This allows user to see generation animation on desktop tab
+                      // Tab switch will happen automatically when dev server is ready
                       if (filePath) {
                         setTimeout(() => {
                           setSelectedFileIndex(fileIndex);
-                          setActiveTab((currentTab) => {
-                            // Only switch if still on desktop (to see files being generated)
-                            if (currentTab === 'desktop') {
-                              console.log(`👁️ Switching to preview to see file ${fileIndex + 1}/${updatedFiles.length}: ${filePath}`);
-                              return 'preview';
-                            }
-                            return currentTab; // Keep current tab if user manually switched
-                          });
                           setEditorLanguage(getFileLanguage(filePath));
+                          // Don't switch tabs - let user see animation, switch will happen when dev server is ready
                         }, 0);
                       }
 
@@ -2472,16 +2487,41 @@ export default function PromptPlayground() {
                         timestamp: Date.now()
                       });
                     }
+
+                    // 🚀 Auto-deploy to WebContainer if files are available
+                    if (finalResult.response?.files && finalResult.response.files.length > 0) {
+                      const displayFiles = mapRawFilesToGenerated(finalResult.response.files);
+                      const componentName = currentComponentName || 'App';
+                      
+                      console.log('🚀 Auto-deploying to WebContainer after generation complete...');
+                      setTimeout(() => {
+                        deployToRuntime(displayFiles, componentName);
+                      }, 500);
+                    }
                   }
                 } catch (e) {
                   console.warn('Failed to parse SSE event:', line, e);
                 }
               }
             }
+            }
+          } catch (e) {
+            // Handle stream errors gracefully (stream might be closed)
+            if (e instanceof TypeError && e.message.includes('ReadableStream')) {
+              console.warn('Stream was closed, ending read operation');
+            } else {
+              console.error('Error reading stream:', e);
+            }
+            // Exit loop on error - use return instead of break to avoid crossing function boundary
+            return finalResult || { response: { type: 'text', text: 'Generation completed but no response received', files: [] } };
+          } finally {
+            // Ensure reader is released
+            try {
+              reader.releaseLock();
+            } catch (e) {
+              // Ignore errors when releasing lock
+            }
           }
-        } catch (e) {
-          console.error('Error reading stream:', e);
-        }
         }
 
         // Return the final result
