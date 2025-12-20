@@ -1,9 +1,9 @@
+/* Import Design System - must come before @tailwind */
+@import './styles/design-system.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import Design System */
-@import './styles/design-system.css';
 
 @layer base {
   :root {
