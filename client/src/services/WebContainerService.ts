@@ -225,6 +225,15 @@ class WebContainerServiceClass {
    * Teardown all instances
    */
   async teardown(): Promise<void> {
+    // Stop all instances
+    for (const instance of this.instances.values()) {
+      try {
+        await instance.webcontainer.teardown();
+      } catch (error) {
+        console.warn('Failed to teardown instance:', error);
+      }
+    }
+    
     // Clear all instances
     this.instances.clear();
     this.bootedInstance = null;
