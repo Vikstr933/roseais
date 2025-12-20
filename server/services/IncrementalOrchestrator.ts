@@ -347,10 +347,44 @@ export class IncrementalOrchestrator {
     }
 
     const totalDuration = Date.now() - startTime;
-    const allFilesArray = Array.from(allFiles.entries()).map(([path, content]) => ({
+    let allFilesArray = Array.from(allFiles.entries()).map(([path, content]) => ({
       path,
       content
     }));
+
+    // Analyze filesystem and generate any missing critical files
+    try {
+      const { MissingFileGenerator } = await import('./MissingFileGenerator');
+      const missingFileGenerator = new MissingFileGenerator();
+      
+      if (progressCallback) {
+        progressCallback('final', 95, 'Analyzing filesystem for missing files...');
+      }
+      
+      const missingFiles = await missingFileGenerator.analyzeAndGenerateMissingFiles(allFilesArray);
+      
+      if (missingFiles.length > 0) {
+        this.logger.info(`Generated ${missingFiles.length} missing critical file(s) based on filesystem analysis`);
+        
+        // Add missing files to allFiles
+        missingFiles.forEach(file => {
+          allFiles.set(file.path, file.content);
+          if (fileCallback) {
+            const totalFilesSoFar = Array.from(allFiles.keys()).length;
+            fileCallback(file, totalFilesSoFar - 1, totalFilesSoFar);
+          }
+        });
+        
+        // Update allFilesArray
+        allFilesArray = Array.from(allFiles.entries()).map(([path, content]) => ({
+          path,
+          content
+        }));
+      }
+    } catch (error) {
+      this.logger.warn('Failed to analyze and generate missing files', error as Error);
+      // Continue anyway - not critical
+    }
 
     // Consider generation successful if we have files, even if some phases had warnings
     // Only mark as failed if NO files were generated at all
