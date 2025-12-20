@@ -222,9 +222,115 @@ class WebContainerServiceClass {
   }
 
   /**
+   * Write files to WebContainer
+   */
+  async writeFiles(files: GeneratedFile[]): Promise<void> {
+    const webcontainer = await this.boot();
+    await this.mountFiles(webcontainer, files);
+    console.log(`📝 Wrote ${files.length} files to WebContainer`);
+  }
+
+  /**
+   * Install dependencies with progress callback
+   */
+  async installDependencies(onProgress?: (message: string) => void): Promise<void> {
+    const webcontainer = await this.boot();
+    
+    const installProcess = await webcontainer.spawn('npm', ['install']);
+
+    return new Promise((resolve, reject) => {
+      installProcess.output.pipeTo(
+        new WritableStream({
+          write(data) {
+            const message = new TextDecoder().decode(data);
+            onProgress?.(message);
+            console.log('📦 npm install:', message);
+          },
+        })
+      );
+
+      installProcess.exit.then((code) => {
+        if (code === 0) {
+          console.log('✅ Dependencies installed');
+          resolve();
+        } else {
+          console.error('❌ Failed to install dependencies');
+          reject(new Error(`npm install failed with code ${code}`));
+        }
+      });
+    });
+  }
+
+  /**
+   * Start dev server with progress callback
+   */
+  private devServerProcess: any = null;
+  private devServerUrl: string | null = null;
+
+  async startDevServer(onProgress?: (message: string) => void): Promise<string> {
+    const webcontainer = await this.boot();
+    const port = this.nextPort++;
+
+    // Stop existing dev server if any
+    if (this.devServerProcess) {
+      await this.stopDevServer();
+    }
+
+    this.devServerProcess = await webcontainer.spawn('npm', ['run', 'dev', '--', '--port', port.toString(), '--host']);
+
+    return new Promise((resolve, reject) => {
+      this.devServerProcess.output.pipeTo(
+        new WritableStream({
+          write(data) {
+            const message = new TextDecoder().decode(data);
+            onProgress?.(message);
+            console.log('🚀 Dev server:', message);
+
+            // Check if server is ready
+            const urlMatch = message.match(/Local:\s+(https?:\/\/[^\s]+)/) || 
+                           message.match(/localhost:(\d+)/);
+            if (urlMatch) {
+              this.devServerUrl = urlMatch[1] || `http://localhost:${port}`;
+              resolve(this.devServerUrl);
+            }
+          },
+        })
+      );
+
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        if (!this.devServerUrl) {
+          // Fallback URL
+          this.devServerUrl = `http://localhost:${port}`;
+          resolve(this.devServerUrl);
+        }
+      }, 30000);
+    });
+  }
+
+  /**
+   * Stop dev server
+   */
+  async stopDevServer(): Promise<void> {
+    if (this.devServerProcess) {
+      try {
+        this.devServerProcess.kill();
+        this.devServerProcess = null;
+        this.devServerUrl = null;
+        console.log('🛑 Dev server stopped');
+      } catch (error) {
+        console.warn('Failed to stop dev server:', error);
+      }
+    }
+  }
+
+  /**
    * Teardown all instances
    */
   async teardown(): Promise<void> {
+    // Stop dev server
+    await this.stopDevServer();
+
     // Stop all instances
     for (const instance of this.instances.values()) {
       try {
