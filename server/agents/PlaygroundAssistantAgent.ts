@@ -339,6 +339,7 @@ export class PlaygroundAssistantAgent {
             this.checkTypesTool,
             this.findErrorsTool,
             this.suggestImprovementsTool,
+            this.fixProjectTool,
             this.deployToVercelTool
           );
         }
