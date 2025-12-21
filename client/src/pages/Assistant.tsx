@@ -127,15 +127,12 @@ export default function Assistant() {
       }
 
       // Read stream with proper error handling
-      let streamReadComplete = false;
-      try {
+      // Using a helper function to avoid esbuild parsing issues with nested try-catch
+      const readStream = async () => {
         while (true) {
           const { done, value } = await reader.read();
           
-          if (done) {
-            streamReadComplete = true;
-            break;
-          }
+          if (done) break;
 
           // Handle null/undefined values and ensure proper type
           if (value) {
@@ -197,6 +194,10 @@ export default function Assistant() {
             }
           }
         }
+      };
+
+      try {
+        await readStream();
       } catch (streamError) {
         // Handle stream errors gracefully (stream might be closed)
         if (streamError instanceof TypeError && streamError.message.includes('ReadableStream')) {
@@ -204,15 +205,13 @@ export default function Assistant() {
         } else {
           console.error('Error reading stream:', streamError);
         }
-      }
-      
-      // Ensure reader is released (moved outside try-catch-finally to avoid esbuild parsing issues)
-      try {
-        if (!streamReadComplete) {
+      } finally {
+        // Ensure reader is released
+        try {
           reader.releaseLock();
+        } catch (e) {
+          // Ignore errors when releasing lock
         }
-      } catch (e) {
-        // Ignore errors when releasing lock
       }
     } catch (err) {
       console.error('Failed to send message:', err);
