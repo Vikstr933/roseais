@@ -177,7 +177,9 @@ export function useOmniAssistant() {
           throw new Error('No response body');
         }
 
-        try {
+        // Read stream with proper error handling
+        // Using a helper function to avoid esbuild parsing issues with nested try-catch
+        const readStream = async () => {
           while (true) {
             const { done, value } = await reader.read();
             
@@ -196,52 +198,57 @@ export function useOmniAssistant() {
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                
-                if (data.type === 'chunk') {
-                  // Append text chunk
-                  setMessages(prev => {
-                    const updated = [...prev];
-                    const lastMessage = updated[updated.length - 1];
-                    if (lastMessage && lastMessage.role === 'assistant') {
-                      lastMessage.content += data.text || '';
-                    }
-                    return updated;
-                  });
-                } else if (data.type === 'tools_used') {
-                  // Update tools used
-                  setMessages(prev => {
-                    const updated = [...prev];
-                    const lastMessage = updated[updated.length - 1];
-                    if (lastMessage && lastMessage.role === 'assistant') {
-                      lastMessage.toolsUsed = data.tools || [];
-                    }
-                    return updated;
-                  });
-                } else if (data.type === 'complete') {
-                  // Final message with all metadata
-                  setMessages(prev => {
-                    const updated = [...prev];
-                    const lastMessage = updated[updated.length - 1];
-                    if (lastMessage && lastMessage.role === 'assistant') {
-                      lastMessage.content = data.response || lastMessage.content;
-                      lastMessage.toolsUsed = data.toolsUsed || [];
-                      lastMessage.suggestions = data.suggestions || [];
-                      lastMessage.conversationId = data.conversationId;
-                    }
-                    return updated;
-                  });
-                } else if (data.type === 'error') {
-                  throw new Error(data.message || 'Streaming error');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  
+                  if (data.type === 'chunk') {
+                    // Append text chunk
+                    setMessages(prev => {
+                      const updated = [...prev];
+                      const lastMessage = updated[updated.length - 1];
+                      if (lastMessage && lastMessage.role === 'assistant') {
+                        lastMessage.content += data.text || '';
+                      }
+                      return updated;
+                    });
+                  } else if (data.type === 'tools_used') {
+                    // Update tools used
+                    setMessages(prev => {
+                      const updated = [...prev];
+                      const lastMessage = updated[updated.length - 1];
+                      if (lastMessage && lastMessage.role === 'assistant') {
+                        lastMessage.toolsUsed = data.tools || [];
+                      }
+                      return updated;
+                    });
+                  } else if (data.type === 'complete') {
+                    // Final message with all metadata
+                    setMessages(prev => {
+                      const updated = [...prev];
+                      const lastMessage = updated[updated.length - 1];
+                      if (lastMessage && lastMessage.role === 'assistant') {
+                        lastMessage.content = data.response || lastMessage.content;
+                        lastMessage.toolsUsed = data.toolsUsed || [];
+                        lastMessage.suggestions = data.suggestions || [];
+                        lastMessage.conversationId = data.conversationId;
+                      }
+                      return updated;
+                    });
+                  } else if (data.type === 'error') {
+                    throw new Error(data.message || 'Streaming error');
+                  }
+                } catch (parseError) {
+                  console.error('Failed to parse SSE data:', parseError);
                 }
-              } catch (parseError) {
-                console.error('Failed to parse SSE data:', parseError);
               }
             }
           }
+        };
+
+        try {
+          await readStream();
         } catch (streamError) {
           // Handle stream errors gracefully (stream might be closed)
           if (streamError instanceof TypeError && streamError.message.includes('ReadableStream')) {
