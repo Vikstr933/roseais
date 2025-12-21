@@ -223,11 +223,48 @@ class WebContainerServiceClass {
 
   /**
    * Write files to WebContainer
+   * Uses filesystem API for updates, mount for initial setup
    */
   async writeFiles(files: GeneratedFile[]): Promise<void> {
     const webcontainer = await this.boot();
-    await this.mountFiles(webcontainer, files);
-    console.log(`📝 Wrote ${files.length} files to WebContainer`);
+    
+    // Check if filesystem is already mounted by trying to read root directory
+    let isMounted = false;
+    try {
+      await webcontainer.fs.readdir('/');
+      isMounted = true;
+    } catch {
+      // Not mounted yet, use mount
+      isMounted = false;
+    }
+
+    if (!isMounted) {
+      // First time: mount the entire filesystem
+      await this.mountFiles(webcontainer, files);
+      console.log(`📝 Mounted ${files.length} files to WebContainer`);
+    } else {
+      // Already mounted: write files individually using filesystem API
+      for (const file of files) {
+        try {
+          // Ensure directory exists
+          const dirPath = file.path.split('/').slice(0, -1).join('/');
+          if (dirPath) {
+            try {
+              await webcontainer.fs.mkdir(dirPath, { recursive: true });
+            } catch (err) {
+              // Directory might already exist, that's fine
+            }
+          }
+          
+          // Write file
+          await webcontainer.fs.writeFile(file.path, file.content);
+        } catch (error) {
+          console.error(`Failed to write file ${file.path}:`, error);
+          // Continue with other files
+        }
+      }
+      console.log(`📝 Updated ${files.length} files in WebContainer`);
+    }
   }
 
   /**

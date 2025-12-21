@@ -146,10 +146,28 @@ export function PreviewTab({
 
   // Handle start dev server
   const handleStartServer = async () => {
-    if (!response?.files || !setLivePreviewUrl) return;
+    if (!response?.files || !setLivePreviewUrl) {
+      console.error('Cannot start server: missing files or setLivePreviewUrl');
+      alert('Cannot start server: missing files or preview URL setter');
+      return;
+    }
+
+    // Check if WebContainer is supported
+    if (!webContainerService.isSupported()) {
+      console.error('WebContainer is not supported in this browser');
+      alert('WebContainer is not supported in this browser. Please use a modern browser with SharedArrayBuffer support.');
+      return;
+    }
     
     setIsStartingServer(true);
     try {
+      console.log('🚀 Starting dev server...');
+      
+      // Ensure WebContainer is booted
+      console.log('🔧 Booting WebContainer...');
+      await webContainerService.boot();
+      console.log('✅ WebContainer booted');
+      
       // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
       const fixedFiles = response.files.map(file => {
         const filename = file.path?.split('/').pop() || '';
@@ -193,19 +211,27 @@ export default function App() {
         });
       }
 
+      console.log(`📝 Writing ${fixedFiles.length} files to WebContainer...`);
       // Write files to WebContainer
       await webContainerService.writeFiles(fixedFiles);
+      console.log('✅ Files written successfully');
 
+      console.log('📦 Installing dependencies...');
       // Install dependencies
       await webContainerService.installDependencies();
+      console.log('✅ Dependencies installed');
 
+      console.log('🚀 Starting dev server...');
       // Start dev server
       const devServerUrl = await webContainerService.startDevServer();
+      console.log('✅ Dev server started at:', devServerUrl);
       
       setLivePreviewUrl(devServerUrl);
       setIsServerRunning(true);
     } catch (error) {
-      console.error('Failed to start dev server:', error);
+      console.error('❌ Failed to start dev server:', error);
+      // Show user-friendly error message
+      alert(`Failed to start dev server: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsStartingServer(false);
     }
