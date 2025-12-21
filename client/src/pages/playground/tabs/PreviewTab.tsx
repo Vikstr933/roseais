@@ -1,4 +1,4 @@
-import { Eye, ChevronUp, Server } from "lucide-react";
+import { Eye, ChevronUp, Server, Play, Square } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { AdvancedPreview } from "../../../components/AdvancedPreview";
 import { PythonPreview } from "../../../components/PythonPreview";
@@ -6,6 +6,7 @@ import { PythonServerPreview } from "../../../components/PythonServerPreview";
 import { Badge } from "../../../components/ui/badge";
 import type { GeneratedFile } from "../types";
 import { useEffect, useMemo, useState } from "react";
+import { webContainerService } from "../../../services/WebContainerService";
 
 interface PreviewTabProps {
   response: { type: string; files?: GeneratedFile[] } | null;
@@ -13,6 +14,7 @@ interface PreviewTabProps {
   currentComponentName: string;
   isLoading: boolean;
   setPreviewModalOpen: (open: boolean) => void;
+  setLivePreviewUrl?: (url: string | null) => void;
 }
 
 // Detailed Python project type detection
@@ -66,8 +68,12 @@ export function PreviewTab({
   currentComponentName,
   isLoading,
   setPreviewModalOpen,
+  setLivePreviewUrl,
 }: PreviewTabProps) {
   const [forcePreviewType, setForcePreviewType] = useState<'auto' | 'web' | 'python-script' | 'python-server'>('auto');
+  const [isServerRunning, setIsServerRunning] = useState<boolean>(!!livePreviewUrl);
+  const [isStartingServer, setIsStartingServer] = useState<boolean>(false);
+  const [isStoppingServer, setIsStoppingServer] = useState<boolean>(false);
   
   // Detect project type from files
   const projectType = useMemo(() => {
@@ -122,6 +128,105 @@ export function PreviewTab({
   // Check if Browser tab is usable for this project
   const canRunInBrowser = !isPythonWebApp; // Web frameworks can't run in browser
 
+  // Check if this is a WebContainer project (has package.json and React files)
+  const isWebContainerProject = useMemo(() => {
+    if (!response?.files) return false;
+    const hasPackageJson = response.files.some(f => f.path === 'package.json' || f.path.endsWith('/package.json'));
+    const hasReactFiles = response.files.some(f => 
+      f.path.endsWith('.tsx') || f.path.endsWith('.jsx') ||
+      (f.path === 'package.json' && f.content.includes('react'))
+    );
+    return hasPackageJson && hasReactFiles && !isPythonWebApp;
+  }, [response?.files, isPythonWebApp]);
+
+  // Update server running state when URL changes
+  useEffect(() => {
+    setIsServerRunning(!!livePreviewUrl);
+  }, [livePreviewUrl]);
+
+  // Handle start dev server
+  const handleStartServer = async () => {
+    if (!response?.files || !setLivePreviewUrl) return;
+    
+    setIsStartingServer(true);
+    try {
+      // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
+      const fixedFiles = response.files.map(file => {
+        const filename = file.path?.split('/').pop() || '';
+        const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
+        
+        if (isConfigFile && file.path?.startsWith('src/')) {
+          return { ...file, path: filename };
+        }
+        return file;
+      });
+
+      // 🚨 CRITICAL: Ensure App.tsx exists (main.tsx imports it)
+      const hasMainTsx = fixedFiles.some(f => f.path === 'src/main.tsx' || f.path.endsWith('/main.tsx'));
+      const hasAppTsx = fixedFiles.some(f => f.path === 'src/App.tsx' || f.path.endsWith('/App.tsx'));
+      
+      if (hasMainTsx && !hasAppTsx) {
+        console.warn('⚠️ App.tsx missing but main.tsx exists - creating fallback App.tsx');
+        fixedFiles.push({
+          path: 'src/App.tsx',
+          content: `import React from 'react';
+
+export default function App() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          Welcome to Your App
+        </h1>
+        <p className="text-lg text-gray-600 mb-6">
+          Your application is ready! Start building your features here.
+        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            💡 <strong>Next steps:</strong> Customize this component to build your application.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}`
+        });
+      }
+
+      // Write files to WebContainer
+      await webContainerService.writeFiles(fixedFiles);
+
+      // Install dependencies
+      await webContainerService.installDependencies();
+
+      // Start dev server
+      const devServerUrl = await webContainerService.startDevServer();
+      
+      setLivePreviewUrl(devServerUrl);
+      setIsServerRunning(true);
+    } catch (error) {
+      console.error('Failed to start dev server:', error);
+    } finally {
+      setIsStartingServer(false);
+    }
+  };
+
+  // Handle stop dev server
+  const handleStopServer = async () => {
+    setIsStoppingServer(true);
+    try {
+      await webContainerService.stopDevServer();
+      if (setLivePreviewUrl) {
+        setLivePreviewUrl(null);
+      }
+      setIsServerRunning(false);
+    } catch (error) {
+      console.error('Failed to stop dev server:', error);
+    } finally {
+      setIsStoppingServer(false);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Preview Type Selector (when we have Python files) */}
@@ -173,21 +278,86 @@ export function PreviewTab({
         </div>
       )}
 
+      {/* WebContainer Dev Server Controls */}
+      {hasFiles && isWebContainerProject && (
+        <div className="p-2 border-b bg-muted/30 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Dev Server:</span>
+          {isServerRunning ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={handleStopServer}
+              disabled={isStoppingServer}
+            >
+              <Square className="h-3 w-3 mr-1" />
+              {isStoppingServer ? 'Stopping...' : 'Stop Server'}
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={handleStartServer}
+              disabled={isStartingServer}
+            >
+              <Play className="h-3 w-3 mr-1" />
+              {isStartingServer ? 'Starting...' : 'Start Server'}
+            </Button>
+          )}
+          {livePreviewUrl && (
+            <Badge variant="outline" className="text-xs">
+              {livePreviewUrl}
+            </Badge>
+          )}
+        </div>
+      )}
+
       {/* Preview Content */}
       {hasFiles ? (
         <>
           {/* Mobile: Fullscreen Preview Button */}
           <div className="md:hidden p-2 border-b border-border bg-card flex items-center justify-between">
             <h3 className="text-sm font-medium">Preview</h3>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPreviewModalOpen(true)}
-              className="text-xs"
-            >
-              <ChevronUp className="h-4 w-4 mr-1" />
-              Fullscreen
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* WebContainer controls on mobile */}
+              {isWebContainerProject && (
+                <>
+                  {isServerRunning ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={handleStopServer}
+                      disabled={isStoppingServer}
+                    >
+                      <Square className="h-3 w-3 mr-1" />
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={handleStartServer}
+                      disabled={isStartingServer}
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Start
+                    </Button>
+                  )}
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPreviewModalOpen(true)}
+                className="text-xs"
+              >
+                <ChevronUp className="h-4 w-4 mr-1" />
+                Fullscreen
+              </Button>
+            </div>
           </div>
           <div className="flex-1 min-h-0">
             {activePreviewType === 'python-script' ? (

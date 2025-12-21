@@ -222,6 +222,17 @@ export class MissingFileGenerator {
         });
       }
 
+      // 🚨 CRITICAL: Check App.tsx/jsx (main.tsx imports it)
+      const appPath = `${srcDir}/App.${analysis.projectType === 'react-typescript' ? 'tsx' : 'jsx'}`;
+      if (!analysis.existingFiles.has(appPath) && !analysis.appComponent) {
+        missing.push({
+          path: appPath,
+          reason: 'Required App component (imported by main.tsx)',
+          priority: 'critical',
+          suggestedContent: this.generateAppComponent(analysis)
+        });
+      }
+
       // Check vite.config.ts
       if (analysis.viteConfig && !analysis.viteConfig.exists && analysis.packageJson?.devDependencies?.vite) {
         missing.push({
@@ -365,6 +376,38 @@ export default defineConfig({
     }
   }
 });`;
+  }
+
+  /**
+   * Generate App component
+   */
+  private generateAppComponent(analysis: FileSystemAnalysis): string {
+    const extension = analysis.projectType === 'react-typescript' ? 'tsx' : 'jsx';
+    const importReact = analysis.projectType === 'react-typescript'
+      ? "import React from 'react';"
+      : "import React from 'react';";
+    
+    return `${importReact}
+
+export default function App() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          Welcome to Your App
+        </h1>
+        <p className="text-lg text-gray-600 mb-6">
+          Your application is ready! Start building your features here.
+        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            💡 <strong>Next steps:</strong> Customize this component to build your application.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}`;
   }
 
   /**
