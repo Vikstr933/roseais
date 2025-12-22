@@ -28,6 +28,76 @@ const anthropic = new Anthropic({
 logger.info('[VideoRouter] Video transcription router initialized');
 
 /**
+ * Fetch WebShare proxy for yt-dlp
+ * Returns proxy string in format: http://username:password@ip:port
+ */
+async function getWebShareProxy(): Promise<string | null> {
+  const proxyApiKey = process.env.WEBSHARE_PROXY_API_KEY || process.env.PROXY_API_KEY;
+  
+  if (!proxyApiKey) {
+    return null;
+  }
+
+  try {
+    logger.info('[VideoTranscription] Fetching proxy from WebShare API...');
+    
+    const proxyListUrl = 'https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=100';
+    
+    const response = await fetch(proxyListUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Token ${proxyApiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      logger.warn(`[VideoTranscription] WebShare API returned status ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (!data.results || !Array.isArray(data.results) || data.results.length === 0) {
+      logger.warn('[VideoTranscription] No proxies available from WebShare API');
+      return null;
+    }
+
+    // Randomly select a proxy from the list
+    const randomProxy = data.results[Math.floor(Math.random() * data.results.length)];
+    
+    let proxyServer: string;
+    
+    if (randomProxy.proxy_address) {
+      proxyServer = randomProxy.proxy_address.includes('://') 
+        ? randomProxy.proxy_address 
+        : `http://${randomProxy.proxy_address}`;
+    } else if (randomProxy.ip && randomProxy.port) {
+      const protocol = randomProxy.type === 'socks5' ? 'socks5' : randomProxy.type || 'http';
+      proxyServer = `${protocol}://${randomProxy.ip}:${randomProxy.port}`;
+    } else {
+      return null;
+    }
+
+    // Build proxy string with authentication if available
+    let proxyString = proxyServer;
+    if (randomProxy.username && randomProxy.password) {
+      // Format: http://username:password@ip:port
+      const url = new URL(proxyServer);
+      url.username = randomProxy.username;
+      url.password = randomProxy.password;
+      proxyString = url.toString();
+    }
+
+    logger.info(`[VideoTranscription] ✅ Using WebShare proxy: ${randomProxy.ip || 'proxy'}`);
+    return proxyString;
+  } catch (error) {
+    logger.warn(`[VideoTranscription] Failed to fetch proxy from WebShare API: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+/**
  * Extract audio from YouTube video and transcribe it using Whisper
  * 
  * Uses yt-dlp (or youtube-dl if available) to download audio, then Whisper for transcription
@@ -127,6 +197,9 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
       throw new Error('yt-dlp is not available. venv-whisper with yt-dlp should be installed during Docker build. Please check build logs and ensure yt-dlp is installed in venv-whisper.');
     }
 
+    // Try to get WebShare proxy
+    const webshareProxy = await getWebShareProxy();
+
     // Try multiple strategies to bypass YouTube bot detection
     // Different player clients often work when others fail
     const strategies = [
@@ -171,6 +244,11 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
         if (cookiesPath) {
           command += ` --cookies "${cookiesPath}"`;
           logger.info(`[VideoTranscription] 🔐 Using cookies file: ${cookiesPath}`);
+        }
+        // Add WebShare proxy if available
+        if (webshareProxy) {
+          command += ` --proxy "${webshareProxy}"`;
+          logger.info(`[VideoTranscription] 🌐 Using WebShare proxy with ${strategy.name}`);
         }
         // Additional flags to help bypass detection
         // --no-playlist: Ensure we only download the single video
@@ -425,6 +503,9 @@ async function extractAudioFromYouTube(
       throw new Error('yt-dlp is not available. venv-whisper with yt-dlp should be installed during Docker build.');
     }
 
+    // Try to get WebShare proxy
+    const webshareProxy = await getWebShareProxy();
+
     // Extract audio using yt-dlp with bestaudio format
     const strategies = [
       {
@@ -452,6 +533,11 @@ async function extractAudioFromYouTube(
         let command = `"${pythonCommand}" -m yt_dlp --user-agent "${strategy.userAgent}" --extractor-args "${strategy.extractorArgs}"`;
         if (cookiesPath) {
           command += ` --cookies "${cookiesPath}"`;
+        }
+        // Add WebShare proxy if available
+        if (webshareProxy) {
+          command += ` --proxy "${webshareProxy}"`;
+          logger.info(`[AudioExtraction] Using WebShare proxy with ${strategy.name}`);
         }
         // Extract best audio and convert to MP3
         command += ` -f "bestaudio/best" --no-playlist --no-warnings --no-check-certificate`;
