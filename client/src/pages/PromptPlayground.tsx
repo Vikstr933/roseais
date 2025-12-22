@@ -706,24 +706,19 @@ export default function PromptPlayground() {
     async function initWebContainer() {
       // Check if WebContainer is supported
       // WebContainer is always enabled - no fallback
-      if (false) {
-        console.log('WebContainer disabled, using server-side deployment');
-        return;
-      }
-
       try {
         setWebContainerBooting(true);
-        console.log('ðŸš€ Booting WebContainer...');
+        console.log('Booting WebContainer...');
         
         await webContainerService.boot(5, 2000); // 5 retries with 2s base delay
         
         setWebContainerReady(true);
         setWebContainerBooting(false);
-        console.log('âœ… WebContainer ready!');
+        console.log('WebContainer ready!');
         
         // Removed toast notification - too intrusive for users
       } catch (error) {
-        console.error('âŒ Failed to boot WebContainer:', error);
+        console.error('Failed to boot WebContainer:', error);
         setWebContainerBooting(false);
         setWebContainerReady(false);
         // Show error but keep trying in background
