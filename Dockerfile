@@ -69,5 +69,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:10000/api/health || exit 1
 
 # Starta servern
-CMD ["npm", "start"]
+# Använd node direkt istället för npm start för bättre signal handling
+CMD ["node", "dist/index.js"]
 
