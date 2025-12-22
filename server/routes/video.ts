@@ -77,27 +77,10 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
       }
       logger.info(`[VideoTranscription] Audio downloaded successfully with yt-dlp`);
     } catch (ytdlpError) {
-      logger.warn(`[VideoTranscription] yt-dlp failed, trying youtube-dl...`);
-      try {
-        // Fallback to youtube-dl
-        await execAsync(`youtube-dl -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
-        logger.info(`[VideoTranscription] Audio downloaded successfully with youtube-dl`);
-      } catch (youtubeDlError) {
-        // If both fail, try installing yt-dlp in venv at runtime
-        logger.warn(`[VideoTranscription] Both yt-dlp and youtube-dl failed, attempting runtime installation...`);
-        try {
-          if (pythonCommand) {
-            await execAsync(`"${pythonCommand}" -m pip install yt-dlp --quiet`);
-            await execAsync(`"${pythonCommand}" -m yt_dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
-            logger.info(`[VideoTranscription] Audio downloaded successfully after runtime installation`);
-          } else {
-            throw new Error('yt-dlp not available and cannot install at runtime');
-          }
-        } catch (installError) {
-          logger.error(`[VideoTranscription] Runtime installation also failed`);
-          throw new Error('Failed to download audio. Please install yt-dlp: pip install yt-dlp (or youtube-dl: pip install youtube-dl)');
-        }
-      }
+      logger.error(`[VideoTranscription] yt-dlp failed: ${ytdlpError instanceof Error ? ytdlpError.message : String(ytdlpError)}`);
+      // In production, yt-dlp should be installed during build
+      // If it's not available, this is a configuration error
+      throw new Error('yt-dlp is not available. This should be installed during build. Please check build logs and ensure yt-dlp is installed in venv-whisper.');
     }
 
     // Check if audio file exists

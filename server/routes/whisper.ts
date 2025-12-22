@@ -53,25 +53,16 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
 
     logger.info(`[WhisperAPI] Starting transcription, buffer size: ${audioBuffer.length} bytes, language: ${language}`);
 
-    // Check if faster-whisper is available first
+    // Check if faster-whisper is available
+    // In production, this should be installed during build
     const isAvailable = await whisperService.checkDependencies();
     if (!isAvailable) {
-      logger.warn('[WhisperAPI] faster-whisper not available, attempting installation...');
-      try {
-        await whisperService.installDependencies();
-        const checkAgain = await whisperService.checkDependencies();
-        if (!checkAgain) {
-          throw new Error('faster-whisper installation failed');
-        }
-        logger.info('[WhisperAPI] ✅ faster-whisper installed successfully');
-      } catch (installError) {
-        logger.error('[WhisperAPI] Installation failed', installError as Error);
-        return res.status(503).json({
-          success: false,
-          error: 'faster-whisper is not available and installation failed',
-          message: 'Please use Web Speech API as fallback or contact support',
-        });
-      }
+      logger.error('[WhisperAPI] faster-whisper is not available. This should be installed during build.');
+      return res.status(503).json({
+        success: false,
+        error: 'faster-whisper is not available',
+        message: 'faster-whisper should be installed during build. Please check build logs and ensure faster-whisper is installed in venv-whisper.',
+      });
     }
 
     const result = await whisperService.transcribeBuffer(audioBuffer, {
@@ -154,21 +145,11 @@ router.post('/transcribe-buffer', authenticateUser, async (req, res) => {
 router.get('/status', authenticateUser, async (req, res) => {
   try {
     logger.info('Checking KB-Whisper status for user:', req.user?.id);
-    let isAvailable = await whisperService.checkDependencies();
+    const isAvailable = await whisperService.checkDependencies();
     
-    // If not available, try to install it (runtime installation as fallback)
+    // In production, faster-whisper should be installed during build
     if (!isAvailable) {
-      logger.info('faster-whisper not found, attempting runtime installation...');
-      try {
-        await whisperService.installDependencies();
-        // Check again after installation
-        isAvailable = await whisperService.checkDependencies();
-        if (isAvailable) {
-          logger.info('✅ faster-whisper installed successfully at runtime');
-        }
-      } catch (installError) {
-        logger.warn('Runtime installation failed (this is OK if faster-whisper is not available on this system)', installError);
-      }
+      logger.error('faster-whisper is not available. This should be installed during build.');
     }
     
     logger.info('KB-Whisper status check result:', { available: isAvailable, userId: req.user?.id });
