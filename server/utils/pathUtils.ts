@@ -1,7 +1,9 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 
-export const WORKSPACES_DIR = path.join(process.cwd(), 'workspaces');
+// Use environment variable for workspaces path (for Docker volume mounting)
+// Falls back to local workspaces directory for development
+export const WORKSPACES_DIR = process.env.WORKSPACES_PATH || path.join(process.cwd(), 'workspaces');
 
 export function getWorkspacePath(workspaceId: string) {
   return path.join(WORKSPACES_DIR, workspaceId);

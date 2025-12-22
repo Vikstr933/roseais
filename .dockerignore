@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+venv-whisper/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test files
+coverage/
+.nyc_output/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Documentation
+*.md
+docs/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Workspaces (mounted as volume)
+workspaces/
+
+# Cache
+.cache/
+.npm/
+.pnpm-store/
+
+# Misc
+*.bak
+*.backup
+

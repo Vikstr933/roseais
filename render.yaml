@@ -1,14 +1,13 @@
 services:
-  # Backend API Service
+  # Backend API Service med Docker
   - type: web
     name: ai-library-backend
-    env: node
+    env: docker
     region: oregon
     plan: free
     branch: main
-    rootDir: .
-    buildCommand: npm install && (echo "Installing Playwright browsers..." && npx playwright install --with-deps chromium && npx playwright install-deps chromium 2>/dev/null || npx playwright install chromium || (echo "❌ Playwright installation failed - build cannot continue" && exit 1)) && (echo "Installing faster-whisper and yt-dlp..." && which python3 && python3 --version && (rm -rf venv-whisper && python3 -m venv venv-whisper && ./venv-whisper/bin/python3 -m pip install --upgrade pip --quiet && ./venv-whisper/bin/python3 -m pip install faster-whisper yt-dlp --quiet && ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed successfully')" && ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed successfully')" || (echo "❌ faster-whisper/yt-dlp installation failed - build cannot continue" && exit 1)) || (echo "❌ Python3 not found - build cannot continue" && exit 1)) && cd turnstile-solver && (python3 -m pip install --user --upgrade pip setuptools wheel 2>/dev/null || python3 -m ensurepip --user 2>/dev/null || true) && python3 -m pip install --user -r requirements.txt && python3 -c "import camoufox" 2>/dev/null || (echo "Verifying camoufox installation..." && python3 -m pip install --user --force-reinstall camoufox>=1.0.0 patchright>=1.0.0 quart>=0.19.0 && python3 -c "import camoufox; print('camoufox installed successfully')" || (echo "❌ camoufox installation failed - build cannot continue" && exit 1)) && cd .. && npm run build:backend
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -52,5 +51,5 @@ services:
     autoDeploy: true
     disk:
       name: ai-library-data
-      mountPath: /opt/render/project/src/workspaces
+      mountPath: /data/workspaces
       sizeGB: 1
