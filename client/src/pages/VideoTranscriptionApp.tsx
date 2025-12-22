@@ -31,6 +31,13 @@ interface TranscriptionResult {
   videoDuration?: number;
 }
 
+interface AudioExtractionResult {
+  audioId: string;
+  audioPath: string;
+  videoTitle?: string;
+  videoDuration?: number;
+}
+
 export default function VideoTranscriptionApp() {
   const [, setLocation] = useLocation();
   const { user, sessionToken } = useAuth();
@@ -40,9 +47,12 @@ export default function VideoTranscriptionApp() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [cookiesText, setCookiesText] = useState<string | null>(null);
   const [showCookieHelp, setShowCookieHelp] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [extractedAudio, setExtractedAudio] = useState<AudioExtractionResult | null>(null);
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string>('');
 
   const extractVideoId = (url: string): string | null => {
     const patterns = [
@@ -59,7 +69,7 @@ export default function VideoTranscriptionApp() {
     return null;
   };
 
-  const handleTranscribe = async () => {
+  const handleExtractAudio = async () => {
     if (!youtubeUrl.trim()) {
       toast({
         title: 'Error',
@@ -84,12 +94,13 @@ export default function VideoTranscriptionApp() {
       return;
     }
 
-    setIsProcessing(true);
+    setIsExtracting(true);
     setError(null);
-    setTranscriptionResult(null);
+    setExtractedAudio(null);
+    setProgress('Extracting audio from YouTube...');
 
     try {
-      const response = await apiFetch('/api/video/transcribe', {
+      const response = await apiFetch('/api/video/extract-audio', {
         method: 'POST',
         headers: {
           ...getAuthHeaders(sessionToken!),
@@ -104,7 +115,70 @@ export default function VideoTranscriptionApp() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to transcribe video (${response.status})`);
+        throw new Error(errorData.error || `Failed to extract audio (${response.status})`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setExtractedAudio({
+          audioId: data.audioId,
+          audioPath: data.audioPath,
+          videoTitle: data.videoTitle,
+          videoDuration: data.videoDuration,
+        });
+        setProgress('');
+        toast({
+          title: 'Audio Extracted!',
+          description: 'Audio extracted successfully. Click "Transcribe" to continue.',
+        });
+      } else {
+        throw new Error(data.error || 'Failed to extract audio');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to extract audio');
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to extract audio',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleTranscribe = async () => {
+    if (!extractedAudio) {
+      toast({
+        title: 'Error',
+        description: 'Please extract audio first',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsTranscribing(true);
+    setError(null);
+    setTranscriptionResult(null);
+    setProgress('Transcribing audio...');
+
+    try {
+      const response = await apiFetch('/api/video/transcribe', {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(sessionToken!),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audioId: extractedAudio.audioId,
+          audioPath: extractedAudio.audioPath,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Failed to transcribe audio (${response.status})`);
       }
 
       const data = await response.json();
@@ -113,15 +187,16 @@ export default function VideoTranscriptionApp() {
         setTranscriptionResult({
           transcription: data.transcription || '',
           script: data.script || '',
-          videoTitle: data.videoTitle,
-          videoDuration: data.videoDuration,
+          videoTitle: extractedAudio.videoTitle || data.videoTitle,
+          videoDuration: extractedAudio.videoDuration || data.videoDuration,
         });
+        setProgress('');
         toast({
           title: 'Success!',
-          description: 'Video transcribed and script generated successfully',
+          description: 'Audio transcribed and script generated successfully',
         });
       } else {
-        throw new Error(data.error || 'Failed to process video');
+        throw new Error(data.error || 'Failed to transcribe audio');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to transcribe video';
@@ -255,19 +330,19 @@ export default function VideoTranscriptionApp() {
                   />
                 </div>
                 <Button
-                  onClick={handleTranscribe}
-                  disabled={isProcessing || !youtubeUrl.trim()}
-                  className="min-w-[120px]"
+                  onClick={handleExtractAudio}
+                  disabled={isExtracting || !youtubeUrl.trim()}
+                  className="min-w-[140px]"
                 >
-                  {isProcessing ? (
+                  {isExtracting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
+                      Extracting...
                     </>
                   ) : (
                     <>
                       <Video className="h-4 w-4 mr-2" />
-                      Transcribe
+                      Extract Audio
                     </>
                   )}
                 </Button>
@@ -351,9 +426,52 @@ export default function VideoTranscriptionApp() {
               )}
             </div>
 
+            {progress && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {progress}
+              </div>
+            )}
+
             {error && (
               <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
                 {error}
+              </div>
+            )}
+
+            {extractedAudio && !isTranscribing && (
+              <div className="p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-md">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                      Audio extracted successfully
+                    </span>
+                  </div>
+                  <Button
+                    onClick={handleTranscribe}
+                    disabled={isTranscribing}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    {isTranscribing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Transcribing...
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="h-4 w-4 mr-2" />
+                        Transcribe
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {extractedAudio.videoTitle && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {extractedAudio.videoTitle}
+                    {extractedAudio.videoDuration && ` (${Math.round(extractedAudio.videoDuration / 60)} min)`}
+                  </p>
+                )}
               </div>
             )}
           </div>

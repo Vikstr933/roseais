@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { whisperService } from '../services/WhisperService';
+import { audioFileService } from '../services/AudioFileService';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -358,10 +359,198 @@ Script:`;
 }
 
 /**
- * POST /api/video/transcribe
- * Transcribe YouTube video and convert to voice actor script
+ * Extract audio from YouTube video
+ * Returns audio file path/ID for later transcription
  */
-router.post('/transcribe', authenticateUser, async (req: Request, res: Response) => {
+async function extractAudioFromYouTube(
+  youtubeUrl: string,
+  videoId: string,
+  cookiesText?: string
+): Promise<{ audioId: string; audioPath: string; videoTitle?: string; videoDuration?: number }> {
+  const videoUrl = youtubeUrl || `https://www.youtube.com/watch?v=${videoId}`;
+  logger.info(`[AudioExtraction] Starting audio extraction for video: ${videoId}`);
+
+  // Get audio file path from AudioFileService
+  const audioPath = audioFileService.getAudioFilePath(videoId, 'mp3');
+  const audioId = path.basename(audioPath, '.mp3'); // videoId-timestamp
+
+  // Create temp directory for cookies if needed
+  const tempDir = path.join(process.cwd(), 'temp', `extract-${videoId}-${Date.now()}`);
+  let cookiesPath: string | null = null;
+
+  try {
+    await fs.mkdir(tempDir, { recursive: true });
+
+    // Save cookies to file if provided
+    if (cookiesText) {
+      cookiesPath = path.join(tempDir, 'cookies.txt');
+      await fs.writeFile(cookiesPath, cookiesText, 'utf-8');
+      logger.info(`[AudioExtraction] ✅ Using provided cookies for authentication`);
+    }
+
+    // Find venv with yt-dlp (same logic as transcribeYouTubeVideo)
+    const cwd = process.cwd();
+    const possibleVenvPaths = [
+      path.join(cwd, 'venv-whisper'),
+      path.join('/app', 'venv-whisper'),
+      path.join('/opt/render/project/src', 'venv-whisper'),
+    ];
+
+    let pythonCommand: string | null = null;
+    let foundVenvPath: string | null = null;
+
+    for (const venvPath of possibleVenvPaths) {
+      const venvPython = process.platform === 'win32'
+        ? path.join(venvPath, 'Scripts', 'python.exe')
+        : path.join(venvPath, 'bin', 'python3');
+
+      try {
+        const stats = await fs.stat(venvPython);
+        if (stats.isFile()) {
+          const checkYtdlp = await execAsync(`"${venvPython}" -c "import yt_dlp; print('OK')"`, {
+            timeout: 5000
+          });
+          if (checkYtdlp.stdout.includes('OK')) {
+            pythonCommand = venvPython;
+            foundVenvPath = venvPath;
+            break;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (!pythonCommand) {
+      throw new Error('yt-dlp is not available. venv-whisper with yt-dlp should be installed during Docker build.');
+    }
+
+    // Extract audio using yt-dlp with bestaudio format
+    const strategies = [
+      {
+        name: 'Android client (mobile)',
+        userAgent: 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        extractorArgs: 'youtube:player_client=android',
+      },
+      {
+        name: 'iOS client (mobile)',
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        extractorArgs: 'youtube:player_client=ios',
+      },
+      {
+        name: 'Web client (desktop)',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        extractorArgs: 'youtube:player_client=web',
+      },
+    ];
+
+    let downloadSucceeded = false;
+    let lastError: any = null;
+
+    for (const strategy of strategies) {
+      try {
+        let command = `"${pythonCommand}" -m yt_dlp --user-agent "${strategy.userAgent}" --extractor-args "${strategy.extractorArgs}"`;
+        if (cookiesPath) {
+          command += ` --cookies "${cookiesPath}"`;
+        }
+        // Extract best audio and convert to MP3
+        command += ` -f "bestaudio/best" --no-playlist --no-warnings --no-check-certificate`;
+        command += ` -x --audio-format mp3 --audio-quality 192`;
+        command += ` -o "${audioPath}" "${videoUrl}"`;
+
+        logger.info(`[AudioExtraction] Trying strategy: ${strategy.name}`);
+        
+        await execAsync(command, {
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: 300000, // 5 minute timeout
+          cwd: foundVenvPath ? path.dirname(foundVenvPath) : undefined
+        });
+
+        // Check if audio file was created
+        if (await audioFileService.fileExists(audioPath)) {
+          // Validate file size
+          const validation = await audioFileService.validateFileSize(audioPath);
+          if (!validation.valid) {
+            throw new Error(validation.error);
+          }
+
+          downloadSucceeded = true;
+          logger.info(`[AudioExtraction] ✅ Audio extracted successfully with ${strategy.name}`);
+          break;
+        }
+      } catch (strategyError: any) {
+        lastError = strategyError;
+        const errorStderr = strategyError?.stderr || '';
+        if (errorStderr.includes('bot')) {
+          logger.warn(`[AudioExtraction] Strategy ${strategy.name} blocked by bot detection, trying next...`);
+          continue;
+        }
+        continue;
+      }
+    }
+
+    if (!downloadSucceeded) {
+      const cookieHint = cookiesPath
+        ? 'Cookies were provided but still blocked. The cookies may be expired or invalid.'
+        : 'No cookies were provided. Consider uploading cookies.txt for better success rate.';
+      throw new Error(`YouTube is blocking automated access after trying ${strategies.length} different methods. ${cookieHint}`);
+    }
+
+    // Get video info (title, duration)
+    let videoTitle: string | undefined;
+    let videoDuration: number | undefined;
+
+    try {
+      const infoCommand = `"${pythonCommand}" -m yt_dlp --get-title --get-duration "${videoUrl}" 2>/dev/null`;
+      const infoOutput = await execAsync(infoCommand);
+      const lines = infoOutput.stdout.trim().split('\n');
+      if (lines.length >= 1 && lines[0]) videoTitle = lines[0];
+      if (lines.length >= 2 && lines[1]) {
+        const durationStr = lines[1];
+        const parts = durationStr.split(':').map(Number);
+        if (parts.length === 3) {
+          videoDuration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        } else if (parts.length === 2) {
+          videoDuration = parts[0] * 60 + parts[1];
+        }
+      }
+    } catch {
+      // Info extraction failed, continue without it
+    }
+
+    // Cleanup temp directory
+    try {
+      if (cookiesPath) {
+        await fs.unlink(cookiesPath).catch(() => {});
+      }
+      await fs.rmdir(tempDir).catch(() => {});
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    return { audioId, audioPath, videoTitle, videoDuration };
+  } catch (error) {
+    // Cleanup on error
+    try {
+      if (cookiesPath) {
+        await fs.unlink(cookiesPath).catch(() => {});
+      }
+      await fs.rmdir(tempDir).catch(() => {});
+      if (await audioFileService.fileExists(audioPath)) {
+        await audioFileService.deleteFile(audioPath);
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+    throw error;
+  }
+}
+
+/**
+ * POST /api/video/extract-audio
+ * Extract audio from YouTube video
+ */
+router.post('/extract-audio', authenticateUser, async (req: Request, res: Response) => {
   try {
     const { youtubeUrl, videoId, cookies } = req.body;
 
@@ -381,10 +570,112 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       });
     }
 
-    logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}`);
+    logger.info(`[AudioExtraction] Starting audio extraction for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}`);
 
-    // Transcribe video (with optional cookies)
-    const { transcription, videoTitle, videoDuration } = await transcribeYouTubeVideo(finalVideoId, cookies);
+    const { audioId, audioPath, videoTitle, videoDuration } = await extractAudioFromYouTube(
+      youtubeUrl || '',
+      finalVideoId,
+      cookies
+    );
+
+    res.json({
+      success: true,
+      audioId,
+      audioPath,
+      videoTitle,
+      videoDuration,
+      message: `Audio extracted successfully${videoTitle ? `: ${videoTitle}` : ''}`,
+    });
+  } catch (error: any) {
+    logger.error(`[AudioExtraction] Error: ${error.message}`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to extract audio',
+    });
+  }
+});
+
+/**
+ * POST /api/video/transcribe
+ * Transcribe audio file and convert to voice actor script
+ * Accepts either audioId (from extract-audio) or youtubeUrl/videoId (legacy support)
+ */
+router.post('/transcribe', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const { audioId, audioPath, youtubeUrl, videoId, cookies, language } = req.body;
+
+    let finalAudioPath: string | null = null;
+    let videoTitle: string | undefined;
+    let videoDuration: number | undefined;
+
+    // New flow: Use audioId or audioPath
+    if (audioId || audioPath) {
+      if (audioPath) {
+        finalAudioPath = audioPath;
+      } else if (audioId) {
+        // Try to find audio file by ID
+        const foundPath = audioFileService.getAudioFileById(audioId);
+        if (foundPath && await audioFileService.fileExists(foundPath)) {
+          finalAudioPath = foundPath;
+        } else {
+          // Try to construct path from audioId (format: videoId-timestamp)
+          const constructedPath = path.join(audioFileService.getAudioDirectory(), `${audioId}.mp3`);
+          if (await audioFileService.fileExists(constructedPath)) {
+            finalAudioPath = constructedPath;
+          }
+        }
+      }
+
+      if (!finalAudioPath || !(await audioFileService.fileExists(finalAudioPath))) {
+        return res.status(404).json({
+          success: false,
+          error: 'Audio file not found. Please extract audio first using /extract-audio endpoint.',
+        });
+      }
+
+      logger.info(`[VideoTranscription] Transcribing audio file: ${finalAudioPath}`);
+    } 
+    // Legacy flow: Extract and transcribe in one step
+    else if (youtubeUrl || videoId) {
+      const finalVideoId = videoId || (youtubeUrl ? youtubeUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/)?.[1] : null);
+
+      if (!finalVideoId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid YouTube URL or video ID',
+        });
+      }
+
+      logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''} (legacy mode)`);
+
+      // Use existing function for backward compatibility
+      const result = await transcribeYouTubeVideo(finalVideoId, cookies);
+      const script = await convertToScript(result.transcription, result.videoTitle);
+
+      return res.json({
+        success: true,
+        transcription: result.transcription,
+        script,
+        videoTitle: result.videoTitle,
+        videoDuration: result.videoDuration,
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Either audioId/audioPath or youtubeUrl/videoId is required',
+      });
+    }
+
+    // Transcribe audio file using Whisper
+    logger.info(`[VideoTranscription] Starting Whisper transcription...`);
+    const transcriptionResult = await whisperService.transcribe(finalAudioPath, {
+      language: language || 'auto', // Auto-detect or use specified language
+      task: 'transcribe',
+      returnTimestamps: false
+    });
+
+    const transcription = transcriptionResult.text || 'No transcription available';
+    logger.info(`[VideoTranscription] Transcription complete, length: ${transcription.length} characters`);
 
     // Convert to script
     logger.info(`[VideoTranscription] Converting transcription to script...`);
@@ -403,7 +694,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
     logger.error(`[VideoTranscription] Error: ${error.message}`, error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to transcribe video',
+      error: error.message || 'Failed to transcribe audio',
     });
   }
 });

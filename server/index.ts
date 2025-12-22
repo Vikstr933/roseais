@@ -64,6 +64,7 @@ import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
 import { emailSchedulerService } from './services/EmailSchedulerService';
+import { audioFileService } from './services/AudioFileService';
 
 import * as dotenv from 'dotenv';
 import { sql } from 'drizzle-orm';
@@ -706,6 +707,9 @@ const initializeApp = async () => {
           // Start the storage cleanup service (deletes old projects automatically)
           const { storageCleanupService } = await import('./services/StorageCleanupService');
           storageCleanupService.startAutomaticCleanup();
+          
+          // Start audio file cleanup
+          audioFileService.startAutomaticCleanup();
 
           // Auto-connect Discord bots on startup
           const { DiscordBotService } = await import('./services/DiscordBotService');
