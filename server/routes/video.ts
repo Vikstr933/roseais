@@ -38,6 +38,9 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
   try {
     logger.info(`[VideoTranscription] Attempting to get transcript directly from YouTube for video: ${videoId}`);
     
+    // Note: youtube-transcript-api often fails on cloud providers due to IP blocking
+    // This is a best-effort attempt, but we don't rely on it
+    
     // Find venv Python
     const cwd = process.cwd();
     const possibleVenvPaths = [
@@ -71,7 +74,7 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
     }
 
     if (!pythonCommand) {
-      logger.warn('[VideoTranscription] youtube-transcript-api not available, will use fallback method');
+      logger.info('[VideoTranscription] youtube-transcript-api not available, will use audio extraction');
       return null;
     }
 
@@ -183,15 +186,28 @@ except Exception as e:
       await fs.unlink(tempScriptPath).catch(() => {});
       
       const errorMsg = execError.stderr || execError.message || String(execError);
-      if (errorMsg.includes('NoTranscriptFound') || errorMsg.includes('TranscriptsDisabled')) {
-        logger.info(`[VideoTranscription] Transcript not available for this video, will use fallback method`);
-      } else {
-        logger.warn(`[VideoTranscription] Failed to get transcript: ${errorMsg.substring(0, 200)}`);
+      
+      // These are expected errors - not a problem, just use audio extraction
+      if (errorMsg.includes('NoTranscriptFound') || 
+          errorMsg.includes('TranscriptsDisabled') ||
+          errorMsg.includes('No transcript found')) {
+        logger.info(`[VideoTranscription] Transcript not available for this video, will use audio extraction`);
+      } 
+      // IP blocking is common on cloud providers - not a critical error
+      else if (errorMsg.includes('RequestBlocked') || 
+               errorMsg.includes('IpBlocked') || 
+               errorMsg.includes('blocked')) {
+        logger.info(`[VideoTranscription] YouTube blocked transcript API request (common on cloud providers), will use audio extraction`);
+      } 
+      // Other errors - log but don't fail
+      else {
+        logger.info(`[VideoTranscription] Transcript API unavailable: ${errorMsg.substring(0, 150)}. Will use audio extraction.`);
       }
       return null;
     }
   } catch (error) {
-    logger.warn(`[VideoTranscription] Error getting YouTube transcript: ${error instanceof Error ? error.message : String(error)}`);
+    // Don't log as error - this is expected to fail often on cloud providers
+    logger.info(`[VideoTranscription] Transcript API not available, will use audio extraction: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 }
@@ -630,15 +646,20 @@ async function extractAudioFromYouTube(
   cookiesText?: string,
   languageCode: string = 'auto'
 ): Promise<{ audioId: string; audioPath: string; videoTitle?: string; videoDuration?: number }> {
-  // First, try to get transcript directly from YouTube (preferred method)
+  // Try to get transcript directly from YouTube (optional - often fails on cloud providers)
+  // This is a best-effort attempt, but we don't rely on it
   logger.info(`[AudioExtraction] Processing video: ${videoId}`);
   
   let directTranscript: string | null = null;
   try {
-    directTranscript = await getYouTubeTranscript(videoId, languageCode);
+    // Quick attempt with short timeout - don't wait too long
+    directTranscript = await Promise.race([
+      getYouTubeTranscript(videoId, languageCode),
+      new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 5000)) // 5 second timeout
+    ]);
   } catch (error) {
-    // If transcript retrieval fails, log and continue to audio extraction
-    logger.warn(`[AudioExtraction] Failed to get transcript directly: ${error instanceof Error ? error.message : String(error)}`);
+    // Expected to fail often - not a problem
+    logger.info(`[AudioExtraction] Transcript API not available, will extract audio: ${error instanceof Error ? error.message : String(error)}`);
     directTranscript = null;
   }
   
@@ -654,8 +675,8 @@ async function extractAudioFromYouTube(
     };
   }
 
-  // Fallback to audio extraction
-  logger.info(`[AudioExtraction] Transcript not available, extracting audio from YouTube`);
+  // Primary method: audio extraction (more reliable on cloud providers)
+  logger.info(`[AudioExtraction] Extracting audio from YouTube (primary method)`);
   
   const videoUrl = youtubeUrl || `https://www.youtube.com/watch?v=${videoId}`;
 
