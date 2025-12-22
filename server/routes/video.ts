@@ -876,40 +876,77 @@ router.post('/extract-audio', authenticateUser, async (req: Request, res: Respon
 
     logger.info(`[AudioExtraction] Starting audio extraction for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}${language ? ` (language: ${language})` : ''}`);
 
-    const { audioId, audioPath, videoTitle, videoDuration } = await extractAudioFromYouTube(
-      youtubeUrl || '',
-      finalVideoId,
-      cookies,
-      language || 'auto'
-    );
+    try {
+      const { audioId, audioPath, videoTitle, videoDuration } = await extractAudioFromYouTube(
+        youtubeUrl || '',
+        finalVideoId,
+        cookies,
+        language || 'auto'
+      );
 
-    // Check if we got transcript directly (no audio extraction needed)
-    if (!audioPath) {
-      // Transcript was retrieved directly, get it again for response
-      const transcript = await getYouTubeTranscript(finalVideoId, language || 'auto');
-      return res.json({
+      // Check if we got transcript directly (no audio extraction needed)
+      if (!audioPath) {
+        // Transcript was retrieved directly, get it again for response
+        const transcript = await getYouTubeTranscript(finalVideoId, language || 'auto');
+        return res.json({
+          success: true,
+          audioId,
+          audioPath: null,
+          transcript, // Include transcript in response
+          videoTitle,
+          videoDuration,
+          message: `Transcript retrieved directly from YouTube${videoTitle ? `: ${videoTitle}` : ''}`,
+          method: 'direct_transcript',
+        });
+      }
+
+      res.json({
         success: true,
         audioId,
-        audioPath: null,
-        transcript, // Include transcript in response
+        audioPath,
         videoTitle,
         videoDuration,
-        message: `Transcript retrieved directly from YouTube${videoTitle ? `: ${videoTitle}` : ''}`,
-        method: 'direct_transcript',
+        message: `Audio extracted successfully${videoTitle ? `: ${videoTitle}` : ''}`,
+        method: 'audio_extraction',
+      });
+    } catch (extractionError: any) {
+      // Handle specific error types with appropriate status codes
+      const errorMessage = extractionError.message || 'Failed to extract audio';
+      
+      // Check if it's a YouTube blocking error (user-friendly, not a server error)
+      if (errorMessage.includes('blocking automated access') || 
+          errorMessage.includes('bot detection') ||
+          errorMessage.includes('Sign in to confirm')) {
+        logger.warn(`[AudioExtraction] YouTube blocking detected: ${errorMessage}`);
+        return res.status(400).json({
+          success: false,
+          error: errorMessage,
+          suggestion: 'Try uploading cookies.txt from your browser, or try a different video. Some videos may require manual verification.',
+          requiresCookies: !cookies,
+        });
+      }
+      
+      // Check if transcript not found (also user-friendly)
+      if (errorMessage.includes('No transcript found') || 
+          errorMessage.includes('Transcripts are disabled')) {
+        logger.info(`[AudioExtraction] Transcript not available: ${errorMessage}`);
+        return res.status(400).json({
+          success: false,
+          error: errorMessage,
+          suggestion: 'This video may not have transcripts available. Try extracting audio instead, or use a different video.',
+          canExtractAudio: true,
+        });
+      }
+      
+      // Other errors (actual server errors)
+      logger.error(`[AudioExtraction] Error: ${errorMessage}`, extractionError);
+      res.status(500).json({
+        success: false,
+        error: errorMessage,
       });
     }
-
-    res.json({
-      success: true,
-      audioId,
-      audioPath,
-      videoTitle,
-      videoDuration,
-      message: `Audio extracted successfully${videoTitle ? `: ${videoTitle}` : ''}`,
-      method: 'audio_extraction',
-    });
   } catch (error: any) {
-    logger.error(`[AudioExtraction] Error: ${error.message}`, error);
+    logger.error(`[AudioExtraction] Unexpected error: ${error.message}`, error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to extract audio',
