@@ -59,6 +59,7 @@ import toolPermissionsRouter from './routes/tool-permissions';
 import sharedConnectorsRouter from './routes/shared-connectors';
 import pythonSandboxRouter from './routes/python-sandbox';
 import whisperRouter from './routes/whisper';
+import videoRouter from './routes/video';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -550,6 +551,7 @@ const initializeApp = async () => {
     app.use('/api/shared-connectors', sharedConnectorsRouter); // Shared Connectors (workspace-wide API keys)
     app.use('/api/python', pythonSandboxRouter); // Python Sandbox for Flask/Django/FastAPI
     app.use('/api/whisper', whisperRouter); // KB-Whisper Swedish speech recognition
+    app.use('/api/video', videoRouter); // Video transcription and script generation
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
 
     app.get('/api/sse/agent-activity', (req, res) => {

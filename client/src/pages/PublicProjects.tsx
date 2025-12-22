@@ -17,6 +17,8 @@ import {
   Copy,
   ExternalLink,
   Code,
+  Sparkles,
+  Video,
 } from 'lucide-react';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -80,6 +82,7 @@ export default function PublicProjects() {
   const { user, sessionToken } = useAuth();
   const { toast } = useToast();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState<'projects' | 'apps'>('projects');
   
   const [projects, setProjects] = useState<PublicProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -273,12 +276,46 @@ export default function PublicProjects() {
           className="mb-8"
         >
           <h1 className="text-3xl font-bold mb-2 text-foreground">
-            Community Projects
+            Community
           </h1>
           <p className="text-sm text-muted-foreground">
-            Discover and remix projects from our community
+            Discover projects and use ready-made apps from our community
           </p>
         </motion.div>
+
+        {/* Tabs */}
+        <div className="mb-6 border-b border-border">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab('projects')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'projects'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Sparkles className="h-4 w-4 inline mr-2" />
+              Projects
+            </button>
+            <button
+              onClick={() => setActiveTab('apps')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'apps'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Video className="h-4 w-4 inline mr-2" />
+              App Examples
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'apps' ? (
+          <AppExamplesTab />
+        ) : (
+          <>
 
         {/* Filters and Search */}
         <div className="mb-6 space-y-3">
@@ -467,9 +504,72 @@ export default function PublicProjects() {
             })}
           </div>
         )}
+          </>
+        )}
       </div>
 
       <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
+    </div>
+  );
+}
+
+// App Examples Tab Component
+function AppExamplesTab() {
+  const [, setLocation] = useLocation();
+  
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Video Transcription App */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-card rounded-lg border p-6 hover:border-primary/50 transition-colors"
+        >
+          <div className="flex items-start gap-4 mb-4">
+            <div className="p-3 bg-primary/10 rounded-lg">
+              <Video className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-lg mb-1">Video Transcription to Script</h3>
+              <p className="text-sm text-muted-foreground">
+                Transcribe YouTube videos and convert them into voice actor scripts for voiceover production
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-2 mb-4">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Code className="h-3 w-3" />
+              <span>AI-Powered Transcription</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Code className="h-3 w-3" />
+              <span>Script Formatting</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Code className="h-3 w-3" />
+              <span>Voice Actor Ready</span>
+            </div>
+          </div>
+
+          <Button
+            onClick={() => setLocation('/community/video-transcription')}
+            className="w-full"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Open App
+          </Button>
+        </motion.div>
+
+        {/* Placeholder for more apps */}
+        <div className="bg-card rounded-lg border p-6 border-dashed border-muted-foreground/30 flex items-center justify-center min-h-[200px]">
+          <div className="text-center text-muted-foreground">
+            <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">More apps coming soon</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
