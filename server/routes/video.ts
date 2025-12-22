@@ -79,8 +79,7 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
     const youtubeApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY || process.env.YOUTUBE_API_KEY;
     
     // Create Python script to get transcript
-    // Using the correct syntax for youtube-transcript-api
-    // The API uses get_transcript as a class method (not instance method)
+    // Using list_transcripts() which is the correct method for youtube-transcript-api
     const script = `
 import sys
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -90,41 +89,40 @@ video_id = "${videoId}"
 language_code = "${languageCode}"
 
 try:
-    # Get transcript using the correct API syntax
-    # The method signature is: get_transcript(video_id, languages=None, continue_after_error=False)
-    transcript_list = None
+    # Use list_transcripts() to get available transcripts
+    transcript_list_obj = YouTubeTranscriptApi.list_transcripts(video_id)
     
+    # Try to find transcript in requested language
+    transcript = None
     if language_code and language_code != 'auto':
         # Try specific language first
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
-        except Exception as e1:
-            # Fallback to English if specific language not available
+            transcript = transcript_list_obj.find_transcript([language_code])
+        except:
+            # Fallback to English
             try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-            except Exception as e2:
-                # Last resort: get any available language (no language parameter)
-                try:
-                    transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-                except Exception as e3:
-                    raise Exception(f"All language attempts failed. Last error: {str(e3)}")
+                transcript = transcript_list_obj.find_transcript(['en'])
+            except:
+                # Fallback to any available transcript
+                transcript = transcript_list_obj.find_transcript(['en'])
     else:
-        # Auto-detect: try English first, then any available
+        # Auto-detect: try English first
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-        except Exception as e1:
-            # Fallback to any available language
+            transcript = transcript_list_obj.find_transcript(['en'])
+        except:
+            # Fallback to generated English transcript
             try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-            except Exception as e2:
-                raise Exception(f"Could not get transcript. Last error: {str(e2)}")
+                transcript = transcript_list_obj.find_generated_transcript(['en'])
+            except:
+                # Get any available transcript
+                transcript = transcript_list_obj.find_transcript(['en'])
     
-    if not transcript_list:
-        raise Exception("Transcript list is empty")
+    # Fetch the actual transcript data
+    transcript_data = transcript.fetch()
     
     # Format as plain text
     formatter = TextFormatter()
-    formatted_text = formatter.format_transcript(transcript_list)
+    formatted_text = formatter.format_transcript(transcript_data)
     
     print(formatted_text)
     sys.exit(0)
