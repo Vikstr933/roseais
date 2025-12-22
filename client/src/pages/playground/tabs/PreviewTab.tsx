@@ -21,9 +21,10 @@ interface PreviewTabProps {
 type PythonProjectType = 'flask' | 'django' | 'fastapi' | 'streamlit' | 'script';
 
 function detectPythonProjectType(files: GeneratedFile[]): PythonProjectType | null {
+  if (!files || files.length === 0) return null;
   for (const file of files) {
-    if (!file.path.endsWith('.py')) continue;
-    const content = file.content.toLowerCase();
+    if (!file?.path?.endsWith('.py')) continue;
+    const content = file?.content?.toLowerCase() || '';
     
     if (content.includes('from flask import') || content.includes('import flask')) return 'flask';
     if (content.includes('from django') || content.includes('import django')) return 'django';
@@ -32,12 +33,14 @@ function detectPythonProjectType(files: GeneratedFile[]): PythonProjectType | nu
   }
   
   // Check if any .py files exist
-  if (files.some(f => f.path.endsWith('.py'))) return 'script';
+  if (files.some(f => f?.path?.endsWith('.py'))) return 'script';
   return null;
 }
 
 // Detect project type from files
 function detectProjectType(files: GeneratedFile[]): 'web' | 'python-script' | 'python-server' | 'node' | 'unknown' {
+  if (!files || files.length === 0) return 'unknown';
+  
   const pythonType = detectPythonProjectType(files);
   
   // Python web frameworks need server-side preview
@@ -51,10 +54,10 @@ function detectProjectType(files: GeneratedFile[]): 'web' | 'python-script' | 'p
   }
   
   const hasReactFiles = files.some(f => 
-    f.path.endsWith('.tsx') || f.path.endsWith('.jsx') ||
-    (f.path === 'package.json' && f.content.includes('react'))
+    f?.path?.endsWith('.tsx') || f?.path?.endsWith('.jsx') ||
+    (f?.path === 'package.json' && f?.content?.includes('react'))
   );
-  const hasPackageJson = files.some(f => f.path === 'package.json');
+  const hasPackageJson = files.some(f => f?.path === 'package.json');
   
   if (hasReactFiles) return 'web';
   if (hasPackageJson) return 'node';
@@ -123,7 +126,7 @@ export function PreviewTab({
     response.files &&
     response.files.length > 0;
 
-  const hasPythonFiles = response?.files?.some(f => f.path.endsWith('.py'));
+  const hasPythonFiles = response?.files?.some(f => f?.path?.endsWith('.py')) || false;
 
   // Check if Browser tab is usable for this project
   const canRunInBrowser = !isPythonWebApp; // Web frameworks can't run in browser
@@ -134,10 +137,10 @@ export function PreviewTab({
       console.log('🔍 isWebContainerProject: No files in response');
       return false;
     }
-    const hasPackageJson = response.files.some(f => f.path === 'package.json' || f.path.endsWith('/package.json'));
+    const hasPackageJson = response.files.some(f => f?.path === 'package.json' || f?.path?.endsWith('/package.json'));
     const hasReactFiles = response.files.some(f => 
-      f.path.endsWith('.tsx') || f.path.endsWith('.jsx') ||
-      (f.path === 'package.json' && f.content.includes('react'))
+      f?.path?.endsWith('.tsx') || f?.path?.endsWith('.jsx') ||
+      (f?.path === 'package.json' && f?.content?.includes('react'))
     );
     const result = hasPackageJson && hasReactFiles && !isPythonWebApp;
     console.log('🔍 isWebContainerProject check:', {
