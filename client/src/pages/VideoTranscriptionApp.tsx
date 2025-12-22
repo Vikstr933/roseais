@@ -383,30 +383,31 @@ export default function VideoTranscriptionApp() {
               <span className="text-xs font-medium text-purple-700 dark:text-purple-400">OmniAssistant</span>
             </div>
             <div className="relative z-10">
-            <h3 className="font-semibold mb-3 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              Use Case Example
-            </h3>
-            <p className="text-sm text-muted-foreground mb-3">
-              <strong>Scenario:</strong> You run a YouTube channel featuring police investigations with body cam footage. 
-              You want to add professional commentary voiceover to explain what's happening.
-            </p>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <div className="flex items-start gap-2">
-                <span className="text-primary font-bold">1.</span>
-                <span>Upload your body cam footage video to YouTube</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-primary font-bold">2.</span>
-                <span>Paste the YouTube URL here and click "Transcribe"</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-primary font-bold">3.</span>
-                <span>Get a professional script formatted for voice actors</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-primary font-bold">4.</span>
-                <span>Use the script to record your commentary voiceover</span>
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-600" />
+                Use Case Example
+              </h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                <strong>Scenario:</strong> You run a YouTube channel featuring police investigations with body cam footage. 
+                You want to add professional commentary voiceover to explain what's happening.
+              </p>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <span className="text-purple-600 font-bold">1.</span>
+                  <span>Upload your body cam footage video to YouTube</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-purple-600 font-bold">2.</span>
+                  <span>Paste the YouTube URL here and click "Transcribe"</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-purple-600 font-bold">3.</span>
+                  <span>Get a professional script formatted for voice actors</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-purple-600 font-bold">4.</span>
+                  <span>Use the script to record your commentary voiceover</span>
+                </div>
               </div>
             </div>
           </motion.div>
