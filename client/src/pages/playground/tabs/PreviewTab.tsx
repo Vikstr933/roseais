@@ -123,17 +123,6 @@ export function PreviewTab({
     response.files &&
     response.files.length > 0;
 
-  // Debug logging
-  useEffect(() => {
-    console.log('🔍 PreviewTab state:', {
-      hasFiles,
-      isWebContainerProject,
-      hasResponse: !!response,
-      filesCount: response?.files?.length || 0,
-      filePaths: response?.files?.map(f => f.path) || []
-    });
-  }, [hasFiles, isWebContainerProject, response]);
-
   const hasPythonFiles = response?.files?.some(f => f.path.endsWith('.py'));
 
   // Check if Browser tab is usable for this project
@@ -160,6 +149,17 @@ export function PreviewTab({
     });
     return result;
   }, [response?.files, isPythonWebApp]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 PreviewTab state:', {
+      hasFiles,
+      isWebContainerProject,
+      hasResponse: !!response,
+      filesCount: response?.files?.length || 0,
+      filePaths: response?.files?.map(f => f.path) || []
+    });
+  }, [hasFiles, isWebContainerProject, response]);
 
   // Update server running state when URL changes
   useEffect(() => {
