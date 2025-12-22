@@ -44,7 +44,7 @@ ALLOWED_ORIGINS=https://newai-sigma.vercel.app,https://newai.vercel.app
 Öppna browser console på `https://newai-sigma.vercel.app` och kör:
 
 ```javascript
-fetch('https://ai-library-backend.onrender.com/api/auth/me', {
+fetch('https://ai-library-backend-3mmv.onrender.com/api/auth/me', {
   method: 'GET',
   headers: {
     'Authorization': 'Bearer test'

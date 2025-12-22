@@ -101,7 +101,7 @@ const estimatedSavings = {
 
 **Usage Example**:
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/components/generate/smart \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/components/generate/smart \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -392,17 +392,17 @@ router.post('/components/generate', async (req, res) => {
 ### Current Deployment:
 - ✅ Committed to GitHub (commit 7061d79)
 - ✅ Pushed to main branch
-- ⏳ Auto-deploying to Render (https://ai-library-backend.onrender.com)
+- ⏳ Auto-deploying to Render (https://ai-library-backend-3mmv.onrender.com)
 - ⏳ Expected deployment time: 5-10 minutes
 
 ### Deployment Verification:
 ```bash
 # Check if SmartOrchestrator endpoints are live
-curl https://ai-library-backend.onrender.com/api/components/smart/cache-stats \
+curl https://ai-library-backend-3mmv.onrender.com/api/components/smart/cache-stats \
   -H "Authorization: Bearer YOUR_TOKEN"
 
 # Test smart orchestration
-curl -X POST https://ai-library-backend.onrender.com/api/components/generate/smart \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/components/generate/smart \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{"prompt": "Create a button"}'

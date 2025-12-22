@@ -13,7 +13,7 @@ Det finns två saker som måste göras:
 2. Välj din application (Elon AI Bot)
 3. Gå till **"General Information"**
 4. Scrolla ner till **"Interactions Endpoint URL"**
-5. Fyll i: `https://ai-library-backend.onrender.com/api/discord/interactions`
+5. Fyll i: `https://ai-library-backend-3mmv.onrender.com/api/discord/interactions`
 6. Klicka på **"Save Changes"**
 
 **Viktigt:** Discord kommer att skicka en PING till din endpoint för att verifiera att den fungerar. Om den inte svarar korrekt kommer Discord inte att aktivera interactions.
@@ -65,7 +65,7 @@ Efter att ha kört scriptet bör du se:
 Discord skickar automatiskt en PING när du sparar Interactions Endpoint URL. Du kan också testa manuellt:
 
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/discord/interactions \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/discord/interactions \
   -H "Content-Type: application/json" \
   -d '{"type": 1}'
 ```
@@ -93,7 +93,7 @@ Förväntat svar: `{"type": 1}` (PONG)
 - Kontrollera att interactions endpoint använder raw body för signature verification
 
 ### Interactions endpoint svarar inte
-- Kontrollera att URL:en är korrekt: `https://ai-library-backend.onrender.com/api/discord/interactions`
+- Kontrollera att URL:en är korrekt: `https://ai-library-backend-3mmv.onrender.com/api/discord/interactions`
 - Kontrollera Render logs för fel
 - Testa PING manuellt med curl (se ovan)
 

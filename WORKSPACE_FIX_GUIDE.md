@@ -29,7 +29,7 @@ New maintenance tools:
 
 #### Clean Up Orphaned Data
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/admin/cleanup/orphaned
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/admin/cleanup/orphaned
 ```
 This will:
 - Remove all chat messages referencing deleted workspaces
@@ -38,7 +38,7 @@ This will:
 
 #### Get Database Statistics
 ```bash
-curl https://ai-library-backend.onrender.com/api/admin/stats/database
+curl https://ai-library-backend-3mmv.onrender.com/api/admin/stats/database
 ```
 Shows:
 - Total workspaces
@@ -66,7 +66,7 @@ You're seeing errors about workspace ID 9 because:
 Once the backend deploys (3-5 minutes), run:
 
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/admin/cleanup/orphaned
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/admin/cleanup/orphaned
 ```
 
 This will clean up all orphaned references in the database.

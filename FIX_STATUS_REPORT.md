@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created
 - ✅ Admin cleanup endpoints for orphaned data
 
 ### Services Running:
-- ✅ Backend API on Render (https://ai-library-backend.onrender.com)
+- ✅ Backend API on Render (https://ai-library-backend-3mmv.onrender.com)
 - ✅ Frontend deployed on Vercel (multiple production URLs)
 - ✅ PostgreSQL database (Supabase)
 - ✅ Chat cleanup service (24-hour retention)

@@ -195,10 +195,10 @@ testSmartOrchestrator();
 
 ## Testing in Production (Render)
 
-Once deployed to Render (https://ai-library-backend.onrender.com), replace `http://localhost:5000` with the production URL:
+Once deployed to Render (https://ai-library-backend-3mmv.onrender.com), replace `http://localhost:5000` with the production URL:
 
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/components/generate/smart \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/components/generate/smart \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE" \
   -d '{"prompt": "Create a button component"}'

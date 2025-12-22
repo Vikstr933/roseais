@@ -8,7 +8,7 @@ The frontend deployed on Vercel was unable to connect to the backend API on Rend
 
 ### Error Messages:
 ```
-Access to fetch at 'https://ai-library-backend.onrender.com/api/workspaces'
+Access to fetch at 'https://ai-library-backend-3mmv.onrender.com/api/workspaces'
 from origin 'https://newai-sigma.vercel.app' has been blocked by CORS policy:
 No 'Access-Control-Allow-Origin' header is present on the requested resource.
 ```
@@ -101,7 +101,7 @@ app.use(
 - **GitHub Push:** Completed at commit `8e46a6c`
 - **Render Auto-Deploy:** Triggered automatically
 - **Expected Deploy Time:** 5-10 minutes
-- **Backend URL:** https://ai-library-backend.onrender.com
+- **Backend URL:** https://ai-library-backend-3mmv.onrender.com
 
 ## ⏰ Timeline
 

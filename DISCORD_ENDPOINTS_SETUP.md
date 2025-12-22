@@ -39,7 +39,7 @@ Nu kommer Discord att visa dessa länkar när användare interagerar med din bot
 ### Steg 1: Konfigurera i Discord Developer Portal
 1. Gå till **"General Information"** i Discord Developer Portal
 2. Scrolla ner till **"Linked Roles Verification URL"**
-3. Fyll i: `https://ai-library-backend.onrender.com/api/discord/verify-user`
+3. Fyll i: `https://ai-library-backend-3mmv.onrender.com/api/discord/verify-user`
 4. Klicka på **"Save Changes"**
 
 ### Steg 2: Konfigurera i Discord Server
@@ -107,7 +107,7 @@ npm install tweetnacl
 ### Steg 2: Konfigurera i Discord Developer Portal
 1. Gå till **"General Information"** i Discord Developer Portal
 2. Scrolla ner till **"Interactions Endpoint URL"**
-3. Fyll i: `https://ai-library-backend.onrender.com/api/discord/interactions`
+3. Fyll i: `https://ai-library-backend-3mmv.onrender.com/api/discord/interactions`
 4. Klicka på **"Save Changes"**
 
 ### Steg 3: Hämta Public Key
@@ -161,13 +161,13 @@ Nu kan användare använda slash commands i Discord!
 
 ### Test Linked Roles Verification:
 ```bash
-curl "https://ai-library-backend.onrender.com/api/discord/verify-user?user_id=DISCORD_USER_ID"
+curl "https://ai-library-backend-3mmv.onrender.com/api/discord/verify-user?user_id=DISCORD_USER_ID"
 ```
 
 ### Test Interactions Endpoint:
 ```bash
 # PING test (Discord skickar detta automatiskt)
-curl -X POST https://ai-library-backend.onrender.com/api/discord/interactions \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/discord/interactions \
   -H "Content-Type: application/json" \
   -d '{"type": 1}'
 ```

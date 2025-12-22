@@ -128,7 +128,7 @@ CREATE TABLE discord_user_mappings (
 
 1. **Koppla ditt konto:**
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/discord/link \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/discord/link \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"discordUserId": "DITT_DISCORD_ID"}'

@@ -20,10 +20,10 @@
 - ✅ Fixed TerminalOutput.tsx syntax error (TypeScript clean)
 - ✅ All React bug fixes (Error #310, Hooks ordering)
 - ✅ Updated UI components
-- ✅ Connected to backend API at https://ai-library-backend.onrender.com
+- ✅ Connected to backend API at https://ai-library-backend-3mmv.onrender.com
 
 ### Backend (Render) - ⏳ DEPLOYING
-**URL**: https://ai-library-backend.onrender.com
+**URL**: https://ai-library-backend-3mmv.onrender.com
 **Status**: Auto-deploying from GitHub (commit 5c342f1)
 **ETA**: 5-10 minutes from commit time (08:13 UTC)
 
@@ -161,7 +161,7 @@ a190cdd - Add SmartOrchestrator demo endpoints
 
 #### 1. Test Simple Prompt
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/components/generate \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/components/generate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -178,7 +178,7 @@ curl -X POST https://ai-library-backend.onrender.com/api/components/generate \
 
 #### 2. Test Medium Prompt
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/components/generate \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/components/generate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -195,7 +195,7 @@ curl -X POST https://ai-library-backend.onrender.com/api/components/generate \
 
 #### 3. Test Complex Prompt
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/components/generate \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/components/generate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -227,7 +227,7 @@ curl ... (same as above)
 
 #### 5. Test Legacy Mode
 ```bash
-curl -X POST https://ai-library-backend.onrender.com/api/components/generate \
+curl -X POST https://ai-library-backend-3mmv.onrender.com/api/components/generate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{

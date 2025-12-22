@@ -109,7 +109,7 @@ This error comes from minified/bundled JavaScript (`index-_faD8g3I.js`). The `_p
 
 **Error:**
 ```
-ai-library-backend.onrender.com/api/browser/analyze:1 Failed to load resource: the server responded with a status of 500
+ai-library-backend-3mmv.onrender.com/api/browser/analyze:1 Failed to load resource: the server responded with a status of 500
 ```
 
 **Root Cause:**

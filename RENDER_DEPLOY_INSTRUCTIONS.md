@@ -38,7 +38,7 @@ ALLOWED_ORIGINS=https://newai-sigma.vercel.app,https://newai.vercel.app
 Efter deployment, öppna browser console på `https://newai-sigma.vercel.app` och kör:
 
 ```javascript
-fetch('https://ai-library-backend.onrender.com/api/auth/me', {
+fetch('https://ai-library-backend-3mmv.onrender.com/api/auth/me', {
   method: 'GET',
   headers: {
     'Authorization': 'Bearer test',
@@ -83,7 +83,7 @@ Om CORS fortfarande inte fungerar:
    - Kontrollera att det inte finns extra mellanslag eller felaktiga värden
 
 3. **Testa Backend Health:**
-   - Gå till `https://ai-library-backend.onrender.com/health`
+   - Gå till `https://ai-library-backend-3mmv.onrender.com/health`
    - Om detta fungerar, är backend igång
    - Om detta inte fungerar, är backend nere eller har problem
 

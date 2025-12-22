@@ -35,7 +35,7 @@ Efter att backend har deployats, testa:
 
 ```bash
 # Testa endpoint direkt (ersätt med din backend URL)
-curl https://ai-library-backend.onrender.com/api/data-insights/overview \
+curl https://ai-library-backend-3mmv.onrender.com/api/data-insights/overview \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 

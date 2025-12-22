@@ -30,7 +30,7 @@ Denna guide visar hur du konfigurerar OAuth för GitHub och Slack plugins.
 
    **Authorization callback URL:**
    ```
-   https://ai-library-backend.onrender.com/api/plugins/github/callback
+   https://ai-library-backend-3mmv.onrender.com/api/plugins/github/callback
    ```
    
    **ELLER för lokal utveckling:**
@@ -60,7 +60,7 @@ Lägg till dessa i din `.env` fil och på Render/Vercel:
 # GitHub OAuth
 GITHUB_CLIENT_ID=din_client_id_här
 GITHUB_CLIENT_SECRET=din_client_secret_här
-GITHUB_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/github/callback
+GITHUB_REDIRECT_URI=https://ai-library-backend-3mmv.onrender.com/api/plugins/github/callback
 ```
 
 **OBS:** `GITHUB_REDIRECT_URI` är valfritt - systemet konstruerar den automatiskt om den saknas.
@@ -95,7 +95,7 @@ Dessa sätts automatiskt i koden, inget extra behöver göras.
    - Klicka "Add New Redirect URL"
    - Lägg till:
      ```
-     https://ai-library-backend.onrender.com/api/plugins/slack/callback
+     https://ai-library-backend-3mmv.onrender.com/api/plugins/slack/callback
      ```
    - Klicka "Save URLs"
 
@@ -124,7 +124,7 @@ Lägg till dessa i din `.env` fil och på Render/Vercel:
 # Slack OAuth
 SLACK_CLIENT_ID=din_client_id_här
 SLACK_CLIENT_SECRET=din_client_secret_här
-SLACK_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/slack/callback
+SLACK_REDIRECT_URI=https://ai-library-backend-3mmv.onrender.com/api/plugins/slack/callback
 ```
 
 **OBS:** `SLACK_REDIRECT_URI` är valfritt - systemet konstruerar den automatiskt om den saknas.
@@ -150,7 +150,7 @@ SLACK_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/slack/cal
 ```
 
 **Exempel:**
-- Production: `https://ai-library-backend.onrender.com/api/plugins/github/callback`
+- Production: `https://ai-library-backend-3mmv.onrender.com/api/plugins/github/callback`
 - Local: `http://localhost:5000/api/plugins/github/callback`
 
 ---
@@ -172,7 +172,7 @@ SLACK_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/slack/cal
 ```
 
 **Exempel:**
-- Production: `https://ai-library-backend.onrender.com/api/plugins/slack/callback`
+- Production: `https://ai-library-backend-3mmv.onrender.com/api/plugins/slack/callback`
 - Local: `http://localhost:5000/api/plugins/slack/callback`
 
 **Scopes som används:**
@@ -190,14 +190,14 @@ SLACK_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/slack/cal
 
 | Miljö | Redirect URI |
 |-------|--------------|
-| **Production** | `https://ai-library-backend.onrender.com/api/plugins/github/callback` |
+| **Production** | `https://ai-library-backend-3mmv.onrender.com/api/plugins/github/callback` |
 | **Local** | `http://localhost:5000/api/plugins/github/callback` |
 
 ### Slack OAuth URLs
 
 | Miljö | Redirect URI |
 |-------|--------------|
-| **Production** | `https://ai-library-backend.onrender.com/api/plugins/slack/callback` |
+| **Production** | `https://ai-library-backend-3mmv.onrender.com/api/plugins/slack/callback` |
 | **Local** | `http://localhost:5000/api/plugins/slack/callback` |
 
 ---

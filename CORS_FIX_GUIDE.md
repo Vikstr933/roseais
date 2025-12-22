@@ -33,7 +33,7 @@ Backend måste ha de nya CORS-headers som tillåter `Cache-Control`:
 Öppna browser console på `https://newai-sigma.vercel.app` och kör:
 
 ```javascript
-fetch('https://ai-library-backend.onrender.com/api/auth/me', {
+fetch('https://ai-library-backend-3mmv.onrender.com/api/auth/me', {
   method: 'GET',
   headers: {
     'Authorization': 'Bearer test',
@@ -53,7 +53,7 @@ fetch('https://ai-library-backend.onrender.com/api/auth/me', {
 Om du fortfarande får CORS-fel:
 1. Kontrollera Render logs för CORS-meddelanden
 2. Verifiera att `FRONTEND_URL` eller `ALLOWED_ORIGINS` är satt korrekt
-3. Kontrollera att backend faktiskt är igång (gå till `https://ai-library-backend.onrender.com/health`)
+3. Kontrollera att backend faktiskt är igång (gå till `https://ai-library-backend-3mmv.onrender.com/health`)
 
 ## Om problemet kvarstår
 
