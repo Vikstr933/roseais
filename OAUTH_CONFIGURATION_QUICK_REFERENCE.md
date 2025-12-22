@@ -129,7 +129,7 @@ Calendar: http://localhost:5000/api/plugins/google-calendar/callback
    - Fyll i:
      - Name: `AI Library Platform`
      - Homepage: `https://newai-sigma.vercel.app`
-     - Callback: `https://ai-library-backend.onrender.com/api/plugins/github/callback`
+     - Callback: `https://ai-library-backend-3mmv.onrender.com/api/plugins/github/callback`
 
 2. **OAuth App Settings**
    - **Enable Device Flow:** ❌ **LÄMNAR DU AVSTÄNGT**
@@ -154,7 +154,7 @@ Calendar: http://localhost:5000/api/plugins/google-calendar/callback
 
 2. **Konfigurera OAuth**
    - Gå till "OAuth & Permissions"
-   - Lägg till Redirect URL: `https://ai-library-backend.onrender.com/api/plugins/slack/callback`
+   - Lägg till Redirect URL: `https://ai-library-backend-3mmv.onrender.com/api/plugins/slack/callback`
    - Lägg till Bot Token Scopes (se ovan)
 
 3. **Installera App**
