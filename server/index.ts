@@ -728,21 +728,17 @@ const initializeApp = async () => {
               console.log('🔍 Verifying dependencies at startup...');
               
               // Check faster-whisper
+              // In production, this should be installed during build
               const { whisperService } = await import('./services/WhisperService');
               const whisperAvailable = await whisperService.checkDependencies();
               if (!whisperAvailable) {
-                console.log('⚠️ faster-whisper not found, attempting installation...');
-                try {
-                  await whisperService.installDependencies();
-                  console.log('✅ faster-whisper installed successfully at startup');
-                } catch (error) {
-                  console.warn('⚠️ faster-whisper installation failed at startup (will retry on first use):', error);
-                }
+                console.error('❌ faster-whisper is not available. This should be installed during build. Check build logs.');
               } else {
                 console.log('✅ faster-whisper is available');
               }
               
               // Check Playwright (try to launch browser to verify)
+              // In production, this should be installed during build
               try {
                 const { chromium } = await import('playwright');
                 const browser = await chromium.launch({ headless: true });
@@ -750,14 +746,7 @@ const initializeApp = async () => {
                 console.log('✅ Playwright browsers are available');
               } catch (error: any) {
                 if (error.message?.includes('Executable doesn\'t exist') || error.message?.includes('playwright')) {
-                  console.log('⚠️ Playwright browsers not found, attempting installation...');
-                  const { execa } = await import('execa');
-                  try {
-                    await execa('npx', ['playwright', 'install', 'chromium'], { timeout: 120000 });
-                    console.log('✅ Playwright browsers installed successfully at startup');
-                  } catch (installError) {
-                    console.warn('⚠️ Playwright installation failed at startup (will retry on first use):', installError);
-                  }
+                  console.error('❌ Playwright browsers not found. This should be installed during build. Check build logs.');
                 } else {
                   console.warn('⚠️ Playwright check failed:', error.message);
                 }
