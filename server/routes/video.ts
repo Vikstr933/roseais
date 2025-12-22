@@ -8,9 +8,13 @@ import { authenticateUser } from '../middleware/auth';
 import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { SimpleLogger } from '../utils/SimpleLogger';
-// Note: For production, you'll need to install ytdl-core:
-// npm install ytdl-core @types/ytdl-core
-// Or use an alternative approach with external APIs
+import { whisperService } from '../services/WhisperService';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 const router = Router();
 const logger = new SimpleLogger('VideoTranscriptionAPI');
 
@@ -23,54 +27,110 @@ const anthropic = new Anthropic({
 logger.info('[VideoRouter] Video transcription router initialized');
 
 /**
- * Extract audio from YouTube video and transcribe it
+ * Extract audio from YouTube video and transcribe it using Whisper
  * 
- * Note: This is a placeholder implementation. For production, you'll need to:
- * 1. Install ytdl-core: npm install ytdl-core @types/ytdl-core
- * 2. Set up a transcription service (OpenAI Whisper API, Google Speech-to-Text, etc.)
- * 3. Implement actual audio download and transcription
- * 
- * Alternative approach: Use external APIs like:
- * - AssemblyAI for transcription
- * - OpenAI Whisper API
- * - Google Cloud Speech-to-Text
+ * Uses yt-dlp (or ytdl-core if available) to download audio, then Whisper for transcription
  */
 async function transcribeYouTubeVideo(videoId: string): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
+  const tempDir = path.join(process.cwd(), 'temp', `video-${videoId}-${Date.now()}`);
+  let audioPath: string | null = null;
+  
   try {
-    // For now, we'll use a mock implementation
-    // In production, implement actual video download and transcription
-    
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     logger.info(`[VideoTranscription] Processing video: ${videoId}`);
 
-    // TODO: Implement actual video transcription
-    // 1. Download video/audio from YouTube
-    // 2. Extract audio
-    // 3. Send to transcription service (OpenAI Whisper, Google Speech-to-Text, etc.)
-    // 4. Return transcription
+    // Create temp directory
+    await fs.mkdir(tempDir, { recursive: true });
+
+    // Try to get video info and download audio using yt-dlp (more reliable than ytdl-core)
+    // yt-dlp is a fork of youtube-dl with better support
+    audioPath = path.join(tempDir, 'audio.wav');
     
-    // Placeholder response
-    const videoTitle = `Video ${videoId}`;
-    const videoDuration = 0;
+    try {
+      // Try yt-dlp first (recommended)
+      logger.info(`[VideoTranscription] Attempting to download audio with yt-dlp...`);
+      await execAsync(`yt-dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+      logger.info(`[VideoTranscription] Audio downloaded successfully with yt-dlp`);
+    } catch (ytdlpError) {
+      logger.warn(`[VideoTranscription] yt-dlp failed, trying youtube-dl...`);
+      try {
+        // Fallback to youtube-dl
+        await execAsync(`youtube-dl -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+        logger.info(`[VideoTranscription] Audio downloaded successfully with youtube-dl`);
+      } catch (youtubeDlError) {
+        // If both fail, return error message
+        logger.error(`[VideoTranscription] Both yt-dlp and youtube-dl failed`);
+        throw new Error('Failed to download audio. Please install yt-dlp: pip install yt-dlp (or youtube-dl: pip install youtube-dl)');
+      }
+    }
+
+    // Check if audio file exists
+    try {
+      await fs.access(audioPath);
+    } catch {
+      throw new Error('Audio file was not created after download');
+    }
+
+    // Get video info (title, duration) if possible
+    let videoTitle: string | undefined;
+    let videoDuration: number | undefined;
     
-    // For now, return a placeholder transcription
-    // In production, replace this with actual transcription
-    const transcription = `[Video Transcription Service]\n\nVideo ID: ${videoId}\n\nThis is a placeholder transcription. To enable full functionality:\n1. Install ytdl-core: npm install ytdl-core @types/ytdl-core\n2. Set up OpenAI Whisper API or Google Speech-to-Text\n3. Implement audio download and transcription\n\nOnce configured, this will provide:\n- Full video transcription\n- Timestamped segments\n- Speaker identification (if available)\n- Professional formatting`;
+    try {
+      const infoOutput = await execAsync(`yt-dlp --get-title --get-duration "${videoUrl}" 2>/dev/null || youtube-dl --get-title --get-duration "${videoUrl}" 2>/dev/null || echo ""`);
+      const lines = infoOutput.stdout.trim().split('\n');
+      if (lines.length >= 1) videoTitle = lines[0];
+      if (lines.length >= 2) {
+        // Parse duration (format: HH:MM:SS or MM:SS)
+        const durationStr = lines[1];
+        const parts = durationStr.split(':').map(Number);
+        if (parts.length === 3) {
+          videoDuration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        } else if (parts.length === 2) {
+          videoDuration = parts[0] * 60 + parts[1];
+        }
+      }
+    } catch {
+      // Info extraction failed, continue without it
+      logger.warn(`[VideoTranscription] Could not extract video info`);
+    }
+
+    // Transcribe using Whisper
+    logger.info(`[VideoTranscription] Starting Whisper transcription...`);
+    const transcriptionResult = await whisperService.transcribe(audioPath, {
+      language: 'auto', // Auto-detect language
+      task: 'transcribe',
+      returnTimestamps: false
+    });
+
+    const transcription = transcriptionResult.text || 'No transcription available';
+
+    logger.info(`[VideoTranscription] Transcription complete, length: ${transcription.length} characters`);
 
     return {
       transcription,
-      videoTitle,
+      videoTitle: videoTitle || `Video ${videoId}`,
       videoDuration,
     };
   } catch (error) {
     logger.error(`[VideoTranscription] Error transcribing video: ${error}`);
     throw error;
+  } finally {
+    // Cleanup temp files
+    try {
+      if (audioPath) {
+        await fs.unlink(audioPath).catch(() => {});
+      }
+      await fs.rmdir(tempDir).catch(() => {});
+    } catch (cleanupError) {
+      logger.warn(`[VideoTranscription] Failed to cleanup temp directory: ${cleanupError}`);
+    }
   }
 }
 
 /**
  * Convert transcription to voice actor script
  */
-async function convertToScript(transcription: string, videoTitle?: string): Promise<string> {
+export async function convertToScript(transcription: string, videoTitle?: string): Promise<string> {
   try {
     const prompt = `You are a professional script writer for voice actors. Convert the following video transcription into a well-structured voice actor script.
 

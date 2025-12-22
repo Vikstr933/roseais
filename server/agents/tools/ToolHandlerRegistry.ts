@@ -60,6 +60,7 @@ import {
   GetUsageStatsToolHandler,
   GetDataInsightsToolHandler
 } from './AnalyticsToolHandler';
+import { VideoTranscriptionToolHandler } from './VideoTranscriptionToolHandler';
 import { SimpleLogger } from '../../utils/SimpleLogger';
 
 const logger = new SimpleLogger('ToolHandlerRegistry');
@@ -148,6 +149,8 @@ export class ToolHandlerRegistry {
       // Analytics handlers (need agent instance)
       new GetUsageStatsToolHandler(this.agentInstance),
       new GetDataInsightsToolHandler(this.agentInstance),
+      // Video transcription handler
+      new VideoTranscriptionToolHandler(),
       // All handlers registered!
     ];
 
