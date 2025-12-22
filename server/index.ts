@@ -737,6 +737,51 @@ const initializeApp = async () => {
                 console.log('✅ faster-whisper is available');
               }
               
+              // Check yt-dlp in venv-whisper
+              // In production, this should be installed during Docker build
+              const cwd = process.cwd();
+              const possibleVenvPaths = [
+                path.join(cwd, 'venv-whisper'),
+                path.join('/app', 'venv-whisper'), // Docker default
+                path.join('/opt/render/project/src', 'venv-whisper'), // Render Node.js env
+              ].filter((p, index, arr) => arr.indexOf(p) === index); // Remove duplicates
+              
+              let ytdlpFound = false;
+              let foundVenvPath: string | null = null;
+              
+              for (const venvPath of possibleVenvPaths) {
+                const venvPython = process.platform === 'win32'
+                  ? path.join(venvPath, 'Scripts', 'python.exe')
+                  : path.join(venvPath, 'bin', 'python3');
+                
+                try {
+                  const stats = await fs.promises.stat(venvPython);
+                  if (stats.isFile()) {
+                    // Try to import yt_dlp
+                    const { exec } = await import('child_process');
+                    const { promisify } = await import('util');
+                    const execAsync = promisify(exec);
+                    try {
+                      await execAsync(`"${venvPython}" -c "import yt_dlp; print('OK')"`, { timeout: 5000 });
+                      ytdlpFound = true;
+                      foundVenvPath = venvPath;
+                      console.log(`✅ yt-dlp is available in venv at: ${venvPath}`);
+                      break;
+                    } catch {
+                      // yt-dlp not installed in this venv
+                    }
+                  }
+                } catch {
+                  // Venv doesn't exist at this path
+                }
+              }
+              
+              if (!ytdlpFound) {
+                console.error('❌ yt-dlp is not available in venv-whisper. This should be installed during Docker build. Check build logs.');
+                console.error(`   Searched paths: ${possibleVenvPaths.join(', ')}`);
+                console.error(`   Current working directory: ${cwd}`);
+              }
+              
               // Check Playwright (try to launch browser to verify)
               // In production, this should be installed during build
               try {

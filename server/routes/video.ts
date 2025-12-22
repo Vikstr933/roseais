@@ -48,11 +48,12 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
     
     // Check if we have venv-whisper with yt-dlp installed
     // Try multiple possible paths (Docker /app, Render /opt/render/project/src, etc.)
+    const cwd = process.cwd();
     const possibleVenvPaths = [
-      path.join(process.cwd(), 'venv-whisper'),
+      path.join(cwd, 'venv-whisper'),
       path.join('/app', 'venv-whisper'), // Docker default
       path.join('/opt/render/project/src', 'venv-whisper'), // Render Node.js env
-    ];
+    ].filter((p, index, arr) => arr.indexOf(p) === index); // Remove duplicates
     
     let pythonCommand: string | null = null;
     let foundVenvPath: string | null = null;
