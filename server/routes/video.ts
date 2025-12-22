@@ -28,13 +28,88 @@ const anthropic = new Anthropic({
 logger.info('[VideoRouter] Video transcription router initialized');
 
 /**
- * Get transcript directly from YouTube using youtube-transcript-api
- * This is the preferred method as it doesn't require downloading audio
+ * Get transcript using youtube-transcript.io API (paid service, more reliable)
+ * Falls back to Python youtube-transcript-api if API key not available
  * @param videoId - YouTube video ID
  * @param languageCode - Optional language code (e.g., 'en', 'sv', 'auto')
  * @returns Transcript text or null if not available
  */
 async function getYouTubeTranscript(videoId: string, languageCode: string = 'auto'): Promise<string | null> {
+  // First, try youtube-transcript.io API if API key is available (most reliable)
+  const transcriptIoApiKey = process.env.YOUTUBE_TRANSCRIPT_IO_API_KEY;
+  
+  if (transcriptIoApiKey) {
+    try {
+      logger.info(`[VideoTranscription] Attempting to get transcript via youtube-transcript.io API for video: ${videoId}`);
+      
+      const response = await fetch('https://www.youtube-transcript.io/api/transcripts', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${transcriptIoApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ids: [videoId],
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // API returns array of results, find our video
+        if (data && Array.isArray(data) && data.length > 0) {
+          const videoData = data.find((item: any) => item.id === videoId || item.videoId === videoId);
+          
+          if (videoData && videoData.transcript) {
+            // Transcript can be string or array of snippets
+            let transcriptText: string;
+            
+            if (typeof videoData.transcript === 'string') {
+              transcriptText = videoData.transcript;
+            } else if (Array.isArray(videoData.transcript)) {
+              // Array of snippets with text, start, duration
+              transcriptText = videoData.transcript
+                .map((snippet: any) => snippet.text || snippet)
+                .filter(Boolean)
+                .join(' ');
+            } else {
+              logger.warn(`[VideoTranscription] Unexpected transcript format from API`);
+              throw new Error('Unexpected transcript format');
+            }
+            
+            if (transcriptText && transcriptText.trim()) {
+              logger.info(`[VideoTranscription] ✅ Successfully retrieved transcript via youtube-transcript.io API (${transcriptText.length} characters)`);
+              return transcriptText.trim();
+            }
+          }
+        }
+        
+        logger.info(`[VideoTranscription] Transcript not found in API response for video: ${videoId}`);
+      } else if (response.status === 429) {
+        // Rate limited
+        const retryAfter = response.headers.get('Retry-After');
+        logger.warn(`[VideoTranscription] Rate limited by youtube-transcript.io API. Retry after: ${retryAfter}s`);
+      } else {
+        logger.warn(`[VideoTranscription] youtube-transcript.io API returned status ${response.status}`);
+      }
+    } catch (error) {
+      logger.warn(`[VideoTranscription] Error calling youtube-transcript.io API: ${error instanceof Error ? error.message : String(error)}`);
+      // Continue to fallback method
+    }
+  }
+
+  // Fallback to Python youtube-transcript-api (often fails on cloud providers due to IP blocking)
+  return await getYouTubeTranscriptPython(videoId, languageCode);
+}
+
+/**
+ * Get transcript directly from YouTube using youtube-transcript-api Python library
+ * This often fails on cloud providers due to IP blocking, but we try it as fallback
+ * @param videoId - YouTube video ID
+ * @param languageCode - Optional language code (e.g., 'en', 'sv', 'auto')
+ * @returns Transcript text or null if not available
+ */
+async function getYouTubeTranscriptPython(videoId: string, languageCode: string = 'auto'): Promise<string | null> {
   try {
     logger.info(`[VideoTranscription] Attempting to get transcript directly from YouTube for video: ${videoId}`);
     
@@ -82,7 +157,7 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
     const youtubeApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY || process.env.YOUTUBE_API_KEY;
     
     // Create Python script to get transcript
-    // Using the correct API syntax: fetch() returns FetchedTranscript object
+    // Using the correct API syntax: fetch() returns FetchedTranscript object                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
     const script = `
 import sys
 from youtube_transcript_api import YouTubeTranscriptApi
