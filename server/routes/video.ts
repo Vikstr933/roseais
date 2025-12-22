@@ -112,7 +112,13 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
       
       if (pythonCommand) {
         // Use Python module directly if venv is available
-        const command = `"${pythonCommand}" -m yt_dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
+        // Add flags to handle YouTube bot detection:
+        // --user-agent: Use a real browser user agent
+        // --extractor-args: Pass arguments to YouTube extractor
+        // --no-check-certificate: Skip SSL verification if needed
+        // --extract-flat: Try to avoid JavaScript requirements
+        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+        const command = `"${pythonCommand}" -m yt_dlp --user-agent "${userAgent}" --extractor-args "youtube:player_client=android" -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
         logger.info(`[VideoTranscription] Executing: ${command}`);
         logger.info(`[VideoTranscription] Using venv from: ${foundVenvPath}`);
         const result = await execAsync(command, { 
@@ -146,18 +152,44 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
         logger.error(`[VideoTranscription] yt-dlp stderr: ${errorStderr.substring(0, 1000)}`);
       }
       
-      // In production, yt-dlp should be installed during build
-      // If it's not available, this is a configuration error
-      const errorDetails = [
-        `Error: ${errorMessage}`,
-        `Searched venv paths: ${possibleVenvPaths.join(', ')}`,
-        `Current working directory: ${process.cwd()}`,
-        `Python command used: ${pythonCommand || 'none (system yt-dlp attempted)'}`,
-      ];
-      if (errorStdout) errorDetails.push(`stdout: ${errorStdout.substring(0, 500)}`);
-      if (errorStderr) errorDetails.push(`stderr: ${errorStderr.substring(0, 500)}`);
+      // Check if it's a YouTube bot detection error
+      const isBotDetectionError = 
+        errorStderr.includes('Sign in to confirm you\'re not a bot') ||
+        errorStderr.includes('confirm you\'re not a bot') ||
+        errorMessage.includes('bot');
       
-      throw new Error(`yt-dlp is not available or failed to download audio. This should be installed during Docker build. ${errorDetails.join(' | ')}`);
+      if (isBotDetectionError) {
+        // Try alternative method: use android client which often bypasses bot detection
+        logger.info(`[VideoTranscription] YouTube bot detection detected, trying alternative method...`);
+        try {
+          const userAgent = 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+          const altCommand = `"${pythonCommand}" -m yt_dlp --user-agent "${userAgent}" --extractor-args "youtube:player_client=android" --extractor-args "youtube:player_skip=webpage" -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
+          logger.info(`[VideoTranscription] Trying alternative command: ${altCommand}`);
+          const altResult = await execAsync(altCommand, { 
+            maxBuffer: 10 * 1024 * 1024,
+            timeout: 300000,
+            cwd: foundVenvPath ? path.dirname(foundVenvPath) : undefined
+          });
+          logger.info(`[VideoTranscription] ✅ Alternative method succeeded!`);
+          // Continue with transcription
+        } catch (altError: any) {
+          logger.error(`[VideoTranscription] Alternative method also failed: ${altError instanceof Error ? altError.message : String(altError)}`);
+          throw new Error(`YouTube is blocking automated access. This video may require manual verification. Please try a different video or contact support if this persists. Original error: ${errorMessage.substring(0, 200)}`);
+        }
+      } else {
+        // In production, yt-dlp should be installed during build
+        // If it's not available, this is a configuration error
+        const errorDetails = [
+          `Error: ${errorMessage}`,
+          `Searched venv paths: ${possibleVenvPaths.join(', ')}`,
+          `Current working directory: ${process.cwd()}`,
+          `Python command used: ${pythonCommand || 'none (system yt-dlp attempted)'}`,
+        ];
+        if (errorStdout) errorDetails.push(`stdout: ${errorStdout.substring(0, 500)}`);
+        if (errorStderr) errorDetails.push(`stderr: ${errorStderr.substring(0, 500)}`);
+        
+        throw new Error(`yt-dlp is not available or failed to download audio. This should be installed during Docker build. ${errorDetails.join(' | ')}`);
+      }
     }
 
     // Check if audio file exists
