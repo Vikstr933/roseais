@@ -46,6 +46,8 @@ services:
         sync: false
       - key: TWOCAPTCHA_API_KEY
         sync: false
+      - key: YOUTUBE_TRANSCRIPT_API_KEY
+        sync: false
       - key: WEBSHARE_PROXY_API_KEY
         sync: false
       - key: WORKSPACES_PATH

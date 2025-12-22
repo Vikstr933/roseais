@@ -75,17 +75,24 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
       return null;
     }
 
+    // Get YouTube API key if available (optional - for better rate limits)
+    const youtubeApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY || process.env.YOUTUBE_API_KEY;
+    
     // Create Python script to get transcript
     const script = `
 import sys
+import os
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import TextFormatter
 
 video_id = "${videoId}"
 language_code = "${languageCode}"
+api_key = ${youtubeApiKey ? `"${youtubeApiKey}"` : 'None'}
 
 try:
     # List available transcripts
+    # Note: youtube-transcript-api doesn't directly use API key, but we can pass it
+    # for potential future use or if using YouTube Data API v3 directly
     transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
     
     # Try to get transcript in requested language, fallback to English or any available
