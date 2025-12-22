@@ -207,7 +207,7 @@ export default function VideoTranscriptionApp() {
         variant: 'destructive',
       });
     } finally {
-      setIsProcessing(false);
+      setIsTranscribing(false);
     }
   };
 
@@ -572,7 +572,7 @@ export default function VideoTranscriptionApp() {
         )}
 
         {/* Use Case Example */}
-        {!transcriptionResult && !isProcessing && (
+        {!transcriptionResult && !isTranscribing && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
