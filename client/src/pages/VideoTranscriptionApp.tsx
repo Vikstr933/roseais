@@ -46,36 +46,52 @@ export default function VideoTranscriptionApp() {
   const { toast } = useToast();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [cookiesText, setCookiesText] = useState<string | null>(null);
-  const [showCookieHelp, setShowCookieHelp] = useState(false);
-  const [isExtracting, setIsExtracting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [extractedAudio, setExtractedAudio] = useState<AudioExtractionResult | null>(null);
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('');
 
-  const extractVideoId = (url: string): string | null => {
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-      /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1]) {
-        return match[1];
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav', 'audio/ogg', 'audio/webm', 'audio/m4a'];
+      const validExtensions = ['.mp3', '.wav', '.ogg', '.webm', '.m4a'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+        toast({
+          title: 'Invalid file type',
+          description: 'Please upload an audio file (MP3, WAV, OGG, WebM, or M4A)',
+          variant: 'destructive',
+        });
+        return;
       }
+
+      // Validate file size (500MB max)
+      const maxSize = 500 * 1024 * 1024; // 500MB
+      if (file.size > maxSize) {
+        toast({
+          title: 'File too large',
+          description: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (500MB)`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setSelectedFile(file);
+      setError(null);
     }
-    return null;
   };
 
-  const handleExtractAudio = async () => {
-    if (!youtubeUrl.trim()) {
+  const handleUploadAudio = async () => {
+    if (!selectedFile) {
       toast({
         title: 'Error',
-        description: 'Please enter a YouTube URL',
+        description: 'Please select an audio file',
         variant: 'destructive',
       });
       return;
@@ -86,34 +102,37 @@ export default function VideoTranscriptionApp() {
       return;
     }
 
-    const videoId = extractVideoId(youtubeUrl);
-    if (!videoId) {
-      toast({
-        title: 'Invalid URL',
-        description: 'Please enter a valid YouTube URL',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsExtracting(true);
+    setIsUploading(true);
     setError(null);
     setExtractedAudio(null);
-    setProgress('Extracting audio from YouTube...');
+    setProgress('Uploading audio file...');
 
     try {
-      const response = await apiFetch('/api/video/extract-audio', {
+      // Read file as base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
+
+      const base64Data = await base64Promise;
+
+      const response = await apiFetch('/api/video/upload-audio', {
         method: 'POST',
         body: JSON.stringify({
-          youtubeUrl,
-          videoId,
-          cookies: cookiesText || undefined,
+          audioData: base64Data,
+          filename: selectedFile.name,
+          mimeType: selectedFile.type,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to extract audio (${response.status})`);
+        throw new Error(errorData.error || `Failed to upload audio (${response.status})`);
       }
 
       const data = await response.json();
@@ -122,39 +141,32 @@ export default function VideoTranscriptionApp() {
         const extractionResult: AudioExtractionResult = {
           audioId: data.audioId,
           audioPath: data.audioPath || null,
-          videoTitle: data.videoTitle,
-          videoDuration: data.videoDuration,
-          transcript: data.transcript,
-          method: data.method,
+          videoTitle: selectedFile.name,
+          videoDuration: undefined,
+          transcript: undefined,
+          method: 'audio_extraction',
         };
         
         setExtractedAudio(extractionResult);
         setProgress('');
         
-        if (data.method === 'direct_transcript') {
-          toast({
-            title: 'Transcript Retrieved!',
-            description: 'Transcript retrieved directly from YouTube. Click "Transcribe" to generate script.',
-          });
-        } else {
-          toast({
-            title: 'Audio Extracted!',
-            description: 'Audio extracted successfully. Click "Transcribe" to continue.',
-          });
-        }
+        toast({
+          title: 'Audio Uploaded!',
+          description: 'Audio file uploaded successfully. Click "Transcribe" to continue.',
+        });
       } else {
-        throw new Error(data.error || 'Failed to extract audio');
+        throw new Error(data.error || 'Failed to upload audio');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to extract audio');
+      setError(err instanceof Error ? err.message : 'Failed to upload audio');
       setProgress('');
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to extract audio',
+        description: err instanceof Error ? err.message : 'Failed to upload audio',
         variant: 'destructive',
       });
     } finally {
-      setIsExtracting(false);
+      setIsUploading(false);
     }
   };
 
@@ -291,12 +303,20 @@ export default function VideoTranscriptionApp() {
             </div>
             <div>
               <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Video Transcription to Script
+                Audio Transcription to Script
               </h1>
               <p className="text-sm text-muted-foreground mb-4">
-                Transcribe YouTube videos and convert them into professional voice actor scripts for voiceover production.
+                Upload an audio file and convert it into a professional voice actor script for voiceover production.
                 Perfect for content creators who need to add commentary voiceover to body cam footage, documentaries, or any video content.
               </p>
+              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md text-xs text-blue-700 dark:text-blue-300">
+                <p className="font-medium mb-1">💡 How to get audio from YouTube videos:</p>
+                <ol className="list-decimal list-inside space-y-1 ml-2">
+                  <li>Use <strong>yt-dlp</strong> (command line): <code className="bg-background px-1 rounded">yt-dlp -x --audio-format mp3 VIDEO_URL</code></li>
+                  <li>Use online tools like <strong>ytmp3.cc</strong> or <strong>y2mate.com</strong></li>
+                  <li>Use browser extensions like <strong>Video DownloadHelper</strong></li>
+                </ol>
+              </div>
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Mic className="h-3 w-3" />
@@ -332,113 +352,58 @@ export default function VideoTranscriptionApp() {
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium mb-2 block">
-                YouTube Video URL
+                Audio File (MP3, WAV, OGG, WebM, or M4A)
               </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="pl-10"
-                    disabled={isExtracting || isTranscribing}
-                  />
-                </div>
-                <Button
-                  onClick={handleExtractAudio}
-                  disabled={isExtracting || !youtubeUrl.trim()}
-                  className="min-w-[140px]"
-                >
-                  {isExtracting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Extracting...
-                    </>
-                  ) : (
-                    <>
-                      <Video className="h-4 w-4 mr-2" />
-                      Extract Audio
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Cookie Upload (Optional) */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-sm font-medium">
-                  YouTube Cookies (Optional - helps bypass bot detection)
-                </label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => setShowCookieHelp(!showCookieHelp)}
-                >
-                  <HelpCircle className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              {showCookieHelp && (
-                <div className="mb-3 p-3 bg-muted rounded-md text-xs space-y-2">
-                  <p className="font-medium">How to export YouTube cookies:</p>
-                  <ol className="list-decimal list-inside space-y-1 ml-2">
-                    <li>Install browser extension: <strong>Get cookies.txt LOCALLY</strong> (Chrome/Edge) or <strong>cookies.txt</strong> (Firefox)</li>
-                    <li>Go to <strong>youtube.com</strong> and make sure you're logged in</li>
-                    <li>Click the extension icon and export cookies</li>
-                    <li>Upload the <code className="bg-background px-1 rounded">cookies.txt</code> file below</li>
-                  </ol>
-                  <p className="text-muted-foreground mt-2">
-                    Cookies help bypass YouTube's bot detection. This is optional but recommended if you encounter blocking errors.
-                  </p>
-                </div>
-              )}
-
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
                     type="file"
-                    accept=".txt"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          const text = event.target?.result as string;
-                          setCookiesText(text);
-                        };
-                        reader.readAsText(file);
-                      }
-                    }}
+                    accept="audio/*,.mp3,.wav,.ogg,.webm,.m4a"
+                    onChange={handleFileSelect}
                     className="cursor-pointer"
-                    disabled={isExtracting || isTranscribing}
+                    disabled={isUploading || isTranscribing}
                   />
                 </div>
-                {cookiesText && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setCookiesText(null);
-                      // Reset file input
-                      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-                      if (fileInput) fileInput.value = '';
-                    }}
-                    disabled={isExtracting || isTranscribing}
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Clear
-                  </Button>
-                )}
+                <Button
+                  onClick={handleUploadAudio}
+                  disabled={isUploading || !selectedFile || isTranscribing}
+                  className="min-w-[140px]"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Audio
+                    </>
+                  )}
+                </Button>
               </div>
-              {cookiesText && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  ✓ Cookies loaded ({cookiesText.split('\n').length} lines)
-                </p>
+              {selectedFile && (
+                <div className="mt-2 p-2 bg-muted rounded-md text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Selected: <strong>{selectedFile.name}</strong> ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                        if (fileInput) fileInput.value = '';
+                      }}
+                      disabled={isUploading || isTranscribing}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
 

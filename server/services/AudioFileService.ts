@@ -47,14 +47,39 @@ export class AudioFileService {
 
   /**
    * Get audio file path by ID
-   * @param audioId - Audio file ID (format: videoId-timestamp)
+   * @param audioId - Audio file ID (format: videoId-timestamp or upload-timestamp-random)
+   * @returns Full path to audio file or null if not found
    */
-  getAudioFileById(audioId: string): string | null {
-    // audioId format: videoId-timestamp
-    const files = fs.readdir(this.audioDir).catch(() => []);
-    // We'll need to search for the file
-    // For now, return path based on ID
-    return path.join(this.audioDir, `${audioId}.mp3`);
+  async getAudioFileById(audioId: string): Promise<string | null> {
+    try {
+      const files = await fs.readdir(this.audioDir);
+      
+      // Search for file that starts with audioId
+      // audioId format can be: videoId-timestamp or upload-timestamp-random
+      // File format: audioId.extension
+      const matchingFile = files.find(file => {
+        const fileWithoutExt = path.parse(file).name;
+        return fileWithoutExt === audioId || fileWithoutExt.startsWith(audioId);
+      });
+      
+      if (matchingFile) {
+        return path.join(this.audioDir, matchingFile);
+      }
+      
+      // Fallback: try common extensions
+      const extensions = ['mp3', 'wav', 'ogg', 'webm', 'm4a'];
+      for (const ext of extensions) {
+        const testPath = path.join(this.audioDir, `${audioId}.${ext}`);
+        if (await this.fileExists(testPath)) {
+          return testPath;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      logger.warn('AudioFileService', `Failed to find audio file by ID: ${audioId}`, error as Error);
+      return null;
+    }
   }
 
   /**

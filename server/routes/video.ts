@@ -940,8 +940,95 @@ async function extractAudioFromYouTube(
 }
 
 /**
+ * POST /api/video/upload-audio
+ * Upload audio file for transcription
+ * Accepts base64 encoded audio file or file buffer
+ */
+router.post('/upload-audio', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const { audioData, filename, mimeType } = req.body;
+
+    if (!audioData) {
+      return res.status(400).json({
+        success: false,
+        error: 'Audio file data is required',
+      });
+    }
+
+    // Generate unique audio ID
+    const audioId = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    
+    // Determine file extension from filename or mimeType
+    let extension = 'mp3';
+    if (filename) {
+      const match = filename.match(/\.([a-z0-9]+)$/i);
+      if (match) extension = match[1].toLowerCase();
+    } else if (mimeType) {
+      const mimeToExt: Record<string, string> = {
+        'audio/mpeg': 'mp3',
+        'audio/mp3': 'mp3',
+        'audio/wav': 'wav',
+        'audio/wave': 'wav',
+        'audio/x-wav': 'wav',
+        'audio/ogg': 'ogg',
+        'audio/webm': 'webm',
+        'audio/m4a': 'm4a',
+      };
+      extension = mimeToExt[mimeType] || 'mp3';
+    }
+
+    const audioPath = audioFileService.getAudioFilePath(audioId, extension);
+
+    // Decode base64 audio data
+    let audioBuffer: Buffer;
+    try {
+      // Remove data URL prefix if present (e.g., "data:audio/mpeg;base64,")
+      const base64Data = audioData.includes(',') 
+        ? audioData.split(',')[1] 
+        : audioData;
+      audioBuffer = Buffer.from(base64Data, 'base64');
+    } catch (error) {
+      logger.error(`[AudioUpload] Failed to decode base64 audio data: ${error instanceof Error ? error.message : String(error)}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid audio data format. Expected base64 encoded audio.',
+      });
+    }
+
+    // Validate file size
+    const sizeMB = audioBuffer.length / (1024 * 1024);
+    if (sizeMB > audioFileService['maxFileSizeMB']) {
+      return res.status(400).json({
+        success: false,
+        error: `File size (${sizeMB.toFixed(2)}MB) exceeds maximum allowed size (${audioFileService['maxFileSizeMB']}MB)`,
+      });
+    }
+
+    // Save audio file
+    await fs.writeFile(audioPath, audioBuffer);
+
+    logger.info(`[AudioUpload] ✅ Audio file uploaded: ${audioId} (${sizeMB.toFixed(2)}MB)`);
+
+    res.json({
+      success: true,
+      audioId,
+      audioPath,
+      sizeMB: sizeMB.toFixed(2),
+      message: 'Audio file uploaded successfully',
+    });
+  } catch (error: any) {
+    logger.error(`[AudioUpload] Error: ${error.message}`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to upload audio file',
+    });
+  }
+});
+
+/**
  * POST /api/video/extract-audio
- * Extract audio from YouTube video
+ * Extract audio from YouTube video (DEPRECATED - use upload-audio instead)
+ * Kept for backward compatibility
  */
 router.post('/extract-audio', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -1062,14 +1149,18 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         finalAudioPath = audioPath;
       } else if (audioId) {
         // Try to find audio file by ID
-        const foundPath = audioFileService.getAudioFileById(audioId);
+        const foundPath = await audioFileService.getAudioFileById(audioId);
         if (foundPath && await audioFileService.fileExists(foundPath)) {
           finalAudioPath = foundPath;
         } else {
-          // Try to construct path from audioId (format: videoId-timestamp)
-          const constructedPath = path.join(audioFileService.getAudioDirectory(), `${audioId}.mp3`);
-          if (await audioFileService.fileExists(constructedPath)) {
-            finalAudioPath = constructedPath;
+          // Try to construct path from audioId (format: videoId-timestamp or upload-timestamp-random)
+          const extensions = ['mp3', 'wav', 'ogg', 'webm', 'm4a'];
+          for (const ext of extensions) {
+            const constructedPath = path.join(audioFileService.getAudioDirectory(), `${audioId}.${ext}`);
+            if (await audioFileService.fileExists(constructedPath)) {
+              finalAudioPath = constructedPath;
+              break;
+            }
           }
         }
       }
