@@ -617,7 +617,15 @@ async function extractAudioFromYouTube(
 ): Promise<{ audioId: string; audioPath: string; videoTitle?: string; videoDuration?: number }> {
   // First, try to get transcript directly from YouTube (preferred method)
   logger.info(`[AudioExtraction] Processing video: ${videoId}`);
-  const directTranscript = await getYouTubeTranscript(videoId, languageCode);
+  
+  let directTranscript: string | null = null;
+  try {
+    directTranscript = await getYouTubeTranscript(videoId, languageCode);
+  } catch (error) {
+    // If transcript retrieval fails, log and continue to audio extraction
+    logger.warn(`[AudioExtraction] Failed to get transcript directly: ${error instanceof Error ? error.message : String(error)}`);
+    directTranscript = null;
+  }
   
   if (directTranscript) {
     logger.info(`[AudioExtraction] ✅ Transcript available directly from YouTube, skipping audio extraction`);
@@ -625,7 +633,7 @@ async function extractAudioFromYouTube(
     const audioId = `transcript-${videoId}-${Date.now()}`;
     return {
       audioId,
-      audioPath: '', // No audio file needed
+      audioPath: '', // No audio file needed - empty string indicates direct transcript
       videoTitle: undefined,
       videoDuration: undefined,
     };
