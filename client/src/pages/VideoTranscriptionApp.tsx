@@ -285,36 +285,44 @@ export default function VideoTranscriptionApp() {
             className="space-y-6"
           >
             {/* Transcription */}
-            <div className="bg-card rounded-lg border p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Mic className="h-5 w-5 text-primary" />
-                  <h2 className="text-xl font-semibold">Transcription</h2>
+            <div 
+              className="relative bg-card rounded-lg border-2 border-transparent p-6 overflow-hidden group"
+              style={{
+                background: 'linear-gradient(white, white) padding-box, linear-gradient(to right, #a855f7, #ec4899, #a855f7) border-box',
+                border: '2px solid transparent',
+              }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all duration-300 pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Mic className="h-5 w-5 text-purple-600" />
+                    <h2 className="text-xl font-semibold">Transcription</h2>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopy(transcriptionResult.transcription, 'transcription')}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownload(transcriptionResult.transcription, 'transcription.txt')}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCopy(transcriptionResult.transcription, 'transcription')}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownload(transcriptionResult.transcription, 'transcription.txt')}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </Button>
-                </div>
-              </div>
-              <Textarea
-                value={transcriptionResult.transcription}
-                readOnly
-                className="min-h-[200px] font-mono text-sm"
-              />
+                <Textarea
+                  value={transcriptionResult.transcription}
+                  readOnly
+                  className="min-h-[200px] font-mono text-sm"
+                />
               </div>
             </div>
 
@@ -328,35 +336,36 @@ export default function VideoTranscriptionApp() {
             >
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all duration-300 pointer-events-none" />
               <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-purple-600" />
-                  <h2 className="text-xl font-semibold">Voice Actor Script</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-purple-600" />
+                    <h2 className="text-xl font-semibold">Voice Actor Script</h2>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopy(transcriptionResult.script, 'script')}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownload(transcriptionResult.script, 'voice-actor-script.txt')}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCopy(transcriptionResult.script, 'script')}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownload(transcriptionResult.script, 'voice-actor-script.txt')}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </Button>
-                </div>
+                <Textarea
+                  value={transcriptionResult.script}
+                  readOnly
+                  className="min-h-[300px] font-mono text-sm"
+                />
               </div>
-              <Textarea
-                value={transcriptionResult.script}
-                readOnly
-                className="min-h-[300px] font-mono text-sm"
-              />
             </div>
           </motion.div>
         )}
