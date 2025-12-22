@@ -51,36 +51,79 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
       ? path.join(process.cwd(), 'venv-whisper', 'Scripts', 'python.exe')
       : path.join(process.cwd(), 'venv-whisper', 'bin', 'python3');
     
-    let ytdlpCommand = 'yt-dlp';
     let pythonCommand: string | null = null;
     
-    // Check if venv Python exists and has yt-dlp
+    // Check if venv Python exists and has yt-dlp installed
     try {
       await fs.access(venvPython);
-      // Try to use venv Python with yt-dlp module
-      pythonCommand = venvPython;
-      logger.info(`[VideoTranscription] Using venv Python: ${venvPython}`);
-    } catch {
-      logger.debug(`[VideoTranscription] Venv Python not found, using system yt-dlp`);
+      logger.info(`[VideoTranscription] Venv Python found at: ${venvPython}`);
+      
+      // Verify that yt-dlp is actually installed in the venv
+      try {
+        const checkYtdlp = await execAsync(`"${venvPython}" -c "import yt_dlp; print('OK')"`);
+        if (checkYtdlp.stdout.includes('OK')) {
+          pythonCommand = venvPython;
+          logger.info(`[VideoTranscription] ✅ yt-dlp verified in venv, using: ${venvPython}`);
+        } else {
+          logger.warn(`[VideoTranscription] Venv Python found but yt-dlp not installed`);
+        }
+      } catch (importError) {
+        logger.warn(`[VideoTranscription] Venv Python found but yt-dlp import failed: ${importError instanceof Error ? importError.message : String(importError)}`);
+      }
+    } catch (accessError) {
+      logger.warn(`[VideoTranscription] Venv Python not found at ${venvPython}, will try system yt-dlp`);
+      logger.debug(`[VideoTranscription] Access error: ${accessError instanceof Error ? accessError.message : String(accessError)}`);
     }
     
     try {
       // Try yt-dlp first (recommended)
       logger.info(`[VideoTranscription] Attempting to download audio with yt-dlp...`);
+      logger.info(`[VideoTranscription] Video URL: ${videoUrl}`);
+      logger.info(`[VideoTranscription] Audio output path: ${audioPath}`);
       
       if (pythonCommand) {
         // Use Python module directly if venv is available
-        await execAsync(`"${pythonCommand}" -m yt_dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+        const command = `"${pythonCommand}" -m yt_dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
+        logger.info(`[VideoTranscription] Executing: ${command}`);
+        const result = await execAsync(command, { 
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+          timeout: 300000 // 5 minute timeout
+        });
+        logger.info(`[VideoTranscription] yt-dlp stdout: ${result.stdout.substring(0, 500)}`);
+        if (result.stderr) {
+          logger.debug(`[VideoTranscription] yt-dlp stderr: ${result.stderr.substring(0, 500)}`);
+        }
       } else {
         // Try system yt-dlp command
-        await execAsync(`yt-dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+        logger.info(`[VideoTranscription] Trying system yt-dlp command...`);
+        const command = `yt-dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
+        logger.info(`[VideoTranscription] Executing: ${command}`);
+        const result = await execAsync(command, { 
+          maxBuffer: 10 * 1024 * 1024,
+          timeout: 300000
+        });
+        logger.info(`[VideoTranscription] yt-dlp stdout: ${result.stdout.substring(0, 500)}`);
+        if (result.stderr) {
+          logger.debug(`[VideoTranscription] yt-dlp stderr: ${result.stderr.substring(0, 500)}`);
+        }
       }
-      logger.info(`[VideoTranscription] Audio downloaded successfully with yt-dlp`);
-    } catch (ytdlpError) {
-      logger.error(`[VideoTranscription] yt-dlp failed: ${ytdlpError instanceof Error ? ytdlpError.message : String(ytdlpError)}`);
+      logger.info(`[VideoTranscription] ✅ Audio downloaded successfully with yt-dlp`);
+    } catch (ytdlpError: any) {
+      const errorMessage = ytdlpError instanceof Error ? ytdlpError.message : String(ytdlpError);
+      const errorStdout = ytdlpError?.stdout || '';
+      const errorStderr = ytdlpError?.stderr || '';
+      
+      logger.error(`[VideoTranscription] ❌ yt-dlp failed: ${errorMessage}`);
+      if (errorStdout) {
+        logger.error(`[VideoTranscription] yt-dlp stdout: ${errorStdout.substring(0, 1000)}`);
+      }
+      if (errorStderr) {
+        logger.error(`[VideoTranscription] yt-dlp stderr: ${errorStderr.substring(0, 1000)}`);
+      }
+      
       // In production, yt-dlp should be installed during build
       // If it's not available, this is a configuration error
-      throw new Error('yt-dlp is not available. This should be installed during build. Please check build logs and ensure yt-dlp is installed in venv-whisper.');
+      throw new Error(`yt-dlp is not available or failed to download audio. This should be installed during build. Please check build logs and ensure yt-dlp is installed in venv-whisper. Error: ${errorMessage}`);
     }
 
     // Check if audio file exists
