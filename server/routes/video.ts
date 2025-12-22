@@ -37,6 +37,7 @@ logger.info('[VideoRouter] Video transcription router initialized');
 export async function transcribeYouTubeVideo(videoId: string, cookiesText?: string): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
   const tempDir = path.join(process.cwd(), 'temp', `video-${videoId}-${Date.now()}`);
   let audioPath: string | null = null;
+  let cookiesPath: string | null = null;
   
   try {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -50,11 +51,13 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
     audioPath = path.join(tempDir, 'audio.wav');
     
     // Save cookies to file if provided
-    let cookiesPath: string | null = null;
     if (cookiesText) {
       cookiesPath = path.join(tempDir, 'cookies.txt');
       await fs.writeFile(cookiesPath, cookiesText, 'utf-8');
-      logger.info(`[VideoTranscription] Using provided cookies for authentication`);
+      const cookieLines = cookiesText.split('\n').filter(line => line.trim() && !line.startsWith('#')).length;
+      logger.info(`[VideoTranscription] ✅ Using provided cookies for authentication (${cookieLines} cookie entries)`);
+    } else {
+      logger.info(`[VideoTranscription] ⚠️ No cookies provided - bot detection may occur. Consider uploading cookies.txt for better success rate.`);
     }
     
     // Check if we have venv-whisper with yt-dlp installed
@@ -127,14 +130,19 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
     // Different player clients often work when others fail
     const strategies = [
       {
-        name: 'Android client',
+        name: 'Android client (mobile)',
         userAgent: 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
         extractorArgs: 'youtube:player_client=android',
       },
       {
-        name: 'iOS client',
+        name: 'iOS client (mobile)',
         userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
         extractorArgs: 'youtube:player_client=ios',
+      },
+      {
+        name: 'Android client (skip webpage)',
+        userAgent: 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        extractorArgs: 'youtube:player_client=android:player_skip=webpage',
       },
       {
         name: 'TV embedded client',
@@ -157,11 +165,17 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
         logger.info(`[VideoTranscription] Video URL: ${videoUrl}`);
         logger.info(`[VideoTranscription] Audio output path: ${audioPath}`);
         
-        // Build command with optional cookies
+        // Build command with optional cookies and additional flags to help bypass detection
         let command = `"${pythonCommand}" -m yt_dlp --user-agent "${strategy.userAgent}" --extractor-args "${strategy.extractorArgs}"`;
         if (cookiesPath) {
           command += ` --cookies "${cookiesPath}"`;
+          logger.info(`[VideoTranscription] 🔐 Using cookies file: ${cookiesPath}`);
         }
+        // Additional flags to help bypass detection
+        // --no-playlist: Ensure we only download the single video
+        // --no-warnings: Reduce noise in output
+        // --no-check-certificate: Skip SSL verification (can help with some network issues)
+        command += ` --no-playlist --no-warnings --no-check-certificate`;
         command += ` -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
         
         logger.info(`[VideoTranscription] Executing: ${command}`);
@@ -218,7 +232,11 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
         logger.error(`[VideoTranscription] Last stderr: ${errorStderr.substring(0, 1000)}`);
       }
       
-      throw new Error(`YouTube is blocking automated access after trying ${strategies.length} different methods. To bypass this, please export your YouTube cookies from your browser and upload them. Install the "Get cookies.txt LOCALLY" browser extension, go to youtube.com (while logged in), export cookies, and upload the cookies.txt file.`);
+      const cookieHint = cookiesPath 
+        ? 'Cookies were provided but still blocked. The cookies may be expired or invalid. Please export fresh cookies from your browser.'
+        : 'No cookies were provided. To bypass bot detection, please export your YouTube cookies from your browser and upload them. Install the "Get cookies.txt LOCALLY" browser extension (Chrome/Edge) or "cookies.txt" (Firefox), go to youtube.com (while logged in), export cookies, and upload the cookies.txt file.';
+      
+      throw new Error(`YouTube is blocking automated access after trying ${strategies.length} different methods. ${cookieHint}`);
     }
 
     // Check if audio file exists
