@@ -6,7 +6,7 @@ services:
     region: oregon
     plan: free
     branch: main
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
     envVars:
