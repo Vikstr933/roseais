@@ -46,10 +46,35 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
     // yt-dlp is a fork of youtube-dl with better support
     audioPath = path.join(tempDir, 'audio.wav');
     
+    // Check if we have venv-whisper with yt-dlp installed
+    const venvPython = process.platform === 'win32'
+      ? path.join(process.cwd(), 'venv-whisper', 'Scripts', 'python.exe')
+      : path.join(process.cwd(), 'venv-whisper', 'bin', 'python3');
+    
+    let ytdlpCommand = 'yt-dlp';
+    let pythonCommand: string | null = null;
+    
+    // Check if venv Python exists and has yt-dlp
+    try {
+      await fs.access(venvPython);
+      // Try to use venv Python with yt-dlp module
+      pythonCommand = venvPython;
+      logger.info(`[VideoTranscription] Using venv Python: ${venvPython}`);
+    } catch {
+      logger.debug(`[VideoTranscription] Venv Python not found, using system yt-dlp`);
+    }
+    
     try {
       // Try yt-dlp first (recommended)
       logger.info(`[VideoTranscription] Attempting to download audio with yt-dlp...`);
-      await execAsync(`yt-dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+      
+      if (pythonCommand) {
+        // Use Python module directly if venv is available
+        await execAsync(`"${pythonCommand}" -m yt_dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+      } else {
+        // Try system yt-dlp command
+        await execAsync(`yt-dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+      }
       logger.info(`[VideoTranscription] Audio downloaded successfully with yt-dlp`);
     } catch (ytdlpError) {
       logger.warn(`[VideoTranscription] yt-dlp failed, trying youtube-dl...`);
@@ -58,9 +83,20 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
         await execAsync(`youtube-dl -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
         logger.info(`[VideoTranscription] Audio downloaded successfully with youtube-dl`);
       } catch (youtubeDlError) {
-        // If both fail, return error message
-        logger.error(`[VideoTranscription] Both yt-dlp and youtube-dl failed`);
-        throw new Error('Failed to download audio. Please install yt-dlp: pip install yt-dlp (or youtube-dl: pip install youtube-dl)');
+        // If both fail, try installing yt-dlp in venv at runtime
+        logger.warn(`[VideoTranscription] Both yt-dlp and youtube-dl failed, attempting runtime installation...`);
+        try {
+          if (pythonCommand) {
+            await execAsync(`"${pythonCommand}" -m pip install yt-dlp --quiet`);
+            await execAsync(`"${pythonCommand}" -m yt_dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`);
+            logger.info(`[VideoTranscription] Audio downloaded successfully after runtime installation`);
+          } else {
+            throw new Error('yt-dlp not available and cannot install at runtime');
+          }
+        } catch (installError) {
+          logger.error(`[VideoTranscription] Runtime installation also failed`);
+          throw new Error('Failed to download audio. Please install yt-dlp: pip install yt-dlp (or youtube-dl: pip install youtube-dl)');
+        }
       }
     }
 
