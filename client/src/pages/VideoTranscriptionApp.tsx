@@ -326,7 +326,7 @@ export default function VideoTranscriptionApp() {
                     onChange={(e) => setYoutubeUrl(e.target.value)}
                     placeholder="https://www.youtube.com/watch?v=..."
                     className="pl-10"
-                    disabled={isProcessing}
+                    disabled={isExtracting || isTranscribing}
                   />
                 </div>
                 <Button
@@ -398,7 +398,7 @@ export default function VideoTranscriptionApp() {
                       }
                     }}
                     className="cursor-pointer"
-                    disabled={isProcessing}
+                    disabled={isExtracting || isTranscribing}
                   />
                 </div>
                 {cookiesText && (
@@ -412,7 +412,7 @@ export default function VideoTranscriptionApp() {
                       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
                       if (fileInput) fileInput.value = '';
                     }}
-                    disabled={isProcessing}
+                    disabled={isExtracting || isTranscribing}
                   >
                     <X className="h-4 w-4 mr-1" />
                     Clear
