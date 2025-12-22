@@ -144,11 +144,99 @@ export function PreviewTab({
     setIsServerRunning(!!livePreviewUrl);
   }, [livePreviewUrl]);
 
+  // Auto-mount files to WebContainer when project is loaded
+  useEffect(() => {
+    if (!response?.files || response.files.length === 0) return;
+    if (!isWebContainerProject) return; // Only for WebContainer projects
+    if (isServerRunning) return; // Don't remount if server is already running
+
+    // Auto-mount files when project loads
+    const mountFiles = async () => {
+      try {
+        console.log('📁 Auto-mounting files to WebContainer...');
+        
+        // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
+        const fixedFiles = response.files.map(file => {
+          const filename = file.path?.split('/').pop() || '';
+          const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
+          
+          if (isConfigFile && file.path?.startsWith('src/')) {
+            return { ...file, path: filename };
+          }
+          return file;
+        });
+
+        // Ensure App.tsx exists
+        const hasMainTsx = fixedFiles.some(f => f.path === 'src/main.tsx' || f.path.endsWith('/main.tsx'));
+        const hasAppTsx = fixedFiles.some(f => f.path === 'src/App.tsx' || f.path.endsWith('/App.tsx'));
+        
+        if (hasMainTsx && !hasAppTsx) {
+          console.warn('⚠️ App.tsx missing but main.tsx exists - creating fallback App.tsx');
+          fixedFiles.push({
+            path: 'src/App.tsx',
+            content: `import React from 'react';
+
+export default function App() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          Welcome to Your App
+        </h1>
+        <p className="text-lg text-gray-600 mb-6">
+          Your application is ready! Start building your features here.
+        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            💡 <strong>Next steps:</strong> Customize this component to build your application.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}`
+          });
+        }
+
+        // Boot WebContainer if needed
+        await webContainerService.boot();
+        
+        // Mount files
+        await webContainerService.writeFiles(fixedFiles);
+        console.log('✅ Files auto-mounted to WebContainer');
+      } catch (error) {
+        console.error('Failed to auto-mount files:', error);
+        // Don't show alert for auto-mount failures - user can still click Start Server
+      }
+    };
+
+    mountFiles();
+  }, [response?.files, isWebContainerProject, isServerRunning]);
+
   // Handle start dev server
   const handleStartServer = async () => {
-    if (!response?.files || !setLivePreviewUrl) {
-      console.error('Cannot start server: missing files or setLivePreviewUrl');
-      alert('Cannot start server: missing files or preview URL setter');
+    console.log('🔍 handleStartServer called:', {
+      hasResponse: !!response,
+      hasFiles: !!response?.files,
+      filesCount: response?.files?.length || 0,
+      hasSetLivePreviewUrl: !!setLivePreviewUrl
+    });
+
+    if (!response) {
+      console.error('Cannot start server: response is null');
+      alert('Cannot start server: No project loaded. Please wait for the project to finish loading.');
+      return;
+    }
+
+    if (!response.files || response.files.length === 0) {
+      console.error('Cannot start server: no files in response');
+      alert('Cannot start server: No files found in this project. Please generate or add files first.');
+      return;
+    }
+
+    if (!setLivePreviewUrl) {
+      console.error('Cannot start server: setLivePreviewUrl is not provided');
+      alert('Cannot start server: Preview URL setter is missing. This is a bug, please refresh the page.');
       return;
     }
 
