@@ -19,6 +19,9 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
+// Log router initialization
+logger.info('[VideoRouter] Video transcription router initialized');
+
 /**
  * Extract audio from YouTube video and transcribe it
  * 

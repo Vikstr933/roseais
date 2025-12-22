@@ -551,7 +551,12 @@ const initializeApp = async () => {
     app.use('/api/shared-connectors', sharedConnectorsRouter); // Shared Connectors (workspace-wide API keys)
     app.use('/api/python', pythonSandboxRouter); // Python Sandbox for Flask/Django/FastAPI
     app.use('/api/whisper', whisperRouter); // KB-Whisper Swedish speech recognition
-    app.use('/api/video', videoRouter); // Video transcription and script generation
+    try {
+      app.use('/api/video', videoRouter); // Video transcription and script generation
+      console.log('✅ Video router registered at /api/video');
+    } catch (error) {
+      console.error('❌ Failed to register video router:', error);
+    }
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
 
     app.get('/api/sse/agent-activity', (req, res) => {
