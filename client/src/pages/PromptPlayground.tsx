@@ -705,8 +705,9 @@ export default function PromptPlayground() {
   useEffect(() => {
     async function initWebContainer() {
       // Check if WebContainer is supported
-      if (!useWebContainer) {
-        console.log('âš ï¸ WebContainer disabled, using server-side deployment');
+      // WebContainer is always enabled - no fallback
+      if (false) {
+        console.log('WebContainer disabled, using server-side deployment');
         return;
       }
 
