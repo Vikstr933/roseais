@@ -514,8 +514,6 @@ export default function PromptPlayground() {
   // WebContainer state
   const [webContainerReady, setWebContainerReady] = useState(false);
   const [webContainerBooting, setWebContainerBooting] = useState(false);
-  // WebContainer is always enabled - no fallback
-  const [useWebContainer] = useState(true);
   const { toast } = useToast();
   
   // Cleanup streaming intervals on unmount
