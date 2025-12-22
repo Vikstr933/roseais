@@ -79,53 +79,31 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
     const youtubeApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY || process.env.YOUTUBE_API_KEY;
     
     // Create Python script to get transcript
+    // Using the simplest method: get_transcript() which handles language selection automatically
     const script = `
 import sys
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import TextFormatter
-from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
 
 video_id = "${videoId}"
 language_code = "${languageCode}"
 
 try:
-    # Try to get transcript directly first (simplest method)
-    try:
-        if language_code and language_code != 'auto':
-            # Try specific language
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
-        else:
-            # Try English first, then any available
-            try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-            except:
-                # Fallback to any available language
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-    except NoTranscriptFound:
-        # If direct method fails, try listing available transcripts
+    # Try to get transcript - API handles language selection automatically
+    if language_code and language_code != 'auto':
+        # Try specific language first
         try:
-            transcript_list_obj = YouTubeTranscriptApi.list_transcripts(video_id)
-            
-            # Try to find transcript in requested language
-            if language_code and language_code != 'auto':
-                transcript = transcript_list_obj.find_transcript([language_code])
-            else:
-                # Try English first
-                try:
-                    transcript = transcript_list_obj.find_transcript(['en'])
-                except:
-                    # Fallback to generated English transcript
-                    try:
-                        transcript = transcript_list_obj.find_generated_transcript(['en'])
-                    except:
-                        # Get any available transcript
-                        transcript = transcript_list_obj.find_transcript(['en'])
-            
-            transcript_list = transcript.fetch()
-        except Exception as list_error:
-            raise NoTranscriptFound(video_id, None, f"Could not list transcripts: {str(list_error)}")
-    except TranscriptsDisabled:
-        raise Exception(f"Transcripts are disabled for video {video_id}")
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
+        except:
+            # Fallback to English if specific language not available
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+    else:
+        # Auto-detect: try English first, then any available
+        try:
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+        except:
+            # Fallback to any available language
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
     
     # Format as plain text
     formatter = TextFormatter()
@@ -133,14 +111,15 @@ try:
     
     print(formatted_text)
     sys.exit(0)
-except NoTranscriptFound as e:
-    print(f"ERROR: No transcript found: {str(e)}", file=sys.stderr)
-    sys.exit(1)
-except TranscriptsDisabled as e:
-    print(f"ERROR: Transcripts disabled: {str(e)}", file=sys.stderr)
-    sys.exit(1)
 except Exception as e:
-    print(f"ERROR: {str(e)}", file=sys.stderr)
+    error_msg = str(e)
+    # Check for specific error types
+    if 'NoTranscriptFound' in error_msg or 'could not retrieve a transcript' in error_msg.lower():
+        print(f"ERROR: No transcript found for video {video_id}", file=sys.stderr)
+    elif 'TranscriptsDisabled' in error_msg or 'transcripts are disabled' in error_msg.lower():
+        print(f"ERROR: Transcripts are disabled for video {video_id}", file=sys.stderr)
+    else:
+        print(f"ERROR: {error_msg}", file=sys.stderr)
     sys.exit(1)
 `;
 
