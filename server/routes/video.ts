@@ -112,10 +112,17 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
     let videoDuration: number | undefined;
     
     try {
-      const infoOutput = await execAsync(`yt-dlp --get-title --get-duration "${videoUrl}" 2>/dev/null || youtube-dl --get-title --get-duration "${videoUrl}" 2>/dev/null || echo ""`);
+      let infoCommand: string;
+      if (pythonCommand) {
+        infoCommand = `"${pythonCommand}" -m yt_dlp --get-title --get-duration "${videoUrl}" 2>/dev/null`;
+      } else {
+        infoCommand = `yt-dlp --get-title --get-duration "${videoUrl}" 2>/dev/null || youtube-dl --get-title --get-duration "${videoUrl}" 2>/dev/null || echo ""`;
+      }
+      
+      const infoOutput = await execAsync(infoCommand);
       const lines = infoOutput.stdout.trim().split('\n');
-      if (lines.length >= 1) videoTitle = lines[0];
-      if (lines.length >= 2) {
+      if (lines.length >= 1 && lines[0]) videoTitle = lines[0];
+      if (lines.length >= 2 && lines[1]) {
         // Parse duration (format: HH:MM:SS or MM:SS)
         const durationStr = lines[1];
         const parts = durationStr.split(':').map(Number);
