@@ -106,7 +106,7 @@ WebContainer requires cross-origin isolation to enable SharedArrayBuffer support
 **Frontend (Vercel):**
 ```bash
 # .env.production
-VITE_API_URL=https://ai-library-backend.onrender.com
+VITE_API_URL=https://ai-library-backend-3mmv.onrender.com
 VITE_SUPABASE_URL=https://[project].supabase.co
 VITE_SUPABASE_ANON_KEY=...
 ```
@@ -394,17 +394,17 @@ Before deploying ANY changes:
 
 **Check deployed backend version:**
 ```bash
-curl -s https://ai-library-backend.onrender.com/api/health | grep gitCommit
+curl -s https://ai-library-backend-3mmv.onrender.com/api/health | grep gitCommit
 ```
 
 **Test CORS from command line:**
 ```bash
-curl -I -H "Origin: https://newai-sigma.vercel.app" https://ai-library-backend.onrender.com/api/health | grep -i access-control
+curl -I -H "Origin: https://newai-sigma.vercel.app" https://ai-library-backend-3mmv.onrender.com/api/health | grep -i access-control
 ```
 
 **Check if admin route exists:**
 ```bash
-curl -s https://ai-library-backend.onrender.com/api/admin/stats
+curl -s https://ai-library-backend-3mmv.onrender.com/api/admin/stats
 # Should return: {"error":"Authentication required"}
 # NOT: 404 Not Found
 ```
@@ -421,7 +421,7 @@ console.log('API Base URL:', API_BASE_URL);
 
 1. **Check Render Logs** - See what errors backend is throwing
 2. **Check Vercel Logs** - See if frontend build succeeded
-3. **Test Backend Health** - `curl https://ai-library-backend.onrender.com/api/health`
+3. **Test Backend Health** - `curl https://ai-library-backend-3mmv.onrender.com/api/health`
 4. **Check Environment Variables** - In both Render and Vercel dashboards
 5. **Verify Git Commits Match** - Compare commit hashes in dashboards vs local
 6. **Clear Browser Cache** - Often the issue after CORS/routing fixes

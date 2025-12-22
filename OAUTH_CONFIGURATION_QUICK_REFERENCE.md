@@ -52,7 +52,7 @@ GITHUB_CLIENT_ID=din_client_id_här
 GITHUB_CLIENT_SECRET=din_client_secret_här
 
 # Optional (auto-genereras om saknas)
-GITHUB_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/github/callback
+GITHUB_REDIRECT_URI=https://ai-library-backend-3mmv.onrender.com/api/plugins/github/callback
 ```
 
 **Var hittar du dessa?**
@@ -68,7 +68,7 @@ SLACK_CLIENT_ID=din_client_id_här
 SLACK_CLIENT_SECRET=din_client_secret_här
 
 # Optional (auto-genereras om saknas)
-SLACK_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/slack/callback
+SLACK_REDIRECT_URI=https://ai-library-backend-3mmv.onrender.com/api/plugins/slack/callback
 ```
 
 **Var hittar du dessa?**
@@ -83,10 +83,10 @@ SLACK_REDIRECT_URI=https://ai-library-backend.onrender.com/api/plugins/slack/cal
 
 ### Production (Render)
 ```
-GitHub:  https://ai-library-backend.onrender.com/api/plugins/github/callback
-Slack:   https://ai-library-backend.onrender.com/api/plugins/slack/callback
-Gmail:   https://ai-library-backend.onrender.com/api/plugins/gmail/callback
-Calendar: https://ai-library-backend.onrender.com/api/plugins/google-calendar/callback
+GitHub:  https://ai-library-backend-3mmv.onrender.com/api/plugins/github/callback
+Slack:   https://ai-library-backend-3mmv.onrender.com/api/plugins/slack/callback
+Gmail:   https://ai-library-backend-3mmv.onrender.com/api/plugins/gmail/callback
+Calendar: https://ai-library-backend-3mmv.onrender.com/api/plugins/google-calendar/callback
 ```
 
 ### Local Development

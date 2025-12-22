@@ -36,8 +36,7 @@ export class VideoTranscriptionToolHandler extends BaseToolHandler {
           },
           convertToScript: {
             type: 'boolean',
-            description: 'Whether to convert the transcription to a voice actor script (default: true)',
-            default: true
+            description: 'Whether to convert the transcription to a voice actor script (default: true)'
           }
         },
         required: ['youtubeUrl']
@@ -79,7 +78,6 @@ export class VideoTranscriptionToolHandler extends BaseToolHandler {
       }
 
       // Import and call transcription functions directly
-      // We need to import the module to access the functions
       const videoModule = await import('../../routes/video');
       
       // Transcribe video
@@ -91,29 +89,14 @@ export class VideoTranscriptionToolHandler extends BaseToolHandler {
         script = await videoModule.convertToScript(transcription, videoTitle);
       }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to transcribe video (${response.status})`);
-      }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        return {
-          success: false,
-          error: data.error || 'Transcription failed',
-          fallbackSuggestion: 'Please check the YouTube URL and try again'
-        };
-      }
-
       // Format the result for the user
       const result = {
         success: true,
-        transcription: data.transcription,
-        script: data.script,
-        videoTitle: data.videoTitle,
-        videoDuration: data.videoDuration,
-        message: `Successfully transcribed video${data.videoTitle ? `: ${data.videoTitle}` : ''}${data.videoDuration ? ` (${Math.round(data.videoDuration / 60)} minutes)` : ''}`
+        transcription,
+        script,
+        videoTitle,
+        videoDuration,
+        message: `Successfully transcribed video${videoTitle ? `: ${videoTitle}` : ''}${videoDuration ? ` (${Math.round(videoDuration / 60)} minutes)` : ''}`
       };
 
       return {
@@ -131,18 +114,10 @@ export class VideoTranscriptionToolHandler extends BaseToolHandler {
   }
 
   async isAvailable(context: ToolContext): Promise<boolean> {
-    // Check if the video transcription API is available
+    // Check if Whisper service is available
     try {
-      const backendUrl = process.env.BACKEND_URL || 
-                        process.env.RENDER_EXTERNAL_URL || 
-                        'https://ai-library-backend.onrender.com';
-      
-      const response = await fetch(`${backendUrl}/api/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000) // 5 second timeout
-      });
-      
-      return response.ok;
+      const { whisperService } = await import('../../services/WhisperService');
+      return await whisperService.checkDependencies();
     } catch {
       return false;
     }
@@ -161,4 +136,3 @@ export class VideoTranscriptionToolHandler extends BaseToolHandler {
     ];
   }
 }
-

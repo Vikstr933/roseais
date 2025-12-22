@@ -14,10 +14,10 @@ CORS errors efter OAuth-callbacks:
 
 ```env
 # Backend URL (sätts automatiskt av Render, men kan behövas explicit)
-BACKEND_URL=https://ai-library-backend.onrender.com
+BACKEND_URL=https://ai-library-backend-3mmv.onrender.com
 
 # Render External URL (sätts automatiskt, men kan behövas explicit)
-RENDER_EXTERNAL_URL=https://ai-library-backend.onrender.com
+RENDER_EXTERNAL_URL=https://ai-library-backend-3mmv.onrender.com
 
 # Frontend URL (du har redan denna)
 FRONTEND_URL=https://newai-sigma.vercel.app
@@ -57,7 +57,7 @@ curl -H "Origin: https://newai-sigma.vercel.app" \
      -H "Access-Control-Request-Method: GET" \
      -H "Access-Control-Request-Headers: Content-Type,Authorization" \
      -X OPTIONS \
-     https://ai-library-backend.onrender.com/api/plugins
+     https://ai-library-backend-3mmv.onrender.com/api/plugins
 ```
 
 Du bör få tillbaka:
