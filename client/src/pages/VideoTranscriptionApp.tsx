@@ -33,9 +33,11 @@ interface TranscriptionResult {
 
 interface AudioExtractionResult {
   audioId: string;
-  audioPath: string;
+  audioPath: string | null;
   videoTitle?: string;
   videoDuration?: number;
+  transcript?: string; // Direct transcript if available
+  method?: 'direct_transcript' | 'audio_extraction';
 }
 
 export default function VideoTranscriptionApp() {
@@ -179,12 +181,22 @@ export default function VideoTranscriptionApp() {
     setProgress('Transcribing audio...');
 
     try {
+      // If we have a direct transcript, send it to avoid re-fetching
+      const requestBody: any = {
+        audioId: extractedAudio.audioId,
+        audioPath: extractedAudio.audioPath,
+      };
+      
+      if (extractedAudio.transcript) {
+        requestBody.transcript = extractedAudio.transcript;
+        setProgress('Generating script from transcript...');
+      } else {
+        setProgress('Transcribing audio...');
+      }
+
       const response = await apiFetch('/api/video/transcribe', {
         method: 'POST',
-        body: JSON.stringify({
-          audioId: extractedAudio.audioId,
-          audioPath: extractedAudio.audioPath,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
