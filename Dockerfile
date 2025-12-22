@@ -56,7 +56,8 @@ RUN npm run build:backend
 RUN npm cache clean --force
 
 # Skapa directories för workspaces och temp files
-RUN mkdir -p /data/workspaces /app/temp /app/scripts
+# Använd relativ path för temp så att det matchar process.cwd()/temp
+RUN mkdir -p /data/workspaces temp cache/whisper-models
 
 # Sätt environment variable för workspaces path
 ENV WORKSPACES_PATH=/data/workspaces
