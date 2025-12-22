@@ -49,6 +49,9 @@ RUN npm run build:backend || echo "Build step completed"
 # Skapa directories för workspaces och temp files
 RUN mkdir -p /data/workspaces /app/temp /app/scripts
 
+# Sätt environment variable för workspaces path
+ENV WORKSPACES_PATH=/data/workspaces
+
 # Exponera port
 EXPOSE 10000
 

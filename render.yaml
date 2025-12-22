@@ -48,6 +48,8 @@ services:
         sync: false
       - key: WEBSHARE_PROXY_API_KEY
         sync: false
+      - key: WORKSPACES_PATH
+        value: /data/workspaces
     autoDeploy: true
     disk:
       name: ai-library-data
