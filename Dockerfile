@@ -58,8 +58,9 @@ RUN npm cache clean --force
 # Använd relativ path för temp så att det matchar process.cwd()/temp
 RUN mkdir -p /data/workspaces temp cache/whisper-models
 
-# Sätt environment variable för workspaces path
+# Sätt environment variables
 ENV WORKSPACES_PATH=/data/workspaces
+ENV NODE_ENV=production
 
 # Exponera port
 EXPOSE 10000
