@@ -28,6 +28,134 @@ const anthropic = new Anthropic({
 logger.info('[VideoRouter] Video transcription router initialized');
 
 /**
+ * Get transcript directly from YouTube using youtube-transcript-api
+ * This is the preferred method as it doesn't require downloading audio
+ * @param videoId - YouTube video ID
+ * @param languageCode - Optional language code (e.g., 'en', 'sv', 'auto')
+ * @returns Transcript text or null if not available
+ */
+async function getYouTubeTranscript(videoId: string, languageCode: string = 'auto'): Promise<string | null> {
+  try {
+    logger.info(`[VideoTranscription] Attempting to get transcript directly from YouTube for video: ${videoId}`);
+    
+    // Find venv Python
+    const cwd = process.cwd();
+    const possibleVenvPaths = [
+      path.join(cwd, 'venv-whisper'),
+      path.join('/app', 'venv-whisper'),
+      path.join('/opt/render/project/src', 'venv-whisper'),
+    ];
+
+    let pythonCommand: string | null = null;
+
+    for (const venvPath of possibleVenvPaths) {
+      const venvPython = process.platform === 'win32'
+        ? path.join(venvPath, 'Scripts', 'python.exe')
+        : path.join(venvPath, 'bin', 'python3');
+
+      try {
+        const stats = await fs.stat(venvPython);
+        if (stats.isFile()) {
+          // Check if youtube-transcript-api is installed
+          const checkApi = await execAsync(`"${venvPython}" -c "import youtube_transcript_api; print('OK')"`, {
+            timeout: 5000
+          });
+          if (checkApi.stdout.includes('OK')) {
+            pythonCommand = venvPython;
+            break;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (!pythonCommand) {
+      logger.warn('[VideoTranscription] youtube-transcript-api not available, will use fallback method');
+      return null;
+    }
+
+    // Create Python script to get transcript
+    const script = `
+import sys
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.formatters import TextFormatter
+
+video_id = "${videoId}"
+language_code = "${languageCode}"
+
+try:
+    # List available transcripts
+    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+    
+    # Try to get transcript in requested language, fallback to English or any available
+    try:
+        if language_code and language_code != 'auto':
+            transcript = transcript_list.find_transcript([language_code])
+        else:
+            # Try English first, then any available
+            try:
+                transcript = transcript_list.find_transcript(['en'])
+            except:
+                transcript = transcript_list.find_generated_transcript(['en'])
+    except:
+        # Fallback to any available transcript
+        transcript = transcript_list.find_transcript(['en'])
+    
+    # Fetch the transcript
+    transcript_data = transcript.fetch()
+    
+    # Format as plain text
+    formatter = TextFormatter()
+    formatted_text = formatter.format_transcript(transcript_data)
+    
+    print(formatted_text)
+    sys.exit(0)
+except Exception as e:
+    print(f"ERROR: {str(e)}", file=sys.stderr)
+    sys.exit(1)
+`;
+
+    // Write script to temp file
+    const tempScriptPath = path.join(process.cwd(), 'temp', `get_transcript_${Date.now()}.py`);
+    await fs.mkdir(path.dirname(tempScriptPath), { recursive: true });
+    await fs.writeFile(tempScriptPath, script, 'utf-8');
+
+    try {
+      // Execute Python script
+      const result = await execAsync(`"${pythonCommand}" "${tempScriptPath}"`, {
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 30000, // 30 second timeout
+      });
+
+      // Clean up temp script
+      await fs.unlink(tempScriptPath).catch(() => {});
+
+      if (result.stdout && result.stdout.trim()) {
+        logger.info(`[VideoTranscription] ✅ Successfully retrieved transcript directly from YouTube (${result.stdout.length} characters)`);
+        return result.stdout.trim();
+      }
+
+      return null;
+    } catch (execError: any) {
+      // Clean up temp script
+      await fs.unlink(tempScriptPath).catch(() => {});
+      
+      const errorMsg = execError.stderr || execError.message || String(execError);
+      if (errorMsg.includes('NoTranscriptFound') || errorMsg.includes('TranscriptsDisabled')) {
+        logger.info(`[VideoTranscription] Transcript not available for this video, will use fallback method`);
+      } else {
+        logger.warn(`[VideoTranscription] Failed to get transcript: ${errorMsg.substring(0, 200)}`);
+      }
+      return null;
+    }
+  } catch (error) {
+    logger.warn(`[VideoTranscription] Error getting YouTube transcript: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+/**
  * Fetch WebShare proxy for yt-dlp
  * Returns proxy string in format: http://username:password@ip:port
  */
@@ -105,14 +233,29 @@ async function getWebShareProxy(): Promise<string | null> {
  * @param videoId - YouTube video ID
  * @param cookiesText - Optional: YouTube cookies in Netscape format (from browser extension)
  */
-export async function transcribeYouTubeVideo(videoId: string, cookiesText?: string): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
+export async function transcribeYouTubeVideo(videoId: string, cookiesText?: string, languageCode: string = 'auto'): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
+  // First, try to get transcript directly from YouTube (preferred method)
+  logger.info(`[VideoTranscription] Processing video: ${videoId}`);
+  const directTranscript = await getYouTubeTranscript(videoId, languageCode);
+  
+  if (directTranscript) {
+    logger.info(`[VideoTranscription] ✅ Using direct transcript from YouTube`);
+    return {
+      transcription: directTranscript,
+      videoTitle: undefined,
+      videoDuration: undefined,
+    };
+  }
+
+  // Fallback to audio extraction + Whisper transcription
+  logger.info(`[VideoTranscription] Transcript not available, falling back to audio extraction + Whisper`);
+  
   const tempDir = path.join(process.cwd(), 'temp', `video-${videoId}-${Date.now()}`);
   let audioPath: string | null = null;
   let cookiesPath: string | null = null;
   
   try {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    logger.info(`[VideoTranscription] Processing video: ${videoId}`);
 
     // Create temp directory
     await fs.mkdir(tempDir, { recursive: true });
@@ -443,10 +586,29 @@ Script:`;
 async function extractAudioFromYouTube(
   youtubeUrl: string,
   videoId: string,
-  cookiesText?: string
+  cookiesText?: string,
+  languageCode: string = 'auto'
 ): Promise<{ audioId: string; audioPath: string; videoTitle?: string; videoDuration?: number }> {
+  // First, try to get transcript directly from YouTube (preferred method)
+  logger.info(`[AudioExtraction] Processing video: ${videoId}`);
+  const directTranscript = await getYouTubeTranscript(videoId, languageCode);
+  
+  if (directTranscript) {
+    logger.info(`[AudioExtraction] ✅ Transcript available directly from YouTube, skipping audio extraction`);
+    // Return a dummy audioId since we don't need to extract audio
+    const audioId = `transcript-${videoId}-${Date.now()}`;
+    return {
+      audioId,
+      audioPath: '', // No audio file needed
+      videoTitle: undefined,
+      videoDuration: undefined,
+    };
+  }
+
+  // Fallback to audio extraction
+  logger.info(`[AudioExtraction] Transcript not available, extracting audio from YouTube`);
+  
   const videoUrl = youtubeUrl || `https://www.youtube.com/watch?v=${videoId}`;
-  logger.info(`[AudioExtraction] Starting audio extraction for video: ${videoId}`);
 
   // Get audio file path from AudioFileService
   const audioPath = audioFileService.getAudioFilePath(videoId, 'mp3');
@@ -638,7 +800,7 @@ async function extractAudioFromYouTube(
  */
 router.post('/extract-audio', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const { youtubeUrl, videoId, cookies } = req.body;
+    const { youtubeUrl, videoId, cookies, language } = req.body;
 
     if (!youtubeUrl && !videoId) {
       return res.status(400).json({
@@ -656,13 +818,30 @@ router.post('/extract-audio', authenticateUser, async (req: Request, res: Respon
       });
     }
 
-    logger.info(`[AudioExtraction] Starting audio extraction for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}`);
+    logger.info(`[AudioExtraction] Starting audio extraction for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}${language ? ` (language: ${language})` : ''}`);
 
     const { audioId, audioPath, videoTitle, videoDuration } = await extractAudioFromYouTube(
       youtubeUrl || '',
       finalVideoId,
-      cookies
+      cookies,
+      language || 'auto'
     );
+
+    // Check if we got transcript directly (no audio extraction needed)
+    if (!audioPath) {
+      // Transcript was retrieved directly, get it again for response
+      const transcript = await getYouTubeTranscript(finalVideoId, language || 'auto');
+      return res.json({
+        success: true,
+        audioId,
+        audioPath: null,
+        transcript, // Include transcript in response
+        videoTitle,
+        videoDuration,
+        message: `Transcript retrieved directly from YouTube${videoTitle ? `: ${videoTitle}` : ''}`,
+        method: 'direct_transcript',
+      });
+    }
 
     res.json({
       success: true,
@@ -671,6 +850,7 @@ router.post('/extract-audio', authenticateUser, async (req: Request, res: Respon
       videoTitle,
       videoDuration,
       message: `Audio extracted successfully${videoTitle ? `: ${videoTitle}` : ''}`,
+      method: 'audio_extraction',
     });
   } catch (error: any) {
     logger.error(`[AudioExtraction] Error: ${error.message}`, error);
@@ -732,10 +912,10 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         });
       }
 
-      logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''} (legacy mode)`);
+      logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}${language ? ` (language: ${language})` : ''} (legacy mode)`);
 
       // Use existing function for backward compatibility
-      const result = await transcribeYouTubeVideo(finalVideoId, cookies);
+      const result = await transcribeYouTubeVideo(finalVideoId, cookies, language || 'auto');
       const script = await convertToScript(result.transcription, result.videoTitle);
 
       return res.json({
@@ -744,6 +924,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         script,
         videoTitle: result.videoTitle,
         videoDuration: result.videoDuration,
+        method: result.transcription ? 'direct_transcript' : 'audio_whisper',
       });
     } else {
       return res.status(400).json({

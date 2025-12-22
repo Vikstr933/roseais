@@ -117,17 +117,36 @@ export default function VideoTranscriptionApp() {
       const data = await response.json();
       
       if (data.success) {
-        setExtractedAudio({
-          audioId: data.audioId,
-          audioPath: data.audioPath,
-          videoTitle: data.videoTitle,
-          videoDuration: data.videoDuration,
-        });
-        setProgress('');
-        toast({
-          title: 'Audio Extracted!',
-          description: 'Audio extracted successfully. Click "Transcribe" to continue.',
-        });
+        // Check if transcript was retrieved directly (no audio extraction needed)
+        if (data.method === 'direct_transcript' && data.transcript) {
+          // Transcript is already available, we can transcribe immediately
+          setExtractedAudio({
+            audioId: data.audioId,
+            audioPath: data.audioPath || '', // May be null for direct transcript
+            videoTitle: data.videoTitle,
+            videoDuration: data.videoDuration,
+          });
+          // Store transcript for later use
+          (setExtractedAudio as any).transcript = data.transcript;
+          setProgress('');
+          toast({
+            title: 'Transcript Retrieved!',
+            description: 'Transcript retrieved directly from YouTube. Click "Transcribe" to generate script.',
+          });
+        } else {
+          // Audio was extracted, need to transcribe
+          setExtractedAudio({
+            audioId: data.audioId,
+            audioPath: data.audioPath,
+            videoTitle: data.videoTitle,
+            videoDuration: data.videoDuration,
+          });
+          setProgress('');
+          toast({
+            title: 'Audio Extracted!',
+            description: 'Audio extracted successfully. Click "Transcribe" to continue.',
+          });
+        }
       } else {
         throw new Error(data.error || 'Failed to extract audio');
       }

@@ -38,11 +38,12 @@ RUN npx playwright install-deps chromium || true && \
 # Använd relativ path så att det matchar process.cwd() i koden
 RUN python3 -m venv venv-whisper && \
     ./venv-whisper/bin/pip install --upgrade pip && \
-    ./venv-whisper/bin/pip install faster-whisper yt-dlp && \
+    ./venv-whisper/bin/pip install faster-whisper yt-dlp youtube-transcript-api && \
     ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed')" && \
     ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" && \
+    ./venv-whisper/bin/python3 -c "import youtube_transcript_api; print('✅ youtube-transcript-api installed')" && \
     ./venv-whisper/bin/python3 -m yt_dlp --version && \
-    echo "✅ yt-dlp verified and working" || (echo "❌ yt-dlp installation or verification failed" && exit 1)
+    echo "✅ All Python packages verified and working" || (echo "❌ Package installation or verification failed" && exit 1)
 
 # turnstile-solver dependencies (camoufox) removed - not needed for core functionality
 
