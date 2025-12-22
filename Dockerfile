@@ -40,7 +40,9 @@ RUN python3 -m venv venv-whisper && \
     ./venv-whisper/bin/pip install --upgrade pip && \
     ./venv-whisper/bin/pip install faster-whisper yt-dlp && \
     ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed')" && \
-    ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" || exit 1
+    ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" && \
+    ./venv-whisper/bin/python3 -m yt_dlp --version && \
+    echo "✅ yt-dlp verified and working" || (echo "❌ yt-dlp installation or verification failed" && exit 1)
 
 # turnstile-solver dependencies (camoufox) removed - not needed for core functionality
 
