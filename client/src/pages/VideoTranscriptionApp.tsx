@@ -19,7 +19,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch } from '../lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { AuthDialog } from '@/components/AuthDialog';
@@ -102,10 +102,6 @@ export default function VideoTranscriptionApp() {
     try {
       const response = await apiFetch('/api/video/extract-audio', {
         method: 'POST',
-        headers: {
-          ...getAuthHeaders(sessionToken!),
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           youtubeUrl,
           videoId,
@@ -166,10 +162,6 @@ export default function VideoTranscriptionApp() {
     try {
       const response = await apiFetch('/api/video/transcribe', {
         method: 'POST',
-        headers: {
-          ...getAuthHeaders(sessionToken!),
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           audioId: extractedAudio.audioId,
           audioPath: extractedAudio.audioPath,
