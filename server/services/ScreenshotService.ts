@@ -105,7 +105,7 @@ export class ScreenshotService {
       // This ensures screenshots work when frontend is on different domain
       const backendUrl = process.env.BACKEND_URL || 
                         process.env.RENDER_EXTERNAL_URL || 
-                        'https://ai-library-backend.onrender.com';
+                        'https://ai-library-backend-3mmv.onrender.com';
       
       const screenshotUrl = `${backendUrl}/uploads/screenshots/${screenshotFilename}`;
       const finalThumbnailUrl = thumbnailUrl ? `${backendUrl}${thumbnailUrl}` : null;

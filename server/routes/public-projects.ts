@@ -22,7 +22,7 @@ function ensureAbsoluteUrl(url: string | null | undefined): string | null {
   // Convert relative URL to absolute
   const backendUrl = process.env.BACKEND_URL || 
                     process.env.RENDER_EXTERNAL_URL || 
-                    'https://ai-library-backend.onrender.com';
+                    'https://ai-library-backend-3mmv.onrender.com';
   
   // Ensure URL starts with /
   const path = url.startsWith('/') ? url : `/${url}`;

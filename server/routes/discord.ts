@@ -364,7 +364,7 @@ router.get('/oauth/start', authenticateUser, async (req, res) => {
     const userId = req.user!.id;
     const clientId = process.env.DISCORD_CLIENT_ID;
     // Redirect URI must point to backend, not frontend
-    const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL || 'https://ai-library-backend.onrender.com';
+    const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL || 'https://ai-library-backend-3mmv.onrender.com';
     const redirectUri = process.env.DISCORD_REDIRECT_URI || `${backendUrl}/api/discord/oauth/callback`;
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -475,7 +475,7 @@ router.get('/oauth/callback', async (req, res) => {
     const clientId = process.env.DISCORD_CLIENT_ID;
     const clientSecret = process.env.DISCORD_CLIENT_SECRET;
     // Redirect URI must point to backend, not frontend
-    const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL || 'https://ai-library-backend.onrender.com';
+    const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL || 'https://ai-library-backend-3mmv.onrender.com';
     const redirectUri = process.env.DISCORD_REDIRECT_URI || `${backendUrl}/api/discord/oauth/callback`;
 
     if (!clientId || !clientSecret) {

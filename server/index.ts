@@ -115,7 +115,7 @@ const initializeApp = async () => {
     // Render automatically sets RENDER_EXTERNAL_URL, but we can also use BACKEND_URL
     const backendUrl = process.env.BACKEND_URL || 
                       process.env.RENDER_EXTERNAL_URL || 
-                      'https://ai-library-backend.onrender.com' || // Fallback to known Render URL
+                      'https://ai-library-backend-3mmv.onrender.com' || // Fallback to known Render URL
                       'http://localhost:5000';
     
     const allowedOrigins: (string | RegExp)[] = [
