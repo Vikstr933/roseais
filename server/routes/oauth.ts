@@ -100,23 +100,31 @@ router.post('/oauth', async (req, res) => {
     });
   } catch (error) {
     console.error('OAuth error:', error);
+    console.error('OAuth error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     // Provide more specific error messages
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
     const isConnectionError = 
       errorMessage.includes('Connection terminated') ||
       errorMessage.includes('ECONNREFUSED') ||
-      errorMessage.includes('ETIMEDOUT');
+      errorMessage.includes('ETIMEDOUT') ||
+      errorMessage.includes('Connection') ||
+      errorMessage.includes('database');
     
     if (isConnectionError) {
       res.status(503).json({ 
         error: 'Database connection failed. Please try again in a moment.',
-        retryable: true
+        retryable: true,
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
       });
     } else {
       res.status(500).json({ 
         error: 'Failed to process OAuth authentication',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        details: process.env.NODE_ENV === 'development' ? {
+          message: errorMessage,
+          stack: errorStack
+        } : undefined
       });
     }
   }
