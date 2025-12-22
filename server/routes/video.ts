@@ -29,9 +29,9 @@ logger.info('[VideoRouter] Video transcription router initialized');
 /**
  * Extract audio from YouTube video and transcribe it using Whisper
  * 
- * Uses yt-dlp (or ytdl-core if available) to download audio, then Whisper for transcription
+ * Uses yt-dlp (or youtube-dl if available) to download audio, then Whisper for transcription
  */
-async function transcribeYouTubeVideo(videoId: string): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
+export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
   const tempDir = path.join(process.cwd(), 'temp', `video-${videoId}-${Date.now()}`);
   let audioPath: string | null = null;
   
