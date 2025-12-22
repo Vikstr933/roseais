@@ -47,32 +47,60 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
     audioPath = path.join(tempDir, 'audio.wav');
     
     // Check if we have venv-whisper with yt-dlp installed
-    const venvPython = process.platform === 'win32'
-      ? path.join(process.cwd(), 'venv-whisper', 'Scripts', 'python.exe')
-      : path.join(process.cwd(), 'venv-whisper', 'bin', 'python3');
+    // Try multiple possible paths (Docker /app, Render /opt/render/project/src, etc.)
+    const possibleVenvPaths = [
+      path.join(process.cwd(), 'venv-whisper'),
+      path.join('/app', 'venv-whisper'), // Docker default
+      path.join('/opt/render/project/src', 'venv-whisper'), // Render Node.js env
+    ];
     
     let pythonCommand: string | null = null;
+    let foundVenvPath: string | null = null;
     
-    // Check if venv Python exists and has yt-dlp installed
-    try {
-      await fs.access(venvPython);
-      logger.info(`[VideoTranscription] Venv Python found at: ${venvPython}`);
+    // Try each possible venv path
+    for (const venvPath of possibleVenvPaths) {
+      const venvPython = process.platform === 'win32'
+        ? path.join(venvPath, 'Scripts', 'python.exe')
+        : path.join(venvPath, 'bin', 'python3');
       
-      // Verify that yt-dlp is actually installed in the venv
+      logger.info(`[VideoTranscription] Checking venv at: ${venvPython}`);
+      
       try {
-        const checkYtdlp = await execAsync(`"${venvPython}" -c "import yt_dlp; print('OK')"`);
-        if (checkYtdlp.stdout.includes('OK')) {
-          pythonCommand = venvPython;
-          logger.info(`[VideoTranscription] ✅ yt-dlp verified in venv, using: ${venvPython}`);
-        } else {
-          logger.warn(`[VideoTranscription] Venv Python found but yt-dlp not installed`);
+        // Use stat instead of access for better reliability
+        const stats = await fs.stat(venvPython);
+        if (stats.isFile()) {
+          logger.info(`[VideoTranscription] ✅ Venv Python found at: ${venvPython}`);
+          
+          // Verify that yt-dlp is actually installed in the venv
+          try {
+            const checkYtdlp = await execAsync(`"${venvPython}" -c "import yt_dlp; print('OK')"`, {
+              timeout: 5000
+            });
+            if (checkYtdlp.stdout.includes('OK')) {
+              pythonCommand = venvPython;
+              foundVenvPath = venvPath;
+              logger.info(`[VideoTranscription] ✅ yt-dlp verified in venv, using: ${venvPython}`);
+              break; // Found working venv, stop searching
+            } else {
+              logger.warn(`[VideoTranscription] Venv Python found but yt-dlp not installed at ${venvPython}`);
+            }
+          } catch (importError: any) {
+            logger.warn(`[VideoTranscription] Venv Python found but yt-dlp import failed: ${importError instanceof Error ? importError.message : String(importError)}`);
+            if (importError.stderr) {
+              logger.debug(`[VideoTranscription] Import error stderr: ${importError.stderr.substring(0, 200)}`);
+            }
+          }
         }
-      } catch (importError) {
-        logger.warn(`[VideoTranscription] Venv Python found but yt-dlp import failed: ${importError instanceof Error ? importError.message : String(importError)}`);
+      } catch (statError) {
+        // Venv doesn't exist at this path, try next
+        logger.debug(`[VideoTranscription] Venv not found at ${venvPython}, trying next path...`);
+        continue;
       }
-    } catch (accessError) {
-      logger.warn(`[VideoTranscription] Venv Python not found at ${venvPython}, will try system yt-dlp`);
-      logger.debug(`[VideoTranscription] Access error: ${accessError instanceof Error ? accessError.message : String(accessError)}`);
+    }
+    
+    if (!pythonCommand) {
+      logger.warn(`[VideoTranscription] ❌ No working venv with yt-dlp found. Tried paths: ${possibleVenvPaths.join(', ')}`);
+      logger.warn(`[VideoTranscription] Current working directory: ${process.cwd()}`);
     }
     
     try {
@@ -85,27 +113,23 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
         // Use Python module directly if venv is available
         const command = `"${pythonCommand}" -m yt_dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
         logger.info(`[VideoTranscription] Executing: ${command}`);
+        logger.info(`[VideoTranscription] Using venv from: ${foundVenvPath}`);
         const result = await execAsync(command, { 
           maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
-          timeout: 300000 // 5 minute timeout
+          timeout: 300000, // 5 minute timeout
+          cwd: foundVenvPath ? path.dirname(foundVenvPath) : undefined
         });
         logger.info(`[VideoTranscription] yt-dlp stdout: ${result.stdout.substring(0, 500)}`);
         if (result.stderr) {
           logger.debug(`[VideoTranscription] yt-dlp stderr: ${result.stderr.substring(0, 500)}`);
         }
       } else {
-        // Try system yt-dlp command
-        logger.info(`[VideoTranscription] Trying system yt-dlp command...`);
-        const command = `yt-dlp -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
-        logger.info(`[VideoTranscription] Executing: ${command}`);
-        const result = await execAsync(command, { 
-          maxBuffer: 10 * 1024 * 1024,
-          timeout: 300000
-        });
-        logger.info(`[VideoTranscription] yt-dlp stdout: ${result.stdout.substring(0, 500)}`);
-        if (result.stderr) {
-          logger.debug(`[VideoTranscription] yt-dlp stderr: ${result.stderr.substring(0, 500)}`);
-        }
+        // System yt-dlp should NOT be used in production - it should be in venv
+        // This is a fallback that will fail, but gives a clear error message
+        logger.error(`[VideoTranscription] ❌ Cannot use system yt-dlp - venv not found!`);
+        logger.error(`[VideoTranscription] Searched paths: ${possibleVenvPaths.join(', ')}`);
+        logger.error(`[VideoTranscription] Current working directory: ${process.cwd()}`);
+        throw new Error('yt-dlp is not available. venv-whisper with yt-dlp should be installed during Docker build. Please check build logs and ensure yt-dlp is installed in venv-whisper.');
       }
       logger.info(`[VideoTranscription] ✅ Audio downloaded successfully with yt-dlp`);
     } catch (ytdlpError: any) {
@@ -123,7 +147,16 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
       
       // In production, yt-dlp should be installed during build
       // If it's not available, this is a configuration error
-      throw new Error(`yt-dlp is not available or failed to download audio. This should be installed during build. Please check build logs and ensure yt-dlp is installed in venv-whisper. Error: ${errorMessage}`);
+      const errorDetails = [
+        `Error: ${errorMessage}`,
+        `Searched venv paths: ${possibleVenvPaths.join(', ')}`,
+        `Current working directory: ${process.cwd()}`,
+        `Python command used: ${pythonCommand || 'none (system yt-dlp attempted)'}`,
+      ];
+      if (errorStdout) errorDetails.push(`stdout: ${errorStdout.substring(0, 500)}`);
+      if (errorStderr) errorDetails.push(`stderr: ${errorStderr.substring(0, 500)}`);
+      
+      throw new Error(`yt-dlp is not available or failed to download audio. This should be installed during Docker build. ${errorDetails.join(' | ')}`);
     }
 
     // Check if audio file exists
