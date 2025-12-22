@@ -19,6 +19,7 @@ import {
   Code,
   Sparkles,
   Video,
+  Brain,
 } from 'lucide-react';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -524,42 +525,57 @@ function AppExamplesTab() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-lg border p-6 hover:border-primary/50 transition-colors"
+          className="relative bg-card rounded-lg border-2 border-transparent p-6 hover:border-primary/50 transition-all duration-300 overflow-hidden group"
+          style={{
+            background: 'linear-gradient(white, white) padding-box, linear-gradient(to right, #a855f7, #ec4899, #a855f7) border-box',
+            border: '2px solid transparent',
+          }}
         >
-          <div className="flex items-start gap-4 mb-4">
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <Video className="h-6 w-6 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-lg mb-1">Video Transcription to Script</h3>
-              <p className="text-sm text-muted-foreground">
-                Transcribe YouTube videos and convert them into voice actor scripts for voiceover production
-              </p>
-            </div>
-          </div>
-          
-          <div className="space-y-2 mb-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Code className="h-3 w-3" />
-              <span>AI-Powered Transcription</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Code className="h-3 w-3" />
-              <span>Script Formatting</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Code className="h-3 w-3" />
-              <span>Voice Actor Ready</span>
-            </div>
+          {/* OmniAssistant Branding Badge */}
+          <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm border border-purple-500/20 rounded-md">
+            <Brain className="h-3 w-3 text-purple-600" />
+            <span className="text-xs font-medium text-purple-700 dark:text-purple-400">OmniAssistant</span>
           </div>
 
-          <Button
-            onClick={() => setLocation('/community/video-transcription')}
-            className="w-full"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Open App
-          </Button>
+          {/* Subtle gradient overlay on hover */}
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all duration-300 pointer-events-none" />
+
+          <div className="relative z-10">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
+                <Video className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="flex-1 pr-16">
+                <h3 className="font-semibold text-lg mb-1">Video Transcription to Script</h3>
+                <p className="text-sm text-muted-foreground">
+                  Transcribe YouTube videos and convert them into voice actor scripts for voiceover production
+                </p>
+              </div>
+            </div>
+            
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Code className="h-3 w-3" />
+                <span>AI-Powered Transcription</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Code className="h-3 w-3" />
+                <span>Script Formatting</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Code className="h-3 w-3" />
+                <span>Voice Actor Ready</span>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => setLocation('/community/video-transcription')}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Open App
+            </Button>
+          </div>
         </motion.div>
 
         {/* Placeholder for more apps */}
