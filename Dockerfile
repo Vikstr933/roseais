@@ -21,11 +21,15 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Installera Node dependencies
-RUN npm ci --only=production
+# Installera Node dependencies (inklusive dev dependencies för build)
+RUN npm install
 
 # Installera Playwright browsers (kritiskt för browser automation)
-RUN npx playwright install --with-deps chromium || npx playwright install chromium || exit 1
+# Installera med system dependencies för att säkerställa att allt fungerar
+RUN npx playwright install-deps chromium || true && \
+    npx playwright install --with-deps chromium || \
+    npx playwright install chromium || \
+    (echo "❌ Playwright installation failed" && exit 1)
 
 # Skapa Python virtual environment och installera faster-whisper och yt-dlp
 RUN python3 -m venv /app/venv-whisper && \
@@ -44,7 +48,11 @@ RUN pip3 install --user --upgrade pip setuptools wheel && \
 COPY . .
 
 # Bygg backend
-RUN npm run build:backend || echo "Build step completed"
+RUN npm run build:backend
+
+# Behåll Playwright även om det är en dev dependency (behövs för runtime)
+# Rensa cache men behåll alla dependencies som behövs
+RUN npm cache clean --force
 
 # Skapa directories för workspaces och temp files
 RUN mkdir -p /data/workspaces /app/temp /app/scripts
