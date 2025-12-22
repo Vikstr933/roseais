@@ -48,25 +48,48 @@ class WebContainerServiceClass {
   }
 
   /**
-   * Boot WebContainer (singleton instance)
+   * Boot WebContainer (singleton instance) with retry logic
    */
-  async boot(): Promise<WebContainer> {
+  async boot(maxRetries: number = 3, retryDelay: number = 1000): Promise<WebContainer> {
     if (this.bootedInstance) {
       return this.bootedInstance;
     }
 
+    // Check browser support
     if (!this.isSupported()) {
-      throw new Error('WebContainer is not supported in this browser');
-    }
-
-    try {
-      this.bootedInstance = await WebContainer.boot();
-      console.log('✅ WebContainer booted successfully');
-      return this.bootedInstance;
-    } catch (error) {
-      console.error('❌ Failed to boot WebContainer:', error);
+      const error = new Error('WebContainer is not supported in this browser. Required: SharedArrayBuffer and Cross-Origin Isolation headers.');
+      console.error('❌ WebContainer not supported:', {
+        hasSharedArrayBuffer: 'SharedArrayBuffer' in window,
+        hasWebContainer: typeof WebContainer !== 'undefined',
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+      });
       throw error;
     }
+
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🚀 Booting WebContainer (attempt ${attempt}/${maxRetries})...`);
+        this.bootedInstance = await WebContainer.boot();
+        console.log('✅ WebContainer booted successfully');
+        return this.bootedInstance;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.error(`❌ WebContainer boot attempt ${attempt} failed:`, lastError.message);
+        
+        // Don't retry on the last attempt
+        if (attempt < maxRetries) {
+          const delay = retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+          console.log(`⏳ Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // All retries failed
+    console.error('❌ WebContainer boot failed after all retries');
+    throw lastError || new Error('WebContainer boot failed after all retries');
   }
 
   /**
@@ -183,7 +206,7 @@ class WebContainerServiceClass {
       devProcess.output.pipeTo(
         new WritableStream({
           write(data) {
-            const output = new TextDecoder().decode(data);
+            const output = typeof data === 'string' ? data : new TextDecoder().decode(data);
             console.log('🚀 Dev server:', output);
 
             // Check if server is ready
@@ -279,7 +302,7 @@ class WebContainerServiceClass {
       installProcess.output.pipeTo(
         new WritableStream({
           write(data) {
-            const message = new TextDecoder().decode(data);
+            const message = typeof data === 'string' ? data : new TextDecoder().decode(data);
             onProgress?.(message);
             console.log('📦 npm install:', message);
           },
@@ -329,10 +352,11 @@ class WebContainerServiceClass {
       });
 
       // Also listen to output for progress and fallback URL detection
+      const service = this; // Capture 'this' for use in closure
       this.devServerProcess.output.pipeTo(
         new WritableStream({
           write(data) {
-            const message = new TextDecoder().decode(data);
+            const message = typeof data === 'string' ? data : new TextDecoder().decode(data);
             onProgress?.(message);
             console.log('🚀 Dev server:', message);
 
@@ -343,10 +367,11 @@ class WebContainerServiceClass {
               if (urlMatch) {
                 // For WebContainer, localhost URLs work in browser but not for backend analysis
                 // Use the matched URL or construct localhost URL
-                this.devServerUrl = urlMatch[1] || `http://localhost:${port}`;
+                const matchedUrl = urlMatch[1] || `http://localhost:${port}`;
+                service.devServerUrl = matchedUrl;
                 if (!resolved) {
                   resolved = true;
-                  resolve(this.devServerUrl);
+                  resolve(matchedUrl);
                 }
               }
             }

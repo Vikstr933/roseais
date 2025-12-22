@@ -514,7 +514,8 @@ export default function PromptPlayground() {
   // WebContainer state
   const [webContainerReady, setWebContainerReady] = useState(false);
   const [webContainerBooting, setWebContainerBooting] = useState(false);
-  const [useWebContainer, setUseWebContainer] = useState(true); // Toggle for fallback
+  // WebContainer is always enabled - no fallback
+  const [useWebContainer] = useState(true);
   const { toast } = useToast();
   
   // Cleanup streaming intervals on unmount
@@ -715,7 +716,7 @@ export default function PromptPlayground() {
         setWebContainerBooting(true);
         console.log('ðŸš€ Booting WebContainer...');
         
-        await webContainerService.boot();
+        await webContainerService.boot(5, 2000); // 5 retries with 2s base delay
         
         setWebContainerReady(true);
         setWebContainerBooting(false);
@@ -726,17 +727,23 @@ export default function PromptPlayground() {
         console.error('âŒ Failed to boot WebContainer:', error);
         setWebContainerBooting(false);
         setWebContainerReady(false);
-        setUseWebContainer(false); // Fallback to server-side
+        // Show error but keep trying in background
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('WebContainer boot failed:', errorMessage);
         
-        // Don't show toast on mobile devices - too intrusive
-        const isMobile = window.innerWidth < 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        if (!isMobile) {
-          toast({
-            title: "WebContainer Unavailable",
-            description: "Using server-side deployment as fallback. Preview may be slower.",
-            variant: "destructive",
-          });
-        }
+        // Retry after 10 seconds
+        setTimeout(() => {
+          console.log('🔄 Retrying WebContainer boot...');
+          initWebContainer();
+        }, 10000);
+        
+        // Show user-friendly error
+        toast({
+          title: "WebContainer Initialization Failed",
+          description: "Retrying automatically. If this persists, please refresh the page.",
+          variant: "destructive",
+          duration: 5000,
+        });
       }
     }
 
@@ -744,9 +751,9 @@ export default function PromptPlayground() {
 
     // Cleanup on unmount
     return () => {
-      webContainerService.teardown().catch(console.error);
+      // Don't teardown on unmount - keep WebContainer alive for better UX
     };
-  }, [useWebContainer, toast]);
+  }, [toast]);
 
   // Load project context if projectId is in URL
   useEffect(() => {
@@ -1640,7 +1647,7 @@ export default function PromptPlayground() {
   // 🚀 Deploy to WebContainer or fallback to server-side
   async function deployToRuntime(files: Array<{ path: string; content: string }>, componentName: string) {
     try {
-      if (webContainerReady && useWebContainer) {
+      if (webContainerReady) {
         console.log('Deploying to WebContainer...');
         
         addChatMessage({
@@ -3370,6 +3377,7 @@ export default function PromptPlayground() {
                 currentComponentName={currentComponentName}
                 isLoading={isLoading}
                 setPreviewModalOpen={setPreviewModalOpen}
+                setLivePreviewUrl={setLivePreviewUrl}
               />
             )}
 
