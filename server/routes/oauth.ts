@@ -35,25 +35,48 @@ router.post('/oauth', async (req, res) => {
     if (!user) {
       // Create new user (with retry logic)
       const username = email.split('@')[0] + '_' + provider;
-      const insertResult = await retryDbOperation(async () => {
-        return await db.insert(users as any).values({
-          id: randomUUID(),
-          username,
-          email,
-          displayName: displayName || username,
-          // OAuth users don't have a password
-          passwordHash: crypto.randomBytes(32).toString('hex'),
-          createdAt: new Date(),
-          lastActive: new Date(),
-          isActive: true,
-        }).returning();
-      });
-      const newUser = Array.isArray(insertResult) ? insertResult[0] : null;
-      if (!newUser) {
-        return res.status(500).json({ error: 'Failed to create user' });
+      try {
+        const insertResult = await retryDbOperation(async () => {
+          return await db.insert(users as any).values({
+            id: randomUUID(),
+            username,
+            email,
+            displayName: displayName || username,
+            // OAuth users don't have a password
+            passwordHash: crypto.randomBytes(32).toString('hex'),
+            createdAt: new Date(),
+            lastActive: new Date(),
+            isActive: true,
+          }).returning();
+        });
+        const newUser = Array.isArray(insertResult) ? insertResult[0] : null;
+        if (!newUser) {
+          return res.status(500).json({ error: 'Failed to create user' });
+        }
+        user = newUser;
+        console.log(`✅ Created new OAuth user: ${email} via ${provider}`);
+      } catch (insertError: any) {
+        // If user was created between our check and insert (race condition), fetch it
+        if (insertError.message?.includes('unique') || insertError.message?.includes('duplicate') || insertError.code === '23505') {
+          console.log(`⚠️ User already exists (race condition), fetching existing user: ${email}`);
+          const existingUser = await retryDbOperation(async () => {
+            const rows = await db
+              .select()
+              .from(users as any)
+              .where(eq((users as any).email, email))
+              .limit(1);
+            return rows[0];
+          });
+          if (existingUser) {
+            user = existingUser;
+            console.log(`✅ Found existing user after race condition: ${email}`);
+          } else {
+            throw insertError; // Re-throw if we can't find the user
+          }
+        } else {
+          throw insertError; // Re-throw other errors
+        }
       }
-      user = newUser;
-      console.log(`✅ Created new OAuth user: ${email} via ${provider}`);
     } else {
       // Update last active (with retry logic)
       await retryDbOperation(async () => {
