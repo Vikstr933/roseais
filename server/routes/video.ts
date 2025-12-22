@@ -81,43 +81,64 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
     // Create Python script to get transcript
     const script = `
 import sys
-import os
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import TextFormatter
+from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
 
 video_id = "${videoId}"
 language_code = "${languageCode}"
-api_key = ${youtubeApiKey ? `"${youtubeApiKey}"` : 'None'}
 
 try:
-    # List available transcripts
-    # Note: youtube-transcript-api doesn't directly use API key, but we can pass it
-    # for potential future use or if using YouTube Data API v3 directly
-    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-    
-    # Try to get transcript in requested language, fallback to English or any available
+    # Try to get transcript directly first (simplest method)
     try:
         if language_code and language_code != 'auto':
-            transcript = transcript_list.find_transcript([language_code])
+            # Try specific language
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
         else:
             # Try English first, then any available
             try:
-                transcript = transcript_list.find_transcript(['en'])
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
             except:
-                transcript = transcript_list.find_generated_transcript(['en'])
-    except:
-        # Fallback to any available transcript
-        transcript = transcript_list.find_transcript(['en'])
-    
-    # Fetch the transcript
-    transcript_data = transcript.fetch()
+                # Fallback to any available language
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+    except NoTranscriptFound:
+        # If direct method fails, try listing available transcripts
+        try:
+            transcript_list_obj = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Try to find transcript in requested language
+            if language_code and language_code != 'auto':
+                transcript = transcript_list_obj.find_transcript([language_code])
+            else:
+                # Try English first
+                try:
+                    transcript = transcript_list_obj.find_transcript(['en'])
+                except:
+                    # Fallback to generated English transcript
+                    try:
+                        transcript = transcript_list_obj.find_generated_transcript(['en'])
+                    except:
+                        # Get any available transcript
+                        transcript = transcript_list_obj.find_transcript(['en'])
+            
+            transcript_list = transcript.fetch()
+        except Exception as list_error:
+            raise NoTranscriptFound(video_id, None, f"Could not list transcripts: {str(list_error)}")
+    except TranscriptsDisabled:
+        raise Exception(f"Transcripts are disabled for video {video_id}")
     
     # Format as plain text
     formatter = TextFormatter()
-    formatted_text = formatter.format_transcript(transcript_data)
+    formatted_text = formatter.format_transcript(transcript_list)
     
     print(formatted_text)
     sys.exit(0)
+except NoTranscriptFound as e:
+    print(f"ERROR: No transcript found: {str(e)}", file=sys.stderr)
+    sys.exit(1)
+except TranscriptsDisabled as e:
+    print(f"ERROR: Transcripts disabled: {str(e)}", file=sys.stderr)
+    sys.exit(1)
 except Exception as e:
     print(f"ERROR: {str(e)}", file=sys.stderr)
     sys.exit(1)
