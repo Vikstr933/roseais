@@ -79,7 +79,7 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
     const youtubeApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY || process.env.YOUTUBE_API_KEY;
     
     // Create Python script to get transcript
-    // Using the simplest method: get_transcript() which handles language selection automatically
+    // Using the correct syntax for youtube-transcript-api
     const script = `
 import sys
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -89,14 +89,19 @@ video_id = "${videoId}"
 language_code = "${languageCode}"
 
 try:
-    # Try to get transcript - API handles language selection automatically
+    # Get transcript - the API is a class with static methods
+    # Try with language preference
     if language_code and language_code != 'auto':
         # Try specific language first
         try:
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
         except:
             # Fallback to English if specific language not available
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            try:
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            except:
+                # Last resort: get any available language
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
     else:
         # Auto-detect: try English first, then any available
         try:
@@ -113,10 +118,12 @@ try:
     sys.exit(0)
 except Exception as e:
     error_msg = str(e)
+    error_type = type(e).__name__
+    
     # Check for specific error types
-    if 'NoTranscriptFound' in error_msg or 'could not retrieve a transcript' in error_msg.lower():
+    if 'NoTranscriptFound' in error_type or 'NoTranscriptFound' in error_msg or 'could not retrieve a transcript' in error_msg.lower():
         print(f"ERROR: No transcript found for video {video_id}", file=sys.stderr)
-    elif 'TranscriptsDisabled' in error_msg or 'transcripts are disabled' in error_msg.lower():
+    elif 'TranscriptsDisabled' in error_type or 'TranscriptsDisabled' in error_msg or 'transcripts are disabled' in error_msg.lower():
         print(f"ERROR: Transcripts are disabled for video {video_id}", file=sys.stderr)
     else:
         print(f"ERROR: {error_msg}", file=sys.stderr)
