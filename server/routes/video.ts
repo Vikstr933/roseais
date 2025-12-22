@@ -30,8 +30,11 @@ logger.info('[VideoRouter] Video transcription router initialized');
  * Extract audio from YouTube video and transcribe it using Whisper
  * 
  * Uses yt-dlp (or youtube-dl if available) to download audio, then Whisper for transcription
+ * 
+ * @param videoId - YouTube video ID
+ * @param cookiesText - Optional: YouTube cookies in Netscape format (from browser extension)
  */
-export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
+export async function transcribeYouTubeVideo(videoId: string, cookiesText?: string): Promise<{ transcription: string; videoTitle?: string; videoDuration?: number }> {
   const tempDir = path.join(process.cwd(), 'temp', `video-${videoId}-${Date.now()}`);
   let audioPath: string | null = null;
   
@@ -45,6 +48,14 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
     // Try to get video info and download audio using yt-dlp (more reliable than ytdl-core)
     // yt-dlp is a fork of youtube-dl with better support
     audioPath = path.join(tempDir, 'audio.wav');
+    
+    // Save cookies to file if provided
+    let cookiesPath: string | null = null;
+    if (cookiesText) {
+      cookiesPath = path.join(tempDir, 'cookies.txt');
+      await fs.writeFile(cookiesPath, cookiesText, 'utf-8');
+      logger.info(`[VideoTranscription] Using provided cookies for authentication`);
+    }
     
     // Check if we have venv-whisper with yt-dlp installed
     // Try multiple possible paths (Docker /app, Render /opt/render/project/src, etc.)
@@ -146,7 +157,13 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
         logger.info(`[VideoTranscription] Video URL: ${videoUrl}`);
         logger.info(`[VideoTranscription] Audio output path: ${audioPath}`);
         
-        const command = `"${pythonCommand}" -m yt_dlp --user-agent "${strategy.userAgent}" --extractor-args "${strategy.extractorArgs}" -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
+        // Build command with optional cookies
+        let command = `"${pythonCommand}" -m yt_dlp --user-agent "${strategy.userAgent}" --extractor-args "${strategy.extractorArgs}"`;
+        if (cookiesPath) {
+          command += ` --cookies "${cookiesPath}"`;
+        }
+        command += ` -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
+        
         logger.info(`[VideoTranscription] Executing: ${command}`);
         logger.info(`[VideoTranscription] Using venv from: ${foundVenvPath}`);
         
@@ -201,7 +218,7 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
         logger.error(`[VideoTranscription] Last stderr: ${errorStderr.substring(0, 1000)}`);
       }
       
-      throw new Error(`YouTube is blocking automated access after trying ${strategies.length} different methods. This video may require manual verification or cookies. Please try a different video or contact support if this persists.`);
+      throw new Error(`YouTube is blocking automated access after trying ${strategies.length} different methods. To bypass this, please export your YouTube cookies from your browser and upload them. Install the "Get cookies.txt LOCALLY" browser extension, go to youtube.com (while logged in), export cookies, and upload the cookies.txt file.`);
     }
 
     // Check if audio file exists
@@ -261,17 +278,20 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
   } catch (error) {
     logger.error(`[VideoTranscription] Error transcribing video: ${error}`);
     throw error;
-  } finally {
-    // Cleanup temp files
-    try {
-      if (audioPath) {
-        await fs.unlink(audioPath).catch(() => {});
+    } finally {
+      // Cleanup temp files
+      try {
+        if (audioPath) {
+          await fs.unlink(audioPath).catch(() => {});
+        }
+        if (cookiesPath) {
+          await fs.unlink(cookiesPath).catch(() => {});
+        }
+        await fs.rmdir(tempDir).catch(() => {});
+      } catch (cleanupError) {
+        logger.warn(`[VideoTranscription] Failed to cleanup temp directory: ${cleanupError}`);
       }
-      await fs.rmdir(tempDir).catch(() => {});
-    } catch (cleanupError) {
-      logger.warn(`[VideoTranscription] Failed to cleanup temp directory: ${cleanupError}`);
     }
-  }
 }
 
 /**
@@ -325,7 +345,7 @@ Script:`;
  */
 router.post('/transcribe', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const { youtubeUrl, videoId } = req.body;
+    const { youtubeUrl, videoId, cookies } = req.body;
 
     if (!youtubeUrl && !videoId) {
       return res.status(400).json({
@@ -343,10 +363,10 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       });
     }
 
-    logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}`);
+    logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}`);
 
-    // Transcribe video
-    const { transcription, videoTitle, videoDuration } = await transcribeYouTubeVideo(finalVideoId);
+    // Transcribe video (with optional cookies)
+    const { transcription, videoTitle, videoDuration } = await transcribeYouTubeVideo(finalVideoId, cookies);
 
     // Convert to script
     logger.info(`[VideoTranscription] Converting transcription to script...`);

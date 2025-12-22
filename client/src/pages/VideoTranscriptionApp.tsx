@@ -15,6 +15,9 @@ import {
   Mic,
   Sparkles,
   Brain,
+  HelpCircle,
+  Upload,
+  X,
 } from 'lucide-react';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -35,6 +38,8 @@ export default function VideoTranscriptionApp() {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [cookiesText, setCookiesText] = useState<string | null>(null);
+  const [showCookieHelp, setShowCookieHelp] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +98,7 @@ export default function VideoTranscriptionApp() {
         body: JSON.stringify({
           youtubeUrl,
           videoId,
+          cookies: cookiesText || undefined,
         }),
       });
 
@@ -266,6 +272,83 @@ export default function VideoTranscriptionApp() {
                   )}
                 </Button>
               </div>
+            </div>
+
+            {/* Cookie Upload (Optional) */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="text-sm font-medium">
+                  YouTube Cookies (Optional - helps bypass bot detection)
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setShowCookieHelp(!showCookieHelp)}
+                >
+                  <HelpCircle className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {showCookieHelp && (
+                <div className="mb-3 p-3 bg-muted rounded-md text-xs space-y-2">
+                  <p className="font-medium">How to export YouTube cookies:</p>
+                  <ol className="list-decimal list-inside space-y-1 ml-2">
+                    <li>Install browser extension: <strong>Get cookies.txt LOCALLY</strong> (Chrome/Edge) or <strong>cookies.txt</strong> (Firefox)</li>
+                    <li>Go to <strong>youtube.com</strong> and make sure you're logged in</li>
+                    <li>Click the extension icon and export cookies</li>
+                    <li>Upload the <code className="bg-background px-1 rounded">cookies.txt</code> file below</li>
+                  </ol>
+                  <p className="text-muted-foreground mt-2">
+                    Cookies help bypass YouTube's bot detection. This is optional but recommended if you encounter blocking errors.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    type="file"
+                    accept=".txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const text = event.target?.result as string;
+                          setCookiesText(text);
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    className="cursor-pointer"
+                    disabled={isProcessing}
+                  />
+                </div>
+                {cookiesText && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCookiesText(null);
+                      // Reset file input
+                      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                      if (fileInput) fileInput.value = '';
+                    }}
+                    disabled={isProcessing}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+              {cookiesText && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  ✓ Cookies loaded ({cookiesText.split('\n').length} lines)
+                </p>
+              )}
             </div>
 
             {error && (
