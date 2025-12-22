@@ -79,72 +79,63 @@ async function getYouTubeTranscript(videoId: string, languageCode: string = 'aut
     const youtubeApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY || process.env.YOUTUBE_API_KEY;
     
     // Create Python script to get transcript
-    // Using the NEW API syntax (v1.2.0+): Create instance and use instance methods
+    // Using the correct API syntax: fetch() returns FetchedTranscript object
     const script = `
 import sys
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.formatters import TextFormatter
 
 video_id = "${videoId}"
 language_code = "${languageCode}"
 
 try:
-    # Create API instance (new syntax for v1.2.0+)
+    # Create API instance
     ytt_api = YouTubeTranscriptApi()
     
     # Try to fetch transcript directly
-    # The new API uses fetch() method which returns transcript data
+    # fetch() returns a FetchedTranscript object (iterable, has snippets)
+    fetched_transcript = None
+    
     try:
         if language_code and language_code != 'auto':
             # Try specific language first
-            transcript_data = ytt_api.fetch(video_id, languages=[language_code])
+            fetched_transcript = ytt_api.fetch(video_id, languages=[language_code])
         else:
             # Try English first, then any available
             try:
-                transcript_data = ytt_api.fetch(video_id, languages=['en'])
+                fetched_transcript = ytt_api.fetch(video_id, languages=['en'])
             except:
-                # Fallback to any available language
-                transcript_data = ytt_api.fetch(video_id)
+                # Fallback to any available language (no languages param)
+                fetched_transcript = ytt_api.fetch(video_id)
     except Exception as fetch_error:
         # If direct fetch fails, try listing available transcripts
         try:
             transcript_list = ytt_api.list(video_id)
             
-            # Find transcript in requested language
-            transcript_item = None
+            # Find transcript in requested language using find_transcript()
             if language_code and language_code != 'auto':
-                # Try to find specific language
-                for item in transcript_list:
-                    if item.language_code == language_code:
-                        transcript_item = item
-                        break
-                # Fallback to English if specific not found
-                if not transcript_item:
-                    for item in transcript_list:
-                        if item.language_code == 'en':
-                            transcript_item = item
-                            break
+                # Try specific language, fallback to English
+                try:
+                    transcript = transcript_list.find_transcript([language_code, 'en'])
+                except:
+                    transcript = transcript_list.find_transcript(['en'])
             else:
                 # Try English first
-                for item in transcript_list:
-                    if item.language_code == 'en':
-                        transcript_item = item
-                        break
+                try:
+                    transcript = transcript_list.find_transcript(['en'])
+                except:
+                    # Fallback to any available transcript
+                    transcript = transcript_list.find_transcript(['en'])
             
-            # If still no transcript found, use first available
-            if not transcript_item and len(transcript_list) > 0:
-                transcript_item = transcript_list[0]
-            
-            if not transcript_item:
-                raise Exception("No transcript found")
-            
-            # Fetch transcript data
-            transcript_data = transcript_item.fetch()
+            # Fetch the actual transcript data (returns FetchedTranscript)
+            fetched_transcript = transcript.fetch()
         except Exception as list_error:
             raise Exception(f"Could not get transcript: {str(list_error)}")
     
-    # Format transcript as plain text
-    # transcript_data is a list of dicts with 'text', 'start', 'duration'
-    transcript_text = ' '.join([item['text'] for item in transcript_data])
+    # Format transcript as plain text using TextFormatter
+    # FetchedTranscript is iterable and can be formatted directly
+    formatter = TextFormatter()
+    transcript_text = formatter.format_transcript(fetched_transcript)
     
     print(transcript_text)
     sys.exit(0)
@@ -157,6 +148,8 @@ except Exception as e:
         print(f"ERROR: No transcript found for video {video_id}", file=sys.stderr)
     elif 'TranscriptsDisabled' in error_type or 'TranscriptsDisabled' in error_msg or 'transcripts are disabled' in error_msg.lower():
         print(f"ERROR: Transcripts are disabled for video {video_id}", file=sys.stderr)
+    elif 'RequestBlocked' in error_type or 'IpBlocked' in error_type or 'blocked' in error_msg.lower():
+        print(f"ERROR: Request blocked by YouTube. Your IP may be blocked. Consider using proxies. Error: {error_msg}", file=sys.stderr)
     elif 'has no attribute' in error_msg.lower():
         print(f"ERROR: API method not found. This may be a version issue with youtube-transcript-api. Error: {error_msg}", file=sys.stderr)
     else:
