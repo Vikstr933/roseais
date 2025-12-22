@@ -161,7 +161,7 @@ router.get('/status', authenticateUser, async (req, res) => {
       language: 'Swedish (sv)',
       message: isAvailable 
         ? 'KB-Whisper is ready to use'
-        : 'KB-Whisper requires faster-whisper. Install with: pip install faster-whisper',
+        : 'KB-Whisper requires faster-whisper. This should be installed during build. Please check build logs and ensure faster-whisper is installed in venv-whisper.',
     });
   } catch (error) {
     logger.error('Status check failed', error as Error);
