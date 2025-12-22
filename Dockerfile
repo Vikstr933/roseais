@@ -52,6 +52,12 @@ COPY . .
 # Bygg backend
 RUN npm run build:backend
 
+# Verifiera att venv-whisper finns och fungerar efter build
+RUN test -f venv-whisper/bin/python3 && \
+    venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp verified in Docker image')" && \
+    echo "✅ venv-whisper verified in Docker image" || \
+    (echo "❌ venv-whisper not found or broken in Docker image" && exit 1)
+
 # Behåll Playwright även om det är en dev dependency (behövs för runtime)
 # Rensa cache men behåll alla dependencies som behövs
 RUN npm cache clean --force
