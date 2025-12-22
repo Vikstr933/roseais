@@ -148,7 +148,7 @@ export function PreviewTab({
       hasReactFiles,
       isPythonWebApp,
       result,
-      filePaths: response.files.map(f => f.path)
+      filePaths: response.files.map(f => f?.path).filter(Boolean)
     });
     return result;
   }, [response?.files, isPythonWebApp]);
