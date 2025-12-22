@@ -104,92 +104,104 @@ export async function transcribeYouTubeVideo(videoId: string): Promise<{ transcr
       logger.warn(`[VideoTranscription] Current working directory: ${process.cwd()}`);
     }
     
-    try {
-      // Try yt-dlp first (recommended)
-      logger.info(`[VideoTranscription] Attempting to download audio with yt-dlp...`);
-      logger.info(`[VideoTranscription] Video URL: ${videoUrl}`);
-      logger.info(`[VideoTranscription] Audio output path: ${audioPath}`);
-      
-      if (pythonCommand) {
-        // Use Python module directly if venv is available
-        // Add flags to handle YouTube bot detection:
-        // --user-agent: Use a real browser user agent
-        // --extractor-args: Pass arguments to YouTube extractor
-        // --no-check-certificate: Skip SSL verification if needed
-        // --extract-flat: Try to avoid JavaScript requirements
-        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-        const command = `"${pythonCommand}" -m yt_dlp --user-agent "${userAgent}" --extractor-args "youtube:player_client=android" -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
+    if (!pythonCommand) {
+      // System yt-dlp should NOT be used in production - it should be in venv
+      logger.error(`[VideoTranscription] ❌ Cannot use system yt-dlp - venv not found!`);
+      logger.error(`[VideoTranscription] Searched paths: ${possibleVenvPaths.join(', ')}`);
+      logger.error(`[VideoTranscription] Current working directory: ${process.cwd()}`);
+      throw new Error('yt-dlp is not available. venv-whisper with yt-dlp should be installed during Docker build. Please check build logs and ensure yt-dlp is installed in venv-whisper.');
+    }
+
+    // Try multiple strategies to bypass YouTube bot detection
+    // Different player clients often work when others fail
+    const strategies = [
+      {
+        name: 'Android client',
+        userAgent: 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        extractorArgs: 'youtube:player_client=android',
+      },
+      {
+        name: 'iOS client',
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        extractorArgs: 'youtube:player_client=ios',
+      },
+      {
+        name: 'TV embedded client',
+        userAgent: 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        extractorArgs: 'youtube:player_client=tv_embedded',
+      },
+      {
+        name: 'Web client (desktop)',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        extractorArgs: 'youtube:player_client=web',
+      },
+    ];
+
+    let lastError: any = null;
+    let downloadSucceeded = false;
+
+    for (const strategy of strategies) {
+      try {
+        logger.info(`[VideoTranscription] Trying strategy: ${strategy.name}`);
+        logger.info(`[VideoTranscription] Video URL: ${videoUrl}`);
+        logger.info(`[VideoTranscription] Audio output path: ${audioPath}`);
+        
+        const command = `"${pythonCommand}" -m yt_dlp --user-agent "${strategy.userAgent}" --extractor-args "${strategy.extractorArgs}" -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
         logger.info(`[VideoTranscription] Executing: ${command}`);
         logger.info(`[VideoTranscription] Using venv from: ${foundVenvPath}`);
+        
         const result = await execAsync(command, { 
           maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
           timeout: 300000, // 5 minute timeout
           cwd: foundVenvPath ? path.dirname(foundVenvPath) : undefined
         });
+        
         logger.info(`[VideoTranscription] yt-dlp stdout: ${result.stdout.substring(0, 500)}`);
         if (result.stderr) {
           logger.debug(`[VideoTranscription] yt-dlp stderr: ${result.stderr.substring(0, 500)}`);
         }
-      } else {
-        // System yt-dlp should NOT be used in production - it should be in venv
-        // This is a fallback that will fail, but gives a clear error message
-        logger.error(`[VideoTranscription] ❌ Cannot use system yt-dlp - venv not found!`);
-        logger.error(`[VideoTranscription] Searched paths: ${possibleVenvPaths.join(', ')}`);
-        logger.error(`[VideoTranscription] Current working directory: ${process.cwd()}`);
-        throw new Error('yt-dlp is not available. venv-whisper with yt-dlp should be installed during Docker build. Please check build logs and ensure yt-dlp is installed in venv-whisper.');
-      }
-      logger.info(`[VideoTranscription] ✅ Audio downloaded successfully with yt-dlp`);
-    } catch (ytdlpError: any) {
-      const errorMessage = ytdlpError instanceof Error ? ytdlpError.message : String(ytdlpError);
-      const errorStdout = ytdlpError?.stdout || '';
-      const errorStderr = ytdlpError?.stderr || '';
-      
-      logger.error(`[VideoTranscription] ❌ yt-dlp failed: ${errorMessage}`);
-      if (errorStdout) {
-        logger.error(`[VideoTranscription] yt-dlp stdout: ${errorStdout.substring(0, 1000)}`);
-      }
-      if (errorStderr) {
-        logger.error(`[VideoTranscription] yt-dlp stderr: ${errorStderr.substring(0, 1000)}`);
-      }
-      
-      // Check if it's a YouTube bot detection error
-      const isBotDetectionError = 
-        errorStderr.includes('Sign in to confirm you\'re not a bot') ||
-        errorStderr.includes('confirm you\'re not a bot') ||
-        errorMessage.includes('bot');
-      
-      if (isBotDetectionError) {
-        // Try alternative method: use android client which often bypasses bot detection
-        logger.info(`[VideoTranscription] YouTube bot detection detected, trying alternative method...`);
-        try {
-          const userAgent = 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
-          const altCommand = `"${pythonCommand}" -m yt_dlp --user-agent "${userAgent}" --extractor-args "youtube:player_client=android" --extractor-args "youtube:player_skip=webpage" -x --audio-format wav --audio-quality 0 -o "${audioPath}" "${videoUrl}"`;
-          logger.info(`[VideoTranscription] Trying alternative command: ${altCommand}`);
-          const altResult = await execAsync(altCommand, { 
-            maxBuffer: 10 * 1024 * 1024,
-            timeout: 300000,
-            cwd: foundVenvPath ? path.dirname(foundVenvPath) : undefined
-          });
-          logger.info(`[VideoTranscription] ✅ Alternative method succeeded!`);
-          // Continue with transcription
-        } catch (altError: any) {
-          logger.error(`[VideoTranscription] Alternative method also failed: ${altError instanceof Error ? altError.message : String(altError)}`);
-          throw new Error(`YouTube is blocking automated access. This video may require manual verification. Please try a different video or contact support if this persists. Original error: ${errorMessage.substring(0, 200)}`);
-        }
-      } else {
-        // In production, yt-dlp should be installed during build
-        // If it's not available, this is a configuration error
-        const errorDetails = [
-          `Error: ${errorMessage}`,
-          `Searched venv paths: ${possibleVenvPaths.join(', ')}`,
-          `Current working directory: ${process.cwd()}`,
-          `Python command used: ${pythonCommand || 'none (system yt-dlp attempted)'}`,
-        ];
-        if (errorStdout) errorDetails.push(`stdout: ${errorStdout.substring(0, 500)}`);
-        if (errorStderr) errorDetails.push(`stderr: ${errorStderr.substring(0, 500)}`);
         
-        throw new Error(`yt-dlp is not available or failed to download audio. This should be installed during Docker build. ${errorDetails.join(' | ')}`);
+        // Check if audio file was created
+        try {
+          await fs.access(audioPath);
+          logger.info(`[VideoTranscription] ✅ Audio downloaded successfully with ${strategy.name} strategy`);
+          downloadSucceeded = true;
+          break; // Success! Exit the retry loop
+        } catch {
+          // Audio file not created, try next strategy
+          logger.warn(`[VideoTranscription] Strategy ${strategy.name} completed but audio file not found, trying next...`);
+          continue;
+        }
+      } catch (strategyError: any) {
+        const errorStderr = strategyError?.stderr || '';
+        const isBotDetectionError = 
+          errorStderr.includes('Sign in to confirm you\'re not a bot') ||
+          errorStderr.includes('confirm you\'re not a bot') ||
+          errorStderr.includes('bot');
+        
+        if (isBotDetectionError) {
+          logger.warn(`[VideoTranscription] Strategy ${strategy.name} blocked by bot detection, trying next...`);
+          lastError = strategyError;
+          continue; // Try next strategy
+        } else {
+          // Non-bot-detection error, log and try next
+          logger.warn(`[VideoTranscription] Strategy ${strategy.name} failed: ${strategyError instanceof Error ? strategyError.message : String(strategyError)}`);
+          lastError = strategyError;
+          continue;
+        }
       }
+    }
+
+    if (!downloadSucceeded) {
+      const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+      const errorStderr = lastError?.stderr || '';
+      
+      logger.error(`[VideoTranscription] ❌ All strategies failed. Last error: ${errorMessage}`);
+      if (errorStderr) {
+        logger.error(`[VideoTranscription] Last stderr: ${errorStderr.substring(0, 1000)}`);
+      }
+      
+      throw new Error(`YouTube is blocking automated access after trying ${strategies.length} different methods. This video may require manual verification or cookies. Please try a different video or contact support if this persists.`);
     }
 
     // Check if audio file exists
