@@ -123,6 +123,17 @@ export function PreviewTab({
     response.files &&
     response.files.length > 0;
 
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 PreviewTab state:', {
+      hasFiles,
+      isWebContainerProject,
+      hasResponse: !!response,
+      filesCount: response?.files?.length || 0,
+      filePaths: response?.files?.map(f => f.path) || []
+    });
+  }, [hasFiles, isWebContainerProject, response]);
+
   const hasPythonFiles = response?.files?.some(f => f.path.endsWith('.py'));
 
   // Check if Browser tab is usable for this project
@@ -130,13 +141,24 @@ export function PreviewTab({
 
   // Check if this is a WebContainer project (has package.json and React files)
   const isWebContainerProject = useMemo(() => {
-    if (!response?.files) return false;
+    if (!response?.files) {
+      console.log('🔍 isWebContainerProject: No files in response');
+      return false;
+    }
     const hasPackageJson = response.files.some(f => f.path === 'package.json' || f.path.endsWith('/package.json'));
     const hasReactFiles = response.files.some(f => 
       f.path.endsWith('.tsx') || f.path.endsWith('.jsx') ||
       (f.path === 'package.json' && f.content.includes('react'))
     );
-    return hasPackageJson && hasReactFiles && !isPythonWebApp;
+    const result = hasPackageJson && hasReactFiles && !isPythonWebApp;
+    console.log('🔍 isWebContainerProject check:', {
+      hasPackageJson,
+      hasReactFiles,
+      isPythonWebApp,
+      result,
+      filePaths: response.files.map(f => f.path)
+    });
+    return result;
   }, [response?.files, isPythonWebApp]);
 
   // Update server running state when URL changes
@@ -424,6 +446,18 @@ export default function App() {
               {livePreviewUrl}
             </Badge>
           )}
+          {!webContainerService.isSupported() && (
+            <Badge variant="destructive" className="text-xs">
+              WebContainer Not Supported
+            </Badge>
+          )}
+        </div>
+      )}
+      
+      {/* Debug info - show why button might be hidden */}
+      {hasFiles && !isWebContainerProject && (
+        <div className="p-2 border-b bg-muted/30 flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+          <span>ℹ️ Dev Server controls available for React/Node projects with package.json</span>
         </div>
       )}
 
