@@ -4,7 +4,7 @@
  * Usage: npx tsx scripts/test-render-deployment.ts
  */
 
-const RENDER_URL = 'https://ai-library-backend.onrender.com';
+const RENDER_URL = 'https://ai-library-backend-3mmv.onrender.com';
 
 async function testDeployment() {
   console.log('🧪 Testing Render Deployment\n');

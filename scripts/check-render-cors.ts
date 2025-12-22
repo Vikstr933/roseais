@@ -5,7 +5,7 @@
  * This script polls the backend until CORS headers are present for Vercel origin
  */
 
-const BACKEND_URL = 'https://ai-library-backend.onrender.com/api/health';
+const BACKEND_URL = 'https://ai-library-backend-3mmv.onrender.com/api/health';
 const VERCEL_ORIGIN = 'https://newai-sigma.vercel.app';
 const POLL_INTERVAL = 10000; // 10 seconds
 const MAX_ATTEMPTS = 60; // 10 minutes total
