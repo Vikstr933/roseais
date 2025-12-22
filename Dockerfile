@@ -38,7 +38,7 @@ RUN npx playwright install-deps chromium || true && \
 # Använd relativ path så att det matchar process.cwd() i koden
 RUN python3 -m venv venv-whisper && \
     ./venv-whisper/bin/pip install --upgrade pip && \
-    ./venv-whisper/bin/pip install faster-whisper yt-dlp youtube-transcript-api && \
+    ./venv-whisper/bin/pip install faster-whisper yt-dlp "youtube-transcript-api>=1.2.0" && \
     ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed')" && \
     ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" && \
     ./venv-whisper/bin/python3 -c "import youtube_transcript_api; print('✅ youtube-transcript-api installed')" && \
