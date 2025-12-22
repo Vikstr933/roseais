@@ -579,8 +579,23 @@ function AppExamplesTab() {
         </motion.div>
 
         {/* Placeholder for more apps */}
-        <div className="bg-card rounded-lg border p-6 border-dashed border-muted-foreground/30 flex items-center justify-center min-h-[200px]">
-          <div className="text-center text-muted-foreground">
+        <div 
+          className="relative bg-card rounded-lg border-2 border-dashed p-6 flex items-center justify-center min-h-[200px] overflow-hidden group"
+          style={{
+            background: 'linear-gradient(white, white) padding-box, linear-gradient(to right, #a855f7, #ec4899, #a855f7) border-box',
+            border: '2px dashed transparent',
+          }}
+        >
+          {/* OmniAssistant Branding Badge */}
+          <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm border border-purple-500/20 rounded-md">
+            <Brain className="h-3 w-3 text-purple-600" />
+            <span className="text-xs font-medium text-purple-700 dark:text-purple-400">OmniAssistant</span>
+          </div>
+
+          {/* Subtle gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all duration-300 pointer-events-none" />
+
+          <div className="relative z-10 text-center text-muted-foreground">
             <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">More apps coming soon</p>
           </div>
