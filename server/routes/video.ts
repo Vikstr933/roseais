@@ -14,6 +14,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import multer from 'multer';
 
 const execAsync = promisify(exec);
 const router = Router();
@@ -939,64 +940,59 @@ async function extractAudioFromYouTube(
   }
 }
 
+// Configure multer for audio file uploads (memory storage for efficiency)
+const upload = multer({
+  storage: multer.memoryStorage(), // Store in memory temporarily
+  limits: {
+    fileSize: audioFileService['maxFileSizeMB'] * 1024 * 1024, // 500MB default
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept audio files
+    const allowedMimes = [
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
+      'audio/ogg', 'audio/webm', 'audio/m4a', 'audio/x-m4a'
+    ];
+    const allowedExtensions = ['.mp3', '.wav', '.ogg', '.webm', '.m4a'];
+    
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const isValidMime = allowedMimes.includes(file.mimetype);
+    const isValidExt = allowedExtensions.includes(fileExtension);
+    
+    if (isValidMime || isValidExt) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type. Allowed: ${allowedExtensions.join(', ')}`));
+    }
+  },
+});
+
 /**
  * POST /api/video/upload-audio
- * Upload audio file for transcription
- * Accepts base64 encoded audio file or file buffer
+ * Upload audio file for transcription using multipart/form-data
+ * Much more memory-efficient than base64 JSON
  */
-router.post('/upload-audio', authenticateUser, async (req: Request, res: Response) => {
+router.post('/upload-audio', authenticateUser, upload.single('audio'), async (req: Request, res: Response) => {
   try {
-    const { audioData, filename, mimeType } = req.body;
-
-    if (!audioData) {
+    const file = (req as any).file;
+    
+    if (!file) {
       return res.status(400).json({
         success: false,
-        error: 'Audio file data is required',
+        error: 'Audio file is required. Please upload a file using multipart/form-data with field name "audio".',
       });
     }
 
     // Generate unique audio ID
     const audioId = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     
-    // Determine file extension from filename or mimeType
-    let extension = 'mp3';
-    if (filename) {
-      const match = filename.match(/\.([a-z0-9]+)$/i);
-      if (match) extension = match[1].toLowerCase();
-    } else if (mimeType) {
-      const mimeToExt: Record<string, string> = {
-        'audio/mpeg': 'mp3',
-        'audio/mp3': 'mp3',
-        'audio/wav': 'wav',
-        'audio/wave': 'wav',
-        'audio/x-wav': 'wav',
-        'audio/ogg': 'ogg',
-        'audio/webm': 'webm',
-        'audio/m4a': 'm4a',
-      };
-      extension = mimeToExt[mimeType] || 'mp3';
-    }
+    // Determine file extension from original filename
+    const originalExt = path.extname(file.originalname).toLowerCase().replace('.', '');
+    const extension = originalExt || 'mp3';
 
     const audioPath = audioFileService.getAudioFilePath(audioId, extension);
 
-    // Decode base64 audio data
-    let audioBuffer: Buffer;
-    try {
-      // Remove data URL prefix if present (e.g., "data:audio/mpeg;base64,")
-      const base64Data = audioData.includes(',') 
-        ? audioData.split(',')[1] 
-        : audioData;
-      audioBuffer = Buffer.from(base64Data, 'base64');
-    } catch (error) {
-      logger.error(`[AudioUpload] Failed to decode base64 audio data: ${error instanceof Error ? error.message : String(error)}`);
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid audio data format. Expected base64 encoded audio.',
-      });
-    }
-
     // Validate file size
-    const sizeMB = audioBuffer.length / (1024 * 1024);
+    const sizeMB = file.size / (1024 * 1024);
     if (sizeMB > audioFileService['maxFileSizeMB']) {
       return res.status(400).json({
         success: false,
@@ -1004,20 +1000,36 @@ router.post('/upload-audio', authenticateUser, async (req: Request, res: Respons
       });
     }
 
-    // Save audio file
-    await fs.writeFile(audioPath, audioBuffer);
+    // Save audio file from buffer (already in memory from multer)
+    await fs.writeFile(audioPath, file.buffer);
 
-    logger.info(`[AudioUpload] ✅ Audio file uploaded: ${audioId} (${sizeMB.toFixed(2)}MB)`);
+    logger.info(`[AudioUpload] ✅ Audio file uploaded: ${audioId} (${sizeMB.toFixed(2)}MB, ${file.originalname})`);
 
     res.json({
       success: true,
       audioId,
       audioPath,
       sizeMB: sizeMB.toFixed(2),
+      filename: file.originalname,
       message: 'Audio file uploaded successfully',
     });
   } catch (error: any) {
     logger.error(`[AudioUpload] Error: ${error.message}`, error);
+    
+    // Handle multer errors
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          error: `File too large. Maximum size: ${audioFileService['maxFileSizeMB']}MB`,
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        error: `Upload error: ${error.message}`,
+      });
+    }
+    
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to upload audio file',

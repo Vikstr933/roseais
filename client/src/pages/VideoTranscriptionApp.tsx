@@ -108,26 +108,27 @@ export default function VideoTranscriptionApp() {
     setProgress('Uploading audio file...');
 
     try {
-      // Read file as base64
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
+      // Use FormData for efficient file upload (multipart/form-data)
+      // This is much more memory-efficient than base64 JSON
+      const formData = new FormData();
+      formData.append('audio', selectedFile);
 
-      const base64Data = await base64Promise;
-
-      const response = await apiFetch('/api/video/upload-audio', {
+      // Get auth token for the request
+      const token = sessionToken || localStorage.getItem('sessionToken');
+      
+      // Use getApiUrl helper to get correct URL
+      const apiUrl = import.meta.env.VITE_API_URL 
+        ? `${import.meta.env.VITE_API_URL}/api/video/upload-audio`
+        : '/api/video/upload-audio';
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
-        body: JSON.stringify({
-          audioData: base64Data,
-          filename: selectedFile.name,
-          mimeType: selectedFile.type,
-        }),
+        headers: {
+          // Don't set Content-Type - browser will set it with boundary for multipart/form-data
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        credentials: 'include', // Important for CORS
+        body: formData,
       });
 
       if (!response.ok) {
