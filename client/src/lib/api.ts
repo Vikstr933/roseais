@@ -6,6 +6,8 @@
  */
 
 // Get the API base URL from environment or default to relative path
+// In development, this should be empty to use Vite proxy
+// In production, this should be set to the Render backend URL
 export const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 /**
@@ -17,8 +19,16 @@ export function getApiUrl(path: string): string {
   // Remove leading slash if present to avoid double slashes
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-  // If API_BASE_URL is set (production), use it; otherwise use relative path
-  return API_BASE_URL ? `${API_BASE_URL}${cleanPath}` : cleanPath;
+  // In development (when VITE_API_URL is empty), use relative path to trigger Vite proxy
+  // In production (when VITE_API_URL is set), use the full URL
+  // IMPORTANT: For local development, VITE_API_URL should be empty or unset
+  if (!API_BASE_URL) {
+    // Development mode - use relative path (Vite proxy will handle it)
+    return cleanPath;
+  }
+  
+  // Production mode - use full URL
+  return `${API_BASE_URL}${cleanPath}`;
 }
 
 /**
