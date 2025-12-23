@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiFetch } from '../lib/api';
+import { apiFetch, getApiUrl } from '../lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { AuthDialog } from '@/components/AuthDialog';
 
@@ -116,10 +116,8 @@ export default function VideoTranscriptionApp() {
       // Get auth token for the request
       const token = sessionToken || localStorage.getItem('sessionToken');
       
-      // Use getApiUrl helper to get correct URL
-      const apiUrl = import.meta.env.VITE_API_URL 
-        ? `${import.meta.env.VITE_API_URL}/api/video/upload-audio`
-        : '/api/video/upload-audio';
+      // Use getApiUrl helper to get correct URL (uses Vite proxy in dev, Render URL in prod)
+      const apiUrl = getApiUrl('/api/video/upload-audio');
       
       const response = await fetch(apiUrl, {
         method: 'POST',
