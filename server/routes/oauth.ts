@@ -16,7 +16,10 @@ router.post('/oauth', async (req, res) => {
   try {
     const { provider, providerId, email, displayName, avatarUrl } = req.body;
 
+    console.log('[OAuth] Received OAuth request:', { provider, providerId, email: email?.substring(0, 10) + '...' });
+
     if (!provider || !providerId || !email) {
+      console.error('[OAuth] Missing required fields:', { provider: !!provider, providerId: !!providerId, email: !!email });
       return res.status(400).json({ 
         error: 'Missing required fields: provider, providerId, email' 
       });
@@ -122,31 +125,96 @@ router.post('/oauth', async (req, res) => {
       sessionToken: sessionId,
     });
   } catch (error) {
-    console.error('OAuth error:', error);
-    console.error('OAuth error stack:', error instanceof Error ? error.stack : 'No stack trace');
-    
-    // Provide more specific error messages
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorCode = (error as any)?.code;
+    
+    console.error('[OAuth] Error processing OAuth:', {
+      message: errorMessage,
+      code: errorCode,
+      stack: errorStack?.split('\n').slice(0, 5).join('\n'), // First 5 lines of stack
+    });
+    
+    // Provide more specific error messages
     const isConnectionError = 
       errorMessage.includes('Connection terminated') ||
       errorMessage.includes('ECONNREFUSED') ||
       errorMessage.includes('ETIMEDOUT') ||
       errorMessage.includes('Connection') ||
-      errorMessage.includes('database');
+      errorMessage.includes('database') ||
+      errorCode === 'ECONNREFUSED' ||
+      errorCode === 'ETIMEDOUT';
+    
+    const isUniqueConstraintError = 
+      errorMessage.includes('unique') ||
+      errorMessage.includes('duplicate') ||
+      errorCode === '23505';
     
     if (isConnectionError) {
+      console.error('[OAuth] Database connection error');
       res.status(503).json({ 
         error: 'Database connection failed. Please try again in a moment.',
         retryable: true,
         details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
       });
+    } else if (isUniqueConstraintError) {
+      console.error('[OAuth] Unique constraint error - user may already exist');
+      // Try to fetch existing user and return success
+      try {
+        const existingUser = await retryDbOperation(async () => {
+          const rows = await db
+            .select()
+            .from(users as any)
+            .where(eq((users as any).email, req.body.email))
+            .limit(1);
+          return rows[0];
+        });
+        
+        if (existingUser) {
+          // User exists, create session and return
+          const sessionId = randomUUID();
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          
+          await retryDbOperation(async () => {
+            return await db.insert(sessions as any).values({
+              id: sessionId,
+              userId: existingUser.id,
+              expiresAt,
+            });
+          });
+          
+          console.log(`[OAuth] ✅ User already exists, created session: ${existingUser.email}`);
+          
+          return res.json({
+            user: {
+              id: existingUser.id,
+              username: existingUser.username,
+              email: existingUser.email,
+              displayName: existingUser.displayName,
+              role: existingUser.role || 'user',
+              createdAt: existingUser.createdAt,
+              lastActive: existingUser.lastActive,
+              preferences: existingUser.preferences || {},
+            },
+            sessionToken: sessionId,
+          });
+        }
+      } catch (fetchError) {
+        console.error('[OAuth] Failed to fetch existing user after unique constraint error:', fetchError);
+      }
+      
+      res.status(409).json({ 
+        error: 'User already exists with this email',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      });
     } else {
+      console.error('[OAuth] Unknown error:', errorMessage);
       res.status(500).json({ 
         error: 'Failed to process OAuth authentication',
         details: process.env.NODE_ENV === 'development' ? {
           message: errorMessage,
-          stack: errorStack
+          code: errorCode,
+          stack: errorStack?.split('\n').slice(0, 10).join('\n')
         } : undefined
       });
     }
