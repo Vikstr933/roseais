@@ -940,9 +940,22 @@ async function extractAudioFromYouTube(
   }
 }
 
-// Configure multer for audio file uploads (memory storage for efficiency)
+// Configure multer for audio file uploads (disk storage to save memory)
+// Using disk storage instead of memory to avoid OOM errors on Render free tier (512MB limit)
 const upload = multer({
-  storage: multer.memoryStorage(), // Store in memory temporarily
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      // Store temporarily in audio directory
+      cb(null, audioFileService.getAudioDirectory());
+    },
+    filename: (req, file, cb) => {
+      // Generate unique filename
+      const audioId = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const originalExt = path.extname(file.originalname).toLowerCase();
+      const extension = originalExt || '.mp3';
+      cb(null, `${audioId}${extension}`);
+    },
+  }),
   limits: {
     fileSize: audioFileService['maxFileSizeMB'] * 1024 * 1024, // 500MB default
   },
@@ -982,28 +995,24 @@ router.post('/upload-audio', authenticateUser, upload.single('audio'), async (re
       });
     }
 
-    // Generate unique audio ID
-    const audioId = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    
-    // Determine file extension from original filename
-    const originalExt = path.extname(file.originalname).toLowerCase().replace('.', '');
-    const extension = originalExt || 'mp3';
-
-    const audioPath = audioFileService.getAudioFilePath(audioId, extension);
+    // With disk storage, file.path contains the full path where multer saved it
+    // Extract audioId from filename (format: upload-timestamp-random.ext)
+    const filenameWithoutExt = path.parse(file.filename).name;
+    const audioId = filenameWithoutExt;
+    const audioPath = file.path; // Multer already saved it to disk
 
     // Validate file size
     const sizeMB = file.size / (1024 * 1024);
     if (sizeMB > audioFileService['maxFileSizeMB']) {
+      // Clean up the file if it's too large
+      await fs.unlink(audioPath).catch(() => {});
       return res.status(400).json({
         success: false,
         error: `File size (${sizeMB.toFixed(2)}MB) exceeds maximum allowed size (${audioFileService['maxFileSizeMB']}MB)`,
       });
     }
 
-    // Save audio file from buffer (already in memory from multer)
-    await fs.writeFile(audioPath, file.buffer);
-
-    logger.info(`[AudioUpload] ✅ Audio file uploaded: ${audioId} (${sizeMB.toFixed(2)}MB, ${file.originalname})`);
+    logger.info(`[AudioUpload] ✅ Audio file uploaded: ${audioId} (${sizeMB.toFixed(2)}MB, ${file.originalname}) - saved to disk: ${audioPath}`);
 
     res.json({
       success: true,
