@@ -162,15 +162,19 @@ export function inputValidation() {
       }
 
       // Validate request body size
-      const contentLength = req.get('content-length');
-      if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) { // 10MB limit
-        logger.warn(`Request body too large: ${contentLength}`);
-        // CRITICAL: Ensure CORS headers are set before returning error
-        ensureCORSHeaders(req, res);
-        return res.status(413).json({
-          error: 'Request body too large',
-          code: 'PAYLOAD_TOO_LARGE'
-        });
+      // Skip size check for audio upload endpoint (handled by JSON parser with higher limit)
+      const isAudioUpload = req.path === '/api/video/upload-audio';
+      if (!isAudioUpload) {
+        const contentLength = req.get('content-length');
+        if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) { // 10MB limit for other endpoints
+          logger.warn(`Request body too large: ${contentLength}`);
+          // CRITICAL: Ensure CORS headers are set before returning error
+          ensureCORSHeaders(req, res);
+          return res.status(413).json({
+            error: 'Request body too large',
+            code: 'PAYLOAD_TOO_LARGE'
+          });
+        }
       }
 
       next();
