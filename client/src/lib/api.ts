@@ -22,21 +22,11 @@ export function getApiUrl(path: string): string {
   // In development (when VITE_API_URL is empty), use relative path to trigger Vite proxy
   // In production (when VITE_API_URL is set), use the full URL
   // IMPORTANT: For local development, VITE_API_URL should be empty or unset
+  // All endpoints (including OAuth) go through Vite proxy in development
+  // Backend handles OAuth redirect URIs correctly based on environment variables
   if (!API_BASE_URL) {
-    // Development mode - check if we're in browser (for OAuth callbacks that need full URL)
-    if (typeof window !== 'undefined') {
-      // For OAuth-related endpoints, we need full URL even in dev (OAuth providers require it)
-      const oauthPaths = ['/api/auth/oauth', '/api/plugins/', '/api/credentials/oauth', '/api/discord/oauth'];
-      const isOAuthEndpoint = oauthPaths.some(oauthPath => cleanPath.startsWith(oauthPath));
-      
-      if (isOAuthEndpoint) {
-        // OAuth endpoints need full URL - use localhost:3001 (backend) directly
-        // This bypasses Vite proxy but is necessary for OAuth callbacks
-        return `http://localhost:3001${cleanPath}`;
-      }
-    }
-    
-    // Regular endpoints - use relative path (Vite proxy will handle it)
+    // Development mode - use relative path (Vite proxy will handle it)
+    // Vite proxy forwards to localhost:3001 (or whatever port backend runs on)
     return cleanPath;
   }
   
