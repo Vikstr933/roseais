@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getApiUrl } from '@/lib/api';
 import { useToast } from './use-toast';
 
 export interface OmniAssistantMessage {
@@ -133,10 +133,9 @@ export function useOmniAssistant() {
         setMessages(prev => [...prev, userMessage]);
 
         // Use streaming for better UX
-        const API_BASE = import.meta.env.VITE_API_URL || '';
         const sessionToken = localStorage.getItem('sessionToken');
 
-        const response = await fetch(`${API_BASE}/api/omniassistant/chat`, {
+        const response = await fetch(getApiUrl('/api/omniassistant/chat'), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${sessionToken}`,
