@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { authenticateUser } from '../middleware/auth';
+import { getBackendUrl } from '../utils/getBackendUrl';
 
 const router = Router();
 const logger = new SimpleLogger('PluginsAPI');
@@ -563,13 +564,7 @@ router.get('/gmail/callback', async (req, res) => {
     }
 
     // Determine backend URL dynamically (must match the one used in /auth/start)
-    let backendUrl = process.env.BACKEND_URL;
-    if (!backendUrl && process.env.VERCEL_URL) {
-      backendUrl = `https://${process.env.VERCEL_URL}`;
-    }
-    if (!backendUrl) {
-      backendUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000';
-    }
+    const backendUrl = getBackendUrl();
     
     // Use explicit redirect URI from env, or construct from backend URL
     const redirectUri = process.env.GOOGLE_REDIRECT_URI || 
