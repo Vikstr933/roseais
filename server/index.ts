@@ -389,7 +389,13 @@ const initializeApp = async () => {
       if (req.path === '/api/discord/interactions' || req.originalUrl === '/api/discord/interactions') {
         return next(); // Skip JSON parsing for Discord interactions
       }
-      express.json({ limit: '10mb' })(req, res, next);
+
+      // Allow larger payload only for audio upload (base64 can be ~1.33x of file size)
+      const isLargeAudioUpload = req.path === '/api/video/upload-audio';
+      const maxAudioUploadMb = parseInt(process.env.MAX_AUDIO_UPLOAD_LIMIT_MB || '700', 10); // default ~700MB (supports ~500MB raw audio base64)
+      const limit = isLargeAudioUpload ? `${maxAudioUploadMb}mb` : '10mb';
+
+      express.json({ limit })(req, res, next);
     });
 
     // Add enhanced logging middleware (production-safe)
