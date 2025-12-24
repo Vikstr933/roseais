@@ -336,47 +336,74 @@ except Exception as e:
       logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
       
       const startTime = Date.now();
-      const { stdout, stderr } = await execAsync(`"${pythonCmd}" "${scriptPath}"`, {
-        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
-        timeout: 120000, // 2 minute timeout
-      });
-      const duration = Date.now() - startTime;
-      
-      logger.info(`[WhisperService] Python script completed in ${duration}ms`);
-      
-      if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO') && !stderr.includes('DEBUG')) {
-        logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
-      } else if (stderr) {
-        logger.debug('[WhisperService] Python stderr (warnings/info only):', { stderr: stderr.substring(0, 200) });
+      try {
+        const { stdout, stderr } = await execAsync(`"${pythonCmd}" "${scriptPath}"`, {
+          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+          timeout: 120000, // 2 minute timeout
+        });
+        const duration = Date.now() - startTime;
+        
+        logger.info(`[WhisperService] Python script completed in ${duration}ms`);
+        
+        // Log stderr for debugging (even if it's just warnings)
+        if (stderr) {
+          const stderrPreview = stderr.substring(0, 1000);
+          if (!stderr.includes('WARNING') && !stderr.includes('INFO') && !stderr.includes('DEBUG')) {
+            logger.warn(`[WhisperService] Python stderr (${description}):`, { stderr: stderrPreview });
+          } else {
+            logger.debug(`[WhisperService] Python stderr (${description}, warnings/info):`, { stderr: stderrPreview });
+          }
+        }
+
+        if (!stdout || stdout.trim().length === 0) {
+          logger.error(`[WhisperService] Python script returned empty output (${description})`);
+          throw new Error('Python script returned empty output');
+        }
+
+        logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
+        const result = JSON.parse(stdout.trim());
+    
+        if (result.error) {
+          logger.error(`[WhisperService] Python script error (${description}):`, result.error);
+          throw new Error(`Transcription failed: ${result.error}`);
+        }
+
+        if (!result.text) {
+          logger.warn('[WhisperService] No text in result, but no error either');
+        }
+
+        // Clean up script
+        await fs.unlink(scriptPath).catch(() => {});
+
+        logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
+
+        return {
+          text: result.text || '',
+          language: result.language || language,
+          languageProbability: result.languageProbability || 0,
+          segments: result.segments || undefined,
+        };
+      } catch (execError: any) {
+        const duration = Date.now() - startTime;
+        logger.error(`[WhisperService] Python script execution failed (${description}) after ${duration}ms`);
+        
+        // Log detailed error information
+        if (execError.stdout) {
+          logger.error(`[WhisperService] Python stdout: ${execError.stdout.substring(0, 500)}`);
+        }
+        if (execError.stderr) {
+          logger.error(`[WhisperService] Python stderr: ${execError.stderr.substring(0, 1000)}`);
+        }
+        if (execError.message) {
+          logger.error(`[WhisperService] Error message: ${execError.message}`);
+        }
+        
+        // Re-throw with more context
+        const errorMessage = execError.stderr 
+          ? `${execError.message}\nPython stderr: ${execError.stderr.substring(0, 500)}`
+          : execError.message;
+        throw new Error(errorMessage);
       }
-
-      if (!stdout || stdout.trim().length === 0) {
-        throw new Error('Python script returned empty output');
-      }
-
-      logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
-      const result = JSON.parse(stdout.trim());
-  
-      if (result.error) {
-        logger.error('[WhisperService] Python script error:', result.error);
-        throw new Error(`Transcription failed: ${result.error}`);
-      }
-
-      if (!result.text) {
-        logger.warn('[WhisperService] No text in result, but no error either');
-      }
-
-      // Clean up script
-      await fs.unlink(scriptPath).catch(() => {});
-
-      logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
-
-      return {
-        text: result.text || '',
-        language: result.language || language,
-        languageProbability: result.languageProbability || 0,
-        segments: result.segments || undefined,
-      };
     };
     
     // PRIORITET 1: Try venv Python first (installerad i Docker)
