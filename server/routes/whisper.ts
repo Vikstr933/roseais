@@ -79,12 +79,12 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       ...result,
     });
   } catch (error) {
-    logger.error('[WhisperAPI] Transcription failed', error as Error);
-    const errorMessage = error instanceof Error ? error.message : 'Transcription failed';
-    logger.error('[WhisperAPI] Error details:', {
-      message: errorMessage,
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    logger.error('[WhisperAPI] Transcription failed', errorObj);
+    const errorMessage = errorObj.message;
+    if (errorObj.stack) {
+      logger.error(`[WhisperAPI] Error stack: ${errorObj.stack.substring(0, 500)}`);
+    }
     res.status(500).json({
       success: false,
       error: errorMessage,
@@ -144,7 +144,7 @@ router.post('/transcribe-buffer', authenticateUser, async (req, res) => {
  */
 router.get('/status', authenticateUser, async (req, res) => {
   try {
-    logger.info('Checking KB-Whisper status for user:', req.user?.id);
+    logger.info('Checking KB-Whisper status for user:', { userId: req.user?.id });
     const isAvailable = await whisperService.checkDependencies();
     
     // In production, faster-whisper should be installed during build
