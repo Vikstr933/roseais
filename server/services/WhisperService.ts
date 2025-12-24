@@ -86,9 +86,10 @@ export class WhisperService {
     }
     
     // FALLBACK: Try system Python (for development/local setups)
+    // In Docker/Linux, python3 is the standard, not py or python
     const pythonCommands = process.platform === 'win32' 
       ? ['py', 'python', 'python3']
-      : ['python3', 'python', 'py'];
+      : ['python3', 'python']; // Removed 'py' for Linux/Docker - it's Windows-only
     
     for (const cmd of pythonCommands) {
       try {
@@ -146,9 +147,10 @@ export class WhisperService {
     }
     
     // Find Python command to create venv
+    // In Docker/Linux, python3 is the standard
     const pythonCommands = process.platform === 'win32' 
       ? ['py', 'python', 'python3']
-      : ['python3', 'python', 'py'];
+      : ['python3', 'python']; // Removed 'py' for Linux/Docker - it's Windows-only
     
     let venvCreated = false;
     for (const cmd of pythonCommands) {
@@ -376,9 +378,10 @@ except Exception as e:
     }
 
     // Fallback to system Python commands
+    // In Docker/Linux, python3 is the standard, not py or python
     const pythonCommands = process.platform === 'win32' 
       ? ['py', 'python', 'python3']
-      : ['python3', 'python', 'py'];
+      : ['python3', 'python']; // Removed 'py' for Linux/Docker - it's Windows-only
     
     for (const cmd of pythonCommands) {
       try {
