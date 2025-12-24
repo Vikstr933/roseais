@@ -27,8 +27,9 @@ router.options('/oauth', (req, res) => {
  * POST /api/auth/oauth
  */
 router.post('/oauth', async (req, res) => {
-  // Log immediately when route is hit
-  console.log('[OAuth] ✅ POST /oauth route matched!');
+  // Log immediately when route is hit - this should appear in Render logs
+  console.log('[OAuth] ✅✅✅ POST /oauth route handler EXECUTED! ✅✅✅');
+  console.log('[OAuth] Request received at:', new Date().toISOString());
   console.log('[OAuth] Request details:', {
     method: req.method,
     path: req.path,

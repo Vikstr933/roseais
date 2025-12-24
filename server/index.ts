@@ -520,8 +520,17 @@ const initializeApp = async () => {
 
     // Routes
     app.use('/api/health', healthRouter); // Health check endpoints (no auth required)
-    // Register OAuth router BEFORE authRouter to ensure it takes precedence
+    
+    // Debug: Log ALL requests to /api/auth/* to see routing
+    app.use('/api/auth', (req, res, next) => {
+      console.log(`[DEBUG /api/auth] ${req.method} ${req.path} - routing...`);
+      next();
+    });
+    
+    // Register OAuth route EXPLICITLY before authRouter to ensure it takes precedence
+    // This ensures POST /api/auth/oauth is matched correctly
     app.use('/api/auth', oauthRouter); // OAuth routes (must be before authRouter)
+    
     app.use('/api/auth', authRouter);
     app.use('/api', testRouter); // Test endpoints
     app.use('/api', agentsRouter);
