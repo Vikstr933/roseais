@@ -38,11 +38,16 @@ RUN npx playwright install-deps chromium || true && \
 # Använd relativ path så att det matchar process.cwd() i koden
 # Installera med --no-cache-dir för att spara diskutrymme och säkerställa korrekt installation
 # CRITICAL: Install faster-whisper with all dependencies including C++ build tools
+# Note: faster-whisper requires C++ compiler which is included in build-essential
 RUN python3 -m venv venv-whisper && \
     ./venv-whisper/bin/pip install --upgrade pip setuptools wheel && \
-    ./venv-whisper/bin/pip install --no-cache-dir faster-whisper yt-dlp "youtube-transcript-api>=1.2.0" && \
+    echo "Installing faster-whisper..." && \
+    ./venv-whisper/bin/pip install --no-cache-dir faster-whisper && \
+    echo "Installing yt-dlp and youtube-transcript-api..." && \
+    ./venv-whisper/bin/pip install --no-cache-dir yt-dlp "youtube-transcript-api>=1.2.0" && \
+    echo "Verifying installations..." && \
     ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed')" && \
-    ./venv-whisper/bin/python3 -c "from faster_whisper import WhisperModel; print('✅ faster-whisper importable')" && \
+    ./venv-whisper/bin/python3 -c "from faster_whisper import WhisperModel; print('✅ WhisperModel importable')" && \
     ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" && \
     ./venv-whisper/bin/python3 -c "import youtube_transcript_api; print('✅ youtube-transcript-api installed')" && \
     ./venv-whisper/bin/python3 -m yt_dlp --version && \
@@ -52,7 +57,13 @@ RUN python3 -m venv venv-whisper && \
 
 # Kopiera resten av applikationen (exkludera venv-whisper om den finns lokalt)
 # Använd .dockerignore för att exkludera venv-whisper från COPY
+# VIKTIGT: .dockerignore ska exkludera venv-whisper/ så att den som skapades ovan inte överskrivs
 COPY . .
+
+# Verifiera att venv-whisper INTE överskrevs av COPY (den ska fortfarande ha faster-whisper)
+RUN test -f venv-whisper/bin/python3 && \
+    venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper still present after COPY')" || \
+    (echo "❌ CRITICAL: venv-whisper was overwritten or faster-whisper missing after COPY" && exit 1)
 
 # Bygg backend
 RUN npm run build:backend
