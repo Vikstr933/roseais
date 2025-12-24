@@ -13,12 +13,34 @@ const router = Router();
  * OPTIONS /api/auth/oauth
  */
 router.options('/oauth', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Max-Age', '86400');
   res.status(204).send();
+});
+
+/**
+ * Catch-all for unsupported methods on /oauth endpoint
+ * This helps debug routing issues
+ */
+router.all('/oauth', (req, res, next) => {
+  if (req.method === 'POST') {
+    // Let POST handler process it
+    return next();
+  }
+  if (req.method === 'OPTIONS') {
+    // Already handled above
+    return next();
+  }
+  // Log unsupported methods for debugging
+  console.warn(`[OAuth] Unsupported method ${req.method} for /oauth endpoint`);
+  res.status(405).json({
+    error: `Method ${req.method} not allowed. Use POST.`,
+    allowedMethods: ['POST', 'OPTIONS']
+  });
 });
 
 /**
