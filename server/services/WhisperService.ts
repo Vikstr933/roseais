@@ -261,7 +261,8 @@ try:
     # - cpu device: no GPU required (free)
     # - condition_on_previous_text=False: faster, no context dependency
     print("Loading Whisper model...", file=sys.stderr)
-    print(f"Model: {model_id}, Cache: {r"${escapedCacheDir}"}", file=sys.stderr)
+    cache_dir = r"${escapedCacheDir}"
+    print(f"Model: {model_id}, Cache: {cache_dir}", file=sys.stderr)
     model = WhisperModel(
         model_id,
         device="cpu",  # Use "cuda" if GPU available (faster but requires GPU)
