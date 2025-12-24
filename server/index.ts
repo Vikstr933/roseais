@@ -531,6 +531,13 @@ const initializeApp = async () => {
     // This ensures POST /api/auth/oauth is matched correctly
     app.use('/api/auth', oauthRouter); // OAuth routes (must be before authRouter)
     
+    // Also register OAuth route directly on app level as fallback
+    app.post('/api/auth/oauth', async (req, res, next) => {
+      console.log('[DEBUG] Direct app.post /api/auth/oauth matched! Forwarding to oauthRouter...');
+      // Forward to oauthRouter
+      return oauthRouter.handle(req, res, next);
+    });
+    
     app.use('/api/auth', authRouter);
     app.use('/api', testRouter); // Test endpoints
     app.use('/api', agentsRouter);
