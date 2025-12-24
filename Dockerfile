@@ -17,6 +17,15 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Installera faster-whisper direkt i system Python som primär metod
+# Detta är mer pålitligt än att förlita sig på venv som kan kopieras felaktigt
+RUN pip3 install --upgrade pip setuptools wheel && \
+    pip3 install --no-cache-dir faster-whisper yt-dlp "youtube-transcript-api>=1.2.0" && \
+    python3 -c "import faster_whisper; print('✅ faster-whisper installed in system Python')" && \
+    python3 -c "from faster_whisper import WhisperModel; print('✅ WhisperModel importable in system Python')" && \
+    python3 -c "import yt_dlp; print('✅ yt-dlp installed in system Python')" && \
+    echo "✅ System Python packages verified" || (echo "❌ System Python package installation failed" && exit 1)
+
 # Sätt arbetskatalog
 WORKDIR /app
 
@@ -34,24 +43,14 @@ RUN npx playwright install-deps chromium || true && \
     npx playwright install chromium || \
     (echo "❌ Playwright installation failed" && exit 1)
 
-# Skapa Python virtual environment och installera faster-whisper och yt-dlp
-# Använd relativ path så att det matchar process.cwd() i koden
-# Installera med --no-cache-dir för att spara diskutrymme och säkerställa korrekt installation
-# CRITICAL: Install faster-whisper with all dependencies including C++ build tools
-# Note: faster-whisper requires C++ compiler which is included in build-essential
+# Skapa Python virtual environment som fallback (används om system Python inte fungerar)
+# System Python är nu primär metod (installerad ovan), venv är fallback
 RUN python3 -m venv venv-whisper && \
     ./venv-whisper/bin/pip install --upgrade pip setuptools wheel && \
-    echo "Installing faster-whisper..." && \
-    ./venv-whisper/bin/pip install --no-cache-dir faster-whisper && \
-    echo "Installing yt-dlp and youtube-transcript-api..." && \
-    ./venv-whisper/bin/pip install --no-cache-dir yt-dlp "youtube-transcript-api>=1.2.0" && \
-    echo "Verifying installations..." && \
-    ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed')" && \
-    ./venv-whisper/bin/python3 -c "from faster_whisper import WhisperModel; print('✅ WhisperModel importable')" && \
-    ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" && \
-    ./venv-whisper/bin/python3 -c "import youtube_transcript_api; print('✅ youtube-transcript-api installed')" && \
-    ./venv-whisper/bin/python3 -m yt_dlp --version && \
-    echo "✅ All Python packages verified and working" || (echo "❌ Package installation or verification failed" && exit 1)
+    ./venv-whisper/bin/pip install --no-cache-dir faster-whisper yt-dlp "youtube-transcript-api>=1.2.0" && \
+    ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed in venv')" && \
+    ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed in venv')" && \
+    echo "✅ venv-whisper created as fallback" || (echo "⚠️ venv-whisper creation failed (non-critical, system Python is primary)" && true)
 
 # turnstile-solver dependencies (camoufox) removed - not needed for core functionality
 
@@ -68,14 +67,12 @@ RUN test -f venv-whisper/bin/python3 && \
 # Bygg backend
 RUN npm run build:backend
 
-# Verifiera att venv-whisper finns och fungerar efter build
-# Kontrollera både yt-dlp OCH faster-whisper (inklusive import)
-RUN test -f venv-whisper/bin/python3 && \
-    venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp verified in Docker image')" && \
-    venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper import verified')" && \
-    venv-whisper/bin/python3 -c "from faster_whisper import WhisperModel; print('✅ WhisperModel import verified')" && \
-    echo "✅ venv-whisper fully verified in Docker image" || \
-    (echo "❌ venv-whisper verification failed - faster-whisper may not be properly installed" && exit 1)
+# Verifiera att system Python har faster-whisper (primär metod)
+RUN python3 -c "import faster_whisper; print('✅ faster-whisper verified in system Python')" && \
+    python3 -c "from faster_whisper import WhisperModel; print('✅ WhisperModel verified in system Python')" && \
+    python3 -c "import yt_dlp; print('✅ yt-dlp verified in system Python')" && \
+    echo "✅ System Python fully verified - faster-whisper is ready" || \
+    (echo "❌ CRITICAL: System Python verification failed - faster-whisper not installed" && exit 1)
 
 # Behåll Playwright även om det är en dev dependency (behövs för runtime)
 # Rensa cache men behåll alla dependencies som behövs

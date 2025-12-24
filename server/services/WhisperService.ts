@@ -45,14 +45,44 @@ export class WhisperService {
 
   /**
    * Check if faster-whisper is available
-   * Tries multiple Python commands (py, python3, python) for cross-platform support
+   * NY STRATEGI: Prioriterar system Python (installerad i Docker) över venv
    */
   async checkDependencies(): Promise<boolean> {
-    // FIRST: Always check venv first (where we install faster-whisper)
+    // PRIORITET 1: Check system Python first (installerad direkt i Docker)
+    // I Docker/Linux är python3 standard, inte py eller python
+    const systemPythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3']; // Only python3 in Linux/Docker - python and py don't exist
+    
+    for (const cmd of systemPythonCommands) {
+      try {
+        // Check if Python is available
+        const versionResult = await execAsync(`${cmd} --version`);
+        logger.info(`[WhisperService] Checking system Python: ${cmd} - ${versionResult.stdout.trim()}`);
+        
+        // Check if faster-whisper is installed in system Python
+        try {
+          await execAsync(`${cmd} -c "import faster_whisper"`);
+          await execAsync(`${cmd} -c "from faster_whisper import WhisperModel"`);
+          logger.info(`✅ faster-whisper found in system Python: ${cmd}`);
+          return true;
+        } catch (importError) {
+          logger.debug(`faster-whisper not found in system Python (${cmd}), trying venv...`);
+          // Try venv next
+          break;
+        }
+      } catch (versionError) {
+        // Python command not found, try next
+        continue;
+      }
+    }
+    
+    // PRIORITET 2: Fallback till venv-whisper (om system Python inte fungerar)
     // Use cached result if we've already checked (to avoid repeated file system calls)
     if (this.venvChecked && this.venvExists) {
       try {
         await execAsync(`"${this.venvPython}" -c "import faster_whisper"`);
+        logger.info(`✅ faster-whisper found in venv (cached): ${this.venvPython}`);
         return true;
       } catch {
         // Venv might have been deleted, reset cache
@@ -77,44 +107,16 @@ export class WhisperService {
         // Venv doesn't exist
         this.venvChecked = true;
         this.venvExists = false;
-        logger.debug('Venv not found, checking system Python...');
+        logger.debug('Venv not found');
       }
     } catch (venvError) {
-      logger.debug('Venv check failed, checking system Python...', { error: venvError instanceof Error ? venvError.message : String(venvError) });
+      logger.debug('Venv check failed', { error: venvError instanceof Error ? venvError.message : String(venvError) });
       this.venvChecked = true;
       this.venvExists = false;
     }
     
-    // FALLBACK: Try system Python (for development/local setups)
-    // In Docker/Linux, python3 is the standard, not py or python
-    const pythonCommands = process.platform === 'win32' 
-      ? ['py', 'python', 'python3']
-      : ['python3']; // Only python3 in Linux/Docker - python and py don't exist
-    
-    for (const cmd of pythonCommands) {
-      try {
-        // Check if Python is available
-        const versionResult = await execAsync(`${cmd} --version`);
-        logger.info(`Python found: ${cmd} - ${versionResult.stdout.trim()}`);
-        
-        // Check if faster-whisper is installed
-        try {
-          await execAsync(`${cmd} -c "import faster_whisper"`);
-          logger.info(`✅ faster-whisper found using system Python: ${cmd}`);
-          return true;
-        } catch (importError) {
-          logger.warn(`faster-whisper not found with ${cmd}, trying next...`);
-          // Try next Python command
-          continue;
-        }
-      } catch (versionError) {
-        // Python command not found, try next
-        continue;
-      }
-    }
-    
-    logger.warn('faster-whisper not found. Install with: py -m pip install faster-whisper (Windows) or pip3 install faster-whisper (macOS/Linux)');
-    logger.warn('On Render, faster-whisper should be installed during build. Check build logs.');
+    logger.warn('faster-whisper not found in system Python or venv. Install with: pip3 install faster-whisper');
+    logger.warn('On Render, faster-whisper should be installed in system Python during build. Check build logs.');
     return false;
   }
 
@@ -320,10 +322,80 @@ except Exception as e:
 
     await fs.writeFile(scriptPath, pythonScript);
 
-    // First, try to use venv Python if it exists
+    // NY STRATEGI: Prioritera system Python (installerad direkt i Docker) över venv
     let lastError: Error | null = null;
     
-    // Try venv Python first
+    // Helper function to execute Python script
+    const executeScript = async (pythonCmd: string, description: string) => {
+      logger.info(`[WhisperService] Using ${description}: ${pythonCmd}`);
+      logger.info(`[WhisperService] Executing script: ${scriptPath}`);
+      logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
+      
+      const startTime = Date.now();
+      const { stdout, stderr } = await execAsync(`"${pythonCmd}" "${scriptPath}"`, {
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+        timeout: 120000, // 2 minute timeout
+      });
+      const duration = Date.now() - startTime;
+      
+      logger.info(`[WhisperService] Python script completed in ${duration}ms`);
+      
+      if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO') && !stderr.includes('DEBUG')) {
+        logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
+      } else if (stderr) {
+        logger.debug('[WhisperService] Python stderr (warnings/info only):', { stderr: stderr.substring(0, 200) });
+      }
+
+      if (!stdout || stdout.trim().length === 0) {
+        throw new Error('Python script returned empty output');
+      }
+
+      logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
+      const result = JSON.parse(stdout.trim());
+  
+      if (result.error) {
+        logger.error('[WhisperService] Python script error:', result.error);
+        throw new Error(`Transcription failed: ${result.error}`);
+      }
+
+      if (!result.text) {
+        logger.warn('[WhisperService] No text in result, but no error either');
+      }
+
+      // Clean up script
+      await fs.unlink(scriptPath).catch(() => {});
+
+      logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
+
+      return {
+        text: result.text || '',
+        language: result.language || language,
+        languageProbability: result.languageProbability || 0,
+        segments: result.segments || undefined,
+      };
+    };
+    
+    // PRIORITET 1: Try system Python first (installerad direkt i Docker)
+    const systemPythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3']; // Only python3 in Linux/Docker
+    
+    for (const cmd of systemPythonCommands) {
+      try {
+        // Verify faster-whisper is installed in system Python
+        await execAsync(`${cmd} -c "import faster_whisper"`);
+        await execAsync(`${cmd} -c "from faster_whisper import WhisperModel"`);
+        logger.info(`[WhisperService] ✅ faster-whisper verified in system Python: ${cmd}`);
+        
+        // Execute script with system Python
+        return await executeScript(cmd, `system Python (${cmd})`);
+      } catch (importError) {
+        logger.debug(`[WhisperService] faster-whisper not found in system Python (${cmd}), trying next...`);
+        continue;
+      }
+    }
+    
+    // PRIORITET 2: Fallback to venv Python (if system Python doesn't work)
     try {
       const stats = await fs.stat(this.venvPython);
       if (stats.isFile()) {
@@ -337,152 +409,35 @@ except Exception as e:
           throw new Error(`faster-whisper is not installed in venv-whisper. Please rebuild Docker image.`);
         }
         
-        logger.info(`[WhisperService] Using venv Python: ${this.venvPython}`);
-        logger.info(`[WhisperService] Executing script: ${scriptPath}`);
-        logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
-        
-        const startTime = Date.now();
-        const { stdout, stderr } = await execAsync(`"${this.venvPython}" "${scriptPath}"`, {
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
-          timeout: 120000, // 2 minute timeout
-        });
-        const duration = Date.now() - startTime;
-        
-        logger.info(`[WhisperService] Python script completed in ${duration}ms`);
-        
-        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO') && !stderr.includes('DEBUG')) {
-          logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
-        } else if (stderr) {
-          logger.debug('[WhisperService] Python stderr (warnings/info only):', { stderr: stderr.substring(0, 200) });
-        }
-
-        if (!stdout || stdout.trim().length === 0) {
-          throw new Error('Python script returned empty output');
-        }
-
-        logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
-        const result = JSON.parse(stdout.trim());
-    
-        if (result.error) {
-          logger.error('[WhisperService] Python script error:', result.error);
-          throw new Error(`Transcription failed: ${result.error}`);
-        }
-
-        if (!result.text) {
-          logger.warn('[WhisperService] No text in result, but no error either');
-        }
-
-        // Clean up script
-        await fs.unlink(scriptPath).catch(() => {});
-
-        logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
-
-        return {
-          text: result.text || '',
-          language: result.language || language,
-          languageProbability: result.languageProbability || 0,
-          segments: result.segments || undefined,
-        };
+        // Execute script with venv Python
+        return await executeScript(this.venvPython, 'venv Python');
       }
     } catch (venvError) {
       const error = venvError instanceof Error ? venvError : new Error(String(venvError));
       
-      // If venv exists but faster-whisper is missing, don't fallback to system Python
+      // If venv exists but faster-whisper is missing, don't continue
       // This is a configuration error that needs to be fixed
       if (error.message.includes('faster-whisper is not installed in venv-whisper')) {
         logger.error('[WhisperService] ❌ Venv exists but faster-whisper is missing. This is a build error.');
-        throw error; // Don't fallback - this needs to be fixed
+        throw error; // Don't continue - this needs to be fixed
       }
       
-      logger.warn('[WhisperService] Venv Python failed, trying system Python...', { 
+      logger.warn('[WhisperService] Venv Python failed', { 
         error: error.message,
         stack: error.stack?.substring(0, 200)
       });
       lastError = error;
     }
-
-    // Fallback to system Python commands
-    // In Docker/Linux, python3 is the standard, not py or python
-    const pythonCommands = process.platform === 'win32' 
-      ? ['py', 'python', 'python3']
-      : ['python3']; // Only python3 in Linux/Docker - python and py don't exist
     
-    for (const cmd of pythonCommands) {
-      try {
-        logger.info(`[WhisperService] Trying system Python: ${cmd}`);
-        logger.info(`[WhisperService] Executing script: ${scriptPath}`);
-        logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
-        
-        // Execute Python script
-        // On Windows, use proper quoting for paths with spaces
-        const scriptCommand = process.platform === 'win32' 
-          ? `${cmd} "${scriptPath}"`
-          : `${cmd} "${scriptPath}"`;
-        
-        const startTime = Date.now();
-        logger.debug(`[WhisperService] Running command: ${scriptCommand}`);
-        const { stdout, stderr } = await execAsync(scriptCommand, {
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-          timeout: 120000, // 2 minute timeout
-        });
-        const duration = Date.now() - startTime;
-        
-        logger.info(`[WhisperService] Python script completed in ${duration}ms`);
-      
-        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO') && !stderr.includes('DEBUG')) {
-          logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
-        } else if (stderr) {
-          logger.debug('[WhisperService] Python stderr (warnings/info only):', { stderr: stderr.substring(0, 200) });
-        }
-
-        if (!stdout || stdout.trim().length === 0) {
-          throw new Error('Python script returned empty output');
-        }
-
-        logger.info(`[WhisperService] Python stdout length: ${stdout.length}`);
-        const result = JSON.parse(stdout.trim());
-      
-        if (result.error) {
-          logger.error('[WhisperService] Python script error:', result.error);
-          throw new Error(`Transcription failed: ${result.error}`);
-        }
-
-        if (!result.text) {
-          logger.warn('[WhisperService] No text in result, but no error either');
-        }
-
-        // Clean up script
-        await fs.unlink(scriptPath).catch(() => {});
-
-        logger.info(`[WhisperService] Transcription successful, text: "${result.text?.substring(0, 50)}..."`);
-
-        return {
-          text: result.text || '',
-          language: result.language || language,
-          languageProbability: result.languageProbability || 0,
-          segments: result.segments || undefined,
-        };
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        const isTimeout = err.message.includes('timeout') || err.message.includes('ETIMEDOUT');
-        const isAborted = err.message.includes('aborted') || err.message.includes('SIGTERM');
-        
-        if (isTimeout) {
-          logger.error(`[WhisperService] ${cmd} timed out after 120 seconds. Audio file may be too long or processing too slow.`);
-        } else if (isAborted) {
-          logger.warn(`[WhisperService] ${cmd} was aborted`);
-        } else {
-          logger.warn(`[WhisperService] ${cmd} failed:`, { 
-            error: err.message, 
-            command: cmd,
-            stack: err.stack?.substring(0, 300)
-          });
-        }
-        lastError = err;
-        // Try next Python command
-        continue;
-      }
+    // If we get here, neither system Python nor venv worked
+    // Clean up script on error
+    await fs.unlink(scriptPath).catch(() => {});
+    
+    if (lastError) {
+      throw new Error(`Failed to execute Whisper script. Tried: system Python and venv. Error: ${lastError.message}`);
     }
+    
+    throw new Error('Failed to execute Whisper script. No Python environment with faster-whisper found.');
     
     // Clean up script on error
     await fs.unlink(scriptPath).catch(() => {});
