@@ -433,23 +433,11 @@ except Exception as e:
     // Clean up script on error
     await fs.unlink(scriptPath).catch(() => {});
     
-    if (lastError) {
+    if (lastError instanceof Error) {
       throw new Error(`Failed to execute Whisper script. Tried: system Python and venv. Error: ${lastError.message}`);
     }
     
     throw new Error('Failed to execute Whisper script. No Python environment with faster-whisper found.');
-    
-    // Clean up script on error
-    await fs.unlink(scriptPath).catch(() => {});
-    
-    if (lastError instanceof Error) {
-      if (lastError.message.includes('JSON')) {
-        logger.error('Failed to parse Whisper output', lastError);
-        throw new Error('Failed to parse transcription result. Check Python/faster-whisper installation.');
-      }
-      throw new Error(`Failed to execute Whisper script. Tried: ${pythonCommands.join(', ')}. Error: ${lastError.message}`);
-    }
-    throw new Error(`Failed to execute Whisper script. Tried: ${pythonCommands.join(', ')}. Unknown error.`);
   }
 
   /**
