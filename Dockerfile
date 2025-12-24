@@ -36,9 +36,10 @@ RUN npx playwright install-deps chromium || true && \
 
 # Skapa Python virtual environment och installera faster-whisper och yt-dlp
 # Använd relativ path så att det matchar process.cwd() i koden
+# Installera med --no-cache-dir för att spara diskutrymme och säkerställa korrekt installation
 RUN python3 -m venv venv-whisper && \
-    ./venv-whisper/bin/pip install --upgrade pip && \
-    ./venv-whisper/bin/pip install faster-whisper yt-dlp "youtube-transcript-api>=1.2.0" && \
+    ./venv-whisper/bin/pip install --upgrade pip setuptools wheel && \
+    ./venv-whisper/bin/pip install --no-cache-dir faster-whisper yt-dlp "youtube-transcript-api>=1.2.0" && \
     ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed')" && \
     ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" && \
     ./venv-whisper/bin/python3 -c "import youtube_transcript_api; print('✅ youtube-transcript-api installed')" && \
