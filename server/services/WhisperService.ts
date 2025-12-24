@@ -45,39 +45,11 @@ export class WhisperService {
 
   /**
    * Check if faster-whisper is available
-   * NY STRATEGI: Prioriterar system Python (installerad i Docker) över venv
+   * PRIORITET: venv-whisper (installerad i Docker) är primär metod
+   * System Python kan inte användas i modern Python (3.11+) pga externally-managed-environment
    */
   async checkDependencies(): Promise<boolean> {
-    // PRIORITET 1: Check system Python first (installerad direkt i Docker)
-    // I Docker/Linux är python3 standard, inte py eller python
-    const systemPythonCommands = process.platform === 'win32' 
-      ? ['py', 'python', 'python3']
-      : ['python3']; // Only python3 in Linux/Docker - python and py don't exist
-    
-    for (const cmd of systemPythonCommands) {
-      try {
-        // Check if Python is available
-        const versionResult = await execAsync(`${cmd} --version`);
-        logger.info(`[WhisperService] Checking system Python: ${cmd} - ${versionResult.stdout.trim()}`);
-        
-        // Check if faster-whisper is installed in system Python
-        try {
-          await execAsync(`${cmd} -c "import faster_whisper"`);
-          await execAsync(`${cmd} -c "from faster_whisper import WhisperModel"`);
-          logger.info(`✅ faster-whisper found in system Python: ${cmd}`);
-          return true;
-        } catch (importError) {
-          logger.debug(`faster-whisper not found in system Python (${cmd}), trying venv...`);
-          // Try venv next
-          break;
-        }
-      } catch (versionError) {
-        // Python command not found, try next
-        continue;
-      }
-    }
-    
-    // PRIORITET 2: Fallback till venv-whisper (om system Python inte fungerar)
+    // PRIORITET 1: Check venv-whisper first (installerad i Docker)
     // Use cached result if we've already checked (to avoid repeated file system calls)
     if (this.venvChecked && this.venvExists) {
       try {
@@ -98,6 +70,7 @@ export class WhisperService {
         if (stats.isFile()) {
           // Venv Python exists, check if faster-whisper is installed
           await execAsync(`"${this.venvPython}" -c "import faster_whisper"`);
+          await execAsync(`"${this.venvPython}" -c "from faster_whisper import WhisperModel"`);
           logger.info(`✅ faster-whisper found in venv: ${this.venvPython}`);
           this.venvChecked = true;
           this.venvExists = true;
@@ -107,16 +80,46 @@ export class WhisperService {
         // Venv doesn't exist
         this.venvChecked = true;
         this.venvExists = false;
-        logger.debug('Venv not found');
+        logger.debug('Venv not found, checking system Python...');
       }
     } catch (venvError) {
-      logger.debug('Venv check failed', { error: venvError instanceof Error ? venvError.message : String(venvError) });
+      logger.debug('Venv check failed, checking system Python...', { error: venvError instanceof Error ? venvError.message : String(venvError) });
       this.venvChecked = true;
       this.venvExists = false;
     }
     
-    logger.warn('faster-whisper not found in system Python or venv. Install with: pip3 install faster-whisper');
-    logger.warn('On Render, faster-whisper should be installed in system Python during build. Check build logs.');
+    // PRIORITET 2: Fallback to system Python (för development/local setups)
+    // I Docker/Linux är python3 standard, inte py eller python
+    // NOTE: Modern Python (3.11+) har externally-managed-environment, så detta fungerar oftast inte
+    const systemPythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3']; // Only python3 in Linux/Docker - python and py don't exist
+    
+    for (const cmd of systemPythonCommands) {
+      try {
+        // Check if Python is available
+        const versionResult = await execAsync(`${cmd} --version`);
+        logger.info(`[WhisperService] Checking system Python: ${cmd} - ${versionResult.stdout.trim()}`);
+        
+        // Check if faster-whisper is installed in system Python
+        try {
+          await execAsync(`${cmd} -c "import faster_whisper"`);
+          await execAsync(`${cmd} -c "from faster_whisper import WhisperModel"`);
+          logger.info(`✅ faster-whisper found in system Python: ${cmd}`);
+          return true;
+        } catch (importError) {
+          logger.debug(`faster-whisper not found in system Python (${cmd})`);
+          // Try next
+          continue;
+        }
+      } catch (versionError) {
+        // Python command not found, try next
+        continue;
+      }
+    }
+    
+    logger.warn('faster-whisper not found in venv or system Python. Install with: pip3 install faster-whisper');
+    logger.warn('On Render, faster-whisper should be installed in venv-whisper during build. Check build logs.');
     return false;
   }
 
@@ -322,7 +325,8 @@ except Exception as e:
 
     await fs.writeFile(scriptPath, pythonScript);
 
-    // NY STRATEGI: Prioritera system Python (installerad direkt i Docker) över venv
+    // PRIORITET: venv-whisper (installerad i Docker) är primär metod
+    // System Python kan inte användas i modern Python (3.11+) pga externally-managed-environment
     let lastError: Error | null = null;
     
     // Helper function to execute Python script
@@ -375,33 +379,14 @@ except Exception as e:
       };
     };
     
-    // PRIORITET 1: Try system Python first (installerad direkt i Docker)
-    const systemPythonCommands = process.platform === 'win32' 
-      ? ['py', 'python', 'python3']
-      : ['python3']; // Only python3 in Linux/Docker
-    
-    for (const cmd of systemPythonCommands) {
-      try {
-        // Verify faster-whisper is installed in system Python
-        await execAsync(`${cmd} -c "import faster_whisper"`);
-        await execAsync(`${cmd} -c "from faster_whisper import WhisperModel"`);
-        logger.info(`[WhisperService] ✅ faster-whisper verified in system Python: ${cmd}`);
-        
-        // Execute script with system Python
-        return await executeScript(cmd, `system Python (${cmd})`);
-      } catch (importError) {
-        logger.debug(`[WhisperService] faster-whisper not found in system Python (${cmd}), trying next...`);
-        continue;
-      }
-    }
-    
-    // PRIORITET 2: Fallback to venv Python (if system Python doesn't work)
+    // PRIORITET 1: Try venv Python first (installerad i Docker)
     try {
       const stats = await fs.stat(this.venvPython);
       if (stats.isFile()) {
         // Verify faster-whisper is installed in venv before using it
         try {
           await execAsync(`"${this.venvPython}" -c "import faster_whisper"`);
+          await execAsync(`"${this.venvPython}" -c "from faster_whisper import WhisperModel"`);
           logger.info(`[WhisperService] ✅ faster-whisper verified in venv`);
         } catch (importError) {
           logger.error(`[WhisperService] ❌ faster-whisper NOT found in venv at ${this.venvPython}`);
@@ -422,19 +407,40 @@ except Exception as e:
         throw error; // Don't continue - this needs to be fixed
       }
       
-      logger.warn('[WhisperService] Venv Python failed', { 
+      logger.warn('[WhisperService] Venv Python failed, trying system Python...', { 
         error: error.message,
         stack: error.stack?.substring(0, 200)
       });
       lastError = error;
     }
     
-    // If we get here, neither system Python nor venv worked
+    // PRIORITET 2: Fallback to system Python (för development/local setups)
+    // NOTE: Modern Python (3.11+) har externally-managed-environment, så detta fungerar oftast inte
+    const systemPythonCommands = process.platform === 'win32' 
+      ? ['py', 'python', 'python3']
+      : ['python3']; // Only python3 in Linux/Docker
+    
+    for (const cmd of systemPythonCommands) {
+      try {
+        // Verify faster-whisper is installed in system Python
+        await execAsync(`${cmd} -c "import faster_whisper"`);
+        await execAsync(`${cmd} -c "from faster_whisper import WhisperModel"`);
+        logger.info(`[WhisperService] ✅ faster-whisper verified in system Python: ${cmd}`);
+        
+        // Execute script with system Python
+        return await executeScript(cmd, `system Python (${cmd})`);
+      } catch (importError) {
+        logger.debug(`[WhisperService] faster-whisper not found in system Python (${cmd}), trying next...`);
+        continue;
+      }
+    }
+    
+    // If we get here, neither venv nor system Python worked
     // Clean up script on error
     await fs.unlink(scriptPath).catch(() => {});
     
     if (lastError instanceof Error) {
-      throw new Error(`Failed to execute Whisper script. Tried: system Python and venv. Error: ${lastError.message}`);
+      throw new Error(`Failed to execute Whisper script. Tried: venv and system Python. Error: ${lastError.message}`);
     }
     
     throw new Error('Failed to execute Whisper script. No Python environment with faster-whisper found.');
