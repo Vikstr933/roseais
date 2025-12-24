@@ -23,40 +23,24 @@ router.options('/oauth', (req, res) => {
 });
 
 /**
- * Catch-all for unsupported methods on /oauth endpoint
- * This helps debug routing issues
- */
-router.all('/oauth', (req, res, next) => {
-  if (req.method === 'POST') {
-    // Let POST handler process it
-    return next();
-  }
-  if (req.method === 'OPTIONS') {
-    // Already handled above
-    return next();
-  }
-  // Log unsupported methods for debugging
-  console.warn(`[OAuth] Unsupported method ${req.method} for /oauth endpoint`);
-  res.status(405).json({
-    error: `Method ${req.method} not allowed. Use POST.`,
-    allowedMethods: ['POST', 'OPTIONS']
-  });
-});
-
-/**
  * Handle OAuth callback from Supabase
  * POST /api/auth/oauth
  */
 router.post('/oauth', async (req, res) => {
+  // Log immediately when route is hit
+  console.log('[OAuth] ✅ POST /oauth route matched!');
+  console.log('[OAuth] Request details:', {
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    url: req.url,
+    origin: req.headers.origin,
+    contentType: req.headers['content-type'],
+    hasBody: !!req.body,
+    bodyKeys: req.body ? Object.keys(req.body) : [],
+  });
+  
   try {
-    // Log request details for debugging
-    console.log('[OAuth] Received OAuth request:', {
-      method: req.method,
-      path: req.path,
-      origin: req.headers.origin,
-      contentType: req.headers['content-type'],
-      hasBody: !!req.body,
-    });
 
     const { provider, providerId, email, displayName, avatarUrl } = req.body;
 
