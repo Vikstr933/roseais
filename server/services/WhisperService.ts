@@ -272,6 +272,7 @@ try:
     
     # Transcribe with speed optimizations
     # Note: Very permissive settings to catch all speech, even quiet or short audio
+    print(f"Starting transcription... Audio file: {audio_file}", file=sys.stderr)
     segments, info = model.transcribe(
         audio_file,
         language=language if language != "auto" else None,
