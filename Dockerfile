@@ -47,15 +47,18 @@ RUN python3 -m venv venv-whisper && \
 
 # turnstile-solver dependencies (camoufox) removed - not needed for core functionality
 
-# Kopiera resten av applikationen
+# Kopiera resten av applikationen (exkludera venv-whisper om den finns lokalt)
+# Använd .dockerignore för att exkludera venv-whisper från COPY
 COPY . .
 
 # Bygg backend
 RUN npm run build:backend
 
 # Verifiera att venv-whisper finns och fungerar efter build
+# Kontrollera både yt-dlp OCH faster-whisper
 RUN test -f venv-whisper/bin/python3 && \
     venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp verified in Docker image')" && \
+    venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper verified in Docker image')" && \
     echo "✅ venv-whisper verified in Docker image" || \
     (echo "❌ venv-whisper not found or broken in Docker image" && exit 1)
 
