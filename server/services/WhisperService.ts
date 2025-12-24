@@ -327,17 +327,33 @@ except Exception as e:
     try {
       const stats = await fs.stat(this.venvPython);
       if (stats.isFile()) {
+        // Verify faster-whisper is installed in venv before using it
+        try {
+          await execAsync(`"${this.venvPython}" -c "import faster_whisper"`);
+          logger.info(`[WhisperService] ✅ faster-whisper verified in venv`);
+        } catch (importError) {
+          logger.error(`[WhisperService] ❌ faster-whisper NOT found in venv at ${this.venvPython}`);
+          logger.error(`[WhisperService] This should not happen - faster-whisper should be installed during Docker build`);
+          throw new Error(`faster-whisper is not installed in venv-whisper. Please rebuild Docker image.`);
+        }
+        
         logger.info(`[WhisperService] Using venv Python: ${this.venvPython}`);
         logger.info(`[WhisperService] Executing script: ${scriptPath}`);
         logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
         
+        const startTime = Date.now();
         const { stdout, stderr } = await execAsync(`"${this.venvPython}" "${scriptPath}"`, {
           maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
           timeout: 120000, // 2 minute timeout
         });
+        const duration = Date.now() - startTime;
         
-        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
+        logger.info(`[WhisperService] Python script completed in ${duration}ms`);
+        
+        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO') && !stderr.includes('DEBUG')) {
           logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
+        } else if (stderr) {
+          logger.debug('[WhisperService] Python stderr (warnings/info only):', { stderr: stderr.substring(0, 200) });
         }
 
         if (!stdout || stdout.trim().length === 0) {
@@ -370,6 +386,14 @@ except Exception as e:
       }
     } catch (venvError) {
       const error = venvError instanceof Error ? venvError : new Error(String(venvError));
+      
+      // If venv exists but faster-whisper is missing, don't fallback to system Python
+      // This is a configuration error that needs to be fixed
+      if (error.message.includes('faster-whisper is not installed in venv-whisper')) {
+        logger.error('[WhisperService] ❌ Venv exists but faster-whisper is missing. This is a build error.');
+        throw error; // Don't fallback - this needs to be fixed
+      }
+      
       logger.warn('[WhisperService] Venv Python failed, trying system Python...', { 
         error: error.message,
         stack: error.stack?.substring(0, 200)

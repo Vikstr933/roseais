@@ -37,10 +37,12 @@ RUN npx playwright install-deps chromium || true && \
 # Skapa Python virtual environment och installera faster-whisper och yt-dlp
 # Använd relativ path så att det matchar process.cwd() i koden
 # Installera med --no-cache-dir för att spara diskutrymme och säkerställa korrekt installation
+# CRITICAL: Install faster-whisper with all dependencies including C++ build tools
 RUN python3 -m venv venv-whisper && \
     ./venv-whisper/bin/pip install --upgrade pip setuptools wheel && \
     ./venv-whisper/bin/pip install --no-cache-dir faster-whisper yt-dlp "youtube-transcript-api>=1.2.0" && \
     ./venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper installed')" && \
+    ./venv-whisper/bin/python3 -c "from faster_whisper import WhisperModel; print('✅ faster-whisper importable')" && \
     ./venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp installed')" && \
     ./venv-whisper/bin/python3 -c "import youtube_transcript_api; print('✅ youtube-transcript-api installed')" && \
     ./venv-whisper/bin/python3 -m yt_dlp --version && \
@@ -56,12 +58,13 @@ COPY . .
 RUN npm run build:backend
 
 # Verifiera att venv-whisper finns och fungerar efter build
-# Kontrollera både yt-dlp OCH faster-whisper
+# Kontrollera både yt-dlp OCH faster-whisper (inklusive import)
 RUN test -f venv-whisper/bin/python3 && \
     venv-whisper/bin/python3 -c "import yt_dlp; print('✅ yt-dlp verified in Docker image')" && \
-    venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper verified in Docker image')" && \
-    echo "✅ venv-whisper verified in Docker image" || \
-    (echo "❌ venv-whisper not found or broken in Docker image" && exit 1)
+    venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper import verified')" && \
+    venv-whisper/bin/python3 -c "from faster_whisper import WhisperModel; print('✅ WhisperModel import verified')" && \
+    echo "✅ venv-whisper fully verified in Docker image" || \
+    (echo "❌ venv-whisper verification failed - faster-whisper may not be properly installed" && exit 1)
 
 # Behåll Playwright även om det är en dev dependency (behövs för runtime)
 # Rensa cache men behåll alla dependencies som behövs
