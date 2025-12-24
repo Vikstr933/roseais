@@ -260,12 +260,15 @@ try:
     # - int8 quantization: faster inference, less memory
     # - cpu device: no GPU required (free)
     # - condition_on_previous_text=False: faster, no context dependency
+    print("Loading Whisper model...", file=sys.stderr)
+    print(f"Model: {model_id}, Cache: {r"${escapedCacheDir}"}", file=sys.stderr)
     model = WhisperModel(
         model_id,
         device="cpu",  # Use "cuda" if GPU available (faster but requires GPU)
         compute_type="int8",  # Fastest CPU inference, 4x faster than float32
         download_root=r"${escapedCacheDir}"
     )
+    print("Model loaded successfully", file=sys.stderr)
     
     # Transcribe with speed optimizations
     # Note: Very permissive settings to catch all speech, even quiet or short audio
@@ -337,9 +340,11 @@ except Exception as e:
       
       const startTime = Date.now();
       try {
+        // Increased timeout to 10 minutes for large audio files and first-time model download
+        // faster-whisper may need to download the model on first use
         const { stdout, stderr } = await execAsync(`"${pythonCmd}" "${scriptPath}"`, {
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
-          timeout: 120000, // 2 minute timeout
+          maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large outputs
+          timeout: 600000, // 10 minute timeout (600 seconds)
         });
         const duration = Date.now() - startTime;
         
@@ -385,23 +390,33 @@ except Exception as e:
         };
       } catch (execError: any) {
         const duration = Date.now() - startTime;
-        logger.error(`[WhisperService] Python script execution failed (${description}) after ${duration}ms`);
+        const isTimeout = duration >= 120000 || execError.message?.includes('timeout') || execError.message?.includes('ETIMEDOUT');
+        
+        if (isTimeout) {
+          logger.error(`[WhisperService] Python script TIMED OUT (${description}) after ${duration}ms (${Math.round(duration / 1000)}s)`);
+          logger.error(`[WhisperService] This may indicate: 1) Model is downloading (first time), 2) Audio file is very large, 3) System is under heavy load`);
+        } else {
+          logger.error(`[WhisperService] Python script execution failed (${description}) after ${duration}ms`);
+        }
         
         // Log detailed error information
         if (execError.stdout) {
-          logger.error(`[WhisperService] Python stdout: ${execError.stdout.substring(0, 500)}`);
+          logger.error(`[WhisperService] Python stdout (last 1000 chars): ${execError.stdout.substring(Math.max(0, execError.stdout.length - 1000))}`);
         }
         if (execError.stderr) {
-          logger.error(`[WhisperService] Python stderr: ${execError.stderr.substring(0, 1000)}`);
+          logger.error(`[WhisperService] Python stderr (last 2000 chars): ${execError.stderr.substring(Math.max(0, execError.stderr.length - 2000))}`);
         }
         if (execError.message) {
           logger.error(`[WhisperService] Error message: ${execError.message}`);
         }
         
         // Re-throw with more context
-        const errorMessage = execError.stderr 
-          ? `${execError.message}\nPython stderr: ${execError.stderr.substring(0, 500)}`
-          : execError.message;
+        let errorMessage = execError.message || 'Unknown error';
+        if (isTimeout) {
+          errorMessage = `Transcription timed out after ${Math.round(duration / 1000)}s. This may be due to model download (first time) or large audio file.`;
+        } else if (execError.stderr) {
+          errorMessage = `${execError.message}\nPython stderr: ${execError.stderr.substring(0, 500)}`;
+        }
         throw new Error(errorMessage);
       }
     };
