@@ -64,12 +64,40 @@ export async function apiFetch(
     ...options?.headers,
   };
 
+  // Determine timeout based on endpoint
+  // Transcription endpoints need longer timeout (3 minutes)
+  // Other endpoints use default 30 seconds
+  const isTranscriptionEndpoint = path.includes('/transcribe') || path.includes('/extract-audio');
+  const timeoutMs = isTranscriptionEndpoint ? 180000 : 30000; // 3 minutes for transcription, 30s for others
+
   let lastError: Error | null = null;
   
   for (let attempt = 0; attempt <= retries; attempt++) {
+    let timeoutId: NodeJS.Timeout | null = null;
+    let controller: AbortController | null = null;
+    
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      // Create AbortController for timeout
+      controller = new AbortController();
+      const externalSignal = options?.signal;
+      
+      // If there's an external signal, merge it with our timeout signal
+      if (externalSignal) {
+        // If external signal is already aborted, don't make the request
+        if (externalSignal.aborted) {
+          throw new DOMException('Request was aborted by external signal', 'AbortError');
+        }
+        
+        // Listen to external signal and abort our controller if it aborts
+        externalSignal.addEventListener('abort', () => {
+          controller?.abort();
+        });
+      }
+      
+      // Set timeout based on endpoint type
+      timeoutId = setTimeout(() => {
+        controller?.abort();
+      }, timeoutMs);
 
       const response = await fetch(url, {
         ...options,
@@ -78,7 +106,11 @@ export async function apiFetch(
         signal: controller.signal,
       });
 
+      // Clear timeout on success
+      if (timeoutId) {
       clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       
       // If we get a response (even error), return it
       if (response.status !== 0) {
@@ -87,7 +119,26 @@ export async function apiFetch(
       
       throw new Error('Network request failed with status 0');
     } catch (error: any) {
+      // Clean up timeout
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      
       lastError = error;
+      
+      // If it's an AbortError from external signal (not our timeout), don't retry
+      if (error.name === 'AbortError' && options?.signal?.aborted) {
+        console.warn('[API] Request aborted by external signal (component unmounted or user cancelled)');
+        throw error;
+      }
+      
+      // If it's an AbortError from our timeout, provide better error message
+      if (error.name === 'AbortError' && !options?.signal?.aborted) {
+        // This is likely our timeout - log it but still retry
+        const timeoutSeconds = timeoutMs / 1000;
+        console.warn(`[API] Request timed out after ${timeoutSeconds} seconds, will retry...`);
+      }
       
       // If it's the last attempt, throw the error
       if (attempt === retries) {
@@ -98,14 +149,14 @@ export async function apiFetch(
       // If it's a network error (CORS, timeout, connection refused), retry
       const isNetworkError = 
         error.name === 'TypeError' || 
-        error.message.includes('Failed to fetch') ||
-        error.message.includes('NetworkError') ||
-        error.name === 'AbortError';
+        error.message?.includes('Failed to fetch') ||
+        error.message?.includes('NetworkError') ||
+        (error.name === 'AbortError' && !options?.signal?.aborted); // Only retry if it's our timeout, not external abort
         
       if (isNetworkError) {
         // Exponential backoff: 1s, 2s, 4s
         const delay = Math.pow(2, attempt) * 1000;
-        console.warn(`[API] Request failed (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms...`, error.message);
+        console.warn(`[API] Request failed (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms...`, error.message || error.name);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }

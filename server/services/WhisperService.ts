@@ -230,13 +230,19 @@ export class WhisperService {
     const scriptDir = path.dirname(scriptPath);
     await fs.mkdir(scriptDir, { recursive: true });
 
+    // Escape backslashes for Windows paths in Python string
+    // Use raw strings (r"...") to handle Windows paths correctly
+    const escapedAudioPath = audioFilePath.replace(/\\/g, '\\\\');
+    const escapedCacheDir = this.cacheDir.replace(/\\/g, '\\\\');
+    
     const pythonScript = `
 import json
 import sys
+import os
 from faster_whisper import WhisperModel
 
 model_id = "${this.modelPath}"
-audio_file = "${audioFilePath}"
+audio_file = r"${escapedAudioPath}"
 language = "${language}"
 task = "${task}"
 return_timestamps = ${returnTimestamps ? 'True' : 'False'}
@@ -251,7 +257,7 @@ try:
         model_id,
         device="cpu",  # Use "cuda" if GPU available (faster but requires GPU)
         compute_type="int8",  # Fastest CPU inference, 4x faster than float32
-        download_root="${this.cacheDir}"
+        download_root=r"${escapedCacheDir}"
     )
     
     # Transcribe with speed optimizations
@@ -377,14 +383,29 @@ except Exception as e:
     for (const cmd of pythonCommands) {
       try {
         logger.info(`[WhisperService] Trying system Python: ${cmd}`);
+        logger.info(`[WhisperService] Executing script: ${scriptPath}`);
+        logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
+        
         // Execute Python script
-        const { stdout, stderr } = await execAsync(`${cmd} "${scriptPath}"`, {
+        // On Windows, use proper quoting for paths with spaces
+        const scriptCommand = process.platform === 'win32' 
+          ? `${cmd} "${scriptPath}"`
+          : `${cmd} "${scriptPath}"`;
+        
+        const startTime = Date.now();
+        logger.debug(`[WhisperService] Running command: ${scriptCommand}`);
+        const { stdout, stderr } = await execAsync(scriptCommand, {
           maxBuffer: 10 * 1024 * 1024, // 10MB buffer
           timeout: 120000, // 2 minute timeout
         });
+        const duration = Date.now() - startTime;
+        
+        logger.info(`[WhisperService] Python script completed in ${duration}ms`);
       
-        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
+        if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO') && !stderr.includes('DEBUG')) {
           logger.warn('[WhisperService] Python stderr:', { stderr: stderr.substring(0, 500) });
+        } else if (stderr) {
+          logger.debug('[WhisperService] Python stderr (warnings/info only):', { stderr: stderr.substring(0, 200) });
         }
 
         if (!stdout || stdout.trim().length === 0) {
@@ -416,7 +437,20 @@ except Exception as e:
         };
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
-        logger.warn(`[WhisperService] ${cmd} failed:`, { error: err.message, command: cmd });
+        const isTimeout = err.message.includes('timeout') || err.message.includes('ETIMEDOUT');
+        const isAborted = err.message.includes('aborted') || err.message.includes('SIGTERM');
+        
+        if (isTimeout) {
+          logger.error(`[WhisperService] ${cmd} timed out after 120 seconds. Audio file may be too long or processing too slow.`);
+        } else if (isAborted) {
+          logger.warn(`[WhisperService] ${cmd} was aborted`);
+        } else {
+          logger.warn(`[WhisperService] ${cmd} failed:`, { 
+            error: err.message, 
+            command: cmd,
+            stack: err.stack?.substring(0, 300)
+          });
+        }
         lastError = err;
         // Try next Python command
         continue;

@@ -9,14 +9,36 @@ import { retryDbOperation } from '../utils/dbRetry';
 const router = Router();
 
 /**
+ * Handle OPTIONS preflight for OAuth endpoint
+ * OPTIONS /api/auth/oauth
+ */
+router.options('/oauth', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.status(204).send();
+});
+
+/**
  * Handle OAuth callback from Supabase
  * POST /api/auth/oauth
  */
 router.post('/oauth', async (req, res) => {
   try {
+    // Log request details for debugging
+    console.log('[OAuth] Received OAuth request:', {
+      method: req.method,
+      path: req.path,
+      origin: req.headers.origin,
+      contentType: req.headers['content-type'],
+      hasBody: !!req.body,
+    });
+
     const { provider, providerId, email, displayName, avatarUrl } = req.body;
 
-    console.log('[OAuth] Received OAuth request:', { provider, providerId, email: email?.substring(0, 10) + '...' });
+    console.log('[OAuth] OAuth data:', { provider, providerId, email: email?.substring(0, 10) + '...' });
 
     if (!provider || !providerId || !email) {
       console.error('[OAuth] Missing required fields:', { provider: !!provider, providerId: !!providerId, email: !!email });
