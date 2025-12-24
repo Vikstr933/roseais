@@ -521,9 +521,17 @@ const initializeApp = async () => {
     // Routes
     app.use('/api/health', healthRouter); // Health check endpoints (no auth required)
     
+    // Debug: Log ALL POST requests to /api/* to see what's happening
+    app.use('/api', (req, res, next) => {
+      if (req.method === 'POST' && req.path.includes('oauth')) {
+        console.log(`[DEBUG /api] POST request to ${req.path} - method: ${req.method}, originalUrl: ${req.originalUrl}`);
+      }
+      next();
+    });
+    
     // Debug: Log ALL requests to /api/auth/* to see routing
     app.use('/api/auth', (req, res, next) => {
-      console.log(`[DEBUG /api/auth] ${req.method} ${req.path} - routing...`);
+      console.log(`[DEBUG /api/auth] ${req.method} ${req.path} - originalUrl: ${req.originalUrl}, url: ${req.url}`);
       next();
     });
     
@@ -533,7 +541,8 @@ const initializeApp = async () => {
     
     // Also register OAuth route directly on app level as fallback
     app.post('/api/auth/oauth', async (req, res, next) => {
-      console.log('[DEBUG] Direct app.post /api/auth/oauth matched! Forwarding to oauthRouter...');
+      console.log('[DEBUG] ✅✅✅ Direct app.post /api/auth/oauth matched! ✅✅✅');
+      console.log('[DEBUG] Request body:', req.body);
       // Forward to oauthRouter
       return oauthRouter.handle(req, res, next);
     });
