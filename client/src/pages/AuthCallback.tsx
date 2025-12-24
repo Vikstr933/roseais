@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { apiFetch } from '../lib/api';
+import { apiFetch, getApiUrl } from '../lib/api';
 
 export default function AuthCallback() {
   const [, setLocation] = useLocation();
@@ -75,7 +75,12 @@ export default function AuthCallback() {
         console.log('Got Supabase session for user:', user.email);
 
         // Register/login the user in our system
-        console.log('Calling backend OAuth endpoint...');
+        const apiUrl = getApiUrl('/api/auth/oauth');
+        console.log('Calling backend OAuth endpoint...', {
+          url: apiUrl,
+          apiBaseUrl: import.meta.env.VITE_API_URL || 'not set (using relative path)',
+          isProduction: import.meta.env.PROD,
+        });
         const response = await apiFetch('/api/auth/oauth', {
           method: 'POST',
           body: JSON.stringify({
