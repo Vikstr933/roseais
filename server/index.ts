@@ -664,10 +664,42 @@ const initializeApp = async () => {
     if (fs.existsSync(uploadsDir)) {
       app.use('/uploads', express.static(uploadsDir));
       console.log('✅ Static file serving enabled for uploads directory');
+      
+      // Fallback route for screenshots if static serving fails
+      app.get('/uploads/screenshots/:filename', (req, res) => {
+        const filename = req.params.filename;
+        const filePath = path.join(uploadsDir, 'screenshots', filename);
+        
+        if (fs.existsSync(filePath)) {
+          res.sendFile(filePath);
+        } else {
+          res.status(404).json({
+            success: false,
+            error: 'Screenshot not found',
+            filename,
+          });
+        }
+      });
     } else {
       console.warn('⚠️ Uploads directory not found, creating it...');
       fs.mkdirSync(uploadsDir, { recursive: true });
       app.use('/uploads', express.static(uploadsDir));
+      
+      // Fallback route for screenshots
+      app.get('/uploads/screenshots/:filename', (req, res) => {
+        const filename = req.params.filename;
+        const filePath = path.join(uploadsDir, 'screenshots', filename);
+        
+        if (fs.existsSync(filePath)) {
+          res.sendFile(filePath);
+        } else {
+          res.status(404).json({
+            success: false,
+            error: 'Screenshot not found',
+            filename,
+          });
+        }
+      });
     }
 
     // Sentry error handler - MUST be after routes but BEFORE error handlers
