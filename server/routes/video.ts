@@ -1219,13 +1219,44 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
     if (audioId || audioPath) {
       logger.info(`[VideoTranscription] Looking for audio file - audioId: ${audioId}, audioPath: ${audioPath}`);
       
+      // Helper function to normalize and resolve path
+      const normalizePath = (filePath: string): string => {
+        try {
+          // Resolve relative paths and normalize separators
+          const resolved = path.isAbsolute(filePath) 
+            ? path.normalize(filePath)
+            : path.resolve(filePath);
+          return resolved;
+        } catch {
+          return filePath;
+        }
+      };
+      
+      // Try multiple path resolution strategies
+      const pathCandidates: string[] = [];
+      
       if (audioPath) {
-        // First, try the provided audioPath directly
-        if (await audioFileService.fileExists(audioPath)) {
-          finalAudioPath = audioPath;
-          logger.info(`[VideoTranscription] ✅ Found audio file at provided path: ${audioPath}`);
-        } else {
-          logger.warn(`[VideoTranscription] ⚠️ Provided audioPath does not exist: ${audioPath}, trying to find by audioId...`);
+        // Add normalized absolute path
+        pathCandidates.push(normalizePath(audioPath));
+        
+        // If path is absolute but doesn't work, try relative from cwd
+        if (path.isAbsolute(audioPath)) {
+          const relativeFromAudioDir = path.relative(audioFileService.getAudioDirectory(), audioPath);
+          if (relativeFromAudioDir && !relativeFromAudioDir.startsWith('..')) {
+            pathCandidates.push(path.join(audioFileService.getAudioDirectory(), relativeFromAudioDir));
+          }
+        }
+        
+        // Also try as-is (in case normalization broke something)
+        pathCandidates.push(audioPath);
+      }
+      
+      // Try each candidate path
+      for (const candidatePath of pathCandidates) {
+        if (await audioFileService.fileExists(candidatePath)) {
+          finalAudioPath = candidatePath;
+          logger.info(`[VideoTranscription] ✅ Found audio file at: ${candidatePath}`);
+          break;
         }
       }
       
@@ -1258,19 +1289,65 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         try {
           const audioDir = audioFileService.getAudioDirectory();
           const files = await fs.readdir(audioDir);
-          logger.error(`[VideoTranscription] ❌ Audio file not found. AudioId: ${audioId}, AudioPath: ${audioPath}`);
-          logger.error(`[VideoTranscription] Available files in ${audioDir}: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
+          
+          // Also check if the file exists by absolute path using fs directly
+          let directPathCheck = false;
+          if (audioPath) {
+            try {
+              const normalized = normalizePath(audioPath);
+              await fs.access(normalized);
+              directPathCheck = true;
+              logger.info(`[VideoTranscription] File exists at ${normalized} but AudioFileService didn't find it`);
+              finalAudioPath = normalized;
+            } catch {
+              // File doesn't exist at that path
+            }
+          }
+          
+          if (!directPathCheck) {
+            logger.error(`[VideoTranscription] ❌ Audio file not found. AudioId: ${audioId}, AudioPath: ${audioPath}`);
+            logger.error(`[VideoTranscription] Tried paths: ${pathCandidates.join(', ')}`);
+            logger.error(`[VideoTranscription] Available files in ${audioDir}: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
+            
+            return res.status(404).json({
+              success: false,
+              error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
+            });
+          }
         } catch (dirError) {
           logger.error(`[VideoTranscription] Failed to list audio directory: ${dirError}`);
+          
+          // Last attempt: try direct file access if audioPath was provided
+          if (audioPath && !finalAudioPath) {
+            try {
+              const normalized = normalizePath(audioPath);
+              await fs.access(normalized);
+              finalAudioPath = normalized;
+              logger.info(`[VideoTranscription] ✅ Found audio file via direct access: ${normalized}`);
+            } catch {
+              return res.status(404).json({
+                success: false,
+                error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
+              });
+            }
+          } else {
+            return res.status(404).json({
+              success: false,
+              error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
+            });
+          }
         }
-        
-        return res.status(404).json({
-          success: false,
-          error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
-        });
       }
 
       logger.info(`[VideoTranscription] Transcribing audio file: ${finalAudioPath}`);
+      
+      // Ensure finalAudioPath is set before transcribing
+      if (!finalAudioPath) {
+        return res.status(404).json({
+          success: false,
+          error: 'Audio file path not found. Please upload audio again.',
+        });
+      }
     } 
     // Legacy flow: Extract and transcribe in one step
     else if (youtubeUrl || videoId) {
@@ -1307,6 +1384,13 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
     }
 
     // Transcribe audio file using Whisper
+    if (!finalAudioPath) {
+      return res.status(404).json({
+        success: false,
+        error: 'Audio file path not found. Please upload audio again.',
+      });
+    }
+    
     logger.info(`[VideoTranscription] Starting Whisper transcription...`);
     const transcriptionResult = await whisperService.transcribe(finalAudioPath, {
       language: language || 'auto', // Auto-detect or use specified language

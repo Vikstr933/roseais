@@ -87,10 +87,21 @@ export class AudioFileService {
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
-      await fs.access(filePath);
+      // Normalize the path to handle both absolute and relative paths
+      const normalizedPath = path.isAbsolute(filePath) 
+        ? path.normalize(filePath)
+        : path.resolve(filePath);
+      
+      await fs.access(normalizedPath);
       return true;
     } catch {
-      return false;
+      // If access fails, also try the original path (in case normalization changed it incorrectly)
+      try {
+        await fs.access(filePath);
+        return true;
+      } catch {
+        return false;
+      }
     }
   }
 
