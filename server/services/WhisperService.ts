@@ -306,7 +306,10 @@ try:
             })
     
     # Log transcription info for debugging
+    transcription_time = time.time() - transcription_start_time
+    total_time = time.time() - model_start_time
     print(f"DEBUG: Found {segment_count} segments, language: {info.language}, probability: {info.language_probability}", file=sys.stderr)
+    print(f"DEBUG: Transcription took {transcription_time:.1f} seconds, total time: {total_time:.1f} seconds", file=sys.stderr)
     
     result = {
         "text": " ".join(text_parts).strip(),
@@ -340,13 +343,26 @@ except Exception as e:
       logger.info(`[WhisperService] Executing script: ${scriptPath}`);
       logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
       
+      // Log file size for reference
+      try {
+        const stats = await fs.stat(audioFilePath);
+        const fileSizeMB = stats.size / (1024 * 1024);
+        logger.info(`[WhisperService] Audio file size: ${fileSizeMB.toFixed(2)}MB`);
+        // Estimate processing time: ~1-2 minutes per 10MB for CPU inference
+        const estimatedMinutes = Math.ceil((fileSizeMB / 10) * 1.5);
+        logger.info(`[WhisperService] Estimated processing time: ~${estimatedMinutes} minutes`);
+      } catch (statError) {
+        logger.warn(`[WhisperService] Could not get file stats: ${statError}`);
+      }
+      
       const startTime = Date.now();
       try {
-        // Increased timeout to 10 minutes for large audio files and first-time model download
-        // faster-whisper may need to download the model on first use
+        // Increased timeout to 15 minutes for very large audio files and first-time model download
+        // faster-whisper may need to download the model on first use (can take 2-5 minutes)
+        // Large files (50MB+) can take 5-10 minutes to process on CPU
         const { stdout, stderr } = await execAsync(`"${pythonCmd}" "${scriptPath}"`, {
           maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large outputs
-          timeout: 600000, // 10 minute timeout (600 seconds)
+          timeout: 900000, // 15 minute timeout (900 seconds) for large files
         });
         const duration = Date.now() - startTime;
         
