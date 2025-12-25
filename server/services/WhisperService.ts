@@ -233,9 +233,23 @@ export class WhisperService {
     }
 
     // Create Python script for transcription
-    const scriptPath = path.join(process.cwd(), 'scripts', 'whisper_transcribe.py');
+    // Use absolute path to ensure script persists even if cwd changes
+    const cwd = process.cwd();
+    const scriptPath = path.join(cwd, 'scripts', 'whisper_transcribe.py');
     const scriptDir = path.dirname(scriptPath);
-    await fs.mkdir(scriptDir, { recursive: true });
+    
+    logger.info(`[WhisperService] Creating script at: ${scriptPath}`);
+    logger.info(`[WhisperService] Current working directory: ${cwd}`);
+    
+    // Ensure scripts directory exists
+    try {
+      await fs.mkdir(scriptDir, { recursive: true });
+      const dirStats = await fs.stat(scriptDir);
+      logger.info(`[WhisperService] ✅ Scripts directory created/verified: ${scriptDir} (isDirectory: ${dirStats.isDirectory()})`);
+    } catch (mkdirError) {
+      logger.error(`[WhisperService] ❌ Failed to create scripts directory: ${scriptDir}`, { error: mkdirError });
+      throw new Error(`Failed to create scripts directory: ${mkdirError instanceof Error ? mkdirError.message : String(mkdirError)}`);
+    }
 
     // Escape backslashes for Windows paths in Python string
     // Use raw strings (r"...") to handle Windows paths correctly
