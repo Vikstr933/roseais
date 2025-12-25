@@ -693,7 +693,7 @@ Please format the script in a way that's easy for voice actors to read and perfo
 Script:`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5-20250929', // Updated to latest Claude Sonnet 4.5
       max_tokens: 4096,
       messages: [
         {
