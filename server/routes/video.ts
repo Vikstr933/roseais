@@ -699,7 +699,7 @@ Please format the script in a way that's easy for voice actors to read and perfo
 Script:`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022', // Using Haiku for cost-effective script generation
+      model: 'claude-haiku-4-5-20251001', // Using Haiku 4.5 for cost-effective script generation
       max_tokens: 4096,
       messages: [
         {
