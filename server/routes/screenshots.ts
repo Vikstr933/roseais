@@ -131,5 +131,35 @@ router.post('/:projectId/auto-capture', authenticateUser, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/screenshots/:filename
+ * Fallback route to serve screenshot files if static serving fails
+ */
+router.get('/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const screenshotPath = path.join(process.cwd(), 'uploads', 'screenshots', filename);
+    
+    // Check if file exists
+    if (!fs.existsSync(screenshotPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Screenshot not found',
+        filename,
+      });
+    }
+    
+    // Serve the file
+    res.sendFile(screenshotPath);
+  } catch (error: any) {
+    console.error('Failed to serve screenshot:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to serve screenshot',
+      message: error.message,
+    });
+  }
+});
+
 export default router;
 
