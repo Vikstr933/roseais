@@ -353,6 +353,15 @@ except Exception as e:
       logger.info(`[WhisperService] Executing script: ${scriptPath}`);
       logger.info(`[WhisperService] Audio file: ${audioFilePath}`);
       
+      // Verify script exists before executing
+      try {
+        const scriptStats = await fs.stat(scriptPath);
+        logger.info(`[WhisperService] ✅ Script verified before execution: ${scriptPath} (${scriptStats.size} bytes)`);
+      } catch (statError) {
+        logger.error(`[WhisperService] ❌ Script not found before execution: ${scriptPath}`);
+        throw new Error(`Python script not found at ${scriptPath}. Script may have been deleted or not created correctly.`);
+      }
+      
       // Log file size for reference
       try {
         const stats = await fs.stat(audioFilePath);
