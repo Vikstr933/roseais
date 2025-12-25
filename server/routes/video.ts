@@ -1217,20 +1217,36 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
 
     // New flow: Use audioId or audioPath
     if (audioId || audioPath) {
+      logger.info(`[VideoTranscription] Looking for audio file - audioId: ${audioId}, audioPath: ${audioPath}`);
+      
       if (audioPath) {
-        finalAudioPath = audioPath;
-      } else if (audioId) {
+        // First, try the provided audioPath directly
+        if (await audioFileService.fileExists(audioPath)) {
+          finalAudioPath = audioPath;
+          logger.info(`[VideoTranscription] ✅ Found audio file at provided path: ${audioPath}`);
+        } else {
+          logger.warn(`[VideoTranscription] ⚠️ Provided audioPath does not exist: ${audioPath}, trying to find by audioId...`);
+        }
+      }
+      
+      // If audioPath didn't work or wasn't provided, try to find by audioId
+      if (!finalAudioPath && audioId) {
+        logger.info(`[VideoTranscription] Searching for audio file by ID: ${audioId}`);
+        
         // Try to find audio file by ID
         const foundPath = await audioFileService.getAudioFileById(audioId);
         if (foundPath && await audioFileService.fileExists(foundPath)) {
           finalAudioPath = foundPath;
+          logger.info(`[VideoTranscription] ✅ Found audio file by ID: ${foundPath}`);
         } else {
           // Try to construct path from audioId (format: videoId-timestamp or upload-timestamp-random)
+          logger.info(`[VideoTranscription] Trying to construct path from audioId: ${audioId}`);
           const extensions = ['mp3', 'wav', 'ogg', 'webm', 'm4a'];
           for (const ext of extensions) {
             const constructedPath = path.join(audioFileService.getAudioDirectory(), `${audioId}.${ext}`);
             if (await audioFileService.fileExists(constructedPath)) {
               finalAudioPath = constructedPath;
+              logger.info(`[VideoTranscription] ✅ Found audio file by constructed path: ${constructedPath}`);
               break;
             }
           }
@@ -1238,9 +1254,19 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       }
 
       if (!finalAudioPath || !(await audioFileService.fileExists(finalAudioPath))) {
+        // Log all files in audio directory for debugging
+        try {
+          const audioDir = audioFileService.getAudioDirectory();
+          const files = await fs.readdir(audioDir);
+          logger.error(`[VideoTranscription] ❌ Audio file not found. AudioId: ${audioId}, AudioPath: ${audioPath}`);
+          logger.error(`[VideoTranscription] Available files in ${audioDir}: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
+        } catch (dirError) {
+          logger.error(`[VideoTranscription] Failed to list audio directory: ${dirError}`);
+        }
+        
         return res.status(404).json({
           success: false,
-          error: 'Audio file not found. Please extract audio first using /extract-audio endpoint.',
+          error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
         });
       }
 
