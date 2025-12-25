@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { authenticateUser } from '../middleware/auth';
 import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { whisperService } from '../services/WhisperService';
 import { audioFileService } from '../services/AudioFileService';
@@ -23,6 +24,11 @@ const logger = new SimpleLogger('VideoTranscriptionAPI');
 // Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
+});
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || '',
 });
 
 // Log router initialization
@@ -693,7 +699,7 @@ Please format the script in a way that's easy for voice actors to read and perfo
 Script:`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929', // Updated to latest Claude Sonnet 4.5
+      model: 'claude-3-haiku-20240307', // Using Haiku for cost-effective script generation
       max_tokens: 4096,
       messages: [
         {
@@ -707,6 +713,51 @@ Script:`;
     return script || transcription; // Fallback to transcription if script generation fails
   } catch (error) {
     logger.error(`[VideoTranscription] Error converting to script: ${error}`);
+    // Return transcription as fallback
+    return transcription;
+  }
+}
+
+/**
+ * Convert transcription to voice actor script using OpenAI Mini
+ */
+export async function convertToScriptWithOpenAI(transcription: string, videoTitle?: string): Promise<string> {
+  try {
+    const prompt = `You are a professional script writer for voice actors. Convert the following video transcription into a well-structured voice actor script.
+
+The script should be:
+- Clear and easy to read for voice actors
+- Include natural pauses and breathing points
+- Format dialogue clearly
+- Include any important context or tone indicators
+- Be professional and ready for voiceover production
+
+${videoTitle ? `Video Title: ${videoTitle}\n\n` : ''}Transcription:
+${transcription}
+
+Please format the script in a way that's easy for voice actors to read and perform. Include:
+1. Clear scene/section markers if needed
+2. Natural pauses marked with [PAUSE]
+3. Emphasis markers where appropriate
+4. Any tone or emotion indicators
+
+Script:`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini', // Using OpenAI Mini for cost-effective script generation
+      max_tokens: 4096,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    });
+
+    const script = completion.choices[0]?.message?.content || '';
+    return script || transcription; // Fallback to transcription if script generation fails
+  } catch (error) {
+    logger.error(`[VideoTranscription] Error converting to script with OpenAI: ${error}`);
     // Return transcription as fallback
     return transcription;
   }
@@ -1158,7 +1209,7 @@ router.post('/extract-audio', authenticateUser, async (req: Request, res: Respon
  */
 router.post('/transcribe', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const { audioId, audioPath, youtubeUrl, videoId, cookies, language } = req.body;
+    const { audioId, audioPath, youtubeUrl, videoId, cookies, language, scriptProvider = 'haiku' } = req.body;
 
     let finalAudioPath: string | null = null;
     let videoTitle: string | undefined;
@@ -1210,7 +1261,9 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
 
       // Use existing function for backward compatibility
       const result = await transcribeYouTubeVideo(finalVideoId, cookies, language || 'auto');
-      const script = await convertToScript(result.transcription, result.videoTitle);
+      const script = scriptProvider === 'openai' 
+        ? await convertToScriptWithOpenAI(result.transcription, result.videoTitle)
+        : await convertToScript(result.transcription, result.videoTitle);
 
       return res.json({
         success: true,
@@ -1239,8 +1292,10 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
     logger.info(`[VideoTranscription] Transcription complete, length: ${transcription.length} characters`);
 
     // Convert to script
-    logger.info(`[VideoTranscription] Converting transcription to script...`);
-    const script = await convertToScript(transcription, videoTitle);
+    logger.info(`[VideoTranscription] Converting transcription to script using ${scriptProvider}...`);
+    const script = scriptProvider === 'openai' 
+      ? await convertToScriptWithOpenAI(transcription, videoTitle)
+      : await convertToScript(transcription, videoTitle);
 
     logger.info(`[VideoTranscription] Transcription and script generation complete`);
 

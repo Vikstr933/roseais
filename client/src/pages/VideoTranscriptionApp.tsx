@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Video,
   Youtube,
@@ -51,6 +52,8 @@ export default function VideoTranscriptionApp() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [extractedAudio, setExtractedAudio] = useState<AudioExtractionResult | null>(null);
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
+  const [openAIScript, setOpenAIScript] = useState<string | null>(null);
+  const [isGeneratingOpenAIScript, setIsGeneratingOpenAIScript] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('');
 
@@ -189,6 +192,7 @@ export default function VideoTranscriptionApp() {
       const requestBody: any = {
         audioId: extractedAudio.audioId,
         audioPath: extractedAudio.audioPath,
+        scriptProvider: 'haiku', // Use Haiku by default
       };
       
       if (extractedAudio.transcript) {
@@ -507,7 +511,7 @@ export default function VideoTranscriptionApp() {
               </div>
             </div>
 
-            {/* Script */}
+            {/* Script with Tabs */}
             <div 
               className="relative bg-card rounded-lg border-2 border-transparent p-6 overflow-hidden group"
               style={{
@@ -522,30 +526,109 @@ export default function VideoTranscriptionApp() {
                     <FileText className="h-5 w-5 text-purple-600" />
                     <h2 className="text-xl font-semibold">Voice Actor Script</h2>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCopy(transcriptionResult.script, 'script')}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownload(transcriptionResult.script, 'voice-actor-script.txt')}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
                 </div>
-                <Textarea
-                  value={transcriptionResult.script}
-                  readOnly
-                  className="min-h-[300px] font-mono text-sm"
-                />
+                <Tabs defaultValue="haiku" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="haiku">Claude Haiku</TabsTrigger>
+                    <TabsTrigger value="openai">
+                      OpenAI Mini
+                      {!openAIScript && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-2 h-6 px-2 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGenerateOpenAIScript();
+                          }}
+                          disabled={isGeneratingOpenAIScript}
+                        >
+                          {isGeneratingOpenAIScript ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            'Generate'
+                          )}
+                        </Button>
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="haiku" className="mt-4">
+                    <div className="flex items-center justify-end gap-2 mb-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopy(transcriptionResult.script, 'script')}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(transcriptionResult.script, 'voice-actor-script-haiku.txt')}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={transcriptionResult.script}
+                      readOnly
+                      className="min-h-[300px] font-mono text-sm"
+                    />
+                  </TabsContent>
+                  <TabsContent value="openai" className="mt-4">
+                    {openAIScript ? (
+                      <>
+                        <div className="flex items-center justify-end gap-2 mb-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopy(openAIScript, 'script')}
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDownload(openAIScript, 'voice-actor-script-openai.txt')}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </Button>
+                        </div>
+                        <Textarea
+                          value={openAIScript}
+                          readOnly
+                          className="min-h-[300px] font-mono text-sm"
+                        />
+                      </>
+                    ) : (
+                      <div className="min-h-[300px] flex items-center justify-center border-2 border-dashed border-muted rounded-lg">
+                        <div className="text-center">
+                          <p className="text-muted-foreground mb-4">No OpenAI Mini script generated yet</p>
+                          <Button
+                            onClick={handleGenerateOpenAIScript}
+                            disabled={isGeneratingOpenAIScript}
+                          >
+                            {isGeneratingOpenAIScript ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Generating...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                Generate with OpenAI Mini
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
           </motion.div>
