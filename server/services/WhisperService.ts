@@ -247,7 +247,8 @@ export class WhisperService {
       const dirStats = await fs.stat(scriptDir);
       logger.info(`[WhisperService] ✅ Scripts directory created/verified: ${scriptDir} (isDirectory: ${dirStats.isDirectory()})`);
     } catch (mkdirError) {
-      logger.error(`[WhisperService] ❌ Failed to create scripts directory: ${scriptDir}`, { error: mkdirError });
+      const errorMsg = mkdirError instanceof Error ? mkdirError.message : String(mkdirError);
+      logger.error(`[WhisperService] ❌ Failed to create scripts directory: ${scriptDir}`, mkdirError instanceof Error ? mkdirError : new Error(errorMsg));
       throw new Error(`Failed to create scripts directory: ${mkdirError instanceof Error ? mkdirError.message : String(mkdirError)}`);
     }
 
