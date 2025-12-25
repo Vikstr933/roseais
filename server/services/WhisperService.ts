@@ -331,7 +331,17 @@ except Exception as e:
     sys.exit(1)
 `;
 
+    // Write Python script to disk
     await fs.writeFile(scriptPath, pythonScript);
+    
+    // Verify script was created
+    try {
+      const scriptStats = await fs.stat(scriptPath);
+      logger.info(`[WhisperService] ✅ Python script created: ${scriptPath} (${scriptStats.size} bytes)`);
+    } catch (statError) {
+      logger.error(`[WhisperService] ❌ Failed to verify script creation: ${scriptPath}`);
+      throw new Error(`Failed to create Python script at ${scriptPath}: ${statError instanceof Error ? statError.message : String(statError)}`);
+    }
 
     // PRIORITET: venv-whisper (installerad i Docker) är primär metod
     // System Python kan inte användas i modern Python (3.11+) pga externally-managed-environment
