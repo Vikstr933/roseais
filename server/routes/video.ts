@@ -21,6 +21,9 @@ const execAsync = promisify(exec);
 const router = Router();
 const logger = new SimpleLogger('VideoTranscriptionAPI');
 
+// Track in-flight transcriptions to prevent duplicate processing
+const inFlightTranscriptions = new Map<string, Promise<any>>();
+
 // Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -1208,8 +1211,37 @@ router.post('/extract-audio', authenticateUser, async (req: Request, res: Respon
  * Accepts either audioId (from extract-audio) or youtubeUrl/videoId (legacy support)
  */
 router.post('/transcribe', authenticateUser, async (req: Request, res: Response) => {
+  // Helper to ensure CORS headers are set
+  const setCORSHeaders = () => {
+    const origin = req.headers.origin;
+    if (origin) {
+      if (origin.includes('localhost') || origin.includes('vercel.app') || origin.includes('onrender.com')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+    }
+  };
+
   try {
     const { audioId, audioPath, youtubeUrl, videoId, cookies, language, scriptProvider = 'haiku' } = req.body;
+
+    // Create a unique key for deduplication (use audioId if available, otherwise audioPath)
+    const dedupeKey = audioId || audioPath || (videoId ? `video-${videoId}` : null);
+    
+    // Check if this transcription is already in progress
+    if (dedupeKey && inFlightTranscriptions.has(dedupeKey)) {
+      logger.warn(`[VideoTranscription] Transcription already in progress for: ${dedupeKey}`);
+      setCORSHeaders();
+      return res.status(409).json({
+        success: false,
+        error: 'Transcription already in progress for this audio file. Please wait for the current request to complete.',
+        audioId: audioId || undefined,
+        audioPath: audioPath || undefined,
+        code: 'TRANSCRIPTION_IN_PROGRESS',
+      });
+    }
 
     let finalAudioPath: string | null = null;
     let videoTitle: string | undefined;
@@ -1309,6 +1341,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
             logger.error(`[VideoTranscription] Tried paths: ${pathCandidates.join(', ')}`);
             logger.error(`[VideoTranscription] Available files in ${audioDir}: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
             
+            setCORSHeaders();
             return res.status(404).json({
               success: false,
               error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
@@ -1325,12 +1358,14 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
               finalAudioPath = normalized;
               logger.info(`[VideoTranscription] ✅ Found audio file via direct access: ${normalized}`);
             } catch {
+              setCORSHeaders();
               return res.status(404).json({
                 success: false,
                 error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
               });
             }
           } else {
+            setCORSHeaders();
             return res.status(404).json({
               success: false,
               error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
@@ -1343,6 +1378,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       
       // Ensure finalAudioPath is set before transcribing
       if (!finalAudioPath) {
+        setCORSHeaders();
         return res.status(404).json({
           success: false,
           error: 'Audio file path not found. Please upload audio again.',
@@ -1354,29 +1390,65 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       const finalVideoId = videoId || (youtubeUrl ? youtubeUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/)?.[1] : null);
 
       if (!finalVideoId) {
+        setCORSHeaders();
         return res.status(400).json({
           success: false,
           error: 'Invalid YouTube URL or video ID',
         });
       }
 
+      // Use dedupe key for legacy flow too
+      const legacyDedupeKey = `video-${finalVideoId}`;
+      if (inFlightTranscriptions.has(legacyDedupeKey)) {
+        logger.warn(`[VideoTranscription] Transcription already in progress for video: ${finalVideoId}`);
+        setCORSHeaders();
+        return res.status(409).json({
+          success: false,
+          error: 'Transcription already in progress for this video. Please wait for the current request to complete.',
+          videoId: finalVideoId,
+          code: 'TRANSCRIPTION_IN_PROGRESS',
+        });
+      }
+
       logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}${language ? ` (language: ${language})` : ''} (legacy mode)`);
 
-      // Use existing function for backward compatibility
-      const result = await transcribeYouTubeVideo(finalVideoId, cookies, language || 'auto');
-      const script = scriptProvider === 'openai' 
-        ? await convertToScriptWithOpenAI(result.transcription, result.videoTitle)
-        : await convertToScript(result.transcription, result.videoTitle);
+      // Create transcription promise and track it
+      const transcriptionPromise = (async () => {
+        // Use existing function for backward compatibility
+        const result = await transcribeYouTubeVideo(finalVideoId, cookies, language || 'auto');
+        const script = scriptProvider === 'openai' 
+          ? await convertToScriptWithOpenAI(result.transcription, result.videoTitle)
+          : await convertToScript(result.transcription, result.videoTitle);
 
-      return res.json({
-        success: true,
-        transcription: result.transcription,
-        script,
-        videoTitle: result.videoTitle,
-        videoDuration: result.videoDuration,
-        method: result.transcription ? 'direct_transcript' : 'audio_whisper',
-      });
+        return {
+          success: true,
+          transcription: result.transcription,
+          script,
+          videoTitle: result.videoTitle,
+          videoDuration: result.videoDuration,
+          method: result.transcription ? 'direct_transcript' : 'audio_whisper',
+        };
+      })();
+
+      // Track the promise
+      inFlightTranscriptions.set(legacyDedupeKey, transcriptionPromise);
+
+      try {
+        const result = await transcriptionPromise;
+        return res.json(result);
+      } catch (transcriptionError: any) {
+        logger.error(`[VideoTranscription] Legacy transcription error: ${transcriptionError.message}`, transcriptionError);
+        setCORSHeaders();
+        return res.status(500).json({
+          success: false,
+          error: transcriptionError.message || 'Failed to transcribe video',
+        });
+      } finally {
+        // Clean up tracking when done (success or error)
+        inFlightTranscriptions.delete(legacyDedupeKey);
+      }
     } else {
+      setCORSHeaders();
       return res.status(400).json({
         success: false,
         error: 'Either audioId/audioPath or youtubeUrl/videoId is required',
@@ -1385,39 +1457,65 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
 
     // Transcribe audio file using Whisper
     if (!finalAudioPath) {
+      setCORSHeaders();
       return res.status(404).json({
         success: false,
         error: 'Audio file path not found. Please upload audio again.',
       });
     }
     
-    logger.info(`[VideoTranscription] Starting Whisper transcription...`);
-    const transcriptionResult = await whisperService.transcribe(finalAudioPath, {
-      language: language || 'auto', // Auto-detect or use specified language
-      task: 'transcribe',
-      returnTimestamps: false
-    });
+    // Create transcription promise and track it
+    const transcriptionPromise = (async () => {
+      logger.info(`[VideoTranscription] Starting Whisper transcription...`);
+      const transcriptionResult = await whisperService.transcribe(finalAudioPath!, {
+        language: language || 'auto', // Auto-detect or use specified language
+        task: 'transcribe',
+        returnTimestamps: false
+      });
 
-    const transcription = transcriptionResult.text || 'No transcription available';
-    logger.info(`[VideoTranscription] Transcription complete, length: ${transcription.length} characters`);
+      const transcription = transcriptionResult.text || 'No transcription available';
+      logger.info(`[VideoTranscription] Transcription complete, length: ${transcription.length} characters`);
 
-    // Convert to script
-    logger.info(`[VideoTranscription] Converting transcription to script using ${scriptProvider}...`);
-    const script = scriptProvider === 'openai' 
-      ? await convertToScriptWithOpenAI(transcription, videoTitle)
-      : await convertToScript(transcription, videoTitle);
+      // Convert to script
+      logger.info(`[VideoTranscription] Converting transcription to script using ${scriptProvider}...`);
+      const script = scriptProvider === 'openai' 
+        ? await convertToScriptWithOpenAI(transcription, videoTitle)
+        : await convertToScript(transcription, videoTitle);
 
-    logger.info(`[VideoTranscription] Transcription and script generation complete`);
+      logger.info(`[VideoTranscription] Transcription and script generation complete`);
 
-    res.json({
-      success: true,
-      transcription,
-      script,
-      videoTitle,
-      videoDuration,
-    });
+      return {
+        success: true,
+        transcription,
+        script,
+        videoTitle,
+        videoDuration,
+      };
+    })();
+
+    // Track the promise if we have a dedupe key
+    if (dedupeKey) {
+      inFlightTranscriptions.set(dedupeKey, transcriptionPromise);
+    }
+
+    try {
+      const result = await transcriptionPromise;
+      res.json(result);
+    } catch (transcriptionError: any) {
+      logger.error(`[VideoTranscription] Transcription error: ${transcriptionError.message}`, transcriptionError);
+      res.status(500).json({
+        success: false,
+        error: transcriptionError.message || 'Failed to transcribe audio',
+      });
+    } finally {
+      // Clean up tracking when done (success or error)
+      if (dedupeKey) {
+        inFlightTranscriptions.delete(dedupeKey);
+      }
+    }
   } catch (error: any) {
     logger.error(`[VideoTranscription] Error: ${error.message}`, error);
+    setCORSHeaders();
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to transcribe audio',
