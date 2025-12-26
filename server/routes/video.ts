@@ -65,7 +65,7 @@ const openai = new OpenAI({
 /**
  * Transcribe audio using OpenAI Whisper API
  * More reliable and memory-efficient than local Whisper
- * Supports files up to 25MB
+ * Note: OpenAI Whisper API has a 25MB file size limit
  */
 async function transcribeWithOpenAI(
   audioFilePath: string,
@@ -1100,9 +1100,10 @@ async function extractAudioFromYouTube(
 // Maximum audio file size for transcription (in MB)
 // Larger files cause memory issues on Render (2GB limit)
 // Whisper can use 1-2GB RAM per transcription, so we limit file size
+// Note: OpenAI Whisper API has a 25MB limit, but we allow larger files for local transcription
 const MAX_TRANSCRIPTION_FILE_SIZE_MB = process.env.MAX_TRANSCRIPTION_FILE_SIZE_MB 
   ? parseInt(process.env.MAX_TRANSCRIPTION_FILE_SIZE_MB) 
-  : 25; // Default: 25MB max
+  : 100; // Default: 100MB max
 
 // Configure multer for audio file uploads (disk storage to save memory)
 // Using disk storage instead of memory to avoid OOM errors on Render free tier (512MB limit)
@@ -1149,10 +1150,24 @@ const upload = multer({
  * Much more memory-efficient than base64 JSON
  */
 router.post('/upload-audio', authenticateUser, upload.single('audio'), async (req: Request, res: Response) => {
+  // Helper to ensure CORS headers are set
+  const setCORSHeaders = () => {
+    const origin = req.headers.origin;
+    if (origin) {
+      if (origin.includes('localhost') || origin.includes('vercel.app') || origin.includes('onrender.com')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+    }
+  };
+
   try {
     const file = (req as any).file;
     
     if (!file) {
+      setCORSHeaders();
       return res.status(400).json({
         success: false,
         error: 'Audio file is required. Please upload a file using multipart/form-data with field name "audio".',
@@ -1172,6 +1187,7 @@ router.post('/upload-audio', authenticateUser, upload.single('audio'), async (re
     if (sizeMB > maxUploadSize) {
       // Clean up the file if it's too large
       await fs.unlink(audioPath).catch(() => {});
+      setCORSHeaders();
       return res.status(400).json({
         success: false,
         error: `File size (${sizeMB.toFixed(2)}MB) exceeds maximum allowed size (${maxUploadSize}MB). For transcription, maximum file size is ${MAX_TRANSCRIPTION_FILE_SIZE_MB}MB to prevent memory issues on the server.`,
@@ -1194,12 +1210,17 @@ router.post('/upload-audio', authenticateUser, upload.single('audio'), async (re
   } catch (error: any) {
     logger.error(`[AudioUpload] Error: ${error.message}`, error);
     
+    setCORSHeaders();
+    
     // Handle multer errors
     if (error instanceof multer.MulterError) {
       if (error.code === 'LIMIT_FILE_SIZE') {
+        const maxSize = Math.min(audioFileService['maxFileSizeMB'], MAX_TRANSCRIPTION_FILE_SIZE_MB);
         return res.status(400).json({
           success: false,
-          error: `File too large. Maximum size: ${audioFileService['maxFileSizeMB']}MB`,
+          error: `File too large. Maximum size for transcription is ${MAX_TRANSCRIPTION_FILE_SIZE_MB}MB to prevent memory issues on the server. Your file exceeds this limit.`,
+          maxSizeMB: MAX_TRANSCRIPTION_FILE_SIZE_MB,
+          code: 'FILE_TOO_LARGE',
         });
       }
       return res.status(400).json({
