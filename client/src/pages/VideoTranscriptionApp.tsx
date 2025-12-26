@@ -267,6 +267,72 @@ export default function VideoTranscriptionApp() {
     });
   };
 
+  const handleGenerateOpenAIScript = async () => {
+    if (!transcriptionResult?.transcription) {
+      toast({
+        title: 'Error',
+        description: 'No transcription available. Please transcribe audio first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!extractedAudio) {
+      toast({
+        title: 'Error',
+        description: 'No audio file available. Please upload and transcribe audio first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsGeneratingOpenAIScript(true);
+    setError(null);
+
+    try {
+      // Send the existing transcription along with audio info to generate script with OpenAI
+      const requestBody: any = {
+        audioId: extractedAudio.audioId,
+        audioPath: extractedAudio.audioPath,
+        transcript: transcriptionResult.transcription, // Send existing transcription
+        scriptProvider: 'openai',
+        videoTitle: transcriptionResult.videoTitle,
+      };
+
+      const response = await apiFetch('/api/video/transcribe', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Failed to generate OpenAI script (${response.status})`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.script) {
+        setOpenAIScript(data.script);
+        toast({
+          title: 'Success!',
+          description: 'OpenAI script generated successfully',
+        });
+      } else {
+        throw new Error(data.error || 'Failed to generate OpenAI script');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate OpenAI script';
+      setError(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingOpenAIScript(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* OmniAssistant Branding Header */}
