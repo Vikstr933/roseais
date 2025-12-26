@@ -1199,6 +1199,7 @@ router.post('/upload-audio', authenticateUser, upload.single('audio'), async (re
 
     logger.info(`[AudioUpload] ✅ Audio file uploaded: ${audioId} (${sizeMB.toFixed(2)}MB, ${file.originalname}) - saved to disk: ${audioPath}`);
 
+    setCORSHeaders();
     res.json({
       success: true,
       audioId,
@@ -1624,6 +1625,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
 
       try {
         const result = await transcriptionPromise;
+        setCORSHeaders();
         return res.json(result);
       } catch (transcriptionError: any) {
         logger.error(`[VideoTranscription] Legacy transcription error: ${transcriptionError.message}`, transcriptionError);
@@ -1718,13 +1720,37 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
 
     try {
       const result = await transcriptionPromise;
+      setCORSHeaders();
       res.json(result);
+      
+      // Clean up audio file after successful transcription (async, don't block response)
+      if (finalAudioPath) {
+        audioFileService.fileExists(finalAudioPath).then((exists) => {
+          if (exists) {
+            return audioFileService.deleteFile(finalAudioPath);
+          }
+        }).catch((cleanupError) => {
+          logger.warn(`[VideoTranscription] Failed to cleanup audio file ${finalAudioPath}: ${cleanupError}`);
+        });
+      }
     } catch (transcriptionError: any) {
       logger.error(`[VideoTranscription] Transcription error: ${transcriptionError.message}`, transcriptionError);
+      setCORSHeaders();
       res.status(500).json({
         success: false,
         error: transcriptionError.message || 'Failed to transcribe audio',
       });
+      
+      // Clean up audio file on error too (async, don't block response)
+      if (finalAudioPath) {
+        audioFileService.fileExists(finalAudioPath).then((exists) => {
+          if (exists) {
+            return audioFileService.deleteFile(finalAudioPath);
+          }
+        }).catch((cleanupError) => {
+          logger.warn(`[VideoTranscription] Failed to cleanup audio file on error ${finalAudioPath}: ${cleanupError}`);
+        });
+      }
     } finally {
       // Clean up tracking when done (success or error)
       if (dedupeKey) {
