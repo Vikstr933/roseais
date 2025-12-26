@@ -1108,12 +1108,10 @@ async function extractAudioFromYouTube(
 }
 
 // Maximum audio file size for transcription (in MB)
-// Larger files cause memory issues on Render (2GB limit)
-// Whisper can use 1-2GB RAM per transcription, so we limit file size
-// Note: OpenAI Whisper API has a 25MB limit, but we allow larger files for local transcription
+// OpenAI Whisper API has a 25MB limit, and we use OpenAI as the default provider
 const MAX_TRANSCRIPTION_FILE_SIZE_MB = process.env.MAX_TRANSCRIPTION_FILE_SIZE_MB 
   ? parseInt(process.env.MAX_TRANSCRIPTION_FILE_SIZE_MB) 
-  : 100; // Default: 100MB max
+  : 25; // Default: 25MB max (OpenAI Whisper API limit)
 
 // Configure multer for audio file uploads (disk storage to save memory)
 // Using disk storage instead of memory to avoid OOM errors on Render free tier (512MB limit)
