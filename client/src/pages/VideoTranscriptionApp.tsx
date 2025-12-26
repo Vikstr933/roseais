@@ -721,10 +721,10 @@ export default function VideoTranscriptionApp() {
                           )}
                         </Button>
                       </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </div>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </div>
           </motion.div>
         )}
