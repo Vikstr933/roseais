@@ -12,6 +12,7 @@ import { SimpleLogger } from '../utils/SimpleLogger';
 import { whisperService } from '../services/WhisperService';
 import { audioFileService } from '../services/AudioFileService';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -22,7 +23,34 @@ const router = Router();
 const logger = new SimpleLogger('VideoTranscriptionAPI');
 
 // Track in-flight transcriptions to prevent duplicate processing
-const inFlightTranscriptions = new Map<string, Promise<any>>();
+// Format: { promise, startTime }
+interface InFlightTranscription {
+  promise: Promise<any>;
+  startTime: number;
+}
+
+const inFlightTranscriptions = new Map<string, InFlightTranscription>();
+const MAX_TRANSCRIPTION_TIME_MS = 30 * 60 * 1000; // 30 minutes max
+
+// Clean up expired/stuck transcriptions periodically
+setInterval(() => {
+  const now = Date.now();
+  const expiredKeys: string[] = [];
+  
+  for (const [key, transcription] of inFlightTranscriptions.entries()) {
+    const age = now - transcription.startTime;
+    if (age > MAX_TRANSCRIPTION_TIME_MS) {
+      logger.warn(`[VideoTranscription] Cleaning up expired transcription: ${key} (age: ${Math.round(age / 1000)}s)`);
+      expiredKeys.push(key);
+    }
+  }
+  
+  expiredKeys.forEach(key => inFlightTranscriptions.delete(key));
+  
+  if (expiredKeys.length > 0) {
+    logger.info(`[VideoTranscription] Cleaned up ${expiredKeys.length} expired transcription(s)`);
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
@@ -33,6 +61,81 @@ const anthropic = new Anthropic({
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
+
+/**
+ * Transcribe audio using OpenAI Whisper API
+ * More reliable and memory-efficient than local Whisper
+ * Supports files up to 25MB
+ */
+async function transcribeWithOpenAI(
+  audioFilePath: string,
+  language?: string
+): Promise<{ text: string; language: string; languageProbability: number }> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured. Please set it in environment variables.');
+  }
+
+  logger.info(`[OpenAI Whisper] Starting transcription: ${audioFilePath}`);
+  
+  try {
+    // Check file size (OpenAI supports up to 25MB)
+    const stats = await fs.stat(audioFilePath);
+    const fileSizeMB = stats.size / (1024 * 1024);
+    
+    if (fileSizeMB > 25) {
+      throw new Error(`File size (${fileSizeMB.toFixed(2)}MB) exceeds OpenAI Whisper API limit of 25MB`);
+    }
+
+    logger.info(`[OpenAI Whisper] File size: ${fileSizeMB.toFixed(2)}MB`);
+
+    // Create a readable stream for OpenAI API
+    // OpenAI SDK accepts fs.ReadStream directly
+    const fileStream = fsSync.createReadStream(audioFilePath);
+
+    logger.info(`[OpenAI Whisper] Calling OpenAI API...`);
+    
+    // Call OpenAI Whisper API
+    // The SDK accepts a stream directly and will handle the file upload
+    const transcription = await openai.audio.transcriptions.create({
+      file: fileStream,
+      model: 'whisper-1',
+      language: language && language !== 'auto' ? language : undefined,
+      response_format: 'verbose_json', // Get language detection info
+    });
+
+    logger.info(`[OpenAI Whisper] Transcription complete, text length: ${transcription.text.length} characters`);
+
+    return {
+      text: transcription.text || '',
+      language: (transcription as any).language || language || 'unknown',
+      languageProbability: 1.0, // OpenAI doesn't provide probability, assume 1.0
+    };
+  } catch (error: any) {
+    logger.error(`[OpenAI Whisper] Transcription error: ${error.message}`, error);
+    
+    // Check file size for error message
+    let fileSizeMB: number | undefined;
+    try {
+      const stats = await fs.stat(audioFilePath);
+      fileSizeMB = stats.size / (1024 * 1024);
+    } catch {
+      // Ignore stat errors
+    }
+    
+    // Provide more helpful error messages
+    if (error.message?.includes('API key')) {
+      throw new Error('OpenAI API key is invalid or not configured. Please check OPENAI_API_KEY environment variable.');
+    } else if (error.message?.includes('25MB') || (fileSizeMB && fileSizeMB > 25)) {
+      throw new Error(`File is too large for OpenAI Whisper API. Maximum size is 25MB, but file is ${fileSizeMB?.toFixed(2) || 'unknown'}MB.`);
+    } else if (error.status === 429) {
+      throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+    } else if (error.status === 401) {
+      throw new Error('OpenAI API authentication failed. Please check your API key.');
+    }
+    
+    throw error;
+  }
+}
 
 // Log router initialization
 logger.info('[VideoRouter] Video transcription router initialized');
@@ -994,6 +1097,13 @@ async function extractAudioFromYouTube(
   }
 }
 
+// Maximum audio file size for transcription (in MB)
+// Larger files cause memory issues on Render (2GB limit)
+// Whisper can use 1-2GB RAM per transcription, so we limit file size
+const MAX_TRANSCRIPTION_FILE_SIZE_MB = process.env.MAX_TRANSCRIPTION_FILE_SIZE_MB 
+  ? parseInt(process.env.MAX_TRANSCRIPTION_FILE_SIZE_MB) 
+  : 25; // Default: 25MB max
+
 // Configure multer for audio file uploads (disk storage to save memory)
 // Using disk storage instead of memory to avoid OOM errors on Render free tier (512MB limit)
 const upload = multer({
@@ -1011,7 +1121,7 @@ const upload = multer({
     },
   }),
   limits: {
-    fileSize: audioFileService['maxFileSizeMB'] * 1024 * 1024, // 500MB default
+    fileSize: Math.min(audioFileService['maxFileSizeMB'], MAX_TRANSCRIPTION_FILE_SIZE_MB) * 1024 * 1024, // Use the smaller of upload limit or transcription limit
   },
   fileFilter: (req, file, cb) => {
     // Accept audio files
@@ -1055,14 +1165,19 @@ router.post('/upload-audio', authenticateUser, upload.single('audio'), async (re
     const audioId = filenameWithoutExt;
     const audioPath = file.path; // Multer already saved it to disk
 
-    // Validate file size
+    // Validate file size (use transcription limit, which is stricter)
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > audioFileService['maxFileSizeMB']) {
+    const maxUploadSize = Math.min(audioFileService['maxFileSizeMB'], MAX_TRANSCRIPTION_FILE_SIZE_MB);
+    
+    if (sizeMB > maxUploadSize) {
       // Clean up the file if it's too large
       await fs.unlink(audioPath).catch(() => {});
       return res.status(400).json({
         success: false,
-        error: `File size (${sizeMB.toFixed(2)}MB) exceeds maximum allowed size (${audioFileService['maxFileSizeMB']}MB)`,
+        error: `File size (${sizeMB.toFixed(2)}MB) exceeds maximum allowed size (${maxUploadSize}MB). For transcription, maximum file size is ${MAX_TRANSCRIPTION_FILE_SIZE_MB}MB to prevent memory issues on the server.`,
+        fileSizeMB: sizeMB.toFixed(2),
+        maxSizeMB: maxUploadSize,
+        code: 'FILE_TOO_LARGE',
       });
     }
 
@@ -1225,22 +1340,40 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
   };
 
   try {
-    const { audioId, audioPath, youtubeUrl, videoId, cookies, language, scriptProvider = 'haiku' } = req.body;
+    const { 
+      audioId, 
+      audioPath, 
+      youtubeUrl, 
+      videoId, 
+      cookies, 
+      language, 
+      scriptProvider = 'haiku',
+      transcriptionProvider = 'openai' // 'openai' or 'local' (default to openai for better reliability)
+    } = req.body;
 
     // Create a unique key for deduplication (use audioId if available, otherwise audioPath)
     const dedupeKey = audioId || audioPath || (videoId ? `video-${videoId}` : null);
     
     // Check if this transcription is already in progress
     if (dedupeKey && inFlightTranscriptions.has(dedupeKey)) {
-      logger.warn(`[VideoTranscription] Transcription already in progress for: ${dedupeKey}`);
-      setCORSHeaders();
-      return res.status(409).json({
-        success: false,
-        error: 'Transcription already in progress for this audio file. Please wait for the current request to complete.',
-        audioId: audioId || undefined,
-        audioPath: audioPath || undefined,
-        code: 'TRANSCRIPTION_IN_PROGRESS',
-      });
+      const existing = inFlightTranscriptions.get(dedupeKey)!;
+      const age = Date.now() - existing.startTime;
+      
+      // If the transcription has been running too long, clean it up and allow retry
+      if (age > MAX_TRANSCRIPTION_TIME_MS) {
+        logger.warn(`[VideoTranscription] Removing expired transcription: ${dedupeKey} (age: ${Math.round(age / 1000)}s)`);
+        inFlightTranscriptions.delete(dedupeKey);
+      } else {
+        logger.warn(`[VideoTranscription] Transcription already in progress for: ${dedupeKey} (started ${Math.round(age / 1000)}s ago)`);
+        setCORSHeaders();
+        return res.status(409).json({
+          success: false,
+          error: 'Transcription already in progress for this audio file. Please wait for the current request to complete.',
+          audioId: audioId || undefined,
+          audioPath: audioPath || undefined,
+          code: 'TRANSCRIPTION_IN_PROGRESS',
+        });
+      }
     }
 
     let finalAudioPath: string | null = null;
@@ -1384,6 +1517,29 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
           error: 'Audio file path not found. Please upload audio again.',
         });
       }
+
+      // Check file size before transcription (Whisper is memory-intensive)
+      try {
+        const fileStats = await fs.stat(finalAudioPath);
+        const fileSizeMB = fileStats.size / (1024 * 1024);
+        
+        if (fileSizeMB > MAX_TRANSCRIPTION_FILE_SIZE_MB) {
+          logger.warn(`[VideoTranscription] File too large for transcription: ${fileSizeMB.toFixed(2)}MB (max: ${MAX_TRANSCRIPTION_FILE_SIZE_MB}MB)`);
+          setCORSHeaders();
+          return res.status(400).json({
+            success: false,
+            error: `Audio file is too large (${fileSizeMB.toFixed(2)}MB). Maximum size for transcription is ${MAX_TRANSCRIPTION_FILE_SIZE_MB}MB to prevent memory issues on the server. Please use a shorter audio file or split it into smaller chunks.`,
+            fileSizeMB: fileSizeMB.toFixed(2),
+            maxSizeMB: MAX_TRANSCRIPTION_FILE_SIZE_MB,
+            code: 'FILE_TOO_LARGE',
+          });
+        }
+        
+        logger.info(`[VideoTranscription] File size check passed: ${fileSizeMB.toFixed(2)}MB (max: ${MAX_TRANSCRIPTION_FILE_SIZE_MB}MB)`);
+      } catch (fileStatsError) {
+        logger.warn(`[VideoTranscription] Could not check file size: ${fileStatsError}`);
+        // Continue anyway - file might still exist
+      }
     } 
     // Legacy flow: Extract and transcribe in one step
     else if (youtubeUrl || videoId) {
@@ -1400,14 +1556,23 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       // Use dedupe key for legacy flow too
       const legacyDedupeKey = `video-${finalVideoId}`;
       if (inFlightTranscriptions.has(legacyDedupeKey)) {
-        logger.warn(`[VideoTranscription] Transcription already in progress for video: ${finalVideoId}`);
-        setCORSHeaders();
-        return res.status(409).json({
-          success: false,
-          error: 'Transcription already in progress for this video. Please wait for the current request to complete.',
-          videoId: finalVideoId,
-          code: 'TRANSCRIPTION_IN_PROGRESS',
-        });
+        const existing = inFlightTranscriptions.get(legacyDedupeKey)!;
+        const age = Date.now() - existing.startTime;
+        
+        // If the transcription has been running too long, clean it up and allow retry
+        if (age > MAX_TRANSCRIPTION_TIME_MS) {
+          logger.warn(`[VideoTranscription] Removing expired legacy transcription: ${legacyDedupeKey} (age: ${Math.round(age / 1000)}s)`);
+          inFlightTranscriptions.delete(legacyDedupeKey);
+        } else {
+          logger.warn(`[VideoTranscription] Transcription already in progress for video: ${finalVideoId} (started ${Math.round(age / 1000)}s ago)`);
+          setCORSHeaders();
+          return res.status(409).json({
+            success: false,
+            error: 'Transcription already in progress for this video. Please wait for the current request to complete.',
+            videoId: finalVideoId,
+            code: 'TRANSCRIPTION_IN_PROGRESS',
+          });
+        }
       }
 
       logger.info(`[VideoTranscription] Starting transcription for video: ${finalVideoId}${cookies ? ' (with cookies)' : ''}${language ? ` (language: ${language})` : ''} (legacy mode)`);
@@ -1431,7 +1596,10 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       })();
 
       // Track the promise
-      inFlightTranscriptions.set(legacyDedupeKey, transcriptionPromise);
+      inFlightTranscriptions.set(legacyDedupeKey, {
+        promise: transcriptionPromise,
+        startTime: Date.now()
+      });
 
       try {
         const result = await transcriptionPromise;
@@ -1466,15 +1634,40 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
     
     // Create transcription promise and track it
     const transcriptionPromise = (async () => {
-      logger.info(`[VideoTranscription] Starting Whisper transcription...`);
-      const transcriptionResult = await whisperService.transcribe(finalAudioPath!, {
-        language: language || 'auto', // Auto-detect or use specified language
-        task: 'transcribe',
-        returnTimestamps: false
-      });
-
-      const transcription = transcriptionResult.text || 'No transcription available';
-      logger.info(`[VideoTranscription] Transcription complete, length: ${transcription.length} characters`);
+      let transcription: string;
+      let detectedLanguage: string = language || 'unknown';
+      
+      // Choose transcription provider
+      if (transcriptionProvider === 'openai' && process.env.OPENAI_API_KEY) {
+        logger.info(`[VideoTranscription] Using OpenAI Whisper API for transcription...`);
+        try {
+          const transcriptionResult = await transcribeWithOpenAI(finalAudioPath!, language);
+          transcription = transcriptionResult.text || 'No transcription available';
+          detectedLanguage = transcriptionResult.language;
+          logger.info(`[VideoTranscription] OpenAI transcription complete, length: ${transcription.length} characters, language: ${detectedLanguage}`);
+        } catch (openaiError: any) {
+          logger.warn(`[VideoTranscription] OpenAI Whisper failed: ${openaiError.message}, falling back to local Whisper...`);
+          // Fallback to local Whisper if OpenAI fails
+          const transcriptionResult = await whisperService.transcribe(finalAudioPath!, {
+            language: language || 'auto',
+            task: 'transcribe',
+            returnTimestamps: false
+          });
+          transcription = transcriptionResult.text || 'No transcription available';
+          detectedLanguage = transcriptionResult.language;
+        }
+      } else {
+        // Use local Whisper
+        logger.info(`[VideoTranscription] Using local Whisper for transcription...`);
+        const transcriptionResult = await whisperService.transcribe(finalAudioPath!, {
+          language: language || 'auto', // Auto-detect or use specified language
+          task: 'transcribe',
+          returnTimestamps: false
+        });
+        transcription = transcriptionResult.text || 'No transcription available';
+        detectedLanguage = transcriptionResult.language;
+        logger.info(`[VideoTranscription] Local Whisper transcription complete, length: ${transcription.length} characters, language: ${detectedLanguage}`);
+      }
 
       // Convert to script
       logger.info(`[VideoTranscription] Converting transcription to script using ${scriptProvider}...`);
@@ -1490,12 +1683,16 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         script,
         videoTitle,
         videoDuration,
+        transcriptionProvider: transcriptionProvider === 'openai' ? 'openai' : 'local',
       };
     })();
 
     // Track the promise if we have a dedupe key
     if (dedupeKey) {
-      inFlightTranscriptions.set(dedupeKey, transcriptionPromise);
+      inFlightTranscriptions.set(dedupeKey, {
+        promise: transcriptionPromise,
+        startTime: Date.now()
+      });
     }
 
     try {
