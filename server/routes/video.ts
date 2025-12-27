@@ -1604,21 +1604,35 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       if (!finalAudioPath && audioId) {
         logger.info(`[VideoTranscription] Searching for audio file by ID: ${audioId}`);
         
-        // Try to find audio file by ID
-        const foundPath = await audioFileService.getAudioFileById(audioId);
-        if (foundPath && await audioFileService.fileExists(foundPath)) {
-          finalAudioPath = foundPath;
-          logger.info(`[VideoTranscription] ✅ Found audio file by ID: ${foundPath}`);
-        } else {
-          // Try to construct path from audioId (format: videoId-timestamp or upload-timestamp-random)
-          logger.info(`[VideoTranscription] Trying to construct path from audioId: ${audioId}`);
-          const extensions = ['mp3', 'wav', 'ogg', 'webm', 'm4a'];
-          for (const ext of extensions) {
-            const constructedPath = path.join(audioFileService.getAudioDirectory(), `${audioId}.${ext}`);
-            if (await audioFileService.fileExists(constructedPath)) {
-              finalAudioPath = constructedPath;
-              logger.info(`[VideoTranscription] ✅ Found audio file by constructed path: ${constructedPath}`);
-              break;
+        // First, try to construct path from audioId directly (most common case)
+        // audioId format: upload-timestamp-random (from multer filename)
+        const audioDir = audioFileService.getAudioDirectory();
+        logger.info(`[VideoTranscription] Audio directory: ${audioDir}`);
+        
+        const extensions = ['mp3', 'wav', 'ogg', 'webm', 'm4a'];
+        for (const ext of extensions) {
+          const constructedPath = path.join(audioDir, `${audioId}.${ext}`);
+          logger.info(`[VideoTranscription] Checking constructed path: ${constructedPath}`);
+          try {
+            await fs.access(constructedPath);
+            finalAudioPath = constructedPath;
+            logger.info(`[VideoTranscription] ✅ Found audio file by constructed path: ${constructedPath}`);
+            break;
+          } catch {
+            // Continue to next extension
+          }
+        }
+        
+        // If still not found, try getAudioFileById (searches directory)
+        if (!finalAudioPath) {
+          const foundPath = await audioFileService.getAudioFileById(audioId);
+          if (foundPath) {
+            try {
+              await fs.access(foundPath);
+              finalAudioPath = foundPath;
+              logger.info(`[VideoTranscription] ✅ Found audio file by ID search: ${foundPath}`);
+            } catch {
+              logger.warn(`[VideoTranscription] getAudioFileById returned path but file doesn't exist: ${foundPath}`);
             }
           }
         }
