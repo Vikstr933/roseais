@@ -920,6 +920,7 @@ export default function VideoTranscriptionApp() {
         
       setExtractedAudio(extractionResult);
       setProgress('');
+      setTranscriptionStage('idle'); // Reset stage after successful upload
       // Reset tone and style to require user selection
       setTone('');
       setStyle('');
@@ -934,6 +935,7 @@ export default function VideoTranscriptionApp() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload audio');
       setProgress('');
+      setTranscriptionStage('idle'); // Reset stage on error too
       toast({
         title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to upload audio',
