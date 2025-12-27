@@ -1155,50 +1155,40 @@ export default function VideoTranscriptionApp() {
         </div>
       </div>
 
-      <div className="relative max-w-6xl mx-auto px-6 py-12">
-        {/* Premium Header Section */}
+      <div className="relative max-w-7xl mx-auto px-6 py-6">
+        {/* Compact Header Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-12"
+          className="mb-6"
         >
-          <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 bg-clip-text text-transparent">
+          <div className="text-center mb-4">
+            <h1 className="text-2xl md:text-3xl font-bold mb-2 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 bg-clip-text text-transparent">
               Transform Audio Into Commentary Scripts
             </h1>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Professional AI-powered transcription and script generation for YouTube creators. 
-              Perfect for body cam footage, documentaries, and any video content that needs engaging commentary.
-            </p>
-          </div>
-          
-          {/* Feature Pills */}
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
-            <div className="px-4 py-2 bg-purple-50 border border-purple-200 rounded-full text-sm font-medium text-purple-700 flex items-center gap-2">
-              <Mic className="h-4 w-4" />
-              OpenAI Whisper AI
-            </div>
-            <div className="px-4 py-2 bg-pink-50 border border-pink-200 rounded-full text-sm font-medium text-pink-700 flex items-center gap-2">
-              <Sparkles className="h-4 w-4" />
-              Smart Script Generation
-            </div>
-            <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-full text-sm font-medium text-blue-700 flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Voice Actor Ready
-            </div>
-            <div className="px-4 py-2 bg-green-50 border border-green-200 rounded-full text-sm font-medium text-green-700 flex items-center gap-2">
-              <Video className="h-4 w-4" />
-              Max 25MB Files
+            <div className="flex flex-wrap justify-center gap-2 text-xs">
+              <div className="px-3 py-1 bg-purple-50 border border-purple-200 rounded-full font-medium text-purple-700 flex items-center gap-1.5">
+                <Mic className="h-3 w-3" />
+                OpenAI Whisper
+              </div>
+              <div className="px-3 py-1 bg-pink-50 border border-pink-200 rounded-full font-medium text-pink-700 flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3" />
+                AI Scripts
+              </div>
+              <div className="px-3 py-1 bg-blue-50 border border-blue-200 rounded-full font-medium text-blue-700 flex items-center gap-1.5">
+                <FileText className="h-3 w-3" />
+                YouTube Ready
+              </div>
             </div>
           </div>
         </motion.div>
 
-        {/* Premium Upload Section */}
+        {/* Compact Upload Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="card-elevated p-8 mb-8"
+          className="card-elevated p-6 mb-6"
         >
           <div className="space-y-6">
             <div>
@@ -1468,76 +1458,74 @@ export default function VideoTranscriptionApp() {
           </div>
         </motion.div>
 
-        {/* Premium Results Section */}
+        {/* Compact Results Section - Side by Side Layout */}
         {transcriptionResult && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-8"
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
           >
             {/* Transcription Card */}
-            <div className="card-elevated p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-purple-100 rounded-xl">
-                    <Mic className="h-5 w-5 text-purple-600" />
+            <div className="card-elevated p-6 flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Mic className="h-4 w-4 text-purple-600" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-foreground">Raw Transcription</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">Direct transcription from audio</p>
+                    <h2 className="text-lg font-semibold text-foreground">Raw Transcription</h2>
+                    <p className="text-xs text-muted-foreground">Direct transcription</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleCopy(transcriptionResult.transcription, 'transcription')}
-                    className="hover:bg-purple-50"
+                    className="hover:bg-purple-50 h-8 px-2"
                   >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
+                    <Copy className="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDownload(transcriptionResult.transcription, 'transcription.txt')}
-                    className="hover:bg-purple-50"
+                    className="hover:bg-purple-50 h-8 px-2"
                   >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
+                    <Download className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
               <Textarea
                 value={transcriptionResult.transcription}
                 readOnly
-                className="min-h-[250px] font-mono text-sm bg-muted/50 border-muted"
+                className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-muted/50 border-muted resize-none"
               />
             </div>
 
             {/* Script Card with Tabs */}
-            <div className="card-elevated p-8">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 bg-pink-100 rounded-xl">
-                  <FileText className="h-5 w-5 text-pink-600" />
+            <div className="card-elevated p-6 flex flex-col">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 bg-pink-100 rounded-lg">
+                  <FileText className="h-4 w-4 text-pink-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-foreground">Commentary Script</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">YouTube-ready commentary format</p>
+                  <h2 className="text-lg font-semibold text-foreground">Commentary Script</h2>
+                  <p className="text-xs text-muted-foreground">YouTube-ready format</p>
                 </div>
               </div>
-              <Tabs defaultValue="haiku" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted p-1.5">
-                  <TabsTrigger value="haiku" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <Tabs defaultValue="haiku" className="w-full flex flex-col flex-1 min-h-0">
+                <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted p-1 h-9">
+                  <TabsTrigger value="haiku" className="data-[state=active]:bg-white data-[state=active]:shadow-sm text-xs">
                     Claude Haiku
                   </TabsTrigger>
-                  <TabsTrigger value="openai" className="data-[state=active]:bg-white data-[state=active]:shadow-sm relative">
+                  <TabsTrigger value="openai" className="data-[state=active]:bg-white data-[state=active]:shadow-sm relative text-xs">
                     OpenAI Mini
                     {!openAIScript && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="ml-2 h-6 px-2 text-xs absolute right-2"
+                        className="ml-1 h-5 px-1.5 text-xs absolute right-1 top-1/2 -translate-y-1/2"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleGenerateOpenAIScript();
@@ -1553,79 +1541,75 @@ export default function VideoTranscriptionApp() {
                     )}
                   </TabsTrigger>
                 </TabsList>
-                <TabsContent value="haiku" className="space-y-4">
-                  <div className="flex items-center justify-end gap-2">
+                <TabsContent value="haiku" className="space-y-3 flex flex-col flex-1 min-h-0">
+                  <div className="flex items-center justify-end gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleCopy(transcriptionResult.script, 'script')}
-                      className="hover:bg-purple-50"
+                      className="hover:bg-purple-50 h-8 px-2"
                     >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy
+                      <Copy className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleDownload(transcriptionResult.script, 'commentary-script-haiku.txt')}
-                      className="hover:bg-purple-50"
+                      className="hover:bg-purple-50 h-8 px-2"
                     >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
+                      <Download className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                   <Textarea
                     value={transcriptionResult.script}
                     readOnly
-                    className="min-h-[400px] font-mono text-sm bg-muted/50 border-muted leading-relaxed"
+                    className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-muted/50 border-muted leading-relaxed resize-none"
                   />
                 </TabsContent>
-                <TabsContent value="openai" className="space-y-4">
+                <TabsContent value="openai" className="space-y-3 flex flex-col flex-1 min-h-0">
                   {openAIScript ? (
                     <>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleCopy(openAIScript, 'script')}
-                          className="hover:bg-purple-50"
+                          className="hover:bg-purple-50 h-8 px-2"
                         >
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copy
+                          <Copy className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleDownload(openAIScript, 'commentary-script-openai.txt')}
-                          className="hover:bg-purple-50"
+                          className="hover:bg-purple-50 h-8 px-2"
                         >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
+                          <Download className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                       <Textarea
                         value={openAIScript}
                         readOnly
-                        className="min-h-[400px] font-mono text-sm bg-muted/50 border-muted leading-relaxed"
+                        className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-muted/50 border-muted leading-relaxed resize-none"
                       />
                     </>
                   ) : isGeneratingOpenAIScript ? (
-                    <div className="min-h-[400px] flex items-center justify-center border-2 border-purple-200 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
-                      <div className="text-center max-w-md px-6 space-y-6">
+                    <div className="flex-1 min-h-[300px] flex items-center justify-center border-2 border-purple-200 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
+                      <div className="text-center max-w-md px-4 space-y-4">
                         <div className="relative">
                           <motion.div
                             animate={{ rotate: 360 }}
                             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                            className="h-20 w-20 mx-auto rounded-full border-4 border-purple-200 border-t-purple-600"
+                            className="h-16 w-16 mx-auto rounded-full border-4 border-purple-200 border-t-purple-600"
                           />
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <Sparkles className="h-8 w-8 text-purple-600" />
+                            <Sparkles className="h-6 w-6 text-purple-600" />
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <p className="text-lg font-semibold text-foreground">Generating Script...</p>
-                          <p className="text-sm text-muted-foreground">
-                            Creating commentary script with OpenAI Mini using your selected tone and style
+                        <div className="space-y-1">
+                          <p className="text-base font-semibold text-foreground">Generating Script...</p>
+                          <p className="text-xs text-muted-foreground">
+                            Creating commentary script with OpenAI Mini
                           </p>
                         </div>
                         <div className="flex gap-2 justify-center">
@@ -1648,25 +1632,25 @@ export default function VideoTranscriptionApp() {
                       </div>
                     </div>
                   ) : (
-                    <div className="min-h-[400px] flex items-center justify-center border-2 border-dashed border-muted rounded-xl bg-muted/30">
-                      <div className="text-center max-w-md px-6">
-                        <div className="mb-4 flex justify-center">
-                          <div className="p-4 bg-purple-100 rounded-full">
-                            <Sparkles className="h-8 w-8 text-purple-600" />
+                    <div className="flex-1 min-h-[300px] flex items-center justify-center border-2 border-dashed border-muted rounded-xl bg-muted/30">
+                      <div className="text-center max-w-md px-4">
+                        <div className="mb-3 flex justify-center">
+                          <div className="p-3 bg-purple-100 rounded-full">
+                            <Sparkles className="h-6 w-6 text-purple-600" />
                           </div>
                         </div>
-                        <p className="text-base font-medium text-foreground mb-2">Generate OpenAI Script</p>
-                        <p className="text-sm text-muted-foreground mb-6">
-                          Create an alternative script version using OpenAI Mini for comparison
+                        <p className="text-sm font-medium text-foreground mb-1">Generate OpenAI Script</p>
+                        <p className="text-xs text-muted-foreground mb-4">
+                          Create alternative script with OpenAI Mini
                         </p>
                         <Button
                           onClick={handleGenerateOpenAIScript}
                           disabled={isGeneratingOpenAIScript}
-                          size="lg"
+                          size="sm"
                           className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25"
                         >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Generate with OpenAI Mini
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                          Generate
                         </Button>
                       </div>
                     </div>
