@@ -50,11 +50,19 @@ import { apiFetch, getApiUrl } from '../lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { AuthDialog } from '@/components/AuthDialog';
 
+interface TranscriptionSegment {
+  id: number;
+  start: number;
+  end: number;
+  text: string;
+}
+
 interface TranscriptionResult {
   transcription: string;
   script: string;
   videoTitle?: string;
   videoDuration?: number;
+  segments?: TranscriptionSegment[];
 }
 
 interface AudioExtractionResult {
@@ -1480,6 +1488,28 @@ export default function VideoTranscriptionApp() {
                   </div>
                 </div>
                 <div className="flex gap-1.5">
+                  {transcriptionResult.segments && transcriptionResult.segments.length > 0 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(segmentsToSRT(transcriptionResult.segments!), 'subtitles.srt')}
+                        className="hover:bg-purple-50 h-8 px-2 text-xs"
+                        title="Export as SRT subtitle file"
+                      >
+                        SRT
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(segmentsToVTT(transcriptionResult.segments!), 'subtitles.vtt')}
+                        className="hover:bg-purple-50 h-8 px-2 text-xs"
+                        title="Export as VTT subtitle file"
+                      >
+                        VTT
+                      </Button>
+                    </>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
