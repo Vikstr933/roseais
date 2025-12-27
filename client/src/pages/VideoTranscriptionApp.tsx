@@ -836,6 +836,7 @@ export default function VideoTranscriptionApp() {
   const [style, setStyle] = useState<string>('');
   const [scriptLanguage, setScriptLanguage] = useState<string>('en'); // Default to English
   const [enableSpeakerDiarization, setEnableSpeakerDiarization] = useState<boolean>(false); // Speaker diarization option
+  const [enableAudioPreprocessing, setEnableAudioPreprocessing] = useState<boolean>(false); // Audio preprocessing option
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -992,6 +993,7 @@ export default function VideoTranscriptionApp() {
         scriptProvider: 'haiku', // Use Haiku by default
         transcriptionProvider: 'openai', // Use OpenAI by default
         enableSpeakerDiarization: enableSpeakerDiarization, // Enable speaker diarization if selected
+        enableAudioPreprocessing: enableAudioPreprocessing, // Enable audio preprocessing if selected
         tone: tone,
         style: style,
         scriptLanguage: scriptLanguage,

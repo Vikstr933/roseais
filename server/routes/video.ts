@@ -236,6 +236,96 @@ async function transcribeWithAssemblyAI(
 }
 
 /**
+ * Preprocess audio file with FFmpeg (noise reduction and normalization)
+ * Returns path to preprocessed audio file
+ */
+async function preprocessAudio(
+  audioFilePath: string,
+  enableNoiseReduction: boolean = true,
+  enableNormalization: boolean = true
+): Promise<string> {
+  // Check if FFmpeg is available
+  try {
+    await execAsync('ffmpeg -version', { timeout: 5000 });
+  } catch {
+    logger.warn('[AudioPreprocessing] FFmpeg not available, skipping preprocessing');
+    return audioFilePath; // Return original file if FFmpeg not available
+  }
+
+  // If no preprocessing needed, return original
+  if (!enableNoiseReduction && !enableNormalization) {
+    return audioFilePath;
+  }
+
+  logger.info(`[AudioPreprocessing] Preprocessing audio: ${audioFilePath} (noise reduction: ${enableNoiseReduction}, normalization: ${enableNormalization})`);
+
+  try {
+    const preprocessedPath = path.join(
+      path.dirname(audioFilePath),
+      `preprocessed_${Date.now()}_${path.basename(audioFilePath)}`
+    );
+
+    // Build FFmpeg command with filters
+    let filters: string[] = [];
+
+    // Noise reduction filter (highpass + lowpass + highpass for voice)
+    if (enableNoiseReduction) {
+      // Highpass filter to remove low-frequency noise (below 80Hz)
+      filters.push('highpass=f=80');
+      // Lowpass filter to remove high-frequency noise (above 12000Hz for voice)
+      filters.push('lowpass=f=12000');
+      // Another highpass to clean up more (speech typically 300-3400Hz)
+      filters.push('highpass=f=300');
+    }
+
+    // Normalization (loudnorm filter for consistent volume)
+    if (enableNormalization) {
+      // Use loudnorm for LUFS normalization (broadcast standard)
+      // This normalizes audio to -23 LUFS (broadcast standard)
+      filters.push('loudnorm=I=-23:TP=-1.5:LRA=11');
+    }
+
+    const filterComplex = filters.length > 0 ? filters.join(',') : 'anull';
+    
+    const command = `ffmpeg -i "${audioFilePath}" -af "${filterComplex}" -c:a libmp3lame -b:a 192k "${preprocessedPath}" -y -loglevel error`;
+    
+    logger.info(`[AudioPreprocessing] Running FFmpeg preprocessing...`);
+    
+    await execAsync(command, {
+      timeout: 300000, // 5 minutes max
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    // Verify preprocessed file exists
+    await fs.access(preprocessedPath);
+    
+    const originalStats = await fs.stat(audioFilePath);
+    const preprocessedStats = await fs.stat(preprocessedPath);
+    
+    logger.info(`[AudioPreprocessing] ✅ Preprocessing complete: ${(preprocessedStats.size / 1024 / 1024).toFixed(2)}MB (original: ${(originalStats.size / 1024 / 1024).toFixed(2)}MB)`);
+
+    return preprocessedPath;
+  } catch (error: any) {
+    logger.error(`[AudioPreprocessing] Preprocessing failed: ${error.message}, using original file`, error);
+    return audioFilePath; // Fallback to original on error
+  }
+}
+
+/**
+ * Cleanup preprocessed audio file
+ */
+async function cleanupPreprocessedAudio(preprocessedPath: string, originalPath: string): Promise<void> {
+  if (preprocessedPath === originalPath) return; // Don't delete original
+  
+  try {
+    await fs.unlink(preprocessedPath);
+    logger.info(`[AudioPreprocessing] Cleaned up preprocessed file: ${preprocessedPath}`);
+  } catch (error) {
+    logger.warn(`[AudioPreprocessing] Failed to cleanup preprocessed file: ${error}`);
+  }
+}
+
+/**
  * Split audio file into chunks using FFmpeg
  * Returns array of chunk file paths
  */
@@ -2265,7 +2355,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         // Use AssemblyAI for speaker diarization
         logger.info(`[VideoTranscription] Using AssemblyAI for transcription with speaker diarization...`);
         try {
-          const transcriptionResult = await transcribeWithAssemblyAI(finalAudioPath!, language);
+          const transcriptionResult = await transcribeWithAssemblyAI(audioPathToUse, language);
           transcription = transcriptionResult.text || 'No transcription available';
           detectedLanguage = transcriptionResult.language;
           transcriptionSegments = transcriptionResult.segments;
@@ -2273,7 +2363,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         } catch (assemblyAIError: any) {
           logger.warn(`[VideoTranscription] AssemblyAI failed: ${assemblyAIError.message}, falling back to OpenAI...`);
           // Fallback to OpenAI if AssemblyAI fails
-          const transcriptionResult = await transcribeWithOpenAI(finalAudioPath!, language, true);
+          const transcriptionResult = await transcribeWithOpenAI(audioPathToUse, language, true);
           transcription = transcriptionResult.text || 'No transcription available';
           detectedLanguage = transcriptionResult.language;
           transcriptionSegments = transcriptionResult.segments;
@@ -2281,7 +2371,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       } else if (transcriptionProvider === 'openai' && process.env.OPENAI_API_KEY) {
         logger.info(`[VideoTranscription] Using OpenAI Whisper API for transcription...`);
         try {
-          const transcriptionResult = await transcribeWithOpenAI(finalAudioPath!, language, true);
+          const transcriptionResult = await transcribeWithOpenAI(audioPathToUse, language, true);
           transcription = transcriptionResult.text || 'No transcription available';
           detectedLanguage = transcriptionResult.language;
           transcriptionSegments = transcriptionResult.segments;
@@ -2289,7 +2379,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         } catch (openaiError: any) {
           logger.warn(`[VideoTranscription] OpenAI Whisper failed: ${openaiError.message}, falling back to local Whisper...`);
           // Fallback to local Whisper if OpenAI fails
-          const transcriptionResult = await whisperService.transcribe(finalAudioPath!, {
+          const transcriptionResult = await whisperService.transcribe(audioPathToUse, {
             language: language || 'auto',
             task: 'transcribe',
             returnTimestamps: false
@@ -2300,7 +2390,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       } else {
         // Use local Whisper
         logger.info(`[VideoTranscription] Using local Whisper for transcription...`);
-        const transcriptionResult = await whisperService.transcribe(finalAudioPath!, {
+        const transcriptionResult = await whisperService.transcribe(audioPathToUse, {
           language: language || 'auto', // Auto-detect or use specified language
           task: 'transcribe',
           returnTimestamps: false
