@@ -1575,11 +1575,32 @@ export default function VideoTranscriptionApp() {
                   </Button>
                 </div>
               </div>
-              <Textarea
-                value={transcriptionResult.transcription}
-                readOnly
-                className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-muted/50 border-muted resize-none"
-              />
+              {transcriptionResult.segments && transcriptionResult.segments.length > 0 ? (
+                <div className="flex-1 min-h-[300px] max-h-[500px] overflow-auto border border-muted rounded-lg bg-muted/50 p-3">
+                  <div className="space-y-2">
+                    {transcriptionResult.segments.map((seg, index) => (
+                      <div
+                        key={index}
+                        className="p-2 rounded hover:bg-muted/80 transition-colors cursor-pointer"
+                        title={`Click to jump to ${formatDisplayTime(seg.start)}`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-mono text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+                            {formatDisplayTime(seg.start)} → {formatDisplayTime(seg.end)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground leading-relaxed">{seg.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <Textarea
+                  value={transcriptionResult.transcription}
+                  readOnly
+                  className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-muted/50 border-muted resize-none"
+                />
+              )}
             </div>
 
             {/* Script Card with Tabs */}
