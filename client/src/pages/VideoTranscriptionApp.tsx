@@ -822,6 +822,8 @@ export default function VideoTranscriptionApp() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [extractedAudio, setExtractedAudio] = useState<AudioExtractionResult | null>(null);
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
+  const [editedTranscription, setEditedTranscription] = useState<string>(''); // For editing transcription before script generation
+  const [isEditingTranscription, setIsEditingTranscription] = useState(false);
   const [openAIScript, setOpenAIScript] = useState<string | null>(null);
   const [isGeneratingOpenAIScript, setIsGeneratingOpenAIScript] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1137,11 +1139,12 @@ export default function VideoTranscriptionApp() {
     setError(null);
 
     try {
-      // Send the existing transcription along with audio info to generate script with OpenAI
+      // Send the edited transcription (if edited) or original transcription along with audio info to generate script with OpenAI
+      const transcriptionToUse = editedTranscription || transcriptionResult.transcription;
       const requestBody: any = {
         audioId: extractedAudio.audioId,
         audioPath: extractedAudio.audioPath,
-        transcript: transcriptionResult.transcription, // Send existing transcription
+        transcript: transcriptionToUse, // Send edited or original transcription
         scriptProvider: 'openai',
         videoTitle: transcriptionResult.videoTitle,
         tone: tone,
