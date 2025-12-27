@@ -2349,9 +2349,20 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       let detectedLanguage: string = language || 'unknown';
       
       let transcriptionSegments: TranscriptionSegment[] | undefined = undefined;
+      
+      // Preprocess audio if requested
+      let audioPathToUse = finalAudioPath!;
+      let preprocessedAudioPath: string | null = null;
+      
+      if (enableAudioPreprocessing) {
+        logger.info(`[VideoTranscription] Preprocessing audio before transcription...`);
+        preprocessedAudioPath = await preprocessAudio(finalAudioPath!, true, true);
+        audioPathToUse = preprocessedAudioPath;
+      }
 
-      // Choose transcription provider
-      if (enableSpeakerDiarization && process.env.ASSEMBLYAI_API_KEY) {
+      try {
+        // Choose transcription provider
+        if (enableSpeakerDiarization && process.env.ASSEMBLYAI_API_KEY) {
         // Use AssemblyAI for speaker diarization
         logger.info(`[VideoTranscription] Using AssemblyAI for transcription with speaker diarization...`);
         try {
@@ -2417,6 +2428,12 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         transcriptionProvider: enableSpeakerDiarization ? 'assemblyai' : (transcriptionProvider === 'openai' ? 'openai' : 'local'),
         segments: transcriptionSegments,
       };
+      } finally {
+        // Cleanup preprocessed audio file
+        if (preprocessedAudioPath && preprocessedAudioPath !== finalAudioPath) {
+          await cleanupPreprocessedAudio(preprocessedAudioPath, finalAudioPath!);
+        }
+      }
     })();
 
     // Track the promise if we have a dedupe key
