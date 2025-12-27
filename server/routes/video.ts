@@ -1528,20 +1528,35 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       const existing = inFlightTranscriptions.get(dedupeKey)!;
       const age = Date.now() - existing.startTime;
       
-      // If the transcription has been running too long, clean it up and allow retry
+      // Check if promise is already resolved/rejected (using a simple timeout check)
+      // If transcription has been running too long, clean it up and allow retry
       if (age > MAX_TRANSCRIPTION_TIME_MS) {
         logger.warn(`[VideoTranscription] Removing expired transcription: ${dedupeKey} (age: ${Math.round(age / 1000)}s)`);
         inFlightTranscriptions.delete(dedupeKey);
       } else {
-        logger.warn(`[VideoTranscription] Transcription already in progress for: ${dedupeKey} (started ${Math.round(age / 1000)}s ago)`);
-        setCORSHeaders();
-        return res.status(409).json({
-          success: false,
-          error: 'Transcription already in progress for this audio file. Please wait for the current request to complete.',
-          audioId: audioId || undefined,
-          audioPath: audioPath || undefined,
-          code: 'TRANSCRIPTION_IN_PROGRESS',
-        });
+        // Check if promise is settled (resolved or rejected)
+        // Create a race condition check - if promise doesn't resolve quickly, it might be stuck
+        const isPromiseSettled = Promise.race([
+          existing.promise.then(() => true).catch(() => true),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100))
+        ]);
+        
+        // If transcription is relatively old (> 2 minutes) and might be stuck, allow retry
+        const SHORT_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+        if (age > SHORT_TIMEOUT_MS) {
+          logger.warn(`[VideoTranscription] Transcription seems stuck, allowing retry: ${dedupeKey} (age: ${Math.round(age / 1000)}s)`);
+          inFlightTranscriptions.delete(dedupeKey);
+        } else {
+          logger.warn(`[VideoTranscription] Transcription already in progress for: ${dedupeKey} (started ${Math.round(age / 1000)}s ago)`);
+          setCORSHeaders();
+          return res.status(409).json({
+            success: false,
+            error: 'Transcription already in progress for this audio file. Please wait for the current request to complete.',
+            audioId: audioId || undefined,
+            audioPath: audioPath || undefined,
+            code: 'TRANSCRIPTION_IN_PROGRESS',
+          });
+        }
       }
     }
 
