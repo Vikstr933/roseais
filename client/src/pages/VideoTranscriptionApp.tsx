@@ -1676,7 +1676,12 @@ export default function VideoTranscriptionApp() {
                             className="p-2 rounded hover:bg-muted/80 transition-colors cursor-pointer"
                             title={`Click to jump to ${formatDisplayTime(seg.start)}`}
                           >
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              {seg.speaker && (
+                                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                                  {seg.speaker}
+                                </span>
+                              )}
                               <span className="text-xs font-mono text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
                                 {formatDisplayTime(seg.start)} → {formatDisplayTime(seg.end)}
                               </span>
