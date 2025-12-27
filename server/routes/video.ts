@@ -274,10 +274,12 @@ async function transcribeWithOpenAI(
             const lastSegment = (chunkTranscription as any).segments[(chunkTranscription as any).segments.length - 1];
             timeOffset = lastSegment.end + timeOffset;
           } else {
-            // Fallback: estimate from file size (rough approximation)
+            // Fallback: estimate duration from chunk file size
+            // This is a rough estimate - assume ~1MB per minute of audio
             const chunkStats = await fs.stat(chunkPaths[i]);
             const chunkSizeMB = chunkStats.size / (1024 * 1024);
-            timeOffset += (fileSizeMB > 0) ? (totalDuration * chunkSizeMB) / fileSizeMB : 0;
+            const estimatedDuration = chunkSizeMB * 60; // Rough: 1MB ≈ 1 minute
+            timeOffset += estimatedDuration;
           }
         }
 
