@@ -43,6 +43,7 @@ import {
   ArrowRight,
   ChevronRight,
   ChevronLeft,
+  Globe,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
@@ -822,6 +823,7 @@ export default function VideoTranscriptionApp() {
   // Transcription settings - initialized as empty to require user selection
   const [tone, setTone] = useState<string>('');
   const [style, setStyle] = useState<string>('');
+  const [scriptLanguage, setScriptLanguage] = useState<string>('en'); // Default to English
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -976,6 +978,7 @@ export default function VideoTranscriptionApp() {
         scriptProvider: 'haiku', // Use Haiku by default
         tone: tone,
         style: style,
+        scriptLanguage: scriptLanguage,
       };
       
       if (extractedAudio.transcript) {
@@ -1086,6 +1089,7 @@ export default function VideoTranscriptionApp() {
         videoTitle: transcriptionResult.videoTitle,
         tone: tone,
         style: style,
+        scriptLanguage: scriptLanguage,
       };
 
       const response = await apiFetch('/api/video/transcribe', {
@@ -1397,6 +1401,43 @@ export default function VideoTranscriptionApp() {
                               </span>
                             </div>
                             <p className="text-xs text-muted-foreground">{option.desc}</p>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Script Language Selection */}
+                    <div className="space-y-3">
+                      <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-purple-600" />
+                        Script Language
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { code: 'en', name: 'English', flag: '🇬🇧' },
+                          { code: 'sv', name: 'Svenska', flag: '🇸🇪' },
+                          { code: 'es', name: 'Español', flag: '🇪🇸' },
+                          { code: 'fr', name: 'Français', flag: '🇫🇷' },
+                          { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+                          { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+                          { code: 'pt', name: 'Português', flag: '🇵🇹' },
+                          { code: 'nl', name: 'Nederlands', flag: '🇳🇱' },
+                        ].map((lang) => (
+                          <motion.button
+                            key={lang.code}
+                            onClick={() => setScriptLanguage(lang.code)}
+                            className={`p-3 rounded-xl border-2 transition-all text-center ${
+                              scriptLanguage === lang.code
+                                ? 'border-purple-600 bg-purple-50 shadow-md'
+                                : 'border-muted hover:border-purple-300 hover:bg-purple-50/50'
+                            }`}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <div className="text-2xl mb-1">{lang.flag}</div>
+                            <p className={`text-xs font-medium ${scriptLanguage === lang.code ? 'text-purple-900' : 'text-foreground'}`}>
+                              {lang.name}
+                            </p>
                           </motion.button>
                         ))}
                       </div>
