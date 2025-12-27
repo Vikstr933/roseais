@@ -30,7 +30,6 @@ import {
   Award,
   BookOpen,
   Info,
-  CheckCircle2,
   Target,
   BarChart3,
   Users,
@@ -83,16 +82,10 @@ function WaitingRoomContent({
   stage: 'idle' | 'uploading' | 'transcribing' | 'generating';
   progress: string;
 }) {
-  const [currentContentCategory, setCurrentContentCategory] = useState<'tips' | 'facts' | 'stats' | 'checklist'>('tips');
+  const [currentContentCategory, setCurrentContentCategory] = useState<'tips' | 'facts' | 'stats'>('tips');
   const [currentContentIndex, setCurrentContentIndex] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [unlockedContent, setUnlockedContent] = useState<number[]>([]);
-  const [checklistItems, setChecklistItems] = useState<Record<number, boolean>>({
-    0: false,
-    1: false,
-    2: false,
-    3: false,
-  });
 
   // Comprehensive tips for better commentary
   const tips = [
@@ -244,29 +237,6 @@ function WaitingRoomContent({
     },
   ];
 
-  // Checklist items
-  const checklist = [
-    {
-      icon: Edit3,
-      text: 'Plan your video title and description',
-      tip: 'Use keywords that your audience searches for',
-    },
-    {
-      icon: Video,
-      text: 'Consider thumbnail ideas',
-      tip: 'Bright colors and text work best',
-    },
-    {
-      icon: Target,
-      text: 'Identify key moments to highlight',
-      tip: 'These become your video hooks',
-    },
-    {
-      icon: MessageSquare,
-      text: 'Think about questions to engage viewers',
-      tip: 'Rhetorical questions boost comments',
-    },
-  ];
 
   // Get current content based on category
   const getCurrentContent = () => {
@@ -277,8 +247,6 @@ function WaitingRoomContent({
         return facts;
       case 'stats':
         return stats;
-      case 'checklist':
-        return checklist;
     }
   };
 
@@ -290,7 +258,7 @@ function WaitingRoomContent({
       // Rotate categories every 30 seconds
       const categoryInterval = setInterval(() => {
         setCurrentContentCategory((prev) => {
-          const order: Array<'tips' | 'facts' | 'stats' | 'checklist'> = ['tips', 'facts', 'stats', 'checklist'];
+          const order: Array<'tips' | 'facts' | 'stats'> = ['tips', 'facts', 'stats'];
           const currentIndex = order.indexOf(prev);
           return order[(currentIndex + 1) % order.length];
         });
@@ -339,16 +307,9 @@ function WaitingRoomContent({
     setCurrentContentIndex((prev) => (prev - 1 + currentContent.length) % currentContent.length);
   };
 
-  const handleCategoryChange = (category: 'tips' | 'facts' | 'stats' | 'checklist') => {
+  const handleCategoryChange = (category: 'tips' | 'facts' | 'stats') => {
     setCurrentContentCategory(category);
     setCurrentContentIndex(0);
-  };
-
-  const toggleChecklistItem = (index: number) => {
-    setChecklistItems((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
   };
 
   const formatTime = (seconds: number) => {
@@ -365,8 +326,6 @@ function WaitingRoomContent({
         return Info;
       case 'stats':
         return BarChart3;
-      case 'checklist':
-        return CheckCircle2;
       default:
         return Lightbulb;
     }
@@ -380,8 +339,6 @@ function WaitingRoomContent({
         return 'pink';
       case 'stats':
         return 'blue';
-      case 'checklist':
-        return 'green';
       default:
         return 'purple';
     }
@@ -400,8 +357,6 @@ function WaitingRoomContent({
         return `${baseClasses} border-pink-600 bg-pink-50 shadow-md`;
       case 'stats':
         return `${baseClasses} border-blue-600 bg-blue-50 shadow-md`;
-      case 'checklist':
-        return `${baseClasses} border-green-600 bg-green-50 shadow-md`;
       default:
         return `${baseClasses} border-purple-600 bg-purple-50 shadow-md`;
     }
@@ -417,8 +372,6 @@ function WaitingRoomContent({
         return 'h-5 w-5 mx-auto mb-1 text-pink-600';
       case 'stats':
         return 'h-5 w-5 mx-auto mb-1 text-blue-600';
-      case 'checklist':
-        return 'h-5 w-5 mx-auto mb-1 text-green-600';
       default:
         return 'h-5 w-5 mx-auto mb-1 text-purple-600';
     }
@@ -434,8 +387,6 @@ function WaitingRoomContent({
         return 'text-xs font-medium capitalize text-pink-900';
       case 'stats':
         return 'text-xs font-medium capitalize text-blue-900';
-      case 'checklist':
-        return 'text-xs font-medium capitalize text-green-900';
       default:
         return 'text-xs font-medium capitalize text-purple-900';
     }
@@ -558,8 +509,8 @@ function WaitingRoomContent({
                 Auto-rotates every 30s
               </Badge>
             </div>
-            <div className="grid grid-cols-4 gap-2">
-              {(['tips', 'facts', 'stats', 'checklist'] as const).map((category) => {
+            <div className="grid grid-cols-3 gap-2">
+              {(['tips', 'facts', 'stats'] as const).map((category) => {
                 const CategoryIcon = getCategoryIcon(category);
                 const isActive = currentContentCategory === category;
                 return (
@@ -724,58 +675,10 @@ function WaitingRoomContent({
               </div>
             )}
 
-            {currentContentCategory === 'checklist' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-foreground">Pre-Production Checklist</h3>
-                  <Badge variant="secondary" className="text-xs">
-                    {Object.values(checklistItems).filter(Boolean).length} / {checklist.length} completed
-                  </Badge>
-                </div>
-                <div className="space-y-3">
-                  {checklist.map((item, index) => {
-                    const ItemIcon = item.icon;
-                    const isChecked = checklistItems[index];
-                    return (
-                      <motion.button
-                        key={index}
-                        onClick={() => toggleChecklistItem(index)}
-                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                          isChecked
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-muted hover:border-green-300 hover:bg-green-50/50'
-                        }`}
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className={`mt-0.5 ${isChecked ? 'text-green-600' : 'text-muted-foreground'}`}>
-                            {isChecked ? (
-                              <CheckCircle2 className="h-5 w-5" />
-                            ) : (
-                              <div className="h-5 w-5 rounded-full border-2 border-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <ItemIcon className={`h-4 w-4 ${isChecked ? 'text-green-600' : 'text-muted-foreground'}`} />
-                              <p className={`text-sm font-medium ${isChecked ? 'text-green-900 line-through' : 'text-foreground'}`}>
-                                {item.text}
-                              </p>
-                            </div>
-                            <p className="text-xs text-muted-foreground ml-6">{item.tip}</p>
-                          </div>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </motion.div>
 
           {/* Sidebar Stats */}
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 gap-4">
             <div className="card-elevated p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -792,17 +695,6 @@ function WaitingRoomContent({
                   <p className="text-lg font-bold text-foreground">{unlockedContent.length} / {currentContent.length}</p>
                 </div>
                 <Eye className="h-8 w-8 text-purple-500 opacity-50" />
-              </div>
-            </div>
-            <div className="card-elevated p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Checklist Progress</p>
-                  <p className="text-lg font-bold text-foreground">
-                    {Object.values(checklistItems).filter(Boolean).length} / {checklist.length}
-                  </p>
-                </div>
-                <Target className="h-8 w-8 text-green-500 opacity-50" />
               </div>
             </div>
           </div>
