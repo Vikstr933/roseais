@@ -83,6 +83,159 @@ interface TranscriptionWithTimestamps {
 }
 
 /**
+ * Transcribe with speaker diarization using AssemblyAI
+ * Returns transcription with speaker labels
+ */
+async function transcribeWithAssemblyAI(
+  audioFilePath: string,
+  language?: string
+): Promise<TranscriptionWithTimestamps> {
+  const assemblyAIKey = process.env.ASSEMBLYAI_API_KEY;
+  
+  if (!assemblyAIKey) {
+    throw new Error('ASSEMBLYAI_API_KEY is not configured. Speaker diarization requires AssemblyAI API key.');
+  }
+
+  logger.info(`[AssemblyAI] Starting transcription with speaker diarization: ${audioFilePath}`);
+
+  try {
+    // Step 1: Upload audio file
+    const audioBuffer = await fs.readFile(audioFilePath);
+    const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: {
+        'authorization': assemblyAIKey,
+      },
+      body: audioBuffer,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      throw new Error(`Failed to upload audio to AssemblyAI: ${uploadResponse.status} ${errorText}`);
+    }
+
+    const uploadData = await uploadResponse.json();
+    const uploadUrl = uploadData.upload_url;
+
+    logger.info(`[AssemblyAI] Audio uploaded, URL: ${uploadUrl}`);
+
+    // Step 2: Start transcription with speaker diarization
+    const transcriptResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: {
+        'authorization': assemblyAIKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        audio_url: uploadUrl,
+        speaker_labels: true,
+        language_code: language && language !== 'auto' ? language : undefined,
+      }),
+    });
+
+    if (!transcriptResponse.ok) {
+      const errorText = await transcriptResponse.text();
+      throw new Error(`Failed to start transcription: ${transcriptResponse.status} ${errorText}`);
+    }
+
+    const transcriptData = await transcriptResponse.json();
+    const transcriptId = transcriptData.id;
+
+    logger.info(`[AssemblyAI] Transcription started, ID: ${transcriptId}`);
+
+    // Step 3: Poll for completion
+    let status = 'queued';
+    let attempts = 0;
+    const maxAttempts = 300; // 5 minutes max (1 second intervals)
+
+    while (status !== 'completed' && status !== 'error' && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+
+      const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+        headers: {
+          'authorization': assemblyAIKey,
+        },
+      });
+
+      if (!statusResponse.ok) {
+        throw new Error(`Failed to check transcription status: ${statusResponse.status}`);
+      }
+
+      const statusData = await statusResponse.json();
+      status = statusData.status;
+
+      if (status === 'completed') {
+        // Extract segments with speaker labels
+        const segments: TranscriptionSegment[] = [];
+        if (statusData.words && Array.isArray(statusData.words)) {
+          // Group words by speaker and time
+          let currentSegment: { speaker: string; start: number; end: number; words: string[] } | null = null;
+          
+          for (const word of statusData.words) {
+            const speaker = word.speaker ? `Speaker ${word.speaker}` : 'Unknown';
+            
+            if (!currentSegment || currentSegment.speaker !== speaker || 
+                (word.start / 1000 - currentSegment.end) > 1.0) { // New segment if >1 second gap
+              // Save previous segment
+              if (currentSegment) {
+                segments.push({
+                  id: segments.length + 1,
+                  start: currentSegment.start,
+                  end: currentSegment.end,
+                  text: currentSegment.words.join(' '),
+                  speaker: currentSegment.speaker,
+                });
+              }
+              
+              // Start new segment
+              currentSegment = {
+                speaker,
+                start: word.start / 1000, // Convert from ms to seconds
+                end: word.end / 1000,
+                words: [word.text],
+              };
+            } else {
+              // Continue current segment
+              currentSegment.words.push(word.text);
+              currentSegment.end = word.end / 1000;
+            }
+          }
+          
+          // Add last segment
+          if (currentSegment) {
+            segments.push({
+              id: segments.length + 1,
+              start: currentSegment.start,
+              end: currentSegment.end,
+              text: currentSegment.words.join(' '),
+              speaker: currentSegment.speaker,
+            });
+          }
+        }
+
+        const fullText = statusData.text || '';
+        
+        logger.info(`[AssemblyAI] Transcription complete, length: ${fullText.length} characters, segments: ${segments.length}, speakers: ${new Set(segments.map(s => s.speaker)).size}`);
+
+        return {
+          text: fullText,
+          language: statusData.language_code || language || 'unknown',
+          languageProbability: 1.0,
+          segments: segments.length > 0 ? segments : undefined,
+        };
+      }
+
+      attempts++;
+    }
+
+    throw new Error(`Transcription timed out after ${attempts} seconds`);
+  } catch (error: any) {
+    logger.error(`[AssemblyAI] Transcription error: ${error.message}`, error);
+    throw error;
+  }
+}
+
+/**
  * Split audio file into chunks using FFmpeg
  * Returns array of chunk file paths
  */
@@ -2108,7 +2261,24 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       let transcriptionSegments: TranscriptionSegment[] | undefined = undefined;
 
       // Choose transcription provider
-      if (transcriptionProvider === 'openai' && process.env.OPENAI_API_KEY) {
+      if (enableSpeakerDiarization && process.env.ASSEMBLYAI_API_KEY) {
+        // Use AssemblyAI for speaker diarization
+        logger.info(`[VideoTranscription] Using AssemblyAI for transcription with speaker diarization...`);
+        try {
+          const transcriptionResult = await transcribeWithAssemblyAI(finalAudioPath!, language);
+          transcription = transcriptionResult.text || 'No transcription available';
+          detectedLanguage = transcriptionResult.language;
+          transcriptionSegments = transcriptionResult.segments;
+          logger.info(`[VideoTranscription] AssemblyAI transcription complete, length: ${transcription.length} characters, language: ${detectedLanguage}, segments: ${transcriptionSegments?.length || 0}, speakers: ${transcriptionSegments ? new Set(transcriptionSegments.map(s => s.speaker).filter(Boolean)).size : 0}`);
+        } catch (assemblyAIError: any) {
+          logger.warn(`[VideoTranscription] AssemblyAI failed: ${assemblyAIError.message}, falling back to OpenAI...`);
+          // Fallback to OpenAI if AssemblyAI fails
+          const transcriptionResult = await transcribeWithOpenAI(finalAudioPath!, language, true);
+          transcription = transcriptionResult.text || 'No transcription available';
+          detectedLanguage = transcriptionResult.language;
+          transcriptionSegments = transcriptionResult.segments;
+        }
+      } else if (transcriptionProvider === 'openai' && process.env.OPENAI_API_KEY) {
         logger.info(`[VideoTranscription] Using OpenAI Whisper API for transcription...`);
         try {
           const transcriptionResult = await transcribeWithOpenAI(finalAudioPath!, language, true);

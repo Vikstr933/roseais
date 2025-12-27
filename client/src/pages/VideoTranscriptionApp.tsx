@@ -990,6 +990,8 @@ export default function VideoTranscriptionApp() {
         audioId: extractedAudio.audioId,
         audioPath: extractedAudio.audioPath,
         scriptProvider: 'haiku', // Use Haiku by default
+        transcriptionProvider: 'openai', // Use OpenAI by default
+        enableSpeakerDiarization: enableSpeakerDiarization, // Enable speaker diarization if selected
         tone: tone,
         style: style,
         scriptLanguage: scriptLanguage,
