@@ -2229,9 +2229,21 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         });
       }
 
-      // Check file size before transcription (Whisper is memory-intensive)
+      // Final verification: Ensure file actually exists and is accessible before proceeding
       try {
+        await fs.access(finalAudioPath);
         const fileStats = await fs.stat(finalAudioPath);
+        
+        // Verify file is not empty
+        if (fileStats.size === 0) {
+          logger.error(`[VideoTranscription] Audio file is empty: ${finalAudioPath}`);
+          setCORSHeaders();
+          return res.status(400).json({
+            success: false,
+            error: 'Audio file is empty. Please upload a valid audio file.',
+          });
+        }
+        
         const fileSizeMB = fileStats.size / (1024 * 1024);
         
         if (fileSizeMB > MAX_TRANSCRIPTION_FILE_SIZE_MB) {
@@ -2246,10 +2258,15 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
           });
         }
         
-        logger.info(`[VideoTranscription] File size check passed: ${fileSizeMB.toFixed(2)}MB (max: ${MAX_TRANSCRIPTION_FILE_SIZE_MB}MB)`);
-      } catch (fileStatsError) {
-        logger.warn(`[VideoTranscription] Could not check file size: ${fileStatsError}`);
-        // Continue anyway - file might still exist
+        logger.info(`[VideoTranscription] ✅ File verified: ${fileSizeMB.toFixed(2)}MB, accessible at: ${finalAudioPath}`);
+      } catch (fileCheckError: any) {
+        logger.error(`[VideoTranscription] ❌ File verification failed: ${fileCheckError.message}, path: ${finalAudioPath}`);
+        setCORSHeaders();
+        return res.status(404).json({
+          success: false,
+          error: `Audio file not found or inaccessible: ${finalAudioPath}. Please upload audio again.`,
+          details: fileCheckError.message,
+        });
       }
     } 
     // Legacy flow: Extract and transcribe in one step
@@ -2355,13 +2372,44 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       let audioPathToUse = finalAudioPath!;
       let preprocessedAudioPath: string | null = null;
       
+      // Verify original file exists before preprocessing
+      try {
+        await fs.access(finalAudioPath!);
+        logger.info(`[VideoTranscription] ✅ Verified original file exists before preprocessing: ${finalAudioPath}`);
+      } catch (preprocessCheckError: any) {
+        logger.error(`[VideoTranscription] ❌ Original file missing before preprocessing: ${preprocessCheckError.message}`);
+        throw new Error(`Audio file not found before preprocessing: ${finalAudioPath}. Please upload audio again.`);
+      }
+      
       if (enableAudioPreprocessing) {
         logger.info(`[VideoTranscription] Preprocessing audio before transcription...`);
         preprocessedAudioPath = await preprocessAudio(finalAudioPath!, true, true);
         audioPathToUse = preprocessedAudioPath;
+        
+        // Verify preprocessed file exists
+        try {
+          await fs.access(audioPathToUse);
+          logger.info(`[VideoTranscription] ✅ Verified preprocessed file exists: ${audioPathToUse}`);
+        } catch (preprocessedCheckError: any) {
+          logger.error(`[VideoTranscription] ❌ Preprocessed file missing: ${preprocessedCheckError.message}`);
+          throw new Error(`Preprocessed audio file not found: ${audioPathToUse}`);
+        }
       }
 
       try {
+        // Final verification right before transcription starts
+        try {
+          await fs.access(audioPathToUse);
+          const stats = await fs.stat(audioPathToUse);
+          if (stats.size === 0) {
+            throw new Error(`Audio file is empty: ${audioPathToUse}`);
+          }
+          logger.info(`[VideoTranscription] ✅ Final verification passed: file exists and is ${(stats.size / 1024 / 1024).toFixed(2)}MB`);
+        } catch (finalCheckError: any) {
+          logger.error(`[VideoTranscription] ❌ Final file verification failed: ${finalCheckError.message}`);
+          throw new Error(`Audio file not accessible before transcription: ${audioPathToUse}. Error: ${finalCheckError.message}`);
+        }
+        
         // Choose transcription provider
         if (enableSpeakerDiarization && process.env.ASSEMBLYAI_API_KEY) {
         // Use AssemblyAI for speaker diarization

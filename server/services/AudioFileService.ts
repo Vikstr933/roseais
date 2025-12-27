@@ -83,7 +83,7 @@ export class AudioFileService {
   }
 
   /**
-   * Check if audio file exists
+   * Check if audio file exists and is readable
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
@@ -92,12 +92,24 @@ export class AudioFileService {
         ? path.normalize(filePath)
         : path.resolve(filePath);
       
-      await fs.access(normalizedPath);
+      // Check if file exists and is readable
+      await fs.access(normalizedPath, fs.constants.F_OK | fs.constants.R_OK);
+      
+      // Also verify it's actually a file (not a directory) and has size > 0
+      const stats = await fs.stat(normalizedPath);
+      if (!stats.isFile() || stats.size === 0) {
+        return false;
+      }
+      
       return true;
     } catch {
       // If access fails, also try the original path (in case normalization changed it incorrectly)
       try {
-        await fs.access(filePath);
+        await fs.access(filePath, fs.constants.F_OK | fs.constants.R_OK);
+        const stats = await fs.stat(filePath);
+        if (!stats.isFile() || stats.size === 0) {
+          return false;
+        }
         return true;
       } catch {
         return false;
