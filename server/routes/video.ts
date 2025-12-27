@@ -1638,7 +1638,18 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         }
       }
 
-      if (!finalAudioPath || !(await audioFileService.fileExists(finalAudioPath))) {
+      // Final verification that file exists
+      if (finalAudioPath) {
+        try {
+          await fs.access(finalAudioPath);
+          logger.info(`[VideoTranscription] ✅ Verified audio file exists: ${finalAudioPath}`);
+        } catch {
+          logger.warn(`[VideoTranscription] File path was set but doesn't exist: ${finalAudioPath}`);
+          finalAudioPath = null; // Reset to force search below
+        }
+      }
+      
+      if (!finalAudioPath) {
         // Log all files in audio directory for debugging
         try {
           const audioDir = audioFileService.getAudioDirectory();
@@ -1659,15 +1670,40 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
           }
           
           if (!directPathCheck) {
-            logger.error(`[VideoTranscription] ❌ Audio file not found. AudioId: ${audioId}, AudioPath: ${audioPath}`);
-            logger.error(`[VideoTranscription] Tried paths: ${pathCandidates.join(', ')}`);
-            logger.error(`[VideoTranscription] Available files in ${audioDir}: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
+            logger.error(`[VideoTranscription] ❌ Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}`);
+            logger.error(`[VideoTranscription] Tried paths: ${pathCandidates.length > 0 ? pathCandidates.join(', ') : 'none'}`);
+            logger.error(`[VideoTranscription] Audio directory: ${audioDir}`);
+            logger.error(`[VideoTranscription] Available files (${files.length}): ${files.slice(0, 20).join(', ')}${files.length > 20 ? ` ... and ${files.length - 20} more` : ''}`);
             
-            setCORSHeaders();
-            return res.status(404).json({
-              success: false,
-              error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
-            });
+            // Try one more time: list all files and check for exact match or partial match
+            if (audioId) {
+              const matchingFiles = files.filter(f => {
+                const fileWithoutExt = path.parse(f).name;
+                return fileWithoutExt === audioId || fileWithoutExt.includes(audioId) || audioId.includes(fileWithoutExt);
+              });
+              if (matchingFiles.length > 0) {
+                logger.info(`[VideoTranscription] Found potential matches: ${matchingFiles.join(', ')}`);
+                for (const match of matchingFiles) {
+                  const matchPath = path.join(audioDir, match);
+                  try {
+                    await fs.access(matchPath);
+                    finalAudioPath = matchPath;
+                    logger.info(`[VideoTranscription] ✅ Found audio file by filename match: ${matchPath}`);
+                    break;
+                  } catch {
+                    // Continue
+                  }
+                }
+              }
+            }
+            
+            if (!finalAudioPath) {
+              setCORSHeaders();
+              return res.status(404).json({
+                success: false,
+                error: `Audio file not found. AudioId: ${audioId || 'none'}, AudioPath: ${audioPath || 'none'}. Please upload audio again.`,
+              });
+            }
           }
         } catch (dirError) {
           logger.error(`[VideoTranscription] Failed to list audio directory: ${dirError}`);
