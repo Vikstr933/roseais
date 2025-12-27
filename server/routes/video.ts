@@ -261,7 +261,7 @@ async function preprocessAudio(
 
   // Verify input file exists and is readable before preprocessing
   try {
-    await fs.access(audioFilePath, fs.constants.F_OK | fs.constants.R_OK);
+    await fs.access(audioFilePath);
     const stats = await fs.stat(audioFilePath);
     if (!stats.isFile() || stats.size === 0) {
       throw new Error(`Audio file is not a valid file or is empty: ${audioFilePath}`);
