@@ -67,10 +67,25 @@ const openai = new OpenAI({
  * More reliable and memory-efficient than local Whisper
  * Note: OpenAI Whisper API has a 25MB file size limit
  */
+interface TranscriptionSegment {
+  id: number;
+  start: number;
+  end: number;
+  text: string;
+}
+
+interface TranscriptionWithTimestamps {
+  text: string;
+  language: string;
+  languageProbability: number;
+  segments?: TranscriptionSegment[];
+}
+
 async function transcribeWithOpenAI(
   audioFilePath: string,
-  language?: string
-): Promise<{ text: string; language: string; languageProbability: number }> {
+  language?: string,
+  includeTimestamps: boolean = true
+): Promise<TranscriptionWithTimestamps> {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not configured. Please set it in environment variables.');
   }
@@ -100,15 +115,31 @@ async function transcribeWithOpenAI(
       file: fileStream,
       model: 'whisper-1',
       language: language && language !== 'auto' ? language : undefined,
-      response_format: 'verbose_json', // Get language detection info
+      response_format: 'verbose_json', // Get language detection info and segments
+      timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
     });
 
     logger.info(`[OpenAI Whisper] Transcription complete, text length: ${transcription.text.length} characters`);
+
+    // Extract segments if available
+    const segments: TranscriptionSegment[] = [];
+    if (includeTimestamps && (transcription as any).segments) {
+      (transcription as any).segments.forEach((seg: any, index: number) => {
+        segments.push({
+          id: index + 1,
+          start: seg.start,
+          end: seg.end,
+          text: seg.text.trim(),
+        });
+      });
+      logger.info(`[OpenAI Whisper] Extracted ${segments.length} timestamp segments`);
+    }
 
     return {
       text: transcription.text || '',
       language: (transcription as any).language || language || 'unknown',
       languageProbability: 1.0, // OpenAI doesn't provide probability, assume 1.0
+      segments: segments.length > 0 ? segments : undefined,
     };
   } catch (error: any) {
     logger.error(`[OpenAI Whisper] Transcription error: ${error.message}`, error);
@@ -801,6 +832,54 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
         logger.warn(`[VideoTranscription] Failed to cleanup temp directory: ${cleanupError}`);
       }
     }
+}
+
+/**
+ * Convert timestamp segments to SRT subtitle format
+ */
+function segmentsToSRT(segments: TranscriptionSegment[]): string {
+  return segments.map((seg, index) => {
+    const startTime = formatSRTTime(seg.start);
+    const endTime = formatSRTTime(seg.end);
+    return `${index + 1}\n${startTime} --> ${endTime}\n${seg.text}\n`;
+  }).join('\n');
+}
+
+/**
+ * Convert timestamp segments to VTT subtitle format
+ */
+function segmentsToVTT(segments: TranscriptionSegment[]): string {
+  let vtt = 'WEBVTT\n\n';
+  segments.forEach((seg) => {
+    const startTime = formatVTTTime(seg.start);
+    const endTime = formatVTTTime(seg.end);
+    vtt += `${startTime} --> ${endTime}\n${seg.text}\n\n`;
+  });
+  return vtt;
+}
+
+/**
+ * Format time in seconds to SRT format (HH:MM:SS,mmm)
+ */
+function formatSRTTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const milliseconds = Math.floor((seconds % 1) * 1000);
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${milliseconds.toString().padStart(3, '0')}`;
+}
+
+/**
+ * Format time in seconds to VTT format (HH:MM:SS.mmm)
+ */
+function formatVTTTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const milliseconds = Math.floor((seconds % 1) * 1000);
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 }
 
 /**
@@ -1863,14 +1942,17 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       let transcription: string;
       let detectedLanguage: string = language || 'unknown';
       
+      let transcriptionSegments: TranscriptionSegment[] | undefined = undefined;
+
       // Choose transcription provider
       if (transcriptionProvider === 'openai' && process.env.OPENAI_API_KEY) {
         logger.info(`[VideoTranscription] Using OpenAI Whisper API for transcription...`);
         try {
-          const transcriptionResult = await transcribeWithOpenAI(finalAudioPath!, language);
+          const transcriptionResult = await transcribeWithOpenAI(finalAudioPath!, language, true);
           transcription = transcriptionResult.text || 'No transcription available';
           detectedLanguage = transcriptionResult.language;
-          logger.info(`[VideoTranscription] OpenAI transcription complete, length: ${transcription.length} characters, language: ${detectedLanguage}`);
+          transcriptionSegments = transcriptionResult.segments;
+          logger.info(`[VideoTranscription] OpenAI transcription complete, length: ${transcription.length} characters, language: ${detectedLanguage}, segments: ${transcriptionSegments?.length || 0}`);
         } catch (openaiError: any) {
           logger.warn(`[VideoTranscription] OpenAI Whisper failed: ${openaiError.message}, falling back to local Whisper...`);
           // Fallback to local Whisper if OpenAI fails
@@ -1910,6 +1992,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         videoTitle,
         videoDuration,
         transcriptionProvider: transcriptionProvider === 'openai' ? 'openai' : 'local',
+        segments: transcriptionSegments,
       };
     })();
 
@@ -1955,6 +2038,54 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to transcribe audio',
+    });
+  }
+});
+
+/**
+ * GET /api/video/export-subtitles/:audioId
+ * Export transcription segments as SRT or VTT subtitle files
+ */
+router.get('/export-subtitles/:audioId', authenticateUser, async (req: Request, res: Response) => {
+  const setCORSHeaders = () => {
+    const origin = req.headers.origin;
+    if (origin) {
+      if (origin.includes('localhost') || origin.includes('vercel.app') || origin.includes('onrender.com')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+    }
+  };
+
+  try {
+    const { audioId } = req.params;
+    const { format = 'srt' } = req.query; // 'srt' or 'vtt'
+
+    if (!audioId) {
+      setCORSHeaders();
+      return res.status(400).json({
+        success: false,
+        error: 'Audio ID is required',
+      });
+    }
+
+    // For now, this endpoint requires segments to be passed or stored
+    // In a full implementation, you'd store segments in DB or cache
+    // For MVP, we'll return an error suggesting the user use the transcript endpoint first
+    setCORSHeaders();
+    return res.status(501).json({
+      success: false,
+      error: 'Subtitle export not yet implemented. Please use the transcription endpoint which now returns segments.',
+      message: 'Subtitle export will be available in a future update. For now, segments are included in the transcription response.',
+    });
+  } catch (error: any) {
+    logger.error(`[VideoTranscription] Export subtitle error: ${error.message}`, error);
+    setCORSHeaders();
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to export subtitles',
     });
   }
 });
