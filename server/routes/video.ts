@@ -106,7 +106,7 @@ async function transcribeWithAssemblyAI(
       headers: {
         'authorization': assemblyAIKey,
       },
-      body: Buffer.from(audioBuffer), // Convert to Buffer for fetch
+      body: new Uint8Array(audioBuffer), // Convert Buffer to Uint8Array for fetch
     });
 
     if (!uploadResponse.ok) {
