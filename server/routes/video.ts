@@ -2000,6 +2000,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       scriptProvider = 'haiku',
       transcriptionProvider = 'openai', // 'openai', 'local', or 'assemblyai' (default to openai for better reliability)
       enableSpeakerDiarization = false, // Enable speaker diarization (requires AssemblyAI)
+      enableAudioPreprocessing = false, // Enable audio preprocessing (noise reduction & normalization)
       tone, // Optional: professional, conversational, dramatic, educational, casual, energetic
       style, // Optional: detailed, concise, storytelling, analytical
       scriptLanguage = 'en' // Optional: Language code for script output (default: 'en' for English)
