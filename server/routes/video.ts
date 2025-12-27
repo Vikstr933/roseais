@@ -81,6 +81,100 @@ interface TranscriptionWithTimestamps {
   segments?: TranscriptionSegment[];
 }
 
+/**
+ * Split audio file into chunks using FFmpeg
+ * Returns array of chunk file paths
+ */
+async function splitAudioFile(
+  audioFilePath: string,
+  maxChunkSizeMB: number = 24 // Slightly under 25MB to ensure safety margin
+): Promise<string[]> {
+  const stats = await fs.stat(audioFilePath);
+  const fileSizeMB = stats.size / (1024 * 1024);
+  
+  // If file is small enough, return original file
+  if (fileSizeMB <= maxChunkSizeMB) {
+    return [audioFilePath];
+  }
+
+  logger.info(`[AudioChunking] File size (${fileSizeMB.toFixed(2)}MB) exceeds limit (${maxChunkSizeMB}MB), splitting into chunks...`);
+
+  // Check if FFmpeg is available
+  try {
+    await execAsync('ffmpeg -version', { timeout: 5000 });
+  } catch {
+    throw new Error('FFmpeg is required for processing large audio files but is not installed or not in PATH. Please install FFmpeg to use this feature.');
+  }
+
+  // Get audio duration to calculate chunk duration
+  const durationOutput = await execAsync(`ffprobe -i "${audioFilePath}" -show_entries format=duration -v quiet -of csv="p=0"`, {
+    timeout: 30000,
+  });
+  const totalDuration = parseFloat(durationOutput.stdout.trim());
+  
+  if (isNaN(totalDuration) || totalDuration <= 0) {
+    throw new Error('Could not determine audio file duration');
+  }
+
+  // Calculate chunk duration (assume average bitrate, estimate conservatively)
+  // Use ~20MB chunks to leave safety margin
+  const chunkDurationSeconds = Math.floor((totalDuration * (maxChunkSizeMB - 1)) / fileSizeMB);
+  const chunkCount = Math.ceil(totalDuration / chunkDurationSeconds);
+  
+  logger.info(`[AudioChunking] Splitting into ${chunkCount} chunks of ~${chunkDurationSeconds}s each`);
+
+  const chunkPaths: string[] = [];
+  const chunkDir = path.join(path.dirname(audioFilePath), `chunks_${Date.now()}`);
+  await fs.mkdir(chunkDir, { recursive: true });
+
+  try {
+    const baseName = path.basename(audioFilePath, path.extname(audioFilePath));
+    const ext = path.extname(audioFilePath);
+
+    // Split audio file into chunks
+    for (let i = 0; i < chunkCount; i++) {
+      const startTime = i * chunkDurationSeconds;
+      const chunkPath = path.join(chunkDir, `${baseName}_chunk_${i + 1}${ext}`);
+      
+      // Use FFmpeg to extract chunk
+      const command = `ffmpeg -i "${audioFilePath}" -ss ${startTime} -t ${chunkDurationSeconds} -c copy "${chunkPath}" -y -loglevel error`;
+      await execAsync(command, {
+        timeout: 60000, // 1 minute per chunk
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      
+      chunkPaths.push(chunkPath);
+      logger.info(`[AudioChunking] Created chunk ${i + 1}/${chunkCount}: ${chunkPath}`);
+    }
+
+    return chunkPaths;
+  } catch (error: any) {
+    // Cleanup on error
+    for (const chunkPath of chunkPaths) {
+      await fs.unlink(chunkPath).catch(() => {});
+    }
+    await fs.rmdir(chunkDir).catch(() => {});
+    throw new Error(`Failed to split audio file: ${error.message}`);
+  }
+}
+
+/**
+ * Cleanup chunk files after processing
+ */
+async function cleanupChunks(chunkPaths: string[]): Promise<void> {
+  if (chunkPaths.length <= 1) return; // Original file, don't delete
+  
+  const chunkDir = path.dirname(chunkPaths[0]);
+  try {
+    for (const chunkPath of chunkPaths) {
+      await fs.unlink(chunkPath).catch(() => {});
+    }
+    await fs.rmdir(chunkDir).catch(() => {});
+  } catch (error) {
+    logger.warn(`[AudioChunking] Failed to cleanup chunks: ${error}`);
+  }
+}
+
 async function transcribeWithOpenAI(
   audioFilePath: string,
   language?: string,
@@ -97,50 +191,115 @@ async function transcribeWithOpenAI(
     const stats = await fs.stat(audioFilePath);
     const fileSizeMB = stats.size / (1024 * 1024);
     
-    if (fileSizeMB > 25) {
-      throw new Error(`File size (${fileSizeMB.toFixed(2)}MB) exceeds OpenAI Whisper API limit of 25MB`);
-    }
-
-    logger.info(`[OpenAI Whisper] File size: ${fileSizeMB.toFixed(2)}MB`);
-
-    // Create a readable stream for OpenAI API
-    // OpenAI SDK accepts fs.ReadStream directly
-    const fileStream = fsSync.createReadStream(audioFilePath);
-
-    logger.info(`[OpenAI Whisper] Calling OpenAI API...`);
+    // Split into chunks if necessary
+    const chunkPaths = await splitAudioFile(audioFilePath, 24); // Use 24MB chunks for safety margin
     
-    // Call OpenAI Whisper API
-    // The SDK accepts a stream directly and will handle the file upload
-    const transcription = await openai.audio.transcriptions.create({
-      file: fileStream,
-      model: 'whisper-1',
-      language: language && language !== 'auto' ? language : undefined,
-      response_format: 'verbose_json', // Get language detection info and segments
-      timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
-    });
+    try {
+      if (chunkPaths.length === 1) {
+        // Single file - process normally
+        logger.info(`[OpenAI Whisper] File size: ${fileSizeMB.toFixed(2)}MB`);
 
-    logger.info(`[OpenAI Whisper] Transcription complete, text length: ${transcription.text.length} characters`);
-
-    // Extract segments if available
-    const segments: TranscriptionSegment[] = [];
-    if (includeTimestamps && (transcription as any).segments) {
-      (transcription as any).segments.forEach((seg: any, index: number) => {
-        segments.push({
-          id: index + 1,
-          start: seg.start,
-          end: seg.end,
-          text: seg.text.trim(),
+        const fileStream = fsSync.createReadStream(chunkPaths[0]);
+        logger.info(`[OpenAI Whisper] Calling OpenAI API...`);
+        
+        const transcription = await openai.audio.transcriptions.create({
+          file: fileStream,
+          model: 'whisper-1',
+          language: language && language !== 'auto' ? language : undefined,
+          response_format: 'verbose_json',
+          timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
         });
-      });
-      logger.info(`[OpenAI Whisper] Extracted ${segments.length} timestamp segments`);
-    }
 
-    return {
-      text: transcription.text || '',
-      language: (transcription as any).language || language || 'unknown',
-      languageProbability: 1.0, // OpenAI doesn't provide probability, assume 1.0
-      segments: segments.length > 0 ? segments : undefined,
-    };
+        logger.info(`[OpenAI Whisper] Transcription complete, text length: ${transcription.text.length} characters`);
+
+        // Extract segments if available
+        const segments: TranscriptionSegment[] = [];
+        if (includeTimestamps && (transcription as any).segments) {
+          (transcription as any).segments.forEach((seg: any, index: number) => {
+            segments.push({
+              id: index + 1,
+              start: seg.start,
+              end: seg.end,
+              text: seg.text.trim(),
+            });
+          });
+          logger.info(`[OpenAI Whisper] Extracted ${segments.length} timestamp segments`);
+        }
+
+        return {
+          text: transcription.text || '',
+          language: (transcription as any).language || language || 'unknown',
+          languageProbability: 1.0,
+          segments: segments.length > 0 ? segments : undefined,
+        };
+      } else {
+        // Multiple chunks - process each and combine
+        logger.info(`[OpenAI Whisper] Processing ${chunkPaths.length} chunks...`);
+        
+        const allTexts: string[] = [];
+        const allSegments: TranscriptionSegment[] = [];
+        let detectedLanguage: string = language || 'unknown';
+        let segmentOffset = 0;
+        let timeOffset = 0;
+
+        for (let i = 0; i < chunkPaths.length; i++) {
+          logger.info(`[OpenAI Whisper] Processing chunk ${i + 1}/${chunkPaths.length}...`);
+          
+          const chunkStream = fsSync.createReadStream(chunkPaths[i]);
+          const chunkTranscription = await openai.audio.transcriptions.create({
+            file: chunkStream,
+            model: 'whisper-1',
+            language: language && language !== 'auto' ? language : undefined,
+            response_format: 'verbose_json',
+            timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
+          });
+
+          allTexts.push(chunkTranscription.text);
+          detectedLanguage = (chunkTranscription as any).language || detectedLanguage;
+
+          // Add segments with adjusted timestamps
+          if (includeTimestamps && (chunkTranscription as any).segments) {
+            (chunkTranscription as any).segments.forEach((seg: any) => {
+              allSegments.push({
+                id: allSegments.length + 1,
+                start: seg.start + timeOffset,
+                end: seg.end + timeOffset,
+                text: seg.text.trim(),
+              });
+            });
+          }
+
+          // Get chunk duration for time offset (estimate from last segment or use chunk size)
+          if ((chunkTranscription as any).segments && (chunkTranscription as any).segments.length > 0) {
+            const lastSegment = (chunkTranscription as any).segments[(chunkTranscription as any).segments.length - 1];
+            timeOffset = lastSegment.end + timeOffset;
+          } else {
+            // Fallback: estimate from file size (rough approximation)
+            const chunkStats = await fs.stat(chunkPaths[i]);
+            const chunkSizeMB = chunkStats.size / (1024 * 1024);
+            timeOffset += (fileSizeMB > 0) ? (totalDuration * chunkSizeMB) / fileSizeMB : 0;
+          }
+        }
+
+        // Cleanup chunks
+        await cleanupChunks(chunkPaths);
+
+        const combinedText = allTexts.join(' ');
+        logger.info(`[OpenAI Whisper] Combined transcription complete, length: ${combinedText.length} characters, segments: ${allSegments.length}`);
+
+        return {
+          text: combinedText,
+          language: detectedLanguage,
+          languageProbability: 1.0,
+          segments: allSegments.length > 0 ? allSegments : undefined,
+        };
+      }
+    } finally {
+      // Cleanup chunks (if not original file)
+      if (chunkPaths.length > 1) {
+        await cleanupChunks(chunkPaths);
+      }
+    }
   } catch (error: any) {
     logger.error(`[OpenAI Whisper] Transcription error: ${error.message}`, error);
     
@@ -156,8 +315,8 @@ async function transcribeWithOpenAI(
     // Provide more helpful error messages
     if (error.message?.includes('API key')) {
       throw new Error('OpenAI API key is invalid or not configured. Please check OPENAI_API_KEY environment variable.');
-    } else if (error.message?.includes('25MB') || (fileSizeMB && fileSizeMB > 25)) {
-      throw new Error(`File is too large for OpenAI Whisper API. Maximum size is 25MB, but file is ${fileSizeMB?.toFixed(2) || 'unknown'}MB.`);
+    } else if (error.message?.includes('FFmpeg')) {
+      throw error; // Pass through FFmpeg errors
     } else if (error.status === 429) {
       throw new Error('OpenAI API rate limit exceeded. Please try again later.');
     } else if (error.status === 401) {
