@@ -259,6 +259,19 @@ async function preprocessAudio(
 
   logger.info(`[AudioPreprocessing] Preprocessing audio: ${audioFilePath} (noise reduction: ${enableNoiseReduction}, normalization: ${enableNormalization})`);
 
+  // Verify input file exists and is readable before preprocessing
+  try {
+    await fs.access(audioFilePath, fs.constants.F_OK | fs.constants.R_OK);
+    const stats = await fs.stat(audioFilePath);
+    if (!stats.isFile() || stats.size === 0) {
+      throw new Error(`Audio file is not a valid file or is empty: ${audioFilePath}`);
+    }
+    logger.info(`[AudioPreprocessing] ✅ Input file verified: ${(stats.size / 1024 / 1024).toFixed(2)}MB`);
+  } catch (accessError: any) {
+    logger.error(`[AudioPreprocessing] ❌ Input file not accessible: ${accessError.message}`);
+    throw new Error(`Cannot access audio file for preprocessing: ${audioFilePath}. Error: ${accessError.message}`);
+  }
+
   try {
     const preprocessedPath = path.join(
       path.dirname(audioFilePath),

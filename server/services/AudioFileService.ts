@@ -92,8 +92,8 @@ export class AudioFileService {
         ? path.normalize(filePath)
         : path.resolve(filePath);
       
-      // Check if file exists and is readable
-      await fs.access(normalizedPath, fs.constants.F_OK | fs.constants.R_OK);
+      // Check if file exists
+      await fs.access(normalizedPath);
       
       // Also verify it's actually a file (not a directory) and has size > 0
       const stats = await fs.stat(normalizedPath);
@@ -105,7 +105,7 @@ export class AudioFileService {
     } catch {
       // If access fails, also try the original path (in case normalization changed it incorrectly)
       try {
-        await fs.access(filePath, fs.constants.F_OK | fs.constants.R_OK);
+        await fs.access(filePath);
         const stats = await fs.stat(filePath);
         if (!stats.isFile() || stats.size === 0) {
           return false;
