@@ -61,10 +61,9 @@ export default function VideoTranscriptionApp() {
   const [progress, setProgress] = useState<string>('');
   const [transcriptionStage, setTranscriptionStage] = useState<'idle' | 'uploading' | 'transcribing' | 'generating'>('idle');
   
-  // Transcription settings
-  const [tone, setTone] = useState<string>('conversational');
-  const [style, setStyle] = useState<string>('detailed');
-  const [showSettings, setShowSettings] = useState(false);
+  // Transcription settings - initialized as empty to require user selection
+  const [tone, setTone] = useState<string>('');
+  const [style, setStyle] = useState<string>('');
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,13 +158,16 @@ export default function VideoTranscriptionApp() {
           method: 'audio_extraction',
         };
         
-        setExtractedAudio(extractionResult);
-        setProgress('');
-        
-        toast({
-          title: 'Audio Uploaded!',
-          description: 'Audio file uploaded successfully. Click "Transcribe" to continue.',
-        });
+      setExtractedAudio(extractionResult);
+      setProgress('');
+      // Reset tone and style to require user selection
+      setTone('');
+      setStyle('');
+      
+      toast({
+        title: 'Audio Uploaded!',
+        description: 'Please configure transcription settings and then start transcription.',
+      });
       } else {
         throw new Error(data.error || 'Failed to upload audio');
       }
@@ -187,6 +189,16 @@ export default function VideoTranscriptionApp() {
       toast({
         title: 'Error',
         description: 'Please extract audio first',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate that tone and style are selected
+    if (!tone || !style) {
+      toast({
+        title: 'Settings Required',
+        description: 'Please select both tone and style before starting transcription',
         variant: 'destructive',
       });
       return;
@@ -595,55 +607,45 @@ export default function VideoTranscriptionApp() {
                 className="space-y-4"
               >
                 {/* Audio Ready Card */}
-                <div className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="h-10 w-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
-                          <FileText className="h-5 w-5 text-white" />
-                        </div>
-                        <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                <div className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="h-10 w-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                        <FileText className="h-5 w-5 text-white" />
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-green-900">Audio Ready for Transcription</p>
-                        {extractedAudio.videoTitle && (
-                          <p className="text-xs text-green-700 mt-0.5">
-                            {extractedAudio.videoTitle}
-                            {extractedAudio.videoDuration && ` • ${Math.round(extractedAudio.videoDuration / 60)} min`}
-                          </p>
-                        )}
-                      </div>
+                      <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
                     </div>
-                    <Button
-                      onClick={() => setShowSettings(!showSettings)}
-                      variant="outline"
-                      size="sm"
-                      className="hover:bg-green-100"
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      {showSettings ? 'Hide' : 'Settings'}
-                    </Button>
+                    <div>
+                      <p className="text-sm font-semibold text-green-900">Audio Ready for Transcription</p>
+                      {extractedAudio.videoTitle && (
+                        <p className="text-xs text-green-700 mt-0.5">
+                          {extractedAudio.videoTitle}
+                          {extractedAudio.videoDuration && ` • ${Math.round(extractedAudio.videoDuration / 60)} min`}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Transcription Settings Panel */}
-                {showSettings && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="card-elevated p-6 space-y-6"
-                  >
-                    <div className="flex items-center gap-2 mb-4">
-                      <Settings className="h-5 w-5 text-purple-600" />
+                {/* Transcription Settings Panel - Always shown and required */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="card-elevated p-6 space-y-6"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Settings className="h-5 w-5 text-purple-600" />
+                    <div>
                       <h3 className="text-lg font-semibold text-foreground">Transcription Settings</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Please select tone and style before starting transcription</p>
                     </div>
+                  </div>
 
                     {/* Tone Selection */}
                     <div className="space-y-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <Waves className="h-4 w-4 text-purple-600" />
-                        Tone
+                        Tone <span className="text-red-500">*</span>
                       </label>
                       <div className="grid grid-cols-3 gap-3">
                         {[
@@ -681,7 +683,7 @@ export default function VideoTranscriptionApp() {
                     <div className="space-y-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <Brain className="h-4 w-4 text-purple-600" />
-                        Style
+                        Style <span className="text-red-500">*</span>
                       </label>
                       <div className="grid grid-cols-2 gap-3">
                         {[
@@ -713,31 +715,26 @@ export default function VideoTranscriptionApp() {
                       </div>
                     </div>
 
-                    {/* Start Transcription Button */}
-                    <Button
-                      onClick={handleTranscribe}
-                      disabled={isTranscribing}
-                      size="lg"
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 h-12"
-                    >
-                      <Mic className="h-5 w-5 mr-2" />
-                      Start Transcription
-                    </Button>
+                    {/* Start Transcription Button - Disabled until tone and style are selected */}
+                    <div className="pt-2">
+                      <Button
+                        onClick={handleTranscribe}
+                        disabled={isTranscribing || !tone || !style}
+                        size="lg"
+                        className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Mic className="h-5 w-5 mr-2" />
+                        {!tone || !style 
+                          ? 'Please select tone and style' 
+                          : 'Start Transcription'}
+                      </Button>
+                      {(!tone || !style) && (
+                        <p className="text-xs text-muted-foreground mt-2 text-center">
+                          You must select both tone and style to continue
+                        </p>
+                      )}
+                    </div>
                   </motion.div>
-                )}
-
-                {/* Start Button (when settings are hidden) */}
-                {!showSettings && (
-                  <Button
-                    onClick={handleTranscribe}
-                    disabled={isTranscribing}
-                    size="lg"
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 h-12"
-                  >
-                    <Mic className="h-5 w-5 mr-2" />
-                    Start Transcription
-                  </Button>
-                )}
               </motion.div>
             )}
           </div>
