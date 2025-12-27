@@ -432,6 +432,114 @@ async function cleanupChunks(chunkPaths: string[]): Promise<void> {
   }
 }
 
+/**
+ * Check if an error is retryable (transient connection errors)
+ */
+function isRetryableError(error: any): boolean {
+  if (!error) return false;
+  
+  const errorMessage = error.message || error.toString() || '';
+  const errorCode = error.code || '';
+  const errorType = error.type || '';
+  const cause = error.cause;
+  
+  // Check for connection-related error codes
+  const retryableCodes = [
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ECONNREFUSED',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EPIPE',
+    'ESOCKETTIMEDOUT',
+  ];
+  
+  // Check for connection-related error messages
+  const retryableMessages = [
+    'Connection error',
+    'Connection reset',
+    'Connection timeout',
+    'read ECONNRESET',
+    'socket hang up',
+    'network error',
+    'fetch failed',
+  ];
+  
+  // Check error code
+  if (retryableCodes.some(code => errorCode.includes(code) || errorMessage.includes(code))) {
+    return true;
+  }
+  
+  // Check error message
+  if (retryableMessages.some(msg => errorMessage.toLowerCase().includes(msg.toLowerCase()))) {
+    return true;
+  }
+  
+  // Check error type (for OpenAI SDK errors)
+  if (errorType === 'system' || errorType === 'connection_error') {
+    return true;
+  }
+  
+  // Check nested cause
+  if (cause && typeof cause === 'object') {
+    return isRetryableError(cause);
+  }
+  
+  // Rate limit errors (429) are retryable but with longer backoff
+  if (error.status === 429) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Retry an OpenAI API call with exponential backoff
+ */
+async function retryOpenAICall<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      
+      // If not retryable, throw immediately
+      if (!isRetryableError(error)) {
+        throw error;
+      }
+      
+      // If this was the last attempt, break
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      // Calculate exponential backoff delay
+      // For rate limits (429), use longer delays
+      const baseDelay = error.status === 429 ? 5000 : initialDelay;
+      const delay = baseDelay * Math.pow(2, attempt);
+      
+      logger.warn(
+        `[OpenAI Whisper] ${operationName} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${error.message || error.code || 'Unknown error'}. Retrying in ${delay}ms...`
+      );
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  // All retries exhausted
+  logger.error(
+    `[OpenAI Whisper] ${operationName} failed after ${maxRetries + 1} attempts: ${lastError?.message || lastError?.code || 'Unknown error'}`
+  );
+  throw lastError;
+}
+
 async function transcribeWithOpenAI(
   audioFilePath: string,
   language?: string,
@@ -456,16 +564,23 @@ async function transcribeWithOpenAI(
         // Single file - process normally
         logger.info(`[OpenAI Whisper] File size: ${fileSizeMB.toFixed(2)}MB`);
 
-        const fileStream = fsSync.createReadStream(chunkPaths[0]);
         logger.info(`[OpenAI Whisper] Calling OpenAI API...`);
         
-        const transcription = await openai.audio.transcriptions.create({
-          file: fileStream,
-          model: 'whisper-1',
-          language: language && language !== 'auto' ? language : undefined,
-          response_format: 'verbose_json',
-          timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
-        });
+        const transcription = await retryOpenAICall(
+          async () => {
+            const fileStream = fsSync.createReadStream(chunkPaths[0]);
+            return await openai.audio.transcriptions.create({
+              file: fileStream,
+              model: 'whisper-1',
+              language: language && language !== 'auto' ? language : undefined,
+              response_format: 'verbose_json',
+              timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
+            });
+          },
+          'Single file transcription',
+          3, // maxRetries
+          2000 // initialDelay: 2s, 4s, 8s
+        );
 
         logger.info(`[OpenAI Whisper] Transcription complete, text length: ${transcription.text.length} characters`);
 
@@ -502,14 +617,21 @@ async function transcribeWithOpenAI(
         for (let i = 0; i < chunkPaths.length; i++) {
           logger.info(`[OpenAI Whisper] Processing chunk ${i + 1}/${chunkPaths.length}...`);
           
-          const chunkStream = fsSync.createReadStream(chunkPaths[i]);
-          const chunkTranscription = await openai.audio.transcriptions.create({
-            file: chunkStream,
-            model: 'whisper-1',
-            language: language && language !== 'auto' ? language : undefined,
-            response_format: 'verbose_json',
-            timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
-          });
+          const chunkTranscription = await retryOpenAICall(
+            async () => {
+              const chunkStream = fsSync.createReadStream(chunkPaths[i]);
+              return await openai.audio.transcriptions.create({
+                file: chunkStream,
+                model: 'whisper-1',
+                language: language && language !== 'auto' ? language : undefined,
+                response_format: 'verbose_json',
+                timestamp_granularities: includeTimestamps ? ['segment'] : undefined,
+              });
+            },
+            `Chunk ${i + 1}/${chunkPaths.length} transcription`,
+            3, // maxRetries
+            2000 // initialDelay: 2s, 4s, 8s
+          );
 
           allTexts.push(chunkTranscription.text);
           detectedLanguage = (chunkTranscription as any).language || detectedLanguage;
