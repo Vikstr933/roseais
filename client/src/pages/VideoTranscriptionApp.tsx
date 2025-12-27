@@ -55,6 +55,7 @@ interface TranscriptionSegment {
   start: number;
   end: number;
   text: string;
+  speaker?: string; // Optional speaker label (e.g., "Speaker 1", "Speaker 2")
 }
 
 interface TranscriptionResult {
@@ -834,6 +835,7 @@ export default function VideoTranscriptionApp() {
   const [tone, setTone] = useState<string>('');
   const [style, setStyle] = useState<string>('');
   const [scriptLanguage, setScriptLanguage] = useState<string>('en'); // Default to English
+  const [enableSpeakerDiarization, setEnableSpeakerDiarization] = useState<boolean>(false); // Speaker diarization option
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1515,10 +1517,32 @@ export default function VideoTranscriptionApp() {
                       You must select both tone and style to continue
                     </p>
                   )}
+              </div>
+
+              {/* Speaker Diarization Toggle */}
+              <div className="space-y-3 border-t border-muted pt-4">
+                <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <Mic className="h-4 w-4 text-purple-600" />
+                  Advanced Options
+                </label>
+                <div className="flex items-center justify-between p-3 rounded-xl border-2 border-muted bg-muted/30">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Speaker Diarization</p>
+                    <p className="text-xs text-muted-foreground">Identify who is speaking (requires AssemblyAI API key)</p>
+                  </div>
+                  <Button
+                    variant={enableSpeakerDiarization ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setEnableSpeakerDiarization(!enableSpeakerDiarization)}
+                    className={enableSpeakerDiarization ? "bg-purple-600 hover:bg-purple-700" : ""}
+                  >
+                    {enableSpeakerDiarization ? "Enabled" : "Disabled"}
+                  </Button>
                 </div>
               </div>
-            </motion.div>
-          )}
+            </div>
+          </motion.div>
+        )}
         </motion.div>
 
         {/* Compact Results Section - Side by Side Layout */}

@@ -72,6 +72,7 @@ interface TranscriptionSegment {
   start: number;
   end: number;
   text: string;
+  speaker?: string; // Optional speaker label (e.g., "Speaker 1", "Speaker 2")
 }
 
 interface TranscriptionWithTimestamps {
@@ -1754,7 +1755,8 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       cookies, 
       language, 
       scriptProvider = 'haiku',
-      transcriptionProvider = 'openai', // 'openai' or 'local' (default to openai for better reliability)
+      transcriptionProvider = 'openai', // 'openai', 'local', or 'assemblyai' (default to openai for better reliability)
+      enableSpeakerDiarization = false, // Enable speaker diarization (requires AssemblyAI)
       tone, // Optional: professional, conversational, dramatic, educational, casual, energetic
       style, // Optional: detailed, concise, storytelling, analytical
       scriptLanguage = 'en' // Optional: Language code for script output (default: 'en' for English)
@@ -2152,7 +2154,7 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         script,
         videoTitle,
         videoDuration,
-        transcriptionProvider: transcriptionProvider === 'openai' ? 'openai' : 'local',
+        transcriptionProvider: enableSpeakerDiarization ? 'assemblyai' : (transcriptionProvider === 'openai' ? 'openai' : 'local'),
         segments: transcriptionSegments,
       };
     })();
