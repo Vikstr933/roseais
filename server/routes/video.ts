@@ -1926,16 +1926,11 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       setCORSHeaders();
       res.json(result);
       
-      // Clean up audio file after successful transcription (async, don't block response)
-      if (finalAudioPath) {
-        audioFileService.fileExists(finalAudioPath).then((exists) => {
-          if (exists) {
-            return audioFileService.deleteFile(finalAudioPath);
-          }
-        }).catch((cleanupError) => {
-          logger.warn(`[VideoTranscription] Failed to cleanup audio file ${finalAudioPath}: ${cleanupError}`);
-        });
-      }
+      // NOTE: We do NOT delete audio files immediately after transcription
+      // Files should persist for user to potentially re-transcribe or use again
+      // Cleanup is handled by AudioFileService.cleanupOldFiles() which runs every 6 hours
+      // and deletes files older than 24 hours (configurable via MAX_AUDIO_FILE_AGE_HOURS)
+      logger.info(`[VideoTranscription] Transcription complete, keeping audio file for potential reuse: ${finalAudioPath}`);
     } catch (transcriptionError: any) {
       logger.error(`[VideoTranscription] Transcription error: ${transcriptionError.message}`, transcriptionError);
       setCORSHeaders();
@@ -1944,16 +1939,10 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         error: transcriptionError.message || 'Failed to transcribe audio',
       });
       
-      // Clean up audio file on error too (async, don't block response)
-      if (finalAudioPath) {
-        audioFileService.fileExists(finalAudioPath).then((exists) => {
-          if (exists) {
-            return audioFileService.deleteFile(finalAudioPath);
-          }
-        }).catch((cleanupError) => {
-          logger.warn(`[VideoTranscription] Failed to cleanup audio file on error ${finalAudioPath}: ${cleanupError}`);
-        });
-      }
+      // NOTE: We do NOT delete audio files on error either
+      // Keep the file so user can retry transcription
+      // Cleanup is handled by AudioFileService.cleanupOldFiles()
+      logger.info(`[VideoTranscription] Transcription failed, keeping audio file for retry: ${finalAudioPath}`);
     } finally {
       // Clean up tracking when done (success or error)
       if (dedupeKey) {
