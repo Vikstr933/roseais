@@ -19,6 +19,9 @@ import {
   HelpCircle,
   Upload,
   X,
+  Settings,
+  Radio,
+  Waves,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
@@ -56,6 +59,12 @@ export default function VideoTranscriptionApp() {
   const [isGeneratingOpenAIScript, setIsGeneratingOpenAIScript] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('');
+  const [transcriptionStage, setTranscriptionStage] = useState<'idle' | 'uploading' | 'transcribing' | 'generating'>('idle');
+  
+  // Transcription settings
+  const [tone, setTone] = useState<string>('conversational');
+  const [style, setStyle] = useState<string>('detailed');
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -109,6 +118,7 @@ export default function VideoTranscriptionApp() {
     setError(null);
     setExtractedAudio(null);
     setProgress('Uploading audio file...');
+    setTranscriptionStage('uploading');
 
     try {
       // Use FormData for efficient file upload (multipart/form-data)
@@ -186,6 +196,7 @@ export default function VideoTranscriptionApp() {
     setError(null);
     setTranscriptionResult(null);
     setProgress('Transcribing audio...');
+    setTranscriptionStage('transcribing');
 
     try {
       // If we have a direct transcript, send it to avoid re-fetching
@@ -193,13 +204,17 @@ export default function VideoTranscriptionApp() {
         audioId: extractedAudio.audioId,
         audioPath: extractedAudio.audioPath,
         scriptProvider: 'haiku', // Use Haiku by default
+        tone: tone,
+        style: style,
       };
       
       if (extractedAudio.transcript) {
         requestBody.transcript = extractedAudio.transcript;
         setProgress('Generating script from transcript...');
+        setTranscriptionStage('generating');
       } else {
         setProgress('Transcribing audio...');
+        setTranscriptionStage('transcribing');
       }
 
       const response = await apiFetch('/api/video/transcribe', {
@@ -222,6 +237,7 @@ export default function VideoTranscriptionApp() {
           videoDuration: extractedAudio.videoDuration || data.videoDuration,
         });
         setProgress('');
+        setTranscriptionStage('idle');
         toast({
           title: 'Success!',
           description: 'Audio transcribed and script generated successfully',
@@ -232,6 +248,7 @@ export default function VideoTranscriptionApp() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to transcribe video';
       setError(errorMessage);
+      setTranscriptionStage('idle');
       toast({
         title: 'Error',
         description: errorMessage,
@@ -297,6 +314,8 @@ export default function VideoTranscriptionApp() {
         transcript: transcriptionResult.transcription, // Send existing transcription
         scriptProvider: 'openai',
         videoTitle: transcriptionResult.videoTitle,
+        tone: tone,
+        style: style,
       };
 
       const response = await apiFetch('/api/video/transcribe', {
@@ -480,14 +499,82 @@ export default function VideoTranscriptionApp() {
               )}
             </div>
 
-            {progress && (
+            {/* Enhanced Loading Animation */}
+            {(isUploading || isTranscribing || transcriptionStage !== 'idle') && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="card-elevated p-8 mb-6"
               >
-                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                <p className="text-sm font-medium text-blue-900">{progress}</p>
+                <div className="flex flex-col items-center justify-center space-y-6">
+                  {/* Animated Loading Icon */}
+                  <div className="relative">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      className="h-20 w-20 rounded-full border-4 border-purple-200 border-t-purple-600"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      {transcriptionStage === 'uploading' && (
+                        <Upload className="h-8 w-8 text-purple-600" />
+                      )}
+                      {transcriptionStage === 'transcribing' && (
+                        <Mic className="h-8 w-8 text-purple-600" />
+                      )}
+                      {transcriptionStage === 'generating' && (
+                        <Sparkles className="h-8 w-8 text-purple-600" />
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Progress Text */}
+                  <div className="text-center space-y-2">
+                    <p className="text-lg font-semibold text-foreground">{progress || 'Processing...'}</p>
+                    {transcriptionStage === 'transcribing' && (
+                      <p className="text-sm text-muted-foreground">
+                        Analyzing audio and converting speech to text... This may take a few minutes.
+                      </p>
+                    )}
+                    {transcriptionStage === 'generating' && (
+                      <p className="text-sm text-muted-foreground">
+                        Creating engaging commentary script with AI... Almost done!
+                      </p>
+                    )}
+                    {transcriptionStage === 'uploading' && (
+                      <p className="text-sm text-muted-foreground">
+                        Uploading your audio file to the server...
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Stage Indicator */}
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    <div className={`h-2 w-2 rounded-full ${transcriptionStage === 'uploading' ? 'bg-purple-600' : 'bg-purple-300'}`} />
+                    <div className={`h-1 w-8 ${transcriptionStage === 'uploading' ? 'bg-purple-600' : 'bg-purple-300'}`} />
+                    <div className={`h-2 w-2 rounded-full ${transcriptionStage === 'transcribing' ? 'bg-purple-600' : transcriptionStage === 'generating' ? 'bg-purple-600' : 'bg-purple-300'}`} />
+                    <div className={`h-1 w-8 ${transcriptionStage === 'generating' ? 'bg-purple-600' : 'bg-purple-300'}`} />
+                    <div className={`h-2 w-2 rounded-full ${transcriptionStage === 'generating' ? 'bg-purple-600' : 'bg-purple-300'}`} />
+                  </div>
+
+                  {/* Animated Progress Dots */}
+                  <div className="flex gap-2">
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="h-2 w-2 rounded-full bg-purple-600"
+                        animate={{
+                          scale: [1, 1.5, 1],
+                          opacity: [0.5, 1, 0.5],
+                        }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          delay: i * 0.2,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
               </motion.div>
             )}
 
@@ -505,45 +592,152 @@ export default function VideoTranscriptionApp() {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl"
+                className="space-y-4"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <div className="h-10 w-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
-                        <FileText className="h-5 w-5 text-white" />
+                {/* Audio Ready Card */}
+                <div className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <div className="h-10 w-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                          <FileText className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
                       </div>
-                      <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-900">Audio Ready for Transcription</p>
+                        {extractedAudio.videoTitle && (
+                          <p className="text-xs text-green-700 mt-0.5">
+                            {extractedAudio.videoTitle}
+                            {extractedAudio.videoDuration && ` • ${Math.round(extractedAudio.videoDuration / 60)} min`}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-green-900">Audio Ready for Transcription</p>
-                      {extractedAudio.videoTitle && (
-                        <p className="text-xs text-green-700 mt-0.5">
-                          {extractedAudio.videoTitle}
-                          {extractedAudio.videoDuration && ` • ${Math.round(extractedAudio.videoDuration / 60)} min`}
-                        </p>
-                      )}
-                    </div>
+                    <Button
+                      onClick={() => setShowSettings(!showSettings)}
+                      variant="outline"
+                      size="sm"
+                      className="hover:bg-green-100"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      {showSettings ? 'Hide' : 'Settings'}
+                    </Button>
                   </div>
+                </div>
+
+                {/* Transcription Settings Panel */}
+                {showSettings && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="card-elevated p-6 space-y-6"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <Settings className="h-5 w-5 text-purple-600" />
+                      <h3 className="text-lg font-semibold text-foreground">Transcription Settings</h3>
+                    </div>
+
+                    {/* Tone Selection */}
+                    <div className="space-y-3">
+                      <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Waves className="h-4 w-4 text-purple-600" />
+                        Tone
+                      </label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { value: 'professional', label: 'Professional', desc: 'Authoritative & polished' },
+                          { value: 'conversational', label: 'Conversational', desc: 'Friendly & approachable' },
+                          { value: 'dramatic', label: 'Dramatic', desc: 'Intense & engaging' },
+                          { value: 'educational', label: 'Educational', desc: 'Clear & instructional' },
+                          { value: 'casual', label: 'Casual', desc: 'Relaxed & informal' },
+                          { value: 'energetic', label: 'Energetic', desc: 'Enthusiastic & dynamic' },
+                        ].map((option) => (
+                          <motion.button
+                            key={option.value}
+                            onClick={() => setTone(option.value)}
+                            className={`p-4 rounded-xl border-2 transition-all text-left ${
+                              tone === option.value
+                                ? 'border-purple-600 bg-purple-50 shadow-md'
+                                : 'border-muted hover:border-purple-300 hover:bg-purple-50/50'
+                            }`}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <Radio className={`h-4 w-4 ${tone === option.value ? 'text-purple-600' : 'text-muted-foreground'}`} />
+                              <span className={`text-sm font-semibold ${tone === option.value ? 'text-purple-900' : 'text-foreground'}`}>
+                                {option.label}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{option.desc}</p>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Style Selection */}
+                    <div className="space-y-3">
+                      <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Brain className="h-4 w-4 text-purple-600" />
+                        Style
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { value: 'detailed', label: 'Detailed', desc: 'Comprehensive context & thorough explanations' },
+                          { value: 'concise', label: 'Concise', desc: 'To-the-point while maintaining clarity' },
+                          { value: 'storytelling', label: 'Storytelling', desc: 'Narrative flow & dramatic structure' },
+                          { value: 'analytical', label: 'Analytical', desc: 'Deep insights & critical examination' },
+                        ].map((option) => (
+                          <motion.button
+                            key={option.value}
+                            onClick={() => setStyle(option.value)}
+                            className={`p-4 rounded-xl border-2 transition-all text-left ${
+                              style === option.value
+                                ? 'border-purple-600 bg-purple-50 shadow-md'
+                                : 'border-muted hover:border-purple-300 hover:bg-purple-50/50'
+                            }`}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <Radio className={`h-4 w-4 ${style === option.value ? 'text-purple-600' : 'text-muted-foreground'}`} />
+                              <span className={`text-sm font-semibold ${style === option.value ? 'text-purple-900' : 'text-foreground'}`}>
+                                {option.label}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{option.desc}</p>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Start Transcription Button */}
+                    <Button
+                      onClick={handleTranscribe}
+                      disabled={isTranscribing}
+                      size="lg"
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 h-12"
+                    >
+                      <Mic className="h-5 w-5 mr-2" />
+                      Start Transcription
+                    </Button>
+                  </motion.div>
+                )}
+
+                {/* Start Button (when settings are hidden) */}
+                {!showSettings && (
                   <Button
                     onClick={handleTranscribe}
                     disabled={isTranscribing}
                     size="lg"
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 px-6"
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 h-12"
                   >
-                    {isTranscribing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="h-4 w-4 mr-2" />
-                        Start Transcription
-                      </>
-                    )}
+                    <Mic className="h-5 w-5 mr-2" />
+                    Start Transcription
                   </Button>
-                </div>
+                )}
               </motion.div>
             )}
           </div>
@@ -690,6 +884,44 @@ export default function VideoTranscriptionApp() {
                         className="min-h-[400px] font-mono text-sm bg-muted/50 border-muted leading-relaxed"
                       />
                     </>
+                  ) : isGeneratingOpenAIScript ? (
+                    <div className="min-h-[400px] flex items-center justify-center border-2 border-purple-200 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
+                      <div className="text-center max-w-md px-6 space-y-6">
+                        <div className="relative">
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                            className="h-20 w-20 mx-auto rounded-full border-4 border-purple-200 border-t-purple-600"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Sparkles className="h-8 w-8 text-purple-600" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-lg font-semibold text-foreground">Generating Script...</p>
+                          <p className="text-sm text-muted-foreground">
+                            Creating commentary script with OpenAI Mini using your selected tone and style
+                          </p>
+                        </div>
+                        <div className="flex gap-2 justify-center">
+                          {[0, 1, 2].map((i) => (
+                            <motion.div
+                              key={i}
+                              className="h-2 w-2 rounded-full bg-purple-600"
+                              animate={{
+                                scale: [1, 1.5, 1],
+                                opacity: [0.5, 1, 0.5],
+                              }}
+                              transition={{
+                                duration: 1.5,
+                                repeat: Infinity,
+                                delay: i * 0.2,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <div className="min-h-[400px] flex items-center justify-center border-2 border-dashed border-muted rounded-xl bg-muted/30">
                       <div className="text-center max-w-md px-6">
@@ -708,17 +940,8 @@ export default function VideoTranscriptionApp() {
                           size="lg"
                           className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25"
                         >
-                          {isGeneratingOpenAIScript ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Generating...
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="h-4 w-4 mr-2" />
-                              Generate with OpenAI Mini
-                            </>
-                          )}
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Generate with OpenAI Mini
                         </Button>
                       </div>
                     </div>

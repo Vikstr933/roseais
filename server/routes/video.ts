@@ -782,8 +782,34 @@ export async function transcribeYouTubeVideo(videoId: string, cookiesText?: stri
 /**
  * Convert transcription to voice actor script for YouTube commentary
  */
-export async function convertToScript(transcription: string, videoTitle?: string): Promise<string> {
+export async function convertToScript(
+  transcription: string, 
+  videoTitle?: string,
+  tone?: string,
+  style?: string
+): Promise<string> {
   try {
+    // Tone descriptions
+    const toneDescriptions: Record<string, string> = {
+      professional: 'professional, authoritative, and polished',
+      conversational: 'conversational, friendly, and approachable',
+      dramatic: 'dramatic, intense, and emotionally engaging',
+      educational: 'educational, clear, and instructional',
+      casual: 'casual, relaxed, and informal',
+      energetic: 'energetic, enthusiastic, and dynamic',
+    };
+
+    // Style descriptions
+    const styleDescriptions: Record<string, string> = {
+      detailed: 'detailed with comprehensive context and thorough explanations',
+      concise: 'concise and to-the-point while maintaining clarity',
+      storytelling: 'storytelling-focused with narrative flow and dramatic structure',
+      analytical: 'analytical with deep insights and critical examination',
+    };
+
+    const toneDesc = tone && toneDescriptions[tone] ? toneDescriptions[tone] : 'conversational, informative';
+    const styleDesc = style && styleDescriptions[style] ? styleDescriptions[style] : 'well-structured with good pacing';
+
     const prompt = `You are a professional script writer specializing in YouTube commentary content. Convert the following video transcription into an engaging, informative commentary script suitable for YouTube voiceover.
 
 The script should be:
@@ -791,6 +817,8 @@ The script should be:
 - **YouTube Commentary Style**: Written for voiceover narration over footage (body cam, surveillance, documentaries, etc.)
 - **Clear Structure**: Well-organized with natural flow and pacing
 - **Professional**: Ready for voiceover production with clear reading cues
+- **Tone**: ${toneDesc}
+- **Style**: ${styleDesc}
 
 ${videoTitle ? `Video Title: ${videoTitle}\n\n` : ''}Transcription:
 ${transcription}
@@ -798,12 +826,13 @@ ${transcription}
 Create a commentary script that:
 1. Provides context and background information to help viewers understand the situation
 2. Adds insightful commentary and observations about what's happening
-3. Maintains engagement with a conversational, informative tone
+3. Maintains engagement with a ${toneDesc} tone
 4. Includes natural pauses marked with [PAUSE] for breathing
 5. Uses [EMPHASIS] markers for important points
 6. Adds relevant details that enhance understanding
 7. Structures the content in logical sections or beats
 8. Includes transition phrases to connect different parts of the footage
+9. Follows a ${styleDesc} approach
 
 The script should feel like a professional YouTube commentator narrating over footage, providing valuable context and insights throughout. Make it informative, engaging, and suitable for any type of footage (body cam, surveillance, documentary, etc.).
 
@@ -832,8 +861,34 @@ Script:`;
 /**
  * Convert transcription to voice actor script using OpenAI Mini for YouTube commentary
  */
-export async function convertToScriptWithOpenAI(transcription: string, videoTitle?: string): Promise<string> {
+export async function convertToScriptWithOpenAI(
+  transcription: string, 
+  videoTitle?: string,
+  tone?: string,
+  style?: string
+): Promise<string> {
   try {
+    // Tone descriptions
+    const toneDescriptions: Record<string, string> = {
+      professional: 'professional, authoritative, and polished',
+      conversational: 'conversational, friendly, and approachable',
+      dramatic: 'dramatic, intense, and emotionally engaging',
+      educational: 'educational, clear, and instructional',
+      casual: 'casual, relaxed, and informal',
+      energetic: 'energetic, enthusiastic, and dynamic',
+    };
+
+    // Style descriptions
+    const styleDescriptions: Record<string, string> = {
+      detailed: 'detailed with comprehensive context and thorough explanations',
+      concise: 'concise and to-the-point while maintaining clarity',
+      storytelling: 'storytelling-focused with narrative flow and dramatic structure',
+      analytical: 'analytical with deep insights and critical examination',
+    };
+
+    const toneDesc = tone && toneDescriptions[tone] ? toneDescriptions[tone] : 'conversational, informative';
+    const styleDesc = style && styleDescriptions[style] ? styleDescriptions[style] : 'well-structured with good pacing';
+
     const prompt = `You are a professional script writer specializing in YouTube commentary content. Convert the following video transcription into an engaging, informative commentary script suitable for YouTube voiceover.
 
 The script should be:
@@ -841,6 +896,8 @@ The script should be:
 - **YouTube Commentary Style**: Written for voiceover narration over footage (body cam, surveillance, documentaries, etc.)
 - **Clear Structure**: Well-organized with natural flow and pacing
 - **Professional**: Ready for voiceover production with clear reading cues
+- **Tone**: ${toneDesc}
+- **Style**: ${styleDesc}
 
 ${videoTitle ? `Video Title: ${videoTitle}\n\n` : ''}Transcription:
 ${transcription}
@@ -848,12 +905,13 @@ ${transcription}
 Create a commentary script that:
 1. Provides context and background information to help viewers understand the situation
 2. Adds insightful commentary and observations about what's happening
-3. Maintains engagement with a conversational, informative tone
+3. Maintains engagement with a ${toneDesc} tone
 4. Includes natural pauses marked with [PAUSE] for breathing
 5. Uses [EMPHASIS] markers for important points
 6. Adds relevant details that enhance understanding
 7. Structures the content in logical sections or beats
 8. Includes transition phrases to connect different parts of the footage
+9. Follows a ${styleDesc} approach
 
 The script should feel like a professional YouTube commentator narrating over footage, providing valuable context and insights throughout. Make it informative, engaging, and suitable for any type of footage (body cam, surveillance, documentary, etc.).
 
@@ -1378,7 +1436,9 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       cookies, 
       language, 
       scriptProvider = 'haiku',
-      transcriptionProvider = 'openai' // 'openai' or 'local' (default to openai for better reliability)
+      transcriptionProvider = 'openai', // 'openai' or 'local' (default to openai for better reliability)
+      tone, // Optional: professional, conversational, dramatic, educational, casual, energetic
+      style // Optional: detailed, concise, storytelling, analytical
     } = req.body;
 
     // Create a unique key for deduplication (use audioId if available, otherwise audioPath)
@@ -1612,8 +1672,8 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
         // Use existing function for backward compatibility
         const result = await transcribeYouTubeVideo(finalVideoId, cookies, language || 'auto');
         const script = scriptProvider === 'openai' 
-          ? await convertToScriptWithOpenAI(result.transcription, result.videoTitle)
-          : await convertToScript(result.transcription, result.videoTitle);
+          ? await convertToScriptWithOpenAI(result.transcription, result.videoTitle, tone, style)
+          : await convertToScript(result.transcription, result.videoTitle, tone, style);
 
         return {
           success: true,
@@ -1701,10 +1761,10 @@ router.post('/transcribe', authenticateUser, async (req: Request, res: Response)
       }
 
       // Convert to script
-      logger.info(`[VideoTranscription] Converting transcription to script using ${scriptProvider}...`);
+      logger.info(`[VideoTranscription] Converting transcription to script using ${scriptProvider}... (tone: ${tone || 'default'}, style: ${style || 'default'})`);
       const script = scriptProvider === 'openai' 
-        ? await convertToScriptWithOpenAI(transcription, videoTitle)
-        : await convertToScript(transcription, videoTitle);
+        ? await convertToScriptWithOpenAI(transcription, videoTitle, tone, style)
+        : await convertToScript(transcription, videoTitle, tone, style);
 
       logger.info(`[VideoTranscription] Transcription and script generation complete`);
 
