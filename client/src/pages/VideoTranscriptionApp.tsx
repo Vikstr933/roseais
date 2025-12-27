@@ -1183,147 +1183,148 @@ export default function VideoTranscriptionApp() {
           </div>
         </motion.div>
 
-        {/* Compact Upload Section */}
+        {/* Unified Main Container - All content in one card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="card-elevated p-6 mb-6"
         >
-          <div className="space-y-6">
-            <div>
-              <label className="text-base font-semibold mb-3 block text-foreground">
-                Upload Audio File
-              </label>
-              <p className="text-sm text-muted-foreground mb-4">
-                Supported formats: MP3, WAV, OGG, WebM, M4A • Maximum size: 25MB
-              </p>
-              <div className="flex gap-3">
-                <div className="relative flex-1">
-                  <Input
-                    type="file"
-                    accept="audio/*,.mp3,.wav,.ogg,.webm,.m4a"
-                    onChange={handleFileSelect}
-                    className="cursor-pointer h-12 text-sm"
-                    disabled={isUploading || isTranscribing}
-                  />
-                </div>
-                <Button
-                  onClick={handleUploadAudio}
-                  disabled={isUploading || !selectedFile || isTranscribing}
-                  className="min-w-[160px] h-12 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium shadow-lg shadow-purple-500/25"
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Audio
-                    </>
-                  )}
-                </Button>
-              </div>
-              {selectedFile && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <FileText className="h-4 w-4 text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 hover:bg-purple-100"
-                      onClick={() => {
-                        setSelectedFile(null);
-                        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-                        if (fileInput) fileInput.value = '';
-                      }}
+          {/* Upload State */}
+          {!extractedAudio && !isUploading && !isTranscribing && transcriptionStage === 'idle' && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-base font-semibold mb-3 block text-foreground">
+                  Upload Audio File
+                </label>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Supported formats: MP3, WAV, OGG, WebM, M4A • Maximum size: 25MB
+                </p>
+                <div className="flex gap-3">
+                  <div className="relative flex-1">
+                    <Input
+                      type="file"
+                      accept="audio/*,.mp3,.wav,.ogg,.webm,.m4a"
+                      onChange={handleFileSelect}
+                      className="cursor-pointer h-12 text-sm"
                       disabled={isUploading || isTranscribing}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    />
                   </div>
-                </motion.div>
-              )}
-            </div>
-
-            {/* Interactive Waiting Room */}
-            {(isUploading || isTranscribing || transcriptionStage !== 'idle') && (
-              <WaitingRoomContent 
-                stage={transcriptionStage}
-                progress={progress}
-              />
-            )}
-
-            {error && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="p-4 bg-red-50 border border-red-200 rounded-xl"
-              >
-                <p className="text-sm font-medium text-red-900">{error}</p>
-              </motion.div>
-            )}
-
-            {extractedAudio && !isTranscribing && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-4"
-              >
-                {/* Audio Ready Card */}
-                <div className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <div className="h-10 w-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
-                        <FileText className="h-5 w-5 text-white" />
+                  <Button
+                    onClick={handleUploadAudio}
+                    disabled={isUploading || !selectedFile || isTranscribing}
+                    className="min-w-[160px] h-12 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium shadow-lg shadow-purple-500/25"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Audio
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {selectedFile && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 rounded-lg">
+                          <FileText className="h-4 w-4 text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
                       </div>
-                      <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-purple-100"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                          if (fileInput) fileInput.value = '';
+                        }}
+                        disabled={isUploading || isTranscribing}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-green-900">Audio Ready for Transcription</p>
-                      {extractedAudio.videoTitle && (
-                        <p className="text-xs text-green-700 mt-0.5">
-                          {extractedAudio.videoTitle}
-                          {extractedAudio.videoDuration && ` • ${Math.round(extractedAudio.videoDuration / 60)} min`}
-                        </p>
-                      )}
+                  </motion.div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Processing State */}
+          {(isUploading || isTranscribing || transcriptionStage !== 'idle') && (
+            <WaitingRoomContent 
+              stage={transcriptionStage}
+              progress={progress}
+            />
+          )}
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-4 bg-red-50 border border-red-200 rounded-xl mb-4"
+            >
+              <p className="text-sm font-medium text-red-900">{error}</p>
+            </motion.div>
+          )}
+
+          {/* Audio Ready + Settings State */}
+          {extractedAudio && !isTranscribing && transcriptionStage === 'idle' && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              {/* Audio Ready Indicator */}
+              <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="h-10 w-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                      <FileText className="h-5 w-5 text-white" />
                     </div>
+                    <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-green-900">Audio Ready for Transcription</p>
+                    {extractedAudio.videoTitle && (
+                      <p className="text-xs text-green-700 mt-0.5">
+                        {extractedAudio.videoTitle}
+                        {extractedAudio.videoDuration && ` • ${Math.round(extractedAudio.videoDuration / 60)} min`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Transcription Settings Panel */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Settings className="h-5 w-5 text-purple-600" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Transcription Settings</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Please select tone and style before starting transcription</p>
                   </div>
                 </div>
 
-                {/* Transcription Settings Panel - Always shown and required */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="card-elevated p-6 space-y-6"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Settings className="h-5 w-5 text-purple-600" />
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">Transcription Settings</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">Please select tone and style before starting transcription</p>
-                    </div>
-                  </div>
-
-                    {/* Tone Selection */}
-                    <div className="space-y-3">
+                {/* Tone Selection */}
+                <div className="space-y-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <Waves className="h-4 w-4 text-purple-600" />
                         Tone <span className="text-red-500">*</span>
@@ -1358,10 +1359,10 @@ export default function VideoTranscriptionApp() {
                           </motion.button>
                         ))}
                       </div>
-                    </div>
+                </div>
 
-                    {/* Style Selection */}
-                    <div className="space-y-3">
+                {/* Style Selection */}
+                <div className="space-y-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <Brain className="h-4 w-4 text-purple-600" />
                         Style <span className="text-red-500">*</span>
@@ -1394,10 +1395,10 @@ export default function VideoTranscriptionApp() {
                           </motion.button>
                         ))}
                       </div>
-                    </div>
+                </div>
 
-                    {/* Script Language Selection */}
-                    <div className="space-y-3">
+                {/* Script Language Selection */}
+                <div className="space-y-3">
                       <label className="text-sm font-medium text-foreground flex items-center gap-2">
                         <Globe className="h-4 w-4 text-purple-600" />
                         Script Language
@@ -1431,31 +1432,30 @@ export default function VideoTranscriptionApp() {
                           </motion.button>
                         ))}
                       </div>
-                    </div>
+                </div>
 
-                    {/* Start Transcription Button - Disabled until tone and style are selected */}
-                    <div className="pt-2">
-                      <Button
-                        onClick={handleTranscribe}
-                        disabled={isTranscribing || !tone || !style}
-                        size="lg"
-                        className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Mic className="h-5 w-5 mr-2" />
-                        {!tone || !style 
-                          ? 'Please select tone and style' 
-                          : 'Start Transcription'}
-                      </Button>
-                      {(!tone || !style) && (
-                        <p className="text-xs text-muted-foreground mt-2 text-center">
-                          You must select both tone and style to continue
-                        </p>
-                      )}
-                    </div>
-                  </motion.div>
-              </motion.div>
-            )}
-          </div>
+                {/* Start Transcription Button - Disabled until tone and style are selected */}
+                <div className="pt-2">
+                  <Button
+                    onClick={handleTranscribe}
+                    disabled={isTranscribing || !tone || !style}
+                    size="lg"
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold shadow-lg shadow-purple-500/25 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Mic className="h-5 w-5 mr-2" />
+                    {!tone || !style 
+                      ? 'Please select tone and style' 
+                      : 'Start Transcription'}
+                  </Button>
+                  {(!tone || !style) && (
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      You must select both tone and style to continue
+                    </p>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Compact Results Section - Side by Side Layout */}
