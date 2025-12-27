@@ -1067,6 +1067,53 @@ export default function VideoTranscriptionApp() {
     });
   };
 
+  // Format time for display (MM:SS)
+  const formatDisplayTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Format time in seconds to SRT format (HH:MM:SS,mmm)
+  const formatSRTTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const milliseconds = Math.floor((seconds % 1) * 1000);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${milliseconds.toString().padStart(3, '0')}`;
+  };
+
+  // Format time in seconds to VTT format (HH:MM:SS.mmm)
+  const formatVTTTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const milliseconds = Math.floor((seconds % 1) * 1000);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+  };
+
+  // Convert segments to SRT format
+  const segmentsToSRT = (segments: TranscriptionSegment[]): string => {
+    return segments.map((seg, index) => {
+      const startTime = formatSRTTime(seg.start);
+      const endTime = formatSRTTime(seg.end);
+      return `${index + 1}\n${startTime} --> ${endTime}\n${seg.text}\n`;
+    }).join('\n');
+  };
+
+  // Convert segments to VTT format
+  const segmentsToVTT = (segments: TranscriptionSegment[]): string => {
+    let vtt = 'WEBVTT\n\n';
+    segments.forEach((seg) => {
+      const startTime = formatVTTTime(seg.start);
+      const endTime = formatVTTTime(seg.end);
+      vtt += `${startTime} --> ${endTime}\n${seg.text}\n\n`;
+    });
+    return vtt;
+  };
+
   const handleGenerateOpenAIScript = async () => {
     if (!transcriptionResult?.transcription) {
       toast({
