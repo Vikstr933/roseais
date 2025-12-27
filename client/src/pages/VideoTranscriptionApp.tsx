@@ -1015,12 +1015,15 @@ export default function VideoTranscriptionApp() {
       const data = await response.json();
       
       if (data.success) {
-        setTranscriptionResult({
+        const result = {
           transcription: data.transcription || '',
           script: data.script || '',
           videoTitle: extractedAudio.videoTitle || data.videoTitle,
           videoDuration: extractedAudio.videoDuration || data.videoDuration,
-        });
+          segments: data.segments,
+        };
+        setTranscriptionResult(result);
+        setEditedTranscription(data.transcription || ''); // Initialize edited transcription with original
         setProgress('');
         setTranscriptionStage('idle');
         toast({
