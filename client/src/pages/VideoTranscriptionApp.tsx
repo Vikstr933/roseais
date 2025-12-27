@@ -1581,32 +1581,110 @@ export default function VideoTranscriptionApp() {
                   </Button>
                 </div>
               </div>
-              {transcriptionResult.segments && transcriptionResult.segments.length > 0 ? (
-                <div className="flex-1 min-h-[300px] max-h-[500px] overflow-auto border border-muted rounded-lg bg-muted/50 p-3">
-                  <div className="space-y-2">
-                    {transcriptionResult.segments.map((seg, index) => (
-                      <div
-                        key={index}
-                        className="p-2 rounded hover:bg-muted/80 transition-colors cursor-pointer"
-                        title={`Click to jump to ${formatDisplayTime(seg.start)}`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-mono text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
-                            {formatDisplayTime(seg.start)} → {formatDisplayTime(seg.end)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-foreground leading-relaxed">{seg.text}</p>
+              <div className="flex-1 flex flex-col min-h-[300px] max-h-[500px]">
+                {isEditingTranscription ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-muted-foreground">Editing transcription before script generation</p>
+                      <div className="flex gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditedTranscription(transcriptionResult.transcription); // Reset to original
+                            setIsEditingTranscription(false);
+                          }}
+                          className="h-7 px-2 text-xs"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => {
+                            // Update transcription result with edited version
+                            setTranscriptionResult({
+                              ...transcriptionResult,
+                              transcription: editedTranscription,
+                            });
+                            setIsEditingTranscription(false);
+                            toast({
+                              title: 'Transcription updated',
+                              description: 'Your edits will be used when generating scripts',
+                            });
+                          }}
+                          className="h-7 px-2 text-xs bg-purple-600 hover:bg-purple-700"
+                        >
+                          Save
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <Textarea
-                  value={transcriptionResult.transcription}
-                  readOnly
-                  className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-muted/50 border-muted resize-none"
-                />
-              )}
+                    </div>
+                    <Textarea
+                      value={editedTranscription}
+                      onChange={(e) => setEditedTranscription(e.target.value)}
+                      className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-background border-muted resize-none"
+                      placeholder="Edit the transcription text here..."
+                    />
+                  </>
+                ) : transcriptionResult.segments && transcriptionResult.segments.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-end mb-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditedTranscription(transcriptionResult.transcription);
+                          setIsEditingTranscription(true);
+                        }}
+                        className="h-7 px-2 text-xs flex items-center gap-1"
+                      >
+                        <Edit3 className="h-3 w-3" />
+                        Edit
+                      </Button>
+                    </div>
+                    <div className="flex-1 overflow-auto border border-muted rounded-lg bg-muted/50 p-3">
+                      <div className="space-y-2">
+                        {transcriptionResult.segments.map((seg, index) => (
+                          <div
+                            key={index}
+                            className="p-2 rounded hover:bg-muted/80 transition-colors cursor-pointer"
+                            title={`Click to jump to ${formatDisplayTime(seg.start)}`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-mono text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+                                {formatDisplayTime(seg.start)} → {formatDisplayTime(seg.end)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-foreground leading-relaxed">{seg.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-end mb-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditedTranscription(transcriptionResult.transcription);
+                          setIsEditingTranscription(true);
+                        }}
+                        className="h-7 px-2 text-xs flex items-center gap-1"
+                      >
+                        <Edit3 className="h-3 w-3" />
+                        Edit
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={transcriptionResult.transcription}
+                      readOnly
+                      className="flex-1 min-h-[300px] max-h-[500px] font-mono text-xs bg-muted/50 border-muted resize-none"
+                    />
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Script Card with Tabs */}
