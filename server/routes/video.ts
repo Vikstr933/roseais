@@ -5,7 +5,7 @@
 
 import { Router } from 'express';
 import { authenticateUser } from '../middleware/auth';
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { SimpleLogger } from '../utils/SimpleLogger';
@@ -136,6 +136,30 @@ async function transcribeWithOpenAI(
     throw error;
   }
 }
+
+// CORS middleware for video routes
+// CRITICAL: Must be applied BEFORE authentication to handle preflight OPTIONS
+router.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin;
+  
+  // Always set CORS headers for API routes
+  if (origin) {
+    if (origin.includes('localhost') || origin.includes('vercel.app') || origin.includes('onrender.com')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+  }
+  
+  // Handle OPTIONS preflight immediately
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send();
+  }
+  
+  next();
+});
 
 // Log router initialization
 logger.info('[VideoRouter] Video transcription router initialized');

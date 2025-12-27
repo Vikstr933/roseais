@@ -22,6 +22,21 @@ declare global {
  * Authentication middleware
  * Verifies session token and adds user to request object
  */
+/**
+ * Helper to ensure CORS headers are set
+ */
+function setCORSHeaders(req: Request, res: Response): void {
+  const origin = req.headers.origin;
+  if (origin) {
+    if (origin.includes('localhost') || origin.includes('vercel.app') || origin.includes('onrender.com')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+  }
+}
+
 export const authenticateUser = async (
   req: Request,
   res: Response,
@@ -31,11 +46,13 @@ export const authenticateUser = async (
     const sessionToken = req.headers.authorization?.replace('Bearer ', '');
 
     if (!sessionToken) {
+      setCORSHeaders(req, res);
       return res.status(401).json({ error: 'Authentication required' });
     }
 
     const user = await userService.getUserFromSession(sessionToken);
     if (!user) {
+      setCORSHeaders(req, res);
       return res.status(401).json({ error: 'Invalid or expired session' });
     }
 
@@ -73,6 +90,7 @@ export const authenticateUser = async (
     next();
   } catch (error) {
     console.error('Authentication error:', error);
+    setCORSHeaders(req, res);
     res.status(500).json({ error: 'Authentication failed' });
   }
 };
@@ -137,6 +155,7 @@ export const requireAPIKeys = (requiredServices: string[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
+        setCORSHeaders(req, res);
         return res.status(401).json({ error: 'Authentication required' });
       }
 
@@ -146,6 +165,7 @@ export const requireAPIKeys = (requiredServices: string[]) => {
       );
 
       if (missingKeys.length > 0) {
+        setCORSHeaders(req, res);
         return res.status(400).json({
           error: 'Missing required API keys',
           missingServices: missingKeys,
@@ -156,6 +176,7 @@ export const requireAPIKeys = (requiredServices: string[]) => {
       next();
     } catch (error) {
       console.error('API key validation error:', error);
+      setCORSHeaders(req, res);
       res.status(500).json({ error: 'API key validation failed' });
     }
   };
