@@ -1,6 +1,8 @@
-import pdfParse from 'pdf-parse';
-import mammoth from 'mammoth';
 import { SimpleLogger } from '../utils/SimpleLogger';
+
+// pdf-parse and mammoth use CommonJS exports
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 
 const logger = new SimpleLogger('ResumeParserService');
 
