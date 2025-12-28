@@ -29,6 +29,9 @@ import {
   XCircle,
   Search,
   MapPin,
+  FileText as FileTextIcon,
+  Mail,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
@@ -80,10 +83,22 @@ interface JobMatch {
   location?: string;
   matchPercentage: number;
   jobUrl?: string;
+  applicationEmail?: string;
+  applicationUrl?: string;
+  applicationMethod?: string;
   matchedSkills: string[];
   missingSkills: string[];
   jobId?: string; // For adaptation endpoint
   jobDescription?: string; // For adaptation
+}
+
+interface ApplicationData {
+  coverLetter: string;
+  fullApplication: {
+    coverLetter: string;
+    resumeText: string;
+    combinedText: string;
+  };
 }
 
 export default function ResumeAnalysisApp() {
@@ -108,6 +123,9 @@ export default function ResumeAnalysisApp() {
   const [searchKeywords, setSearchKeywords] = useState<string>('');
   const [searchLocation, setSearchLocation] = useState<string>('');
   const [isSearchingJobs, setIsSearchingJobs] = useState<boolean>(false);
+  const [generatingApplication, setGeneratingApplication] = useState<Record<string, boolean>>({});
+  const [applicationData, setApplicationData] = useState<Record<string, ApplicationData>>({});
+  const [viewingApplication, setViewingApplication] = useState<{ jobMatch: JobMatch; data: ApplicationData } | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -987,14 +1005,15 @@ export default function ResumeAnalysisApp() {
                             </div>
                           </div>
                         )}
-                        <div className="flex gap-2 mt-3">
+                        <div className="flex flex-wrap gap-2 mt-3">
                           {match.jobUrl && (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => window.open(match.jobUrl, '_blank')}
                             >
-                              View Job
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Visa Jobb
                             </Button>
                           )}
                           <Button
@@ -1013,6 +1032,25 @@ export default function ResumeAnalysisApp() {
                               <>
                                 <Wand2 className="h-4 w-4 mr-2" />
                                 Anpassa CV
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleGenerateApplication(match)}
+                            disabled={generatingApplication[match.jobId || ''] || !uploadedResume}
+                            className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                          >
+                            {generatingApplication[match.jobId || ''] ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Genererar...
+                              </>
+                            ) : (
+                              <>
+                                <FileTextIcon className="h-4 w-4 mr-2" />
+                                Skapa Ansökan
                               </>
                             )}
                           </Button>

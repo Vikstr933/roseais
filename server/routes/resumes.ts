@@ -9,6 +9,7 @@ import { resumeScoringService } from '../services/ResumeScoringService';
 import { jobMatchingService } from '../services/JobMatchingService';
 import { resumeAdaptationService } from '../services/ResumeAdaptationService';
 import { resumeKeywordExtractor } from '../services/ResumeKeywordExtractor';
+import { applicationService } from '../services/ApplicationService';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -351,6 +352,9 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       location: match.job.location || '',
       matchPercentage: match.matchPercentage,
       jobUrl: match.job.url || '',
+      applicationEmail: match.job.applicationEmail,
+      applicationUrl: match.job.applicationUrl,
+      applicationMethod: match.job.applicationMethod,
       matchedSkills: match.matchedSkills || [],
       missingSkills: match.missingSkills || [],
       jobId: match.job.id, // Include jobId for adaptation endpoint

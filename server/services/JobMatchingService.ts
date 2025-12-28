@@ -10,6 +10,9 @@ export interface JobListing {
   location?: string;
   description: string;
   url: string;
+  applicationEmail?: string; // Email for application
+  applicationUrl?: string; // Direct application URL
+  applicationMethod?: string; // 'url', 'email', 'via_af', or 'other'
   requiredSkills?: string[];
   coordinates?: number[]; // [latitude, longitude] for mapping
   publicationDate?: string;
@@ -194,12 +197,31 @@ export class JobMatchingService {
       location = locationParts.join(', ');
     }
 
-    // Extract application URL
+    // Extract application URL and email
     let jobUrl = '';
+    let applicationEmail = '';
+    let applicationUrl = '';
+    let applicationMethod = 'other';
+
     if (hit.application_details?.url) {
-      jobUrl = hit.application_details.url;
+      applicationUrl = hit.application_details.url;
+      jobUrl = applicationUrl;
+      applicationMethod = 'url';
     } else if (hit.webpage_url) {
       jobUrl = hit.webpage_url;
+      applicationUrl = hit.webpage_url;
+      applicationMethod = 'url';
+    }
+
+    if (hit.application_details?.email) {
+      applicationEmail = hit.application_details.email;
+      if (!applicationUrl) {
+        applicationMethod = 'email';
+      }
+    }
+
+    if (hit.application_details?.via_af) {
+      applicationMethod = 'via_af';
     }
 
     // Extract required skills from must_have and nice_to_have
@@ -232,6 +254,9 @@ export class JobMatchingService {
       location: location,
       description: description,
       url: jobUrl,
+      applicationEmail: applicationEmail || undefined,
+      applicationUrl: applicationUrl || jobUrl,
+      applicationMethod: applicationMethod,
       requiredSkills: [...new Set(requiredSkills)],
       coordinates: hit.workplace_address?.coordinates,
       publicationDate: hit.publication_date,
