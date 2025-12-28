@@ -3,10 +3,11 @@ import multer from 'multer';
 import { authenticateUser } from '../middleware/auth';
 import { db } from '../../db';
 import { resumes, resumeAnalyses, jobMatches } from '../../db/schema-pg';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { resumeParserService } from '../services/ResumeParserService';
 import { resumeScoringService } from '../services/ResumeScoringService';
 import { jobMatchingService } from '../services/JobMatchingService';
+import { resumeAdaptationService } from '../services/ResumeAdaptationService';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -302,30 +303,189 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       jobs
     );
 
-    // Save top matches to database
+    // Save top matches to database (upsert to avoid duplicates)
     const topMatches = matches.slice(0, 10);
     for (const match of topMatches) {
-      await db.insert(jobMatches).values({
-        resumeId,
-        jobTitle: match.job.title,
-        company: match.job.company,
-        location: match.job.location,
-        matchPercentage: match.matchPercentage,
-        jobDescription: match.job.description,
-        jobUrl: match.job.url,
-        jobId: match.job.id,
-        requiredSkills: match.job.requiredSkills as any,
-        matchedSkills: match.matchedSkills as any,
-        missingSkills: match.missingSkills as any,
-      });
+      // Check if match already exists
+      const existing = await db
+        .select()
+        .from(jobMatches)
+        .where(and(
+          eq(jobMatches.resumeId, resumeId),
+          eq(jobMatches.jobId, match.job.id)
+        ))
+        .limit(1);
+
+      if (existing.length === 0) {
+        await db.insert(jobMatches).values({
+          resumeId,
+          jobTitle: match.job.title,
+          company: match.job.company,
+          location: match.job.location,
+          matchPercentage: match.matchPercentage,
+          jobDescription: match.job.description,
+          jobUrl: match.job.url,
+          jobId: match.job.id,
+          requiredSkills: match.job.requiredSkills as any,
+          matchedSkills: match.matchedSkills as any,
+          missingSkills: match.missingSkills as any,
+        });
+      }
     }
 
+    // Transform matches to match frontend interface
+    const transformedMatches = topMatches.map(match => ({
+      jobTitle: match.job.title || '',
+      company: match.job.company || '',
+      location: match.job.location || '',
+      matchPercentage: match.matchPercentage,
+      jobUrl: match.job.url || '',
+      matchedSkills: match.matchedSkills || [],
+      missingSkills: match.missingSkills || [],
+      jobId: match.job.id, // Include jobId for adaptation endpoint
+      jobDescription: match.job.description || '', // Include description for adaptation
+    }));
+
     res.json({
-      matches: topMatches,
+      matches: transformedMatches,
     });
   } catch (error) {
     console.error('Error matching jobs:', error);
     res.status(500).json({ error: 'Failed to match jobs' });
+  }
+});
+
+// POST /api/resumes/:id/adapt/:jobId
+router.post('/:id/adapt/:jobId', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const resumeId = parseInt(req.params.id);
+    const jobId = req.params.jobId;
+
+    // Get resume
+    const [resume] = await db
+      .select()
+      .from(resumes)
+      .where(eq(resumes.id, resumeId))
+      .limit(1);
+
+    if (!resume || resume.userId !== userId) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    // Get job match details - try to find by jobId first
+    let [jobMatch] = await db
+      .select()
+      .from(jobMatches)
+      .where(and(eq(jobMatches.jobId, jobId), eq(jobMatches.resumeId, resumeId)))
+      .limit(1);
+
+    // If not found in database, get from API response (jobId might be in transformedMatches)
+    // For now, we'll use the jobId from URL and fetch from API if needed
+    if (!jobMatch) {
+      // Job match might not be saved yet, so we'll need job details from the request body
+      // or we can skip this check and use data from request body
+      const { jobTitle, jobDescription, requiredSkills, missingSkills } = req.body;
+      
+      if (!jobTitle || !jobDescription) {
+        return res.status(400).json({ error: 'Job details required in request body' });
+      }
+
+      // Use data from request body instead
+      jobMatch = {
+        jobTitle,
+        jobDescription,
+        requiredSkills: requiredSkills || [],
+        missingSkills: missingSkills || [],
+      } as any;
+    }
+
+
+    // Adapt resume to job
+    const adaptedResume = await resumeAdaptationService.adaptResumeToJob(
+      resume.rawText || '',
+      resume.parsedData || {},
+      jobMatch.jobTitle,
+      jobMatch.jobDescription || '',
+      (jobMatch.requiredSkills as string[]) || [],
+      (jobMatch.missingSkills as string[]) || []
+    );
+
+    // Create a new version of the resume (or update existing)
+    // For now, we'll create a new resume entry with adapted content
+    const adaptedFilename = `${resume.filename.replace(/\.[^/.]+$/, '')}_adapted_${jobMatch.jobTitle.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+    
+    const [newResume] = await db
+      .insert(resumes)
+      .values({
+        userId,
+        filename: adaptedFilename,
+        filePath: resume.filePath, // Keep same path structure
+        fileSize: Buffer.byteLength(adaptedResume.rawText, 'utf8'),
+        fileType: 'txt', // Adapted resume as text
+        parsedData: adaptedResume.parsedData as any,
+        rawText: adaptedResume.rawText,
+      })
+      .returning();
+
+    res.json({
+      success: true,
+      adaptedResume: {
+        id: newResume.id,
+        filename: newResume.filename,
+        rawText: adaptedResume.rawText,
+        parsedData: adaptedResume.parsedData,
+        improvements: adaptedResume.improvements,
+        adaptationNotes: adaptedResume.adaptationNotes,
+      },
+    });
+  } catch (error) {
+    console.error('Error adapting resume:', error);
+    res.status(500).json({ error: 'Failed to adapt resume' });
+  }
+});
+
+// PUT /api/resumes/:id
+router.put('/:id', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const resumeId = parseInt(req.params.id);
+    const { rawText, parsedData } = req.body;
+
+    // Check ownership
+    const [resume] = await db
+      .select()
+      .from(resumes)
+      .where(eq(resumes.id, resumeId))
+      .limit(1);
+
+    if (!resume || resume.userId !== userId) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    // Update resume
+    const [updatedResume] = await db
+      .update(resumes)
+      .set({
+        rawText: rawText || resume.rawText,
+        parsedData: parsedData || resume.parsedData,
+        updatedAt: new Date(),
+      })
+      .where(eq(resumes.id, resumeId))
+      .returning();
+
+    res.json({
+      success: true,
+      resume: {
+        id: updatedResume.id,
+        filename: updatedResume.filename,
+        rawText: updatedResume.rawText,
+        parsedData: updatedResume.parsedData,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating resume:', error);
+    res.status(500).json({ error: 'Failed to update resume' });
   }
 });
 

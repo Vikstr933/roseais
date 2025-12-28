@@ -23,6 +23,10 @@ import {
   Sparkles,
   X,
   FileCode,
+  Wand2,
+  Edit,
+  Save,
+  XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
@@ -59,6 +63,8 @@ interface JobMatch {
   jobUrl?: string;
   matchedSkills: string[];
   missingSkills: string[];
+  jobId?: string; // For adaptation endpoint
+  jobDescription?: string; // For adaptation
 }
 
 export default function ResumeAnalysisApp() {
@@ -75,6 +81,9 @@ export default function ResumeAnalysisApp() {
   const [jobMatches, setJobMatches] = useState<JobMatch[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('');
+  const [isAdapting, setIsAdapting] = useState<Record<string, boolean>>({});
+  const [editingResume, setEditingResume] = useState<boolean>(false);
+  const [editedResumeText, setEditedResumeText] = useState<string>('');
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -284,6 +293,124 @@ export default function ResumeAnalysisApp() {
     }
   };
 
+  const handleAdaptResume = async (jobMatch: JobMatch) => {
+    if (!uploadedResume || !jobMatch.jobId) return;
+
+    setIsAdapting(prev => ({ ...prev, [jobMatch.jobId!]: true }));
+    setProgress('Anpassar CV till jobbet...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/adapt/${jobMatch.jobId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobTitle: jobMatch.jobTitle,
+          jobDescription: jobMatch.jobDescription || '',
+          requiredSkills: jobMatch.matchedSkills.concat(jobMatch.missingSkills),
+          missingSkills: jobMatch.missingSkills,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to adapt resume');
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.adaptedResume) {
+        setProgress('');
+        toast({
+          title: 'CV Anpassat!',
+          description: `Ditt CV har anpassats till ${jobMatch.jobTitle}`,
+        });
+        
+        // Optionally reload the resume to show adapted version
+        // For now, we'll just show a success message
+        // You could navigate to a new page showing the adapted resume
+        console.log('Adapted resume:', data.adaptedResume);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to adapt resume';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAdapting(prev => ({ ...prev, [jobMatch.jobId!]: false }));
+    }
+  };
+
+  const handleEditResume = () => {
+    if (!uploadedResume) return;
+    
+    // Fetch current resume text
+    apiFetch(`/api/resumes/${uploadedResume.id}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.resume && data.resume.rawText) {
+          setEditedResumeText(data.resume.rawText);
+          setEditingResume(true);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch resume:', err);
+        toast({
+          title: 'Error',
+          description: 'Failed to load resume for editing',
+          variant: 'destructive',
+        });
+      });
+  };
+
+  const handleSaveResume = async () => {
+    if (!uploadedResume) return;
+
+    setProgress('Sparar ändringar...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rawText: editedResumeText,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save resume');
+      }
+
+      setEditingResume(false);
+      setProgress('');
+      toast({
+        title: 'Sparat!',
+        description: 'Ditt CV har uppdaterats',
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save resume';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingResume(false);
+    setEditedResumeText('');
+  };
+
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
     if (score >= 60) return 'text-yellow-600';
@@ -478,9 +605,65 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
+        {/* Resume Editing */}
+        {uploadedResume && editingResume && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Redigera CV</span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelEdit}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Avbryt
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveResume}
+                    disabled={!editedResumeText.trim()}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Spara
+                  </Button>
+                </div>
+              </CardTitle>
+              <CardDescription>
+                Redigera CV-texten direkt. Ändringar sparas när du klickar på "Spara".
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <textarea
+                value={editedResumeText}
+                onChange={(e) => setEditedResumeText(e.target.value)}
+                className="w-full min-h-[400px] p-4 border rounded-lg font-mono text-sm resize-y"
+                placeholder="Klistra in eller redigera CV-text här..."
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Analysis Results */}
-        {analysis && (
+        {analysis && !editingResume && (
           <div className="space-y-6">
+            {/* Edit Button */}
+            {uploadedResume && (
+              <Card>
+                <CardContent className="pt-6">
+                  <Button
+                    variant="outline"
+                    onClick={handleEditResume}
+                    className="w-full"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Redigera CV
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Overall Score */}
             <Card>
               <CardHeader>
@@ -660,16 +843,36 @@ export default function ResumeAnalysisApp() {
                             </div>
                           </div>
                         )}
-                        {match.jobUrl && (
+                        <div className="flex gap-2 mt-3">
+                          {match.jobUrl && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(match.jobUrl, '_blank')}
+                            >
+                              View Job
+                            </Button>
+                          )}
                           <Button
-                            variant="outline"
+                            variant="default"
                             size="sm"
-                            className="mt-3"
-                            onClick={() => window.open(match.jobUrl, '_blank')}
+                            onClick={() => handleAdaptResume(match)}
+                            disabled={isAdapting[match.jobId || '']}
+                            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                           >
-                            View Job
+                            {isAdapting[match.jobId || ''] ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Anpassar...
+                              </>
+                            ) : (
+                              <>
+                                <Wand2 className="h-4 w-4 mr-2" />
+                                Anpassa CV
+                              </>
+                            )}
                           </Button>
-                        )}
+                        </div>
                       </div>
                     ))}
                   </div>
