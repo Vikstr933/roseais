@@ -108,6 +108,9 @@ export class ResumeParserService {
         throw new Error(`Unsupported file type: ${fileType}. Supported: PDF, DOCX, TEX`);
       }
 
+      // Ensure no null bytes in rawText (PostgreSQL JSONB doesn't support \u0000)
+      rawText = rawText.replace(/\0/g, '');
+      
       // Extract structured data
       const parsedData = this.extractStructuredData(rawText);
 
@@ -134,6 +137,9 @@ export class ResumeParserService {
       
       // Extract text from result
       let text = result.text || '';
+      
+      // Remove null bytes (PostgreSQL JSONB doesn't support \u0000)
+      text = text.replace(/\0/g, '');
       
       // Cleanup LaTeX-artifacts that might remain in the text
       // (LaTeX commands sometimes appear as text in PDFs)
@@ -164,7 +170,10 @@ export class ResumeParserService {
    */
   private async parseLaTeX(buffer: Buffer): Promise<string> {
     try {
-      const latexContent = buffer.toString('utf-8');
+      let latexContent = buffer.toString('utf-8');
+      
+      // Remove null bytes (PostgreSQL JSONB doesn't support \u0000)
+      latexContent = latexContent.replace(/\0/g, '');
       
       // Remove comments
       let text = latexContent.replace(/(?<!\\)%.*$/gm, '');
