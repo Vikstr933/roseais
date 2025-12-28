@@ -9,26 +9,25 @@ let mammoth: any;
 async function getPdfParse() {
   if (!pdfParse) {
     const module = await import('pdf-parse');
-    logger.info(`pdf-parse module type: ${typeof module}, keys: ${Object.keys(module).join(', ')}`);
     
-    // Try different ways to access the function
-    // pdf-parse is CommonJS and exports the function directly
-    pdfParse = (module as any).default || (module as any);
+    // pdf-parse exports an object with PDFParse class/function
+    // Try PDFParse first (the main export), then default, then the module itself
+    pdfParse = (module as any).PDFParse || (module as any).default || (module as any);
     
-    // If it's an object, try to find the function in it
-    if (typeof pdfParse !== 'function' && typeof pdfParse === 'object') {
-      // Try common property names
-      pdfParse = (module as any).pdfParse || (module as any).default || module;
-      // If still not a function, try accessing .default.default (sometimes happens with double wrapping)
-      if (typeof pdfParse !== 'function' && pdfParse && typeof (pdfParse as any).default === 'function') {
+    // If it's still not a function, try accessing it differently
+    if (typeof pdfParse !== 'function') {
+      // Sometimes the function is wrapped
+      if (pdfParse && typeof (pdfParse as any).default === 'function') {
         pdfParse = (pdfParse as any).default;
+      } else if (pdfParse && typeof (pdfParse as any).PDFParse === 'function') {
+        pdfParse = (pdfParse as any).PDFParse;
       }
     }
     
     // Final check
     if (typeof pdfParse !== 'function') {
-      logger.error(`pdf-parse export type: ${typeof pdfParse}, value: ${JSON.stringify(Object.keys(pdfParse || {}))}`);
-      throw new Error(`pdf-parse module export is not a function, got type: ${typeof pdfParse}`);
+      logger.error(`pdf-parse export type: ${typeof pdfParse}, available keys: ${Object.keys(module).join(', ')}`);
+      throw new Error(`pdf-parse module export is not a function, got type: ${typeof pdfParse}. Available keys: ${Object.keys(module).join(', ')}`);
     }
   }
   return pdfParse;
