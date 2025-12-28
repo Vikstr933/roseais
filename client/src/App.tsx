@@ -32,6 +32,7 @@ const ElonChat = lazy(() => import('./pages/ElonChat'));
 const PublicProjects = lazy(() => import('./pages/PublicProjects'));
 const PublicProjectDetail = lazy(() => import('./pages/PublicProjectDetail'));
 const VideoTranscriptionApp = lazy(() => import('./pages/VideoTranscriptionApp'));
+const ResumeAnalysisApp = lazy(() => import('./pages/ResumeAnalysisApp'));
 const DataInsights = lazy(() => import('./pages/DataInsights'));
 
 // Lazy load heavy components
@@ -81,6 +82,7 @@ function AppContent() {
           <Route path="/public-projects" component={PublicProjects} />
           <Route path="/public-projects/:id" component={PublicProjectDetail} />
           <Route path="/community/video-transcription" component={VideoTranscriptionApp} />
+          <Route path="/community/resume-analysis" component={ResumeAnalysisApp} />
           <Route path="/auth/callback" component={AuthCallback} />
           <Route path="/callback" component={AuthCallback} />
           <Route path="/pricing" component={Pricing} />

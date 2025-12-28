@@ -20,6 +20,7 @@ import {
   Sparkles,
   Video,
   Brain,
+  FileText,
 } from 'lucide-react';
 import { useAuth, getAuthHeaders } from '@/contexts/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -578,12 +579,14 @@ function AppExamplesTab() {
           </div>
         </motion.div>
 
-        {/* Placeholder for more apps */}
-        <div 
-          className="relative bg-card rounded-lg border-2 border-dashed p-6 flex items-center justify-center min-h-[200px] overflow-hidden group"
+        {/* CV Analysis App */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative bg-card rounded-lg border-2 border-transparent p-6 hover:border-primary/50 transition-all duration-300 overflow-hidden group"
           style={{
             background: 'linear-gradient(white, white) padding-box, linear-gradient(to right, #a855f7, #ec4899, #a855f7) border-box',
-            border: '2px dashed transparent',
+            border: '2px solid transparent',
           }}
         >
           {/* OmniAssistant Branding Badge */}
@@ -592,14 +595,46 @@ function AppExamplesTab() {
             <span className="text-xs font-medium text-purple-700 dark:text-purple-400">OmniAssistant</span>
           </div>
 
-          {/* Subtle gradient overlay */}
+          {/* Subtle gradient overlay on hover */}
           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-pink-500/0 group-hover:from-purple-500/5 group-hover:to-pink-500/5 transition-all duration-300 pointer-events-none" />
 
-          <div className="relative z-10 text-center text-muted-foreground">
-            <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">More apps coming soon</p>
+          <div className="relative z-10">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
+                <FileText className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="flex-1 pr-16">
+                <h3 className="font-semibold text-lg mb-1">CV Analys & Jobb-matchning</h3>
+                <p className="text-sm text-muted-foreground">
+                  Analysera ditt CV med AI, få detaljerad feedback och hitta matchade jobb. Stöder PDF, DOCX och LaTeX.
+                </p>
+              </div>
+            </div>
+            
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Code className="h-3 w-3" />
+                <span>AI-Powered Analysis</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Code className="h-3 w-3" />
+                <span>Swedish Job Matching</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Code className="h-3 w-3" />
+                <span>LaTeX Support</span>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => setLocation('/community/resume-analysis')}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Open App
+            </Button>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

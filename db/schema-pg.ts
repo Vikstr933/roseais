@@ -1075,6 +1075,88 @@ export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
 export type NewRateLimitBucket = typeof rateLimitBuckets.$inferInsert;
 export type UserAPIKey = typeof userAPIKeys.$inferSelect;
 export type NewUserAPIKey = typeof userAPIKeys.$inferInsert;
+
+// Resume Analysis Tables
+export const resumes = pgTable('resumes', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  filename: text('filename').notNull(),
+  filePath: text('file_path').notNull(),
+  fileSize: integer('file_size'),
+  fileType: text('file_type'), // 'pdf', 'docx', 'tex'
+  parsedData: jsonb('parsed_data').default({}),
+  rawText: text('raw_text'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const resumeAnalyses = pgTable('resume_analyses', {
+  id: serial('id').primaryKey(),
+  resumeId: integer('resume_id').notNull().references(() => resumes.id, { onDelete: 'cascade' }),
+  overallScore: integer('overall_score').notNull(),
+  atsScore: integer('ats_score').notNull(),
+  contentScore: integer('content_score').notNull(),
+  completenessScore: integer('completeness_score').notNull(),
+  keywordScore: integer('keyword_score').notNull(),
+  improvements: jsonb('improvements').default([]),
+  analyzedAt: timestamp('analyzed_at').defaultNow(),
+});
+
+export const jobMatches = pgTable('job_matches', {
+  id: serial('id').primaryKey(),
+  resumeId: integer('resume_id').notNull().references(() => resumes.id, { onDelete: 'cascade' }),
+  jobTitle: text('job_title').notNull(),
+  company: text('company'),
+  location: text('location'),
+  matchPercentage: integer('match_percentage').notNull(),
+  jobDescription: text('job_description'),
+  jobUrl: text('job_url'),
+  jobId: text('job_id'), // External job ID from JobTech API
+  requiredSkills: jsonb('required_skills').default([]),
+  matchedSkills: jsonb('matched_skills').default([]),
+  missingSkills: jsonb('missing_skills').default([]),
+  matchedAt: timestamp('matched_at').defaultNow(),
+});
+
+export const jobSearchQueries = pgTable('job_search_queries', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  queryKeywords: text('query_keywords').notNull(),
+  location: text('location'),
+  results: jsonb('results'),
+  totalCount: integer('total_count').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  expiresAt: timestamp('expires_at'),
+});
+
+// Resume Relations
+export const resumesRelations = relations(resumes, ({ one, many }) => ({
+  user: one(users, { fields: [resumes.userId], references: [users.id] }),
+  analyses: many(resumeAnalyses),
+  jobMatches: many(jobMatches),
+}));
+
+export const resumeAnalysesRelations = relations(resumeAnalyses, ({ one }) => ({
+  resume: one(resumes, { fields: [resumeAnalyses.resumeId], references: [resumes.id] }),
+}));
+
+export const jobMatchesRelations = relations(jobMatches, ({ one }) => ({
+  resume: one(resumes, { fields: [jobMatches.resumeId], references: [resumes.id] }),
+}));
+
+export const jobSearchQueriesRelations = relations(jobSearchQueries, ({ one }) => ({
+  user: one(users, { fields: [jobSearchQueries.userId], references: [users.id] }),
+}));
+
+// TypeScript types
+export type Resume = typeof resumes.$inferSelect;
+export type NewResume = typeof resumes.$inferInsert;
+export type ResumeAnalysis = typeof resumeAnalyses.$inferSelect;
+export type NewResumeAnalysis = typeof resumeAnalyses.$inferInsert;
+export type JobMatch = typeof jobMatches.$inferSelect;
+export type NewJobMatch = typeof jobMatches.$inferInsert;
+export type JobSearchQuery = typeof jobSearchQueries.$inferSelect;
+export type NewJobSearchQuery = typeof jobSearchQueries.$inferInsert;
 export type ChainExecution = typeof chainExecutions.$inferSelect;
 export type NewChainExecution = typeof chainExecutions.$inferInsert;
 export type PromptChain = typeof promptChains.$inferSelect;

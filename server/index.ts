@@ -60,6 +60,7 @@ import sharedConnectorsRouter from './routes/shared-connectors';
 import pythonSandboxRouter from './routes/python-sandbox';
 import whisperRouter from './routes/whisper';
 import videoRouter from './routes/video';
+import resumesRouter from './routes/resumes';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -589,6 +590,14 @@ const initializeApp = async () => {
       console.log('✅ Video router registered at /api/video');
     } catch (error) {
       console.error('❌ Failed to register video router:', error);
+    }
+
+    // Register resume routes
+    try {
+      app.use('/api/resumes', resumesRouter); // Resume analysis and job matching
+      console.log('✅ Resumes router registered at /api/resumes');
+    } catch (error) {
+      console.error('❌ Failed to register resumes router:', error);
     }
     app.use('/api', sseRouter); // This will handle /api/sse/* routes
 

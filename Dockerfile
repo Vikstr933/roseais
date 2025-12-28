@@ -25,7 +25,8 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Installera Node dependencies (inklusive dev dependencies för build)
-RUN npm install
+# Använd --prefer-offline och --no-audit för att spara minne
+RUN npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
 
 # Installera Playwright browsers (kritiskt för browser automation)
 # Installera med system dependencies för att säkerställa att allt fungerar
@@ -63,7 +64,9 @@ RUN test -f venv-whisper/bin/python3 && \
     venv-whisper/bin/python3 -c "import faster_whisper; print('✅ faster-whisper still present after COPY')" || \
     (echo "❌ CRITICAL: venv-whisper was overwritten or faster-whisper missing after COPY" && exit 1)
 
-# Bygg backend
+# Bygg backend med ökad minne för att undvika OOM errors
+# Använd NODE_OPTIONS för att öka tillgängligt minne under build
+ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN npm run build:backend
 
 # Verifiera att venv-whisper finns och fungerar efter build
@@ -76,8 +79,11 @@ RUN test -f venv-whisper/bin/python3 && \
     (echo "❌ venv-whisper verification failed - faster-whisper may not be properly installed" && exit 1)
 
 # Behåll Playwright även om det är en dev dependency (behövs för runtime)
-# Rensa cache men behåll alla dependencies som behövs
-RUN npm cache clean --force
+# Rensa cache och node_modules cache för att frigöra minne
+RUN npm cache clean --force && \
+    rm -rf /tmp/* && \
+    rm -rf /root/.npm && \
+    rm -rf /root/.cache
 
 # Skapa directories för workspaces och temp files
 # Använd relativ path för temp så att det matchar process.cwd()/temp
