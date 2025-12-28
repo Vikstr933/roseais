@@ -10,24 +10,29 @@ async function getPdfParse() {
   if (!pdfParse) {
     const module = await import('pdf-parse');
     
-    // pdf-parse exports an object with PDFParse class/function
-    // Try PDFParse first (the main export), then default, then the module itself
-    pdfParse = (module as any).PDFParse || (module as any).default || (module as any);
+    // pdf-parse v2.x exports PDFParse as a class with a parse method
+    const PDFParseClass = (module as any).PDFParse;
     
-    // If it's still not a function, try accessing it differently
-    if (typeof pdfParse !== 'function') {
-      // Sometimes the function is wrapped
-      if (pdfParse && typeof (pdfParse as any).default === 'function') {
-        pdfParse = (pdfParse as any).default;
-      } else if (pdfParse && typeof (pdfParse as any).PDFParse === 'function') {
-        pdfParse = (pdfParse as any).PDFParse;
+    if (PDFParseClass && typeof PDFParseClass.parse === 'function') {
+      // Use the static parse method
+      pdfParse = PDFParseClass.parse.bind(PDFParseClass);
+    } else if (PDFParseClass && typeof PDFParseClass === 'function') {
+      // If PDFParse itself is callable, use it directly
+      pdfParse = PDFParseClass;
+    } else {
+      // Fallback: try default export
+      pdfParse = (module as any).default;
+      if (pdfParse && typeof pdfParse.parse === 'function') {
+        pdfParse = pdfParse.parse;
       }
     }
     
     // Final check
     if (typeof pdfParse !== 'function') {
-      logger.error(`pdf-parse export type: ${typeof pdfParse}, available keys: ${Object.keys(module).join(', ')}`);
-      throw new Error(`pdf-parse module export is not a function, got type: ${typeof pdfParse}. Available keys: ${Object.keys(module).join(', ')}`);
+      const PDFParseType = PDFParseClass ? typeof PDFParseClass : 'undefined';
+      const hasParse = PDFParseClass && typeof (PDFParseClass as any).parse;
+      logger.error(`pdf-parse: PDFParse type: ${PDFParseType}, has parse method: ${hasParse}, available keys: ${Object.keys(module).join(', ')}`);
+      throw new Error(`pdf-parse module export is not a function. PDFParse type: ${PDFParseType}, has parse: ${hasParse}. Available keys: ${Object.keys(module).join(', ')}`);
     }
   }
   return pdfParse;
