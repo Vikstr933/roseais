@@ -9,8 +9,13 @@ let mammoth: any;
 async function getPdfParse() {
   if (!pdfParse) {
     const module = await import('pdf-parse');
-    // Handle both ESM default export and CommonJS exports
-    pdfParse = module.default || module;
+    // pdf-parse is a CommonJS module, it exports the function directly
+    // Try different ways to access it
+    pdfParse = module.default || (module as any).default || module;
+    // If it's still not a function, try accessing it as a property
+    if (typeof pdfParse !== 'function') {
+      pdfParse = (module as any).pdfParse || (module as any);
+    }
   }
   return pdfParse;
 }
@@ -18,8 +23,12 @@ async function getPdfParse() {
 async function getMammoth() {
   if (!mammoth) {
     const module = await import('mammoth');
-    // Handle both ESM default export and CommonJS exports
-    mammoth = module.default || module;
+    // mammoth is a CommonJS module
+    mammoth = module.default || (module as any).default || module;
+    // If it's still not an object with extractRawText, try accessing it directly
+    if (!mammoth || typeof mammoth.extractRawText !== 'function') {
+      mammoth = (module as any).mammoth || module;
+    }
   }
   return mammoth;
 }
@@ -114,7 +123,14 @@ export class ResumeParserService {
 
   private async parseDOCX(buffer: Buffer): Promise<string> {
     try {
-      const mammothLib = await getMammoth();
+      const mammothModule = await getMammoth();
+      // mammoth exports an object with extractRawText method
+      const mammothLib = mammothModule || (mammothModule as any).default || mammothModule;
+      
+      if (!mammothLib || typeof mammothLib.extractRawText !== 'function') {
+        throw new Error('mammoth module did not export extractRawText function');
+      }
+      
       const result = await mammothLib.extractRawText({ buffer });
       return result.value;
     } catch (error) {
