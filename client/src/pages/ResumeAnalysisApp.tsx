@@ -27,11 +27,14 @@ import {
   Edit,
   Save,
   XCircle,
+  Search,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { AuthDialog } from '@/components/AuthDialog';
+import { Input } from '@/components/ui/input';
 
 interface ResumeAnalysis {
   id: number;
@@ -102,6 +105,9 @@ export default function ResumeAnalysisApp() {
   const [editedResumeText, setEditedResumeText] = useState<string>('');
   const [adaptedResumes, setAdaptedResumes] = useState<AdaptedResume[]>([]);
   const [viewingAdaptedResume, setViewingAdaptedResume] = useState<AdaptedResume | null>(null);
+  const [searchKeywords, setSearchKeywords] = useState<string>('');
+  const [searchLocation, setSearchLocation] = useState<string>('');
+  const [isSearchingJobs, setIsSearchingJobs] = useState<boolean>(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -284,10 +290,23 @@ export default function ResumeAnalysisApp() {
   const handleFindJobs = async () => {
     if (!uploadedResume) return;
 
-    setProgress('Searching for matching jobs...');
+    setIsSearchingJobs(true);
+    setProgress('Söker matchande jobb...');
 
     try {
-      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/job-matches?keywords=developer`, {
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (searchKeywords.trim()) {
+        params.append('keywords', searchKeywords.trim());
+      }
+      if (searchLocation.trim()) {
+        params.append('location', searchLocation.trim());
+      }
+
+      const queryString = params.toString();
+      const url = `/api/resumes/${uploadedResume.id}/job-matches${queryString ? `?${queryString}` : ''}`;
+
+      const response = await apiFetch(url, {
         method: 'GET',
       });
 
@@ -301,13 +320,20 @@ export default function ResumeAnalysisApp() {
         setJobMatches(data.matches);
         setProgress('');
         toast({
-          title: 'Jobs Found!',
-          description: `Found ${data.matches.length} matching job listings`,
+          title: 'Jobb Hittade!',
+          description: `Hittade ${data.matches.length} matchande jobbannonser`,
         });
       }
     } catch (err) {
       console.error('Failed to find jobs:', err);
       setProgress('');
+      toast({
+        title: 'Fel',
+        description: 'Kunde inte söka jobb. Försök igen.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSearchingJobs(false);
     }
   };
 
@@ -854,22 +880,86 @@ export default function ResumeAnalysisApp() {
             {/* Job Matches */}
             <Card>
               <CardHeader>
-                <CardTitle>Job Matches</CardTitle>
-                <CardDescription>Find matching jobs on the Swedish market</CardDescription>
+                <CardTitle>Jobbsökning</CardTitle>
+                <CardDescription>Sök efter jobb på den svenska marknaden och matcha mot ditt CV</CardDescription>
               </CardHeader>
               <CardContent>
-                {jobMatches.length === 0 ? (
-                  <Button
-                    onClick={handleFindJobs}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                    Find Matching Jobs
-                  </Button>
-                ) : (
-                  <div className="space-y-4">
-                    {jobMatches.map((match, index) => (
+                <div className="space-y-4">
+                  {/* Search Form */}
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium flex items-center gap-2">
+                        <Search className="h-4 w-4" />
+                        Sökord
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="t.ex. utvecklare, säljare, lärare..."
+                        value={searchKeywords}
+                        onChange={(e) => setSearchKeywords(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleFindJobs();
+                          }
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Lämna tomt för att automatiskt extrahera sökord från ditt CV
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        Plats (valfritt)
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="t.ex. Stockholm, Göteborg, Malmö..."
+                        value={searchLocation}
+                        onChange={(e) => setSearchLocation(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleFindJobs();
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button
+                      onClick={handleFindJobs}
+                      disabled={isSearchingJobs || !uploadedResume}
+                      className="w-full"
+                    >
+                      {isSearchingJobs ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Söker...
+                        </>
+                      ) : (
+                        <>
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          Sök Jobb
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Job Results */}
+                  {jobMatches.length === 0 && !isSearchingJobs ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">
+                        Ange sökord och klicka på "Sök Jobb" för att hitta matchande jobb
+                      </p>
+                    </div>
+                  ) : (
+                    jobMatches.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between pt-2 border-t">
+                          <p className="text-sm text-muted-foreground">
+                            Visar {jobMatches.length} matchande jobb
+                          </p>
+                        </div>
+                        {jobMatches.map((match, index) => (
                       <div
                         key={index}
                         className="p-4 border rounded-lg"
@@ -929,8 +1019,10 @@ export default function ResumeAnalysisApp() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                )}
+                      </div>
+                    )
+                  )}
+                </div>
               </CardContent>
             </Card>
 
