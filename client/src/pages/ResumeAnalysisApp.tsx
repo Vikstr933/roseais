@@ -1143,6 +1143,119 @@ export default function ResumeAnalysisApp() {
               </Card>
             )}
 
+            {/* Viewing Application */}
+            {viewingApplication && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>Ansökan för {viewingApplication.jobMatch.jobTitle}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setViewingApplication(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>
+                    {viewingApplication.jobMatch.company}
+                    {viewingApplication.jobMatch.applicationEmail && (
+                      <span> • Email: {viewingApplication.jobMatch.applicationEmail}</span>
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Cover Letter Section */}
+                    <div>
+                      <h5 className="font-medium mb-2 text-sm">Personligt Brev</h5>
+                      <div className="border rounded-lg p-4 bg-muted/30">
+                        <pre className="whitespace-pre-wrap font-mono text-sm">
+                          {viewingApplication.data.coverLetter}
+                        </pre>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap gap-2 pt-2 border-t">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(viewingApplication.data.fullApplication.combinedText);
+                          toast({
+                            title: 'Kopierad!',
+                            description: 'Hela ansökan har kopierats till urklipp',
+                          });
+                        }}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Kopiera Allt
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(viewingApplication.data.coverLetter);
+                          toast({
+                            title: 'Kopierad!',
+                            description: 'Personligt brev har kopierats till urklipp',
+                          });
+                        }}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Kopiera Personligt Brev
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const blob = new Blob([viewingApplication.data.fullApplication.combinedText], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `Ansokan_${viewingApplication.jobMatch.jobTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.txt`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Ladda ner som Text
+                      </Button>
+                      {viewingApplication.jobMatch.applicationUrl && (
+                        <Button
+                          variant="default"
+                          onClick={() => window.open(viewingApplication.jobMatch.applicationUrl, '_blank')}
+                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Öppna Ansökningssida
+                        </Button>
+                      )}
+                      {viewingApplication.jobMatch.applicationEmail && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            const subject = encodeURIComponent(`Ansökan: ${viewingApplication.jobMatch.jobTitle}`);
+                            const body = encodeURIComponent(viewingApplication.data.fullApplication.combinedText);
+                            window.location.href = `mailto:${viewingApplication.jobMatch.applicationEmail}?subject=${subject}&body=${body}`;
+                          }}
+                        >
+                          <Mail className="h-4 w-4 mr-2" />
+                          Öppna Email-klient
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Instructions */}
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <strong>Instruktioner:</strong> Kopiera ansökan eller öppna ansökningssidan. Klistra in personligt brev och bifoga ditt CV.
+                        {viewingApplication.jobMatch.applicationEmail && ' Du kan också skicka via email med knappen ovan.'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Viewing Adapted Resume */}
             {viewingAdaptedResume && (
               <Card>
