@@ -66,9 +66,15 @@ export async function apiFetch(
 
   // Determine timeout based on endpoint
   // Transcription endpoints need longer timeout (3 minutes)
+  // CV adaptation endpoints need longer timeout (60 seconds)
   // Other endpoints use default 30 seconds
   const isTranscriptionEndpoint = path.includes('/transcribe') || path.includes('/extract-audio');
-  const timeoutMs = isTranscriptionEndpoint ? 180000 : 30000; // 3 minutes for transcription, 30s for others
+  const isAdaptationEndpoint = path.includes('/adapt');
+  const timeoutMs = isTranscriptionEndpoint 
+    ? 180000  // 3 minutes for transcription
+    : isAdaptationEndpoint 
+      ? 60000  // 60 seconds for CV adaptation
+      : 30000; // 30s for others
 
   let lastError: Error | null = null;
   

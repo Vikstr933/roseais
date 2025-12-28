@@ -296,8 +296,19 @@ export default function ResumeAnalysisApp() {
   const handleAdaptResume = async (jobMatch: JobMatch) => {
     if (!uploadedResume || !jobMatch.jobId) return;
 
+    // Prevent multiple simultaneous adaptation requests
+    const isCurrentlyAdapting = Object.values(isAdapting).some(v => v === true);
+    if (isCurrentlyAdapting) {
+      toast({
+        title: 'Anpassning pågår redan',
+        description: 'Vänligen vänta tills den nuvarande anpassningen är klar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsAdapting(prev => ({ ...prev, [jobMatch.jobId!]: true }));
-    setProgress('Anpassar CV till jobbet...');
+    setProgress('Anpassar CV till jobbet... Detta kan ta upp till en minut...');
 
     try {
       const response = await apiFetch(`/api/resumes/${uploadedResume.id}/adapt/${jobMatch.jobId}`, {
@@ -333,14 +344,25 @@ export default function ResumeAnalysisApp() {
         console.log('Adapted resume:', data.adaptedResume);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to adapt resume';
-      setError(errorMessage);
-      setProgress('');
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      // Handle abort errors gracefully
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Anpassningen avbröts. Försök igen.');
+        setProgress('');
+        toast({
+          title: 'Anpassning avbruten',
+          description: 'Requesten tog för lång tid. Försök igen eller kontakta support om problemet kvarstår.',
+          variant: 'destructive',
+        });
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to adapt resume';
+        setError(errorMessage);
+        setProgress('');
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsAdapting(prev => ({ ...prev, [jobMatch.jobId!]: false }));
     }
