@@ -10,29 +10,22 @@ async function getPdfParse() {
   if (!pdfParse) {
     const module = await import('pdf-parse');
     
-    // pdf-parse v2.x exports PDFParse as a class with a parse method
+    // pdf-parse v2.x exports PDFParse as a class (not a function)
     const PDFParseClass = (module as any).PDFParse;
     
-    if (PDFParseClass && typeof PDFParseClass.parse === 'function') {
-      // Use the static parse method
-      pdfParse = PDFParseClass.parse.bind(PDFParseClass);
-    } else if (PDFParseClass && typeof PDFParseClass === 'function') {
-      // If PDFParse itself is callable, use it directly
+    if (PDFParseClass && typeof PDFParseClass === 'function') {
+      // PDFParse is a class constructor - return it so we can use 'new PDFParse()'
       pdfParse = PDFParseClass;
     } else {
       // Fallback: try default export
       pdfParse = (module as any).default;
-      if (pdfParse && typeof pdfParse.parse === 'function') {
-        pdfParse = pdfParse.parse;
-      }
     }
     
-    // Final check
+    // Final check - must be a constructor function (class)
     if (typeof pdfParse !== 'function') {
       const PDFParseType = PDFParseClass ? typeof PDFParseClass : 'undefined';
-      const hasParse = PDFParseClass && typeof (PDFParseClass as any).parse;
-      logger.error(`pdf-parse: PDFParse type: ${PDFParseType}, has parse method: ${hasParse}, available keys: ${Object.keys(module).join(', ')}`);
-      throw new Error(`pdf-parse module export is not a function. PDFParse type: ${PDFParseType}, has parse: ${hasParse}. Available keys: ${Object.keys(module).join(', ')}`);
+      logger.error(`pdf-parse: PDFParse type: ${PDFParseType}, available keys: ${Object.keys(module).join(', ')}`);
+      throw new Error(`pdf-parse PDFParse is not a class/function. Type: ${PDFParseType}. Available keys: ${Object.keys(module).join(', ')}`);
     }
   }
   return pdfParse;
@@ -133,15 +126,21 @@ export class ResumeParserService {
 
   private async parsePDF(buffer: Buffer): Promise<string> {
     try {
-      const pdfParseFunc = await getPdfParse();
-      const data = await pdfParseFunc(buffer);
-      // pdf-parse handles both regular PDFs and LaTeX-generated PDFs
-      // Since LaTeX is compiled to PDF, we just need to extract the text
-      let text = data.text;
+      const PDFParseClass = await getPdfParse();
+      
+      // pdf-parse v2.x requires creating an instance and calling getText()
+      const parser = new PDFParseClass({ data: buffer });
+      const result = await parser.getText();
+      
+      // Extract text from result
+      let text = result.text || '';
       
       // Cleanup LaTeX-artifacts that might remain in the text
       // (LaTeX commands sometimes appear as text in PDFs)
       text = this.cleanLaTeXArtifacts(text);
+      
+      // Cleanup parser resources
+      await parser.destroy();
       
       return text;
     } catch (error) {
