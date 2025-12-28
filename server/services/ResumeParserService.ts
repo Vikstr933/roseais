@@ -1,10 +1,24 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
 
-// pdf-parse and mammoth use CommonJS exports
-const pdfParse = require('pdf-parse');
-const mammoth = require('mammoth');
-
 const logger = new SimpleLogger('ResumeParserService');
+
+// Lazy load CommonJS modules to avoid bundling issues
+let pdfParse: any;
+let mammoth: any;
+
+async function getPdfParse() {
+  if (!pdfParse) {
+    pdfParse = (await import('pdf-parse')).default || (await import('pdf-parse'));
+  }
+  return pdfParse;
+}
+
+async function getMammoth() {
+  if (!mammoth) {
+    mammoth = (await import('mammoth')).default || (await import('mammoth'));
+  }
+  return mammoth;
+}
 
 export interface ParsedResumeData {
   rawText: string;
@@ -78,7 +92,8 @@ export class ResumeParserService {
 
   private async parsePDF(buffer: Buffer): Promise<string> {
     try {
-      const data = await pdfParse(buffer);
+      const pdfParseFunc = await getPdfParse();
+      const data = await pdfParseFunc(buffer);
       // pdf-parse handles both regular PDFs and LaTeX-generated PDFs
       // Since LaTeX is compiled to PDF, we just need to extract the text
       let text = data.text;
@@ -95,7 +110,8 @@ export class ResumeParserService {
 
   private async parseDOCX(buffer: Buffer): Promise<string> {
     try {
-      const result = await mammoth.extractRawText({ buffer });
+      const mammothLib = await getMammoth();
+      const result = await mammothLib.extractRawText({ buffer });
       return result.value;
     } catch (error) {
       throw new Error(`DOCX parsing failed: ${error instanceof Error ? error.message : String(error)}`);
