@@ -509,6 +509,61 @@ export default function ResumeAnalysisApp() {
     setEditedResumeText('');
   };
 
+  const handleGenerateApplication = async (jobMatch: JobMatch) => {
+    if (!uploadedResume || !jobMatch.jobId) return;
+
+    setGeneratingApplication(prev => ({ ...prev, [jobMatch.jobId!]: true }));
+    setProgress('Genererar personligt brev och ansökan...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/generate-application/${jobMatch.jobId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobTitle: jobMatch.jobTitle,
+          jobDescription: jobMatch.jobDescription || '',
+          company: jobMatch.company,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate application');
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.application) {
+        setApplicationData(prev => ({
+          ...prev,
+          [jobMatch.jobId!]: data.application,
+        }));
+        setViewingApplication({
+          jobMatch,
+          data: data.application,
+        });
+        setProgress('');
+        toast({
+          title: 'Ansökan Genererad!',
+          description: 'Personligt brev och komplett ansökan är klar.',
+        });
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate application';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingApplication(prev => ({ ...prev, [jobMatch.jobId!]: false }));
+    }
+  };
+
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
     if (score >= 60) return 'text-yellow-600';
