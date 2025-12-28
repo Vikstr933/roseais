@@ -53,6 +53,22 @@ interface Resume {
   filename: string;
   fileType: string;
   createdAt: string;
+  rawText?: string;
+  parsedData?: any;
+}
+
+interface AdaptedResume {
+  id: number;
+  filename: string;
+  rawText: string;
+  adaptedForJob: {
+    jobId: string;
+    jobTitle: string;
+    company?: string;
+  };
+  originalResumeId: number;
+  improvements?: string[];
+  adaptationNotes?: string;
 }
 
 interface JobMatch {
@@ -84,6 +100,8 @@ export default function ResumeAnalysisApp() {
   const [isAdapting, setIsAdapting] = useState<Record<string, boolean>>({});
   const [editingResume, setEditingResume] = useState<boolean>(false);
   const [editedResumeText, setEditedResumeText] = useState<string>('');
+  const [adaptedResumes, setAdaptedResumes] = useState<AdaptedResume[]>([]);
+  const [viewingAdaptedResume, setViewingAdaptedResume] = useState<AdaptedResume | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -332,16 +350,30 @@ export default function ResumeAnalysisApp() {
       const data = await response.json();
 
       if (data.success && data.adaptedResume) {
+        // Add the adapted resume to the list
+        const newAdaptedResume: AdaptedResume = {
+          id: data.adaptedResume.id,
+          filename: data.adaptedResume.filename,
+          rawText: data.adaptedResume.rawText,
+          adaptedForJob: data.adaptedResume.adaptedForJob,
+          originalResumeId: data.adaptedResume.originalResumeId,
+          improvements: data.adaptedResume.improvements,
+          adaptationNotes: data.adaptedResume.adaptationNotes,
+        };
+
+        setAdaptedResumes(prev => {
+          // Remove any existing adaptation for the same job
+          const filtered = prev.filter(a => a.adaptedForJob.jobId !== jobMatch.jobId);
+          return [...filtered, newAdaptedResume];
+        });
+
         setProgress('');
+        setViewingAdaptedResume(newAdaptedResume);
+        
         toast({
           title: 'CV Anpassat!',
-          description: `Ditt CV har anpassats till ${jobMatch.jobTitle}`,
+          description: `Ditt CV har anpassats till ${jobMatch.jobTitle}. Du kan se den anpassade versionen nedan.`,
         });
-        
-        // Optionally reload the resume to show adapted version
-        // For now, we'll just show a success message
-        // You could navigate to a new page showing the adapted resume
-        console.log('Adapted resume:', data.adaptedResume);
       }
     } catch (err) {
       // Handle abort errors gracefully
@@ -901,6 +933,157 @@ export default function ResumeAnalysisApp() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Adapted Resumes */}
+            {adaptedResumes.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Anpassade CV-versioner</CardTitle>
+                  <CardDescription>
+                    Dina CV:n anpassade för specifika jobb. Du kan se och jämföra dem här.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {adaptedResumes.map((adapted) => {
+                      const isViewing = viewingAdaptedResume?.id === adapted.id;
+                      return (
+                        <div
+                          key={adapted.id}
+                          className={`p-4 border rounded-lg ${isViewing ? 'border-primary bg-primary/5' : ''}`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h4 className="font-medium">{adapted.adaptedForJob.jobTitle}</h4>
+                              {adapted.adaptedForJob.company && (
+                                <p className="text-sm text-muted-foreground">
+                                  {adapted.adaptedForJob.company}
+                                </p>
+                              )}
+                              {adapted.adaptationNotes && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {adapted.adaptationNotes}
+                                </p>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="bg-purple-100 text-purple-700">
+                              Anpassad
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <Button
+                              variant={isViewing ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setViewingAdaptedResume(isViewing ? null : adapted)}
+                            >
+                              {isViewing ? (
+                                <>
+                                  <X className="h-4 w-4 mr-2" />
+                                  Stäng
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Visa CV
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const blob = new Blob([adapted.rawText], { type: 'text/plain' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = adapted.filename;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Ladda ner
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Viewing Adapted Resume */}
+            {viewingAdaptedResume && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>Anpassad CV för {viewingAdaptedResume.adaptedForJob.jobTitle}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setViewingAdaptedResume(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>
+                    {viewingAdaptedResume.adaptedForJob.company && (
+                      <span>Företag: {viewingAdaptedResume.adaptedForJob.company}</span>
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {viewingAdaptedResume.improvements && viewingAdaptedResume.improvements.length > 0 && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h5 className="font-medium mb-2 text-sm">Förbättringar som gjorts:</h5>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                          {viewingAdaptedResume.improvements.map((improvement, idx) => (
+                            <li key={idx}>{improvement}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="border rounded-lg p-4 bg-muted/30">
+                      <pre className="whitespace-pre-wrap font-mono text-sm">
+                        {viewingAdaptedResume.rawText}
+                      </pre>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const blob = new Blob([viewingAdaptedResume.rawText], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = viewingAdaptedResume.filename;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Ladda ner
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(viewingAdaptedResume.rawText);
+                          toast({
+                            title: 'Kopierad!',
+                            description: 'CV-texten har kopierats till urklipp',
+                          });
+                        }}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Kopiera text
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </div>

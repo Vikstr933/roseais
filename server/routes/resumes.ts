@@ -422,9 +422,32 @@ router.post('/:id/adapt/:jobId', authenticateUser, async (req, res) => {
       (jobMatch.missingSkills as string[]) || []
     );
 
-    // Create a new version of the resume (or update existing)
-    // For now, we'll create a new resume entry with adapted content
+    // Create a new version of the resume with metadata linking to original and job
     const adaptedFilename = `${resume.filename.replace(/\.[^/.]+$/, '')}_adapted_${jobMatch.jobTitle.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+    
+    // Store metadata about the adaptation
+    const adaptedMetadata = {
+      isAdapted: true,
+      originalResumeId: resumeId,
+      adaptedForJob: {
+        jobId: jobId,
+        jobTitle: jobMatch.jobTitle,
+        company: jobMatch.company,
+        matchedSkills: jobMatch.matchedSkills || [],
+        missingSkills: jobMatch.missingSkills || [],
+      },
+      improvements: adaptedResume.improvements,
+      adaptationNotes: adaptedResume.adaptationNotes,
+    };
+
+    // Merge with existing parsedData metadata
+    const adaptedParsedDataWithMetadata = {
+      ...adaptedResume.parsedData,
+      metadata: {
+        ...(adaptedResume.parsedData as any)?.metadata,
+        ...adaptedMetadata,
+      },
+    };
     
     const [newResume] = await db
       .insert(resumes)
@@ -434,7 +457,7 @@ router.post('/:id/adapt/:jobId', authenticateUser, async (req, res) => {
         filePath: resume.filePath, // Keep same path structure
         fileSize: Buffer.byteLength(adaptedResume.rawText, 'utf8'),
         fileType: 'txt', // Adapted resume as text
-        parsedData: adaptedResume.parsedData as any,
+        parsedData: adaptedParsedDataWithMetadata as any,
         rawText: adaptedResume.rawText,
       })
       .returning();
@@ -448,6 +471,12 @@ router.post('/:id/adapt/:jobId', authenticateUser, async (req, res) => {
         parsedData: adaptedResume.parsedData,
         improvements: adaptedResume.improvements,
         adaptationNotes: adaptedResume.adaptationNotes,
+        adaptedForJob: {
+          jobId: jobId,
+          jobTitle: jobMatch.jobTitle,
+          company: jobMatch.company,
+        },
+        originalResumeId: resumeId,
       },
     });
   } catch (error) {
