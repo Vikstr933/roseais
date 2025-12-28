@@ -8,14 +8,18 @@ let mammoth: any;
 
 async function getPdfParse() {
   if (!pdfParse) {
-    pdfParse = (await import('pdf-parse')).default || (await import('pdf-parse'));
+    const module = await import('pdf-parse');
+    // Handle both ESM default export and CommonJS exports
+    pdfParse = module.default || module;
   }
   return pdfParse;
 }
 
 async function getMammoth() {
   if (!mammoth) {
-    mammoth = (await import('mammoth')).default || (await import('mammoth'));
+    const module = await import('mammoth');
+    // Handle both ESM default export and CommonJS exports
+    mammoth = module.default || module;
   }
   return mammoth;
 }
