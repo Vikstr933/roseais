@@ -1,20 +1,30 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { createRequire } from 'module';
 
 const logger = new SimpleLogger('ResumeParserService');
 
-// Lazy load CommonJS modules to avoid bundling issues
+// Use createRequire for CommonJS modules in ESM context
+const require = createRequire(import.meta.url);
+
+// Lazy load CommonJS modules
 let pdfParse: any;
 let mammoth: any;
 
 async function getPdfParse() {
   if (!pdfParse) {
-    const module = await import('pdf-parse');
-    // pdf-parse is a CommonJS module, it exports the function directly
-    // Try different ways to access it
-    pdfParse = module.default || (module as any).default || module;
-    // If it's still not a function, try accessing it as a property
+    try {
+      // Try using createRequire first (works better with CommonJS)
+      pdfParse = require('pdf-parse');
+    } catch (error) {
+      // Fallback to dynamic import
+      const module = await import('pdf-parse');
+      pdfParse = (module as any).default || module;
+    }
+    
+    // Ensure we have a function
     if (typeof pdfParse !== 'function') {
-      pdfParse = (module as any).pdfParse || (module as any);
+      logger.error('pdf-parse module did not export a function', new Error('Invalid pdf-parse export'));
+      throw new Error('pdf-parse module export is not a function');
     }
   }
   return pdfParse;
@@ -22,12 +32,19 @@ async function getPdfParse() {
 
 async function getMammoth() {
   if (!mammoth) {
-    const module = await import('mammoth');
-    // mammoth is a CommonJS module
-    mammoth = module.default || (module as any).default || module;
-    // If it's still not an object with extractRawText, try accessing it directly
+    try {
+      // Try using createRequire first
+      mammoth = require('mammoth');
+    } catch (error) {
+      // Fallback to dynamic import
+      const module = await import('mammoth');
+      mammoth = (module as any).default || module;
+    }
+    
+    // Ensure we have the expected structure
     if (!mammoth || typeof mammoth.extractRawText !== 'function') {
-      mammoth = (module as any).mammoth || module;
+      logger.error('mammoth module did not export extractRawText', new Error('Invalid mammoth export'));
+      throw new Error('mammoth module export is invalid');
     }
   }
   return mammoth;
@@ -123,14 +140,7 @@ export class ResumeParserService {
 
   private async parseDOCX(buffer: Buffer): Promise<string> {
     try {
-      const mammothModule = await getMammoth();
-      // mammoth exports an object with extractRawText method
-      const mammothLib = mammothModule || (mammothModule as any).default || mammothModule;
-      
-      if (!mammothLib || typeof mammothLib.extractRawText !== 'function') {
-        throw new Error('mammoth module did not export extractRawText function');
-      }
-      
+      const mammothLib = await getMammoth();
       const result = await mammothLib.extractRawText({ buffer });
       return result.value;
     } catch (error) {
