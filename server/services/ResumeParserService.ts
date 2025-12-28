@@ -1,30 +1,34 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
-import { createRequire } from 'module';
 
 const logger = new SimpleLogger('ResumeParserService');
 
-// Use createRequire for CommonJS modules in ESM context
-const require = createRequire(import.meta.url);
-
-// Lazy load CommonJS modules
+// Lazy load CommonJS modules - these are externalized by esbuild
 let pdfParse: any;
 let mammoth: any;
 
 async function getPdfParse() {
   if (!pdfParse) {
-    try {
-      // Try using createRequire first (works better with CommonJS)
-      pdfParse = require('pdf-parse');
-    } catch (error) {
-      // Fallback to dynamic import
-      const module = await import('pdf-parse');
-      pdfParse = (module as any).default || module;
+    const module = await import('pdf-parse');
+    logger.info(`pdf-parse module type: ${typeof module}, keys: ${Object.keys(module).join(', ')}`);
+    
+    // Try different ways to access the function
+    // pdf-parse is CommonJS and exports the function directly
+    pdfParse = module.default || (module as any);
+    
+    // If it's an object, try to find the function in it
+    if (typeof pdfParse !== 'function' && typeof pdfParse === 'object') {
+      // Try common property names
+      pdfParse = (module as any).pdfParse || (module as any).default || module;
+      // If still not a function, try accessing .default.default (sometimes happens with double wrapping)
+      if (typeof pdfParse !== 'function' && pdfParse && typeof (pdfParse as any).default === 'function') {
+        pdfParse = (pdfParse as any).default;
+      }
     }
     
-    // Ensure we have a function
+    // Final check
     if (typeof pdfParse !== 'function') {
-      logger.error('pdf-parse module did not export a function', new Error('Invalid pdf-parse export'));
-      throw new Error('pdf-parse module export is not a function');
+      logger.error(`pdf-parse export type: ${typeof pdfParse}, value: ${JSON.stringify(Object.keys(pdfParse || {}))}`);
+      throw new Error(`pdf-parse module export is not a function, got type: ${typeof pdfParse}`);
     }
   }
   return pdfParse;
@@ -32,19 +36,22 @@ async function getPdfParse() {
 
 async function getMammoth() {
   if (!mammoth) {
-    try {
-      // Try using createRequire first
-      mammoth = require('mammoth');
-    } catch (error) {
-      // Fallback to dynamic import
-      const module = await import('mammoth');
-      mammoth = (module as any).default || module;
+    const module = await import('mammoth');
+    logger.info(`mammoth module type: ${typeof module}, keys: ${Object.keys(module).join(', ')}`);
+    
+    // mammoth exports an object with extractRawText method
+    mammoth = (module as any).default || module;
+    
+    // If it's not the right structure, try accessing .default.default
+    if (!mammoth || typeof mammoth.extractRawText !== 'function') {
+      if (mammoth && typeof (mammoth as any).default === 'object') {
+        mammoth = (mammoth as any).default;
+      }
     }
     
-    // Ensure we have the expected structure
     if (!mammoth || typeof mammoth.extractRawText !== 'function') {
-      logger.error('mammoth module did not export extractRawText', new Error('Invalid mammoth export'));
-      throw new Error('mammoth module export is invalid');
+      logger.error(`mammoth export type: ${typeof mammoth}, has extractRawText: ${mammoth && typeof (mammoth as any).extractRawText}`);
+      throw new Error('mammoth module export is invalid - extractRawText not found');
     }
   }
   return mammoth;
