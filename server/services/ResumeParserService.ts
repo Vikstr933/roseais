@@ -247,7 +247,7 @@ export class ResumeParserService {
     return latexIndicators.some(pattern => pattern.test(text));
   }
 
-  private extractStructuredData(text: string): ParsedResumeData {
+  private extractStructuredData(text: string): Omit<ParsedResumeData, 'rawText' | 'metadata'> {
     // Extract email
     const emailRegex = /[\w\.-]+@[\w\.-]+\.\w+/;
     const emailMatch = text.match(emailRegex);
