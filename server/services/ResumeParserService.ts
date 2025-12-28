@@ -13,7 +13,7 @@ async function getPdfParse() {
     
     // Try different ways to access the function
     // pdf-parse is CommonJS and exports the function directly
-    pdfParse = module.default || (module as any);
+    pdfParse = (module as any).default || (module as any);
     
     // If it's an object, try to find the function in it
     if (typeof pdfParse !== 'function' && typeof pdfParse === 'object') {
