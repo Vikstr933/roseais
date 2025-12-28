@@ -41,12 +41,19 @@ const upload = multer({
 // POST /api/resumes/upload
 router.post('/upload', authenticateUser, upload.single('resume'), async (req, res) => {
   try {
+    console.log('[ResumeUpload] Request received');
     const userId = (req as any).user!.id;
     const file = (req as any).file;
+    
+    console.log('[ResumeUpload] User ID:', userId);
+    console.log('[ResumeUpload] File:', file ? { name: file.originalname, size: file.size, mimetype: file.mimetype } : 'No file');
 
     if (!file) {
+      console.log('[ResumeUpload] No file in request');
       return res.status(400).json({ error: 'No file uploaded' });
     }
+    
+    console.log('[ResumeUpload] Starting file parsing...');
 
     // Parse resume
     const parsedData = await resumeParserService.parseResume(file.buffer, file.mimetype, file.originalname);
@@ -82,6 +89,8 @@ router.post('/upload', authenticateUser, upload.single('resume'), async (req, re
       })
       .returning();
 
+    console.log('[ResumeUpload] Resume saved successfully, ID:', resume.id);
+    
     res.json({
       success: true,
       resume: {
@@ -90,8 +99,31 @@ router.post('/upload', authenticateUser, upload.single('resume'), async (req, re
         createdAt: resume.createdAt,
       },
     });
-  } catch (error) {
-    console.error('Upload error:', error);
+  } catch (error: any) {
+    console.error('[ResumeUpload] Error:', error);
+    
+    // Handle multer errors
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          error: 'File too large',
+          message: 'File size exceeds the maximum allowed size of 5MB',
+        });
+      }
+      return res.status(400).json({
+        error: 'Upload error',
+        message: error.message,
+      });
+    }
+    
+    // Handle file filter errors
+    if (error.message && error.message.includes('Invalid file type')) {
+      return res.status(400).json({
+        error: 'Invalid file type',
+        message: error.message,
+      });
+    }
+    
     res.status(500).json({
       error: 'Failed to upload resume',
       message: error instanceof Error ? error.message : String(error),
