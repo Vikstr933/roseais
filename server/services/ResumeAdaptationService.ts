@@ -96,13 +96,39 @@ Returnera resultatet i JSON-format:
       }
 
       // Parse JSON response
-      const content = response.content.trim();
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('Invalid JSON response from AI');
+      let content = response.content.trim();
+      
+      // Remove markdown code blocks if present
+      if (content.includes('```json')) {
+        content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      } else if (content.includes('```')) {
+        content = content.replace(/```\s*/g, '').trim();
       }
 
-      const adaptedData = JSON.parse(jsonMatch[0]);
+      // Try to find JSON object
+      let jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        // Log the content for debugging
+        logger.error(`No JSON found in AI response. Content: ${content.substring(0, 500)}`);
+        
+        // Fallback: return original resume with a note
+        logger.warn('Using fallback: returning original resume with adaptation note');
+        return {
+          rawText: originalResumeText,
+          parsedData: originalParsedData,
+          improvements: ['AI-anpassning kunde inte slutföras. CV:et returneras oförändrat.'],
+          adaptationNotes: 'Kunde inte parsa AI-svar. Original CV returneras.',
+        };
+      }
+
+      try {
+        const adaptedData = JSON.parse(jsonMatch[0]);
+        
+        // Validate required fields
+        if (!adaptedData.adaptedText && !adaptedData.summary) {
+          logger.warn('AI response missing adaptedText, using original');
+          adaptedData.adaptedText = originalResumeText;
+        }
 
       // Reconstruct parsed data with adapted content
       const adaptedParsedData = {
@@ -113,12 +139,17 @@ Returnera resultatet i JSON-format:
         },
       };
 
-      return {
-        rawText: adaptedData.adaptedText || originalResumeText,
-        parsedData: adaptedParsedData,
-        improvements: adaptedData.improvements || [],
-        adaptationNotes: adaptedData.adaptationNotes || 'CV anpassat till jobbannonsen',
-      };
+        return {
+          rawText: adaptedData.adaptedText || originalResumeText,
+          parsedData: adaptedParsedData,
+          improvements: adaptedData.improvements || [],
+          adaptationNotes: adaptedData.adaptationNotes || 'CV anpassat till jobbannonsen',
+        };
+      } catch (parseError) {
+        logger.error(`JSON parse error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        logger.error(`Failed to parse JSON. Content: ${jsonMatch[0].substring(0, 500)}`);
+        throw new Error(`Invalid JSON response from AI: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      }
     } catch (error) {
       logger.error('Failed to adapt resume', error as Error);
       throw error;

@@ -8,6 +8,7 @@ import { resumeParserService } from '../services/ResumeParserService';
 import { resumeScoringService } from '../services/ResumeScoringService';
 import { jobMatchingService } from '../services/JobMatchingService';
 import { resumeAdaptationService } from '../services/ResumeAdaptationService';
+import { resumeKeywordExtractor } from '../services/ResumeKeywordExtractor';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -286,8 +287,19 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Resume not found' });
     }
 
+    // Extract relevant keywords from resume for better job matching
+    const parsedData = resume.parsedData as any;
+    let searchKeywords = keywords as string;
+    
+    // If no keywords provided, extract from resume
+    if (!searchKeywords || searchKeywords === 'developer') {
+      searchKeywords = resumeKeywordExtractor.extractJobSearchKeywords(
+        resume.rawText || '',
+        parsedData
+      );
+    }
+
     // Search for jobs (JobTech API allows up to 100 results per request)
-    const searchKeywords = (keywords as string) || 'utvecklare';
     const jobs = await jobMatchingService.searchJobs(
       searchKeywords,
       location as string | undefined,
@@ -295,7 +307,6 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
     );
 
     // Match resume to jobs
-    const parsedData = resume.parsedData as any;
     const resumeSkills = parsedData?.sections?.skills || [];
     const matches = await jobMatchingService.matchResumeToJobs(
       resume.rawText || '',
