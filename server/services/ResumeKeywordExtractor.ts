@@ -9,44 +9,69 @@ export class ResumeKeywordExtractor {
   extractJobSearchKeywords(resumeText: string, parsedData?: any): string {
     const keywords: string[] = [];
 
-    // Extract job titles from experience section
-    if (parsedData?.sections?.experience) {
+    // PRIORITY 1: Extract job titles from experience section (most reliable)
+    if (parsedData?.sections?.experience && Array.isArray(parsedData.sections.experience)) {
       parsedData.sections.experience.forEach((exp: any) => {
-        if (exp.title) {
-          // Extract main job title keywords (e.g., "Senior Software Engineer" -> ["Software", "Engineer"])
-          const titleWords = this.extractTitleKeywords(exp.title);
-          keywords.push(...titleWords);
+        if (exp.title && typeof exp.title === 'string') {
+          // Keep the full job title or extract key parts
+          const title = exp.title.trim();
+          // For Swedish job titles, prioritize the main occupation word
+          // e.g., "Ekonomiassistent" -> "ekonomiassistent"
+          // e.g., "Senior Software Engineer" -> "software engineer" 
+          const normalizedTitle = this.normalizeJobTitle(title);
+          if (normalizedTitle) {
+            keywords.push(normalizedTitle);
+          }
         }
       });
     }
 
-    // Extract skills
-    if (parsedData?.sections?.skills && Array.isArray(parsedData.sections.skills)) {
-      const skills = parsedData.sections.skills;
-      // Add top 5-7 most relevant skills
-      keywords.push(...skills.slice(0, 7));
+    // PRIORITY 2: Extract from summary section if it contains job title
+    if (parsedData?.sections?.summary && typeof parsedData.sections.summary === 'string') {
+      const summary = parsedData.sections.summary.toLowerCase();
+      // Look for common patterns like "Jag är [job title]" or "[Job title] med X års erfarenhet"
+      const titleMatch = summary.match(/(?:jag är|är|som|arbetar som)\s+([a-zåäö]+(?:\s+[a-zåäö]+){0,3})/i);
+      if (titleMatch && titleMatch[1]) {
+        const foundTitle = titleMatch[1].trim();
+        if (foundTitle.length > 3 && !this.isCommonWord(foundTitle)) {
+          keywords.push(foundTitle);
+        }
+      }
     }
 
-    // Extract technologies and keywords from resume text
-    const techKeywords = this.extractTechnologyKeywords(resumeText);
-    keywords.push(...techKeywords);
+    // PRIORITY 3: Extract job titles directly from raw text using pattern matching
+    const titleFromText = this.extractJobTitleFromText(resumeText);
+    if (titleFromText) {
+      keywords.push(titleFromText);
+    }
 
-    // Extract occupation-related keywords from text
-    const occupationKeywords = this.extractOccupationKeywords(resumeText);
-    keywords.push(...occupationKeywords);
+    // PRIORITY 4: Extract skills (but only if we don't have good job titles)
+    if (keywords.length < 2 && parsedData?.sections?.skills && Array.isArray(parsedData.sections.skills)) {
+      const skills = parsedData.sections.skills;
+      // Add top 3-5 most relevant skills
+      keywords.push(...skills.slice(0, 5).filter((s: any) => s && typeof s === 'string' && s.length > 3));
+    }
 
     // Remove duplicates and filter out common words
     const uniqueKeywords = Array.from(new Set(keywords))
       .filter(kw => kw && kw.length > 2)
-      .filter(kw => !this.isCommonWord(kw));
+      .filter(kw => !this.isCommonWord(kw))
+      .filter(kw => !this.isGenericWord(kw));
 
-    // Build search query (prioritize job titles and skills)
+    // Build search query (prioritize job titles)
     if (uniqueKeywords.length === 0) {
-      return 'utvecklare'; // Fallback
+      // Last resort: try to extract ANY meaningful word from text
+      const fallbackKeywords = this.extractFallbackKeywords(resumeText);
+      if (fallbackKeywords.length > 0) {
+        logger.warn(`Using fallback keywords: ${fallbackKeywords.join(' ')}`);
+        return fallbackKeywords.slice(0, 3).join(' ');
+      }
+      logger.error('Could not extract any keywords from resume');
+      return ''; // Return empty instead of wrong default
     }
 
-    // Take top 3-5 keywords for search
-    const searchKeywords = uniqueKeywords.slice(0, 5).join(' ');
+    // Take top 2-3 keywords for search (prioritize job titles)
+    const searchKeywords = uniqueKeywords.slice(0, 3).join(' ');
 
     logger.info(`Extracted keywords from resume: ${searchKeywords}`);
 
@@ -54,18 +79,107 @@ export class ResumeKeywordExtractor {
   }
 
   /**
-   * Extract keywords from job title
+   * Normalize job title for search (remove prefixes, keep main occupation)
    */
-  private extractTitleKeywords(title: string): string[] {
-    const commonTitleWords = ['senior', 'junior', 'lead', 'principal', 'associate', 'staff', 'head'];
+  private normalizeJobTitle(title: string): string {
+    const commonPrefixes = ['senior', 'junior', 'lead', 'principal', 'associate', 'staff', 'head', 
+                           'senior', 'junior', 'ledande', 'chef', 'ansvarig'];
     const words = title.toLowerCase().split(/\s+/);
     
-    // Filter out common title prefixes and keep meaningful words
-    return words
-      .filter(word => !commonTitleWords.includes(word))
-      .filter(word => word.length > 3)
-      .slice(0, 3); // Max 3 keywords from title
+    // Filter out common prefixes
+    const meaningfulWords = words.filter(word => 
+      !commonPrefixes.includes(word) && word.length > 3
+    );
+    
+    // Return the most meaningful word(s) - usually 1-2 words
+    if (meaningfulWords.length === 0) {
+      return words[words.length - 1]; // Fallback to last word
+    }
+    
+    return meaningfulWords.slice(0, 2).join(' '); // Max 2 words
   }
+
+  /**
+   * Extract job title directly from resume text using patterns
+   */
+  private extractJobTitleFromText(text: string): string | null {
+    const lowerText = text.toLowerCase();
+    
+    // Pattern 1: Look for common Swedish job title patterns
+    // "Ekonomiassistent", "Ekonom", "Redovisningsekonom", etc.
+    const swedishJobTitles = [
+      'ekonomiassistent', 'ekonom', 'redovisningsekonom', 'business controller',
+      'ekonomiansvarig', 'ekonomist', 'revisor', 'revisorsassistent',
+      'kreditanalytiker', 'finansanalytiker', 'budgetanalytiker',
+      'bokförare', 'kassör', 'inköpare', 'säljare', 'säljchef',
+      'marknadsförare', 'projektledare', 'projektchef', 'hr-specialist',
+      'administratör', 'kundtjänst', 'logistik', 'produktionsledare',
+      'lärare', 'lärare', 'kurator', 'psykolog', 'sjuksköterska',
+      'utvecklare', 'programmerare', 'systemarkitekt', 'testare',
+      'designer', 'grafiker', 'författare', 'journalist',
+    ];
+    
+    for (const title of swedishJobTitles) {
+      if (lowerText.includes(title)) {
+        return title;
+      }
+    }
+    
+    // Pattern 2: Look for "Jag är [title]" or similar patterns
+    const patternMatches = [
+      /jag\s+är\s+([a-zåäö]+(?:\s+[a-zåäö]+){0,2})/i,
+      /arbetar\s+som\s+([a-zåäö]+(?:\s+[a-zåäö]+){0,2})/i,
+      /yrke[:\s]+([a-zåäö]+(?:\s+[a-zåäö]+){0,2})/i,
+    ];
+    
+    for (const pattern of patternMatches) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const found = match[1].trim().toLowerCase();
+        if (found.length > 3 && !this.isCommonWord(found)) {
+          return found;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Extract fallback keywords when no clear job title found
+   */
+  private extractFallbackKeywords(text: string): string[] {
+    const keywords: string[] = [];
+    const lowerText = text.toLowerCase();
+    
+    // Look for any capitalized words that might be job titles or skills
+    const capitalizedWords = text.match(/\b[A-ZÅÄÖ][a-zåäö]{4,}\b/g);
+    if (capitalizedWords) {
+      // Filter out common non-job words
+      const excluded = ['Sverige', 'Stockholm', 'Göteborg', 'Malmö', 'Email', 'Telefon', 
+                       'Adress', 'LinkedIn', 'Utbildning', 'Erfarenhet', 'Kompetens'];
+      const meaningful = capitalizedWords
+        .filter(w => !excluded.includes(w))
+        .map(w => w.toLowerCase())
+        .slice(0, 3);
+      keywords.push(...meaningful);
+    }
+    
+    return keywords;
+  }
+
+  /**
+   * Check if word is generic and shouldn't be used for job search
+   */
+  private isGenericWord(word: string): boolean {
+    const genericWords = [
+      'arbete', 'arbetsliv', 'yrke', 'karriär', 'erfarenhet', 'kompetens',
+      'färdigheter', 'kunskaper', 'projekt', 'uppdrag', 'ansvar', 'arbetsuppgifter',
+      'företag', 'organisation', 'bransch', 'sektor',
+    ];
+    return genericWords.includes(word.toLowerCase());
+  }
+
 
   /**
    * Extract technology keywords from resume text
@@ -94,30 +208,6 @@ export class ResumeKeywordExtractor {
     return Array.from(new Set(foundTech)).slice(0, 5);
   }
 
-  /**
-   * Extract occupation-related keywords from resume text
-   */
-  private extractOccupationKeywords(text: string): string[] {
-    const occupationPatterns = [
-      // Swedish job titles
-      /\b(?:utvecklare|programmerare|arkitekt|konsult|ingenjör|designer|analytiker|projektledare|chef|manager|ledare)\b/gi,
-      // English job titles
-      /\b(?:developer|programmer|architect|consultant|engineer|designer|analyst|manager|lead|director)\b/gi,
-      // Specialized roles
-      /\b(?:fullstack|full stack|frontend|front-end|backend|back-end|devops|sre|qa|tester|test engineer)\b/gi,
-    ];
-
-    const foundOccupations: string[] = [];
-
-    occupationPatterns.forEach(pattern => {
-      const matches = text.match(pattern);
-      if (matches) {
-        foundOccupations.push(...matches.map(m => m.toLowerCase()));
-      }
-    });
-
-    return Array.from(new Set(foundOccupations)).slice(0, 3);
-  }
 
   /**
    * Check if word is a common word that shouldn't be used for job search
