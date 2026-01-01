@@ -95,21 +95,43 @@ Returnera resultatet i JSON-format:
         throw new Error('AI did not return adapted resume');
       }
 
-      // Parse JSON response
+      // Parse JSON response with multiple strategies
       let content = response.content.trim();
       
-      // Remove markdown code blocks if present
-      if (content.includes('```json')) {
-        content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      } else if (content.includes('```')) {
-        content = content.replace(/```\s*/g, '').trim();
+      // Strategy 1: Remove markdown code blocks (more aggressive)
+      if (content.includes('```')) {
+        // Try to extract content between first and last ```
+        const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+        if (codeBlockMatch && codeBlockMatch[1]) {
+          content = codeBlockMatch[1].trim();
+        } else {
+          // Fallback: remove all ``` markers
+          content = content.replace(/```(?:json)?/g, '').trim();
+        }
       }
 
-      // Try to find JSON object
-      let jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Strategy 2: Remove common AI explanatory text before JSON
+      content = content.replace(/^(?:Here's?|Here is|I've created|I have created|Below is).*?\n/gim, '');
+
+      // Strategy 3: Try multiple JSON extraction patterns
+      let jsonMatch = null;
+      
+      // 3a: Try to find JSON object with greedy matching
+      jsonMatch = content.match(/\{[\s\S]*\}/);
+      
+      // 3b: If that fails, try to find JSON between first { and last }
+      if (!jsonMatch) {
+        const firstBrace = content.indexOf('{');
+        const lastBrace = content.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonMatch = [content.substring(firstBrace, lastBrace + 1)];
+        }
+      }
+
       if (!jsonMatch) {
         // Log the content for debugging
         logger.error(`No JSON found in AI response. Content: ${content.substring(0, 500)}`);
+        logger.error(`Full response length: ${response.content.length} chars`);
         
         // Fallback: return original resume with a note
         logger.warn('Using fallback: returning original resume with adaptation note');
@@ -122,7 +144,13 @@ Returnera resultatet i JSON-format:
       }
 
       try {
-        const adaptedData = JSON.parse(jsonMatch[0]);
+        let jsonStr = jsonMatch[0];
+        
+        // Strategy 4: Try to fix common JSON issues
+        // Remove trailing commas before closing braces/brackets
+        jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+        
+        const adaptedData = JSON.parse(jsonStr);
         
         // Validate required fields
         if (!adaptedData.adaptedText && !adaptedData.summary) {
