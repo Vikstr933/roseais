@@ -126,6 +126,8 @@ export default function ResumeAnalysisApp() {
   const [generatingApplication, setGeneratingApplication] = useState<Record<string, boolean>>({});
   const [applicationData, setApplicationData] = useState<Record<string, ApplicationData>>({});
   const [viewingApplication, setViewingApplication] = useState<{ jobMatch: JobMatch; data: ApplicationData } | null>(null);
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false);
+  const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -284,10 +286,16 @@ export default function ResumeAnalysisApp() {
       if (data.success && data.analysis) {
         setAnalysis(data.analysis);
         setProgress('');
+        setHasAutoSearched(false); // Reset auto-search flag
         toast({
           title: 'Analysis Complete!',
-          description: `Your resume scored ${data.analysis.overallScore}/100`,
+          description: `Your resume scored ${data.analysis.overallScore}/100. Söker automatiskt efter matchande jobb...`,
         });
+        // Automatically search for jobs after analysis
+        // Use setTimeout to ensure state is updated
+        setTimeout(() => {
+          handleFindJobs(true); // Pass true to indicate auto-search
+        }, 500);
       } else {
         throw new Error(data.error || 'Failed to analyze resume');
       }
@@ -305,19 +313,23 @@ export default function ResumeAnalysisApp() {
     }
   };
 
-  const handleFindJobs = async () => {
+  const handleFindJobs = async (isAutoSearch: boolean = false) => {
     if (!uploadedResume) return;
 
+    // Don't auto-search if already searched
+    if (isAutoSearch && hasAutoSearched) return;
+
     setIsSearchingJobs(true);
-    setProgress('Söker matchande jobb...');
+    setProgress('Söker matchande jobb baserat på ditt CV...');
 
     try {
       // Build query parameters
+      // Only use keywords/location if explicitly provided (not in auto-search)
       const params = new URLSearchParams();
-      if (searchKeywords.trim()) {
+      if (!isAutoSearch && searchKeywords.trim()) {
         params.append('keywords', searchKeywords.trim());
       }
-      if (searchLocation.trim()) {
+      if (!isAutoSearch && searchLocation.trim()) {
         params.append('location', searchLocation.trim());
       }
 
@@ -336,20 +348,25 @@ export default function ResumeAnalysisApp() {
 
       if (data.matches) {
         setJobMatches(data.matches);
+        setHasAutoSearched(isAutoSearch);
         setProgress('');
-        toast({
-          title: 'Jobb Hittade!',
-          description: `Hittade ${data.matches.length} matchande jobbannonser`,
-        });
+        if (!isAutoSearch) {
+          toast({
+            title: 'Jobb Hittade!',
+            description: `Hittade ${data.matches.length} matchande jobbannonser`,
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to find jobs:', err);
       setProgress('');
-      toast({
-        title: 'Fel',
-        description: 'Kunde inte söka jobb. Försök igen.',
-        variant: 'destructive',
-      });
+      if (!isAutoSearch) {
+        toast({
+          title: 'Fel',
+          description: 'Kunde inte söka jobb. Försök igen.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsSearchingJobs(false);
     }
@@ -1029,8 +1046,23 @@ export default function ResumeAnalysisApp() {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between pt-2 border-t">
                           <p className="text-sm text-muted-foreground">
-                            Visar {jobMatches.length} matchande jobb
+                            Visar {jobMatches.length} matchande jobb baserat på ditt CV
                           </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFindJobs(false)}
+                            disabled={isSearchingJobs}
+                          >
+                            {isSearchingJobs ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <BarChart3 className="h-4 w-4 mr-2" />
+                                Uppdatera
+                              </>
+                            )}
+                          </Button>
                         </div>
                         {jobMatches.map((match, index) => (
                       <div
