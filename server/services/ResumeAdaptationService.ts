@@ -178,11 +178,27 @@ Returnera resultatet i följande JSON-format (ingen annan text):
       } catch (parseError) {
         logger.error(`JSON parse error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
         logger.error(`Failed to parse JSON. Content: ${jsonMatch[0].substring(0, 500)}`);
-        throw new Error(`Invalid JSON response from AI: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        
+        // Instead of throwing, return fallback with original resume
+        logger.warn('JSON parsing failed, returning original resume as fallback');
+        return {
+          rawText: originalResumeText,
+          parsedData: originalParsedData,
+          improvements: ['AI-anpassning kunde inte slutföras. CV:et returneras oförändrat.'],
+          adaptationNotes: 'Kunde inte parsa AI-svar. Original CV returneras.',
+        };
       }
     } catch (error) {
       logger.error('Failed to adapt resume', error as Error);
-      throw error;
+      
+      // Return fallback instead of throwing to prevent API errors
+      logger.warn('Error during adaptation, returning original resume as fallback');
+      return {
+        rawText: originalResumeText,
+        parsedData: originalParsedData,
+        improvements: ['AI-anpassning kunde inte slutföras. CV:et returneras oförändrat.'],
+        adaptationNotes: 'Kunde inte parsa AI-svar. Original CV returneras.',
+      };
     }
   }
 
