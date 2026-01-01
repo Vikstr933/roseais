@@ -918,126 +918,125 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
-        {/* Analysis Results */}
+        {/* Analysis Results - Compact Layout */}
         {analysis && !editingResume && (
-          <div className="space-y-6">
-            {/* Edit Button */}
-            {uploadedResume && (
+          <div className="space-y-4">
+            {/* Scores and Improvements in Grid */}
+            <div className="grid lg:grid-cols-3 gap-4">
+              {/* Left Column: Overall Score + Edit Button */}
               <Card>
-                <CardContent className="pt-6">
-                  <Button
-                    variant="outline"
-                    onClick={handleEditResume}
-                    className="w-full"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Redigera CV
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Overall Score */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Overall Score</CardTitle>
-                <CardDescription>Your resume performance rating</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-center">
-                  <div className={`relative w-48 h-48 rounded-full ${getScoreBgColor(analysis.overallScore)} flex items-center justify-center`}>
-                    <div className="text-center">
-                      <div className={`text-6xl font-bold ${getScoreColor(analysis.overallScore)}`}>
-                        {analysis.overallScore}
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">CV Poäng</CardTitle>
+                    {uploadedResume && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleEditResume}
+                        className="h-7 px-2"
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-center py-2">
+                    <div className={`relative w-32 h-32 rounded-full ${getScoreBgColor(analysis.overallScore)} flex items-center justify-center`}>
+                      <div className="text-center">
+                        <div className={`text-4xl font-bold ${getScoreColor(analysis.overallScore)}`}>
+                          {analysis.overallScore}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">/100</div>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-2">out of 100</div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Detailed Scores */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileCheck className="h-5 w-5" />
-                    ATS Score
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Compatibility</span>
-                      <span className={`font-bold ${getScoreColor(analysis.atsScore)}`}>
-                        {analysis.atsScore}/100
-                      </span>
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">ATS</span>
+                        <span className={`text-xs font-semibold ${getScoreColor(analysis.atsScore)}`}>
+                          {analysis.atsScore}
+                        </span>
+                      </div>
+                      <Progress value={analysis.atsScore} className="h-1.5" />
                     </div>
-                    <Progress value={analysis.atsScore} />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Innehåll</span>
+                        <span className={`text-xs font-semibold ${getScoreColor(analysis.contentScore)}`}>
+                          {analysis.contentScore}
+                        </span>
+                      </div>
+                      <Progress value={analysis.contentScore} className="h-1.5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Komplett</span>
+                        <span className={`text-xs font-semibold ${getScoreColor(analysis.completenessScore)}`}>
+                          {analysis.completenessScore}
+                        </span>
+                      </div>
+                      <Progress value={analysis.completenessScore} className="h-1.5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Nyckelord</span>
+                        <span className={`text-xs font-semibold ${getScoreColor(analysis.keywordScore)}`}>
+                          {analysis.keywordScore}
+                        </span>
+                      </div>
+                      <Progress value={analysis.keywordScore} className="h-1.5" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Content Score
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Quality</span>
-                      <span className={`font-bold ${getScoreColor(analysis.contentScore)}`}>
-                        {analysis.contentScore}/100
-                      </span>
+              {/* Middle/Right Column: Improvements */}
+              {analysis.improvements && analysis.improvements.length > 0 && (
+                <Card className="lg:col-span-2">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Förbättringsförslag</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                      {analysis.improvements.map((improvement, index) => (
+                        <div
+                          key={index}
+                          className="p-2.5 border rounded-md hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium text-sm">{improvement.title}</h4>
+                                <Badge variant="outline" className={`text-xs px-1.5 py-0 ${getPriorityColor(improvement.priority)}`}>
+                                  {improvement.priority}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground line-clamp-1">
+                                {improvement.description}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleApplyImprovement(improvement, index)}
+                              disabled={applyingImprovement[index] || !uploadedResume}
+                              className="flex-shrink-0 h-7 px-2 text-xs"
+                            >
+                              {applyingImprovement[index] ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-3 w-3" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <Progress value={analysis.contentScore} />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Award className="h-5 w-5" />
-                    Completeness Score
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Completeness</span>
-                      <span className={`font-bold ${getScoreColor(analysis.completenessScore)}`}>
-                        {analysis.completenessScore}/100
-                      </span>
-                    </div>
-                    <Progress value={analysis.completenessScore} />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Target className="h-5 w-5" />
-                    Keyword Score
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Keywords</span>
-                      <span className={`font-bold ${getScoreColor(analysis.keywordScore)}`}>
-                        {analysis.keywordScore}/100
-                      </span>
-                    </div>
-                    <Progress value={analysis.keywordScore} />
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Improvements */}
@@ -1298,17 +1297,14 @@ export default function ResumeAnalysisApp() {
               </CardContent>
             </Card>
 
-            {/* Adapted Resumes */}
+            {/* Adapted Resumes - Compact */}
             {adaptedResumes.length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Anpassade CV-versioner</CardTitle>
-                  <CardDescription>
-                    Dina CV:n anpassade för specifika jobb. Du kan se och jämföra dem här.
-                  </CardDescription>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Anpassade CV-versioner</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {adaptedResumes.map((adapted) => {
                       const isViewing = viewingAdaptedResume?.id === adapted.id;
                       return (
