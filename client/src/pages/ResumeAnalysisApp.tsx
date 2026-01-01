@@ -1065,58 +1065,6 @@ export default function ResumeAnalysisApp() {
               </Card>
             )}
 
-            {/* Improvements */}
-            {analysis.improvements && analysis.improvements.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Förbättringsförslag</CardTitle>
-                  <CardDescription>AI-genererade förslag för att förbättra ditt CV. Klicka på "Applicera" för att automatiskt implementera förbättringen.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {analysis.improvements.map((improvement, index) => (
-                      <div
-                        key={index}
-                        className="p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-medium text-sm">{improvement.title}</h4>
-                              <Badge variant="outline" className={getPriorityColor(improvement.priority)}>
-                                {improvement.priority}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {improvement.description}
-                            </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => handleApplyImprovement(improvement, index)}
-                            disabled={applyingImprovement[index] || !uploadedResume}
-                            className="flex-shrink-0"
-                          >
-                            {applyingImprovement[index] ? (
-                              <>
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                Applicerar...
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="h-3 w-3 mr-1" />
-                                Applicera
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Job Matches - Compact */}
             <Card>
