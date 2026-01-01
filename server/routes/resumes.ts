@@ -308,13 +308,20 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       100 // Max allowed by JobTech API
     );
 
-    // Match resume to jobs (include parsedData for requirements matching)
+    // Extract location from resume for proximity matching
+    const resumeLocation = resumeKeywordExtractor.extractLocation(
+      resume.rawText || '',
+      parsedData
+    );
+
+    // Match resume to jobs (with location for proximity bonus)
     const resumeSkills = parsedData?.sections?.skills || [];
     const matches = await jobMatchingService.matchResumeToJobs(
       resume.rawText || '',
       resumeSkills,
       jobs,
-      parsedData
+      parsedData,
+      resumeLocation || undefined
     );
 
     // Save top matches to database (upsert to avoid duplicates)
