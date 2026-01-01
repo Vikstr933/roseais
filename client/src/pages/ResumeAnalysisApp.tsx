@@ -85,6 +85,7 @@ interface JobMatch {
   company: string;
   location?: string;
   matchPercentage: number;
+  tier?: 1 | 2 | 3; // Tier classification
   jobUrl?: string;
   applicationEmail?: string;
   applicationUrl?: string;
@@ -605,6 +606,52 @@ export default function ResumeAnalysisApp() {
     }
   };
 
+  const getTierInfo = (tier?: 1 | 2 | 3) => {
+    switch (tier) {
+      case 1:
+        return {
+          label: 'Tier 1: Stark Matchning',
+          description: 'Rekommenderas att söka direkt',
+          color: 'bg-green-100 text-green-800 border-green-300',
+          badgeColor: 'bg-green-600',
+        };
+      case 2:
+        return {
+          label: 'Tier 2: Delvis Matchning',
+          description: 'Kan bli match med AI-anpassning av CV',
+          color: 'bg-blue-100 text-blue-800 border-blue-300',
+          badgeColor: 'bg-blue-600',
+        };
+      case 3:
+        return {
+          label: 'Tier 3: Potentiell Matchning',
+          description: 'Värda att utforska eller anpassa CV för',
+          color: 'bg-purple-100 text-purple-800 border-purple-300',
+          badgeColor: 'bg-purple-600',
+        };
+      default:
+        return {
+          label: 'Okänd Tier',
+          description: '',
+          color: 'bg-gray-100 text-gray-800 border-gray-300',
+          badgeColor: 'bg-gray-600',
+        };
+    }
+  };
+
+  const groupJobsByTier = (jobs: JobMatch[]): { tier: 1 | 2 | 3; jobs: JobMatch[] }[] => {
+    const tier1 = jobs.filter(j => j.tier === 1);
+    const tier2 = jobs.filter(j => j.tier === 2);
+    const tier3 = jobs.filter(j => j.tier === 3);
+    
+    const grouped: { tier: 1 | 2 | 3; jobs: JobMatch[] }[] = [];
+    if (tier1.length > 0) grouped.push({ tier: 1, jobs: tier1 });
+    if (tier2.length > 0) grouped.push({ tier: 2, jobs: tier2 });
+    if (tier3.length > 0) grouped.push({ tier: 3, jobs: tier3 });
+    
+    return grouped;
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground pt-16">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -1067,22 +1114,39 @@ export default function ResumeAnalysisApp() {
                             )}
                           </Button>
                         </div>
-                        {jobMatches.map((match, index) => (
-                      <div
-                        key={index}
-                        className="p-4 border rounded-lg"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h4 className="font-medium">{match.jobTitle}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {match.company} {match.location && `• ${match.location}`}
-                            </p>
-                          </div>
-                          <Badge className="bg-green-100 text-green-700">
-                            {match.matchPercentage}% match
-                          </Badge>
-                        </div>
+                        {/* Group jobs by tier */}
+                        {groupJobsByTier(jobMatches).map(({ tier, jobs }) => {
+                          const tierInfo = getTierInfo(tier);
+                          return (
+                            <div key={tier} className="space-y-3">
+                              <div className={`p-3 rounded-lg border ${tierInfo.color}`}>
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h3 className="font-semibold text-sm">{tierInfo.label}</h3>
+                                    <p className="text-xs opacity-80 mt-0.5">{tierInfo.description}</p>
+                                  </div>
+                                  <Badge className={tierInfo.badgeColor}>
+                                    {jobs.length} jobb
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="space-y-3 ml-2">
+                                {jobs.map((match, index) => (
+                                  <div
+                                    key={index}
+                                    className="p-4 border rounded-lg"
+                                  >
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div>
+                                        <h4 className="font-medium">{match.jobTitle}</h4>
+                                        <p className="text-sm text-muted-foreground">
+                                          {match.company} {match.location && `• ${match.location}`}
+                                        </p>
+                                      </div>
+                                      <Badge className={`${tier === 1 ? 'bg-green-100 text-green-700' : tier === 2 ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                        {match.matchPercentage}% match
+                                      </Badge>
+                                    </div>
                         {match.matchedSkills.length > 0 && (
                           <div className="mt-3">
                             <p className="text-xs text-muted-foreground mb-1">Matched Skills:</p>

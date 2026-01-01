@@ -24,6 +24,7 @@ export interface JobMatch {
   matchPercentage: number;
   matchedSkills: string[];
   missingSkills: string[];
+  tier: 1 | 2 | 3; // Tier classification: 1=strong match, 2=partial match, 3=potential match
 }
 
 export class JobMatchingService {
@@ -276,14 +277,37 @@ export class JobMatchingService {
 
     for (const job of jobs) {
       const match = this.calculateMatch(resumeText, resumeSkills, job);
+      const tier = this.calculateTier(match.matchPercentage);
       matches.push({
         job,
         ...match,
+        tier,
       });
     }
 
-    // Sort by match percentage (highest first)
-    return matches.sort((a, b) => b.matchPercentage - a.matchPercentage);
+    // Sort by tier first (1 > 2 > 3), then by match percentage within each tier
+    return matches.sort((a, b) => {
+      if (a.tier !== b.tier) {
+        return a.tier - b.tier; // Tier 1 before Tier 2 before Tier 3
+      }
+      return b.matchPercentage - a.matchPercentage; // Higher match % first within same tier
+    });
+  }
+
+  /**
+   * Calculate tier based on match percentage
+   * Tier 1: Strong match (>= 70%) - Ready to apply
+   * Tier 2: Partial match (40-69%) - Can become match with AI adaptation
+   * Tier 3: Potential match (20-39%) - Worth exploring/adapting CV for
+   */
+  private calculateTier(matchPercentage: number): 1 | 2 | 3 {
+    if (matchPercentage >= 70) {
+      return 1;
+    } else if (matchPercentage >= 40) {
+      return 2;
+    } else {
+      return 3;
+    }
   }
 
   private calculateMatch(

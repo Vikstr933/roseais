@@ -351,6 +351,7 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       company: match.job.company || '',
       location: match.job.location || '',
       matchPercentage: match.matchPercentage,
+      tier: match.tier,
       jobUrl: match.job.url || '',
       applicationEmail: match.job.applicationEmail,
       applicationUrl: match.job.applicationUrl,
