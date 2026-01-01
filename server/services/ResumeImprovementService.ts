@@ -161,7 +161,7 @@ Generera en kort SPRÅKKUNSKAPER sektion (2-3 rader) med språk och nivåer.`;
     
     if (skillsSectionRegex.test(resumeText)) {
       // Add to existing skills section
-      updatedText = resumeText.replace(skillsSectionRegex, (match, skills) => {
+      const updatedText = resumeText.replace(skillsSectionRegex, (match, skills) => {
         const existingSkills = skills.split(/[,;•\n]/).map((s: string) => s.trim()).filter(Boolean);
         const newSkills = [...new Set([...existingSkills, ...suggestedKeywords])];
         return match.replace(skills, newSkills.join(', '));
