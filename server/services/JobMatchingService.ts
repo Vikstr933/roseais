@@ -782,13 +782,98 @@ export class JobMatchingService {
   }
 
   private calculateKeywordOverlap(text1: string, text2: string): number {
-    const words1 = new Set(text1.toLowerCase().split(/\W+/).filter(w => w.length > 3));
-    const words2 = new Set(text2.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+    // Enhanced keyword overlap calculation
+    // Extract meaningful words (3+ characters, not common words)
+    const commonWords = new Set([
+      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+      'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have',
+      'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+      'may', 'might', 'can', 'och', 'i', 'på', 'för', 'med', 'som', 'av',
+      'till', 'från', 'om', 'det', 'den', 'de', 'är', 'var', 'ska', 'kan',
+      'samt', 'eller', 'men', 'också', 'även', 'både', 'vad', 'när', 'där',
+    ]);
 
-    const intersection = new Set([...words1].filter(w => words2.has(w)));
-    const union = new Set([...words1, ...words2]);
+    const extractWords = (text: string): Set<string> => {
+      return new Set(
+        text.toLowerCase()
+          .split(/\W+/)
+          .filter(word => word.length >= 3 && !commonWords.has(word))
+      );
+    };
 
-    return union.size > 0 ? intersection.size / union.size : 0;
+    const resumeWords = extractWords(text1);
+    const jobWords = extractWords(text2);
+
+    if (jobWords.size === 0) return 0.5; // Default if no words found
+
+    // Calculate overlap ratio
+    let matches = 0;
+    jobWords.forEach(word => {
+      if (resumeWords.has(word)) {
+        matches++;
+      } else {
+        // Fuzzy match: check if any resume word contains this word or vice versa
+        const fuzzyMatch = Array.from(resumeWords).some(resumeWord => 
+          resumeWord.includes(word) || word.includes(resumeWord)
+        );
+        if (fuzzyMatch) {
+          matches += 0.5; // Partial credit for fuzzy matches
+        }
+      }
+    });
+
+    const overlapRatio = matches / jobWords.size;
+    
+    // Boost score if there's significant overlap (more than 30% of words match)
+    if (overlapRatio > 0.3) {
+      return Math.min(1.0, overlapRatio * 1.2); // Boost by 20%
+    }
+
+    return Math.min(1.0, overlapRatio);
+  }
+
+  /**
+   * Calculate how well the job title matches the resume
+   * Returns a score between 0 and 1
+   */
+  private calculateJobTitleMatch(resumeText: string, parsedData: any, jobTitle: string): number {
+    if (!jobTitle) return 0;
+
+    const lowerResumeText = resumeText.toLowerCase();
+    const lowerJobTitle = jobTitle.toLowerCase();
+
+    // Extract main words from job title (remove common prefixes)
+    const titleWords = lowerJobTitle
+      .split(/\s+/)
+      .filter(word => !['senior', 'junior', 'lead', 'principal', 'associate', 'staff', 'head', 
+                       'ledande', 'chef', 'ansvarig', 'specialist', 'expert'].includes(word))
+      .filter(word => word.length > 3);
+
+    if (titleWords.length === 0) return 0;
+
+    // Check if resume mentions similar job titles in experience section
+    if (parsedData?.sections?.experience && Array.isArray(parsedData.sections.experience)) {
+      for (const exp of parsedData.sections.experience) {
+        if (exp.title) {
+          const expTitleLower = exp.title.toLowerCase();
+          // Check if any significant word from job title appears in experience title
+          const matchingWords = titleWords.filter(word => expTitleLower.includes(word));
+          if (matchingWords.length > 0) {
+            // Strong match if multiple words match or if it's a close match
+            return Math.min(1.0, matchingWords.length / titleWords.length + 0.3);
+          }
+        }
+      }
+    }
+
+    // Check if job title words appear in resume text
+    const matchingWords = titleWords.filter(word => lowerResumeText.includes(word));
+    if (matchingWords.length > 0) {
+      // Moderate match based on how many words match
+      return Math.min(0.7, matchingWords.length / titleWords.length * 0.7);
+    }
+
+    return 0;
   }
 }
 
