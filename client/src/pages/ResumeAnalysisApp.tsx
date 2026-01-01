@@ -132,7 +132,6 @@ export default function ResumeAnalysisApp() {
   const [viewingApplication, setViewingApplication] = useState<{ jobMatch: JobMatch; data: ApplicationData } | null>(null);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false);
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
-  const [applyingImprovement, setApplyingImprovement] = useState<Record<number, boolean>>({});
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -531,57 +530,6 @@ export default function ResumeAnalysisApp() {
     setEditedResumeText('');
   };
 
-  const handleApplyImprovement = async (improvement: { type: string; title: string; description: string }, index: number) => {
-    if (!uploadedResume) return;
-
-    setApplyingImprovement(prev => ({ ...prev, [index]: true }));
-    setProgress('Applicerar förbättring...');
-
-    try {
-      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/apply-improvement`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          improvementType: improvement.type,
-          improvementDescription: improvement.description,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || 'Failed to apply improvement');
-      }
-
-      const data = await response.json();
-
-      if (data.success && data.resume) {
-        // Update the resume in state
-        setUploadedResume(prev => prev ? { ...prev, rawText: data.resume.rawText, parsedData: data.resume.parsedData } : null);
-        
-        // Re-analyze to get updated scores
-        setProgress('Analyserar uppdaterat CV...');
-        await handleAnalyze();
-
-        toast({
-          title: 'Förbättring Applicerad!',
-          description: improvement.title + ' har applicerats på ditt CV.',
-        });
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to apply improvement';
-      setError(errorMessage);
-      setProgress('');
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
-      setApplyingImprovement(prev => ({ ...prev, [index]: false }));
-    }
-  };
 
   const handleGenerateApplication = async (jobMatch: JobMatch) => {
     if (!uploadedResume || !jobMatch.jobId) return;
@@ -650,14 +598,6 @@ export default function ResumeAnalysisApp() {
     return 'bg-red-100';
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-700';
-      case 'medium': return 'bg-yellow-100 text-yellow-700';
-      case 'low': return 'bg-blue-100 text-blue-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
 
   const getTierInfo = (tier?: 1 | 2 | 3) => {
     switch (tier) {
