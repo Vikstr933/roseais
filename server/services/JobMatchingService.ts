@@ -546,15 +546,41 @@ export class JobMatchingService {
     // Calculate keyword overlap in description
     const keywordOverlap = this.calculateKeywordOverlap(resumeText, job.description);
 
-    // Weighted match percentage:
-    // - Skills: 50% (core competencies)
-    // - Requirements: 30% (driving license, languages, experience, etc.)
-    // - Keywords: 20% (general relevance)
-    const matchPercentage = Math.round(
-      skillMatchRatio * 50 + 
-      requirementsMatchScore * 30 + 
-      keywordOverlap * 20
-    );
+    // Calculate job title match (bonus for matching job titles)
+    const jobTitleMatch = this.calculateJobTitleMatch(resumeText, resumeParsedData, job.title);
+
+    // Adaptive weighting based on available data:
+    // If we have good skill matches, prioritize skills
+    // If skills are low but keywords are high, prioritize keywords
+    let skillWeight = 50;
+    let requirementsWeight = 30;
+    let keywordWeight = 20;
+
+    // If skill match is very low but keyword overlap is high, adjust weights
+    if (skillMatchRatio < 0.3 && keywordOverlap > 0.4) {
+      // More weight to keywords when skills don't match well
+      skillWeight = 30;
+      keywordWeight = 40;
+    }
+
+    // If we have no skills to match against, rely more on keywords and title
+    if (jobSkills.length === 0) {
+      skillWeight = 0;
+      keywordWeight = 50;
+      requirementsWeight = 30;
+    }
+
+    // Calculate base match percentage with adaptive weights
+    let baseMatch = skillMatchRatio * skillWeight + 
+                    requirementsMatchScore * requirementsWeight + 
+                    keywordOverlap * keywordWeight;
+
+    // Add job title match bonus (0-20 points)
+    const titleBonus = jobTitleMatch * 20;
+    baseMatch += titleBonus;
+
+    // Normalize to 0-100 range
+    const matchPercentage = Math.round(Math.min(100, Math.max(0, baseMatch)));
 
     return {
       matchPercentage: Math.min(100, Math.max(0, matchPercentage)), // Clamp 0-100
