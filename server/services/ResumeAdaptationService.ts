@@ -74,7 +74,9 @@ Anpassa CV:et enligt följande:
 4. Behåll all fakta (datum, företag, utbildningar) oförändrad
 5. Lägg INTE till erfarenhet eller utbildning som inte finns i original CV
 
-Returnera resultatet i JSON-format:
+VIKTIGT: Returnera ENDAST JSON, utan ytterligare text eller förklaringar före eller efter.
+
+Returnera resultatet i följande JSON-format (ingen annan text):
 {
   "adaptedText": "Den anpassade CV-texten (fullständig)",
   "summary": "Förbättrad sammanfattning",
