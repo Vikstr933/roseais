@@ -1092,103 +1092,111 @@ export default function ResumeAnalysisApp() {
               </Card>
             )}
 
-            {/* Job Matches */}
+            {/* Job Matches - Compact */}
             <Card>
-              <CardHeader>
-                <CardTitle>Jobbsökning</CardTitle>
-                <CardDescription>Sök efter jobb på den svenska marknaden och matcha mot ditt CV</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Search Form */}
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium flex items-center gap-2">
-                        <Search className="h-4 w-4" />
-                        Sökord
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder="t.ex. utvecklare, säljare, lärare..."
-                        value={searchKeywords}
-                        onChange={(e) => setSearchKeywords(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleFindJobs();
-                          }
-                        }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Lämna tomt för att automatiskt extrahera sökord från ditt CV
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium flex items-center gap-2">
-                        <MapPin className="h-4 w-4" />
-                        Plats (valfritt)
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder="t.ex. Stockholm, Göteborg, Malmö..."
-                        value={searchLocation}
-                        onChange={(e) => setSearchLocation(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleFindJobs();
-                          }
-                        }}
-                      />
-                    </div>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">Matchande Jobb</CardTitle>
+                    <CardDescription className="text-xs">Automatiskt matchade jobb baserat på ditt CV</CardDescription>
+                  </div>
+                  {jobMatches.length > 0 && (
                     <Button
-                      onClick={handleFindJobs}
-                      disabled={isSearchingJobs || !uploadedResume}
-                      className="w-full"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleFindJobs(false)}
+                      disabled={isSearchingJobs}
+                      className="h-7 px-2"
                     >
                       {isSearchingJobs ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Söker...
-                        </>
+                        <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
-                        <>
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          Sök Jobb
-                        </>
+                        <BarChart3 className="h-3 w-3" />
                       )}
                     </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {/* Search Form - only show when needed */}
+                  {(jobMatches.length === 0 || showAdvancedSearch) && (
+                  <div className="space-y-2 pb-3 border-b">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="text"
+                        placeholder="Sökord..."
+                        value={searchKeywords}
+                        onChange={(e) => setSearchKeywords(e.target.value)}
+                        className="h-8 text-xs"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleFindJobs(false);
+                          }
+                        }}
+                      />
+                      <Input
+                        type="text"
+                        placeholder="Plats..."
+                        value={searchLocation}
+                        onChange={(e) => setSearchLocation(e.target.value)}
+                        className="h-8 text-xs"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleFindJobs(false);
+                          }
+                        }}
+                      />
+                    </div>
+                    {!hasAutoSearched && (
+                      <Button
+                        onClick={() => handleFindJobs(false)}
+                        disabled={isSearchingJobs || !uploadedResume}
+                        size="sm"
+                        className="w-full h-7 text-xs"
+                      >
+                        {isSearchingJobs ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <>
+                            <BarChart3 className="h-3 w-3 mr-1" />
+                            Sök Jobb
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {jobMatches.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+                        className="w-full h-6 text-xs text-muted-foreground"
+                      >
+                        {showAdvancedSearch ? 'Dölj avancerad sökning' : 'Visa avancerad sökning'}
+                      </Button>
+                    )}
                   </div>
+                  )}
 
-                  {/* Job Results */}
-                  {jobMatches.length === 0 && !isSearchingJobs ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p className="text-sm">
-                        Ange sökord och klicka på "Sök Jobb" för att hitta matchande jobb
+                  {isSearchingJobs && (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-primary" />
+                      <p className="text-xs">Söker matchande jobb...</p>
+                    </div>
+                  )}
+
+                  {!isSearchingJobs && jobMatches.length === 0 && !hasAutoSearched && uploadedResume && (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-xs">
+                        Analysera ditt CV för att automatiskt hitta matchande jobb.
                       </p>
                     </div>
-                  ) : (
-                    jobMatches.length > 0 && (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between pt-2 border-t">
-                          <p className="text-sm text-muted-foreground">
-                            Visar {jobMatches.length} matchande jobb baserat på ditt CV
-                          </p>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleFindJobs(false)}
-                            disabled={isSearchingJobs}
-                          >
-                            {isSearchingJobs ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <BarChart3 className="h-4 w-4 mr-2" />
-                                Uppdatera
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                  )}
+
+                  {/* Job Results */}
+                  {jobMatches.length > 0 && (
+                      <div className="space-y-2">
                         {/* Group jobs by tier */}
                         {groupJobsByTier(jobMatches).map(({ tier, jobs }) => {
                           const tierInfo = getTierInfo(tier);
@@ -1288,7 +1296,6 @@ export default function ResumeAnalysisApp() {
                           );
                         })}
                       </div>
-                    )
                   )}
                 </div>
               </CardContent>
