@@ -132,6 +132,7 @@ export default function ResumeAnalysisApp() {
   const [viewingApplication, setViewingApplication] = useState<{ jobMatch: JobMatch; data: ApplicationData } | null>(null);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false);
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
+  const [applyingImprovement, setApplyingImprovement] = useState<Record<number, boolean>>({});
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -528,6 +529,58 @@ export default function ResumeAnalysisApp() {
   const handleCancelEdit = () => {
     setEditingResume(false);
     setEditedResumeText('');
+  };
+
+  const handleApplyImprovement = async (improvement: { type: string; title: string; description: string }, index: number) => {
+    if (!uploadedResume) return;
+
+    setApplyingImprovement(prev => ({ ...prev, [index]: true }));
+    setProgress('Applicerar förbättring...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/apply-improvement`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          improvementType: improvement.type,
+          improvementDescription: improvement.description,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to apply improvement');
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.resume) {
+        // Update the resume in state
+        setUploadedResume(prev => prev ? { ...prev, rawText: data.resume.rawText, parsedData: data.resume.parsedData } : null);
+        
+        // Re-analyze to get updated scores
+        setProgress('Analyserar uppdaterat CV...');
+        await handleAnalyze();
+
+        toast({
+          title: 'Förbättring Applicerad!',
+          description: improvement.title + ' har applicerats på ditt CV.',
+        });
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to apply improvement';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setApplyingImprovement(prev => ({ ...prev, [index]: false }));
+    }
   };
 
   const handleGenerateApplication = async (jobMatch: JobMatch) => {
@@ -991,25 +1044,48 @@ export default function ResumeAnalysisApp() {
             {analysis.improvements && analysis.improvements.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Improvement Suggestions</CardTitle>
-                  <CardDescription>AI-powered recommendations to improve your resume</CardDescription>
+                  <CardTitle>Förbättringsförslag</CardTitle>
+                  <CardDescription>AI-genererade förslag för att förbättra ditt CV. Klicka på "Applicera" för att automatiskt implementera förbättringen.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {analysis.improvements.map((improvement, index) => (
                       <div
                         key={index}
-                        className="p-4 border rounded-lg"
+                        className="p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <h4 className="font-medium">{improvement.title}</h4>
-                          <Badge className={getPriorityColor(improvement.priority)}>
-                            {improvement.priority}
-                          </Badge>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-medium text-sm">{improvement.title}</h4>
+                              <Badge variant="outline" className={getPriorityColor(improvement.priority)}>
+                                {improvement.priority}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {improvement.description}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleApplyImprovement(improvement, index)}
+                            disabled={applyingImprovement[index] || !uploadedResume}
+                            className="flex-shrink-0"
+                          >
+                            {applyingImprovement[index] ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Applicerar...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-3 w-3 mr-1" />
+                                Applicera
+                              </>
+                            )}
+                          </Button>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {improvement.description}
-                        </p>
                       </div>
                     ))}
                   </div>

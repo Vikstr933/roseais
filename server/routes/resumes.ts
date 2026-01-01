@@ -10,6 +10,7 @@ import { jobMatchingService } from '../services/JobMatchingService';
 import { resumeAdaptationService } from '../services/ResumeAdaptationService';
 import { resumeKeywordExtractor } from '../services/ResumeKeywordExtractor';
 import { applicationService } from '../services/ApplicationService';
+import { resumeImprovementService } from '../services/ResumeImprovementService';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -531,6 +532,61 @@ router.put('/:id', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('Error updating resume:', error);
     res.status(500).json({ error: 'Failed to update resume' });
+  }
+});
+
+// POST /api/resumes/:id/apply-improvement
+router.post('/:id/apply-improvement', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const resumeId = parseInt(req.params.id);
+    const { improvementType, improvementDescription } = req.body;
+
+    if (!improvementType || !improvementDescription) {
+      return res.status(400).json({ error: 'improvementType and improvementDescription required' });
+    }
+
+    // Get resume
+    const [resume] = await db
+      .select()
+      .from(resumes)
+      .where(eq(resumes.id, resumeId))
+      .limit(1);
+
+    if (!resume || resume.userId !== userId) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    // Apply improvement
+    const { updatedText, updatedParsedData } = await resumeImprovementService.applyImprovement(
+      resume.rawText || '',
+      resume.parsedData || {},
+      improvementType,
+      improvementDescription
+    );
+
+    // Update resume
+    const [updatedResume] = await db
+      .update(resumes)
+      .set({
+        rawText: updatedText,
+        parsedData: updatedParsedData as any,
+        updatedAt: new Date(),
+      })
+      .where(eq(resumes.id, resumeId))
+      .returning();
+
+    res.json({
+      success: true,
+      resume: {
+        id: updatedResume.id,
+        rawText: updatedResume.rawText,
+        parsedData: updatedResume.parsedData,
+      },
+    });
+  } catch (error) {
+    console.error('Error applying improvement:', error);
+    res.status(500).json({ error: 'Failed to apply improvement' });
   }
 });
 
