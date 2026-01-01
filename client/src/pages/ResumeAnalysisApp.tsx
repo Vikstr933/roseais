@@ -1193,15 +1193,12 @@ export default function ResumeAnalysisApp() {
                         {groupJobsByTier(jobMatches).map(({ tier, jobs }) => {
                           const tierInfo = getTierInfo(tier);
                           return (
-                            <div key={tier} className="space-y-3">
-                              <div className={`p-3 rounded-lg border ${tierInfo.color}`}>
+                            <div key={tier} className="space-y-2">
+                              <div className={`p-2 rounded-md border ${tierInfo.color}`}>
                                 <div className="flex items-center justify-between">
-                                  <div>
-                                    <h3 className="font-semibold text-sm">{tierInfo.label}</h3>
-                                    <p className="text-xs opacity-80 mt-0.5">{tierInfo.description}</p>
-                                  </div>
-                                  <Badge className={tierInfo.badgeColor}>
-                                    {jobs.length} jobb
+                                  <h3 className="font-semibold text-sm">{tierInfo.label}</h3>
+                                  <Badge className={`${tierInfo.badgeColor} text-xs px-2 py-0`}>
+                                    {jobs.length}
                                   </Badge>
                                 </div>
                               </div>
