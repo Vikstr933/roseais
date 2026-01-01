@@ -294,7 +294,7 @@ export default function ResumeAnalysisApp() {
         setHasAutoSearched(false); // Reset auto-search flag
         toast({
           title: 'Analysis Complete!',
-          description: `Your resume scored ${data.analysis.overallScore}/100. Söker automatiskt efter matchande jobb...`,
+          description: `Your resume scored ${data.analysis?.overallScore ?? 0}/100. Söker automatiskt efter matchande jobb...`,
         });
         // Automatically search for jobs after analysis
         // Use setTimeout to ensure state is updated
@@ -947,10 +947,10 @@ export default function ResumeAnalysisApp() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-center py-2">
-                  <div className={`relative w-32 h-32 rounded-full ${getScoreBgColor(analysis.overallScore)} flex items-center justify-center`}>
+                  <div className={`relative w-32 h-32 rounded-full ${getScoreBgColor(analysis?.overallScore ?? 0)} flex items-center justify-center`}>
                     <div className="text-center">
-                      <div className={`text-4xl font-bold ${getScoreColor(analysis.overallScore)}`}>
-                        {analysis.overallScore}
+                      <div className={`text-4xl font-bold ${getScoreColor(analysis?.overallScore ?? 0)}`}>
+                        {analysis?.overallScore ?? 0}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">/100</div>
                     </div>
@@ -960,38 +960,38 @@ export default function ResumeAnalysisApp() {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-muted-foreground">ATS</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis.atsScore)}`}>
-                        {analysis.atsScore}
+                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.atsScore ?? 0)}`}>
+                        {analysis?.atsScore ?? 0}
                       </span>
                     </div>
-                    <Progress value={analysis.atsScore} className="h-1.5" />
+                    <Progress value={analysis?.atsScore ?? 0} className="h-1.5" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-muted-foreground">Innehåll</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis.contentScore)}`}>
-                        {analysis.contentScore}
+                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.contentScore ?? 0)}`}>
+                        {analysis?.contentScore ?? 0}
                       </span>
                     </div>
-                    <Progress value={analysis.contentScore} className="h-1.5" />
+                    <Progress value={analysis?.contentScore ?? 0} className="h-1.5" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-muted-foreground">Komplett</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis.completenessScore)}`}>
-                        {analysis.completenessScore}
+                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.completenessScore ?? 0)}`}>
+                        {analysis?.completenessScore ?? 0}
                       </span>
                     </div>
-                    <Progress value={analysis.completenessScore} className="h-1.5" />
+                    <Progress value={analysis?.completenessScore ?? 0} className="h-1.5" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-muted-foreground">Nyckelord</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis.keywordScore)}`}>
-                        {analysis.keywordScore}
+                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.keywordScore ?? 0)}`}>
+                        {analysis?.keywordScore ?? 0}
                       </span>
                     </div>
-                    <Progress value={analysis.keywordScore} className="h-1.5" />
+                    <Progress value={analysis?.keywordScore ?? 0} className="h-1.5" />
                   </div>
                 </div>
               </CardContent>
@@ -1046,8 +1046,8 @@ export default function ResumeAnalysisApp() {
                             <Button
                               size="sm"
                               variant="default"
-                              onClick={() => handleApplyImprovement(improvement, index)}
-                              disabled={applyingImprovement[index] || !uploadedResume}
+                              onClick={() => improvement && handleApplyImprovement(improvement, index)}
+                              disabled={applyingImprovement[index] || !uploadedResume || !improvement}
                               className="flex-shrink-0 h-6 px-1.5 text-[10px]"
                             >
                               {applyingImprovement[index] ? (

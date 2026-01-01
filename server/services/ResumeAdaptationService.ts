@@ -177,7 +177,12 @@ Returnera resultatet i följande JSON-format (ingen annan text):
         };
       } catch (parseError) {
         logger.error(`JSON parse error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-        logger.error(`Failed to parse JSON. Content: ${jsonMatch[0].substring(0, 500)}`);
+        if (jsonMatch && jsonMatch[0]) {
+          const preview = jsonMatch[0].length > 500 ? jsonMatch[0].substring(0, 500) : jsonMatch[0];
+          logger.error(`Failed to parse JSON. Content preview: ${preview}`);
+        } else {
+          logger.error(`Failed to parse JSON. No JSON match found.`);
+        }
         
         // Instead of throwing, return fallback with original resume
         logger.warn('JSON parsing failed, returning original resume as fallback');
