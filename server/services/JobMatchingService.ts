@@ -481,24 +481,17 @@ export class JobMatchingService {
       
       // Add location bonus to match percentage (cap at 100)
       const adjustedMatchPercentage = Math.min(100, match.matchPercentage + locationBonus);
-      const tier = this.calculateTier(adjustedMatchPercentage);
       
       matches.push({
         job,
         matchPercentage: adjustedMatchPercentage,
         matchedSkills: match.matchedSkills,
         missingSkills: match.missingSkills,
-        tier,
       });
     }
 
-    // Sort by tier first (1 > 2 > 3), then by match percentage within each tier
-    return matches.sort((a, b) => {
-      if (a.tier !== b.tier) {
-        return a.tier - b.tier; // Tier 1 before Tier 2 before Tier 3
-      }
-      return b.matchPercentage - a.matchPercentage; // Higher match % first within same tier
-    });
+    // Sort by match percentage (highest first)
+    return matches.sort((a, b) => b.matchPercentage - a.matchPercentage);
   }
 
 
