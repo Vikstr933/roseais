@@ -924,14 +924,8 @@ export default function ResumeAnalysisApp() {
             {/* Scores - Compact */}
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">CV Poäng</CardTitle>
-                  <div className="flex items-center gap-2">
-                    {analysis.improvements && analysis.improvements.length > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {analysis.improvements.length} förbättringar
-                      </Badge>
-                    )}
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">CV Poäng</CardTitle>
                     {uploadedResume && (
                       <Button
                         variant="ghost"
@@ -943,7 +937,6 @@ export default function ResumeAnalysisApp() {
                       </Button>
                     )}
                   </div>
-                </div>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-center py-2">
