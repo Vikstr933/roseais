@@ -32,8 +32,6 @@ import {
   FileText as FileTextIcon,
   Mail,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   Filter,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -929,75 +927,6 @@ export default function ResumeAnalysisApp() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Improvements - Collapsible and Compact */}
-            {analysis.improvements && analysis.improvements.length > 0 && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium">Förbättringsförslag ({analysis.improvements.length})</CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowImprovements(!showImprovements)}
-                      className="h-6 px-2 text-xs"
-                    >
-                      {showImprovements ? (
-                        <>
-                          <ChevronUp className="h-3 w-3 mr-1" />
-                          Dölj
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-3 w-3 mr-1" />
-                          Visa
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardHeader>
-                {showImprovements && (
-                  <CardContent className="pt-0">
-                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                      {analysis.improvements.map((improvement, index) => (
-                        <div
-                          key={index}
-                          className="p-2 border rounded-md hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <h4 className="font-medium text-xs">{improvement.title}</h4>
-                                <Badge variant="outline" className={`text-[10px] px-1 py-0 ${getPriorityColor(improvement.priority)}`}>
-                                  {improvement.priority}
-                                </Badge>
-                              </div>
-                              <p className="text-[10px] text-muted-foreground line-clamp-1">
-                                {improvement.description}
-                              </p>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => improvement && handleApplyImprovement(improvement, index)}
-                              disabled={applyingImprovement[index] || !uploadedResume || !improvement}
-                              className="flex-shrink-0 h-6 px-1.5 text-[10px]"
-                            >
-                              {applyingImprovement[index] ? (
-                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                              ) : (
-                                <Sparkles className="h-2.5 w-2.5" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            )}
-
 
             {/* Job Matches - Compact */}
             <Card>
