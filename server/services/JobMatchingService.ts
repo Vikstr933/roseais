@@ -449,16 +449,46 @@ export class JobMatchingService {
     resumeText: string,
     resumeSkills: string[],
     jobs: JobListing[],
-    resumeParsedData?: any
+    resumeParsedData?: any,
+    resumeLocation?: string
   ): Promise<JobMatch[]> {
     const matches: JobMatch[] = [];
 
+    // Normalize resume location for comparison
+    const normalizedResumeLocation = resumeLocation?.toLowerCase().trim();
+
     for (const job of jobs) {
       const match = this.calculateMatch(resumeText, resumeSkills, job, resumeParsedData);
-      const tier = this.calculateTier(match.matchPercentage);
+      
+      // Location proximity bonus (0-10 points)
+      let locationBonus = 0;
+      if (normalizedResumeLocation && job.location) {
+        const normalizedJobLocation = job.location.toLowerCase();
+        
+        // Exact match (city, municipality, or region)
+        if (normalizedJobLocation.includes(normalizedResumeLocation) || 
+            normalizedResumeLocation.includes(normalizedJobLocation.split(',')[0]?.trim())) {
+          locationBonus = 10; // Strong location match
+        } else {
+          // Partial match (same region or nearby)
+          const resumeCity = normalizedResumeLocation.split(',')[0]?.trim();
+          const jobCity = normalizedJobLocation.split(',')[0]?.trim();
+          if (resumeCity && jobCity && 
+              (jobCity.includes(resumeCity) || resumeCity.includes(jobCity))) {
+            locationBonus = 5; // Partial location match
+          }
+        }
+      }
+      
+      // Add location bonus to match percentage (cap at 100)
+      const adjustedMatchPercentage = Math.min(100, match.matchPercentage + locationBonus);
+      const tier = this.calculateTier(adjustedMatchPercentage);
+      
       matches.push({
         job,
-        ...match,
+        matchPercentage: adjustedMatchPercentage,
+        matchedSkills: match.matchedSkills,
+        missingSkills: match.missingSkills,
         tier,
       });
     }

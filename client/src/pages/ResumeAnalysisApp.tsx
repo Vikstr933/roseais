@@ -1119,8 +1119,7 @@ export default function ResumeAnalysisApp() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {/* Search Form - only show when needed */}
-                  {(jobMatches.length === 0 || showAdvancedSearch) && (
+                  {/* Search Form - always visible but can be toggled */}
                   <div className="space-y-2 pb-3 border-b">
                     <div className="grid grid-cols-2 gap-2">
                       <Input
@@ -1165,18 +1164,7 @@ export default function ResumeAnalysisApp() {
                         )}
                       </Button>
                     )}
-                    {jobMatches.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
-                        className="w-full h-6 text-xs text-muted-foreground"
-                      >
-                        {showAdvancedSearch ? 'Dölj avancerad sökning' : 'Visa avancerad sökning'}
-                      </Button>
-                    )}
                   </div>
-                  )}
 
                   {isSearchingJobs && (
                     <div className="text-center py-4 text-muted-foreground">

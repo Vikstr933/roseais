@@ -4,6 +4,64 @@ const logger = new SimpleLogger('ResumeKeywordExtractor');
 
 export class ResumeKeywordExtractor {
   /**
+   * Extract location from resume (city, municipality, region)
+   */
+  extractLocation(resumeText: string, parsedData?: any): string | null {
+    // PRIORITY 1: Check contactInfo.location if available
+    if (parsedData?.contactInfo?.location && typeof parsedData.contactInfo.location === 'string') {
+      const location = parsedData.contactInfo.location.trim();
+      if (location.length > 0) {
+        logger.info(`Extracted location from contactInfo: ${location}`);
+        return location;
+      }
+    }
+
+    // PRIORITY 2: Extract from address pattern in text
+    // Swedish address patterns: "Stockholm", "123 45 Stockholm", "Göteborg, Västra Götaland"
+    const addressPatterns = [
+      /(?:Adress|Address|Plats|Location)[:]\s*([^\n]+)/i,
+      /([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)*)\s+\d{3}\s?\d{2}/, // "Stockholm 123 45"
+      /(\d{3}\s?\d{2})\s+([A-ZÅÄÖ][a-zåäö]+)/, // "123 45 Stockholm"
+      /([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)*),\s*([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)*)/, // "Stockholm, Södermanland"
+    ];
+
+    for (const pattern of addressPatterns) {
+      const match = resumeText.match(pattern);
+      if (match) {
+        // Extract the location part (usually the last match group)
+        const location = match[match.length - 1]?.trim();
+        if (location && location.length > 2 && location.length < 50) {
+          // Filter out common non-location words
+          const excluded = ['Sverige', 'Sweden', 'Email', 'Telefon', 'Phone', 'Mobil'];
+          if (!excluded.includes(location)) {
+            logger.info(`Extracted location from text pattern: ${location}`);
+            return location;
+          }
+        }
+      }
+    }
+
+    // PRIORITY 3: Look for common Swedish cities/regions in text
+    const swedishCities = [
+      'Stockholm', 'Göteborg', 'Malmö', 'Uppsala', 'Västerås', 'Örebro', 'Linköping',
+      'Helsingborg', 'Jönköping', 'Norrköping', 'Lund', 'Umeå', 'Gävle', 'Borås',
+      'Eskilstuna', 'Södertälje', 'Karlstad', 'Täby', 'Växjö', 'Halmstad', 'Sundsvall',
+      'Luleå', 'Trollhättan', 'Östersund', 'Borlänge', 'Falun', 'Kalmar', 'Kristianstad',
+      'Skövde', 'Karlskrona', 'Skellefteå', 'Uddevalla', 'Lidingö', 'Motala', 'Piteå'
+    ];
+
+    const lowerText = resumeText.toLowerCase();
+    for (const city of swedishCities) {
+      if (lowerText.includes(city.toLowerCase())) {
+        logger.info(`Extracted location from known city: ${city}`);
+        return city;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Extract relevant search keywords from resume for job matching
    */
   extractJobSearchKeywords(resumeText: string, parsedData?: any): string {
