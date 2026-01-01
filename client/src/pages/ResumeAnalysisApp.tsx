@@ -32,6 +32,9 @@ import {
   FileText as FileTextIcon,
   Mail,
   ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Filter,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
