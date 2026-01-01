@@ -1208,9 +1208,13 @@ export default function ResumeAnalysisApp() {
                               </>
                             )}
                           </Button>
-                        </div>
-                      </div>
-                    ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )
                   )}
