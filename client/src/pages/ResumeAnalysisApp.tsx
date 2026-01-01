@@ -83,7 +83,6 @@ interface JobMatch {
   company: string;
   location?: string;
   matchPercentage: number;
-  tier?: 1 | 2 | 3; // Tier classification
   jobUrl?: string;
   applicationEmail?: string;
   applicationUrl?: string;
@@ -597,51 +596,6 @@ export default function ResumeAnalysisApp() {
   };
 
 
-  const getTierInfo = (tier?: 1 | 2 | 3) => {
-    switch (tier) {
-      case 1:
-        return {
-          label: 'Tier 1: Stark Matchning',
-          description: 'Rekommenderas att söka direkt',
-          color: 'bg-green-100 text-green-800 border-green-300',
-          badgeColor: 'bg-green-600',
-        };
-      case 2:
-        return {
-          label: 'Tier 2: Delvis Matchning',
-          description: 'Kan bli match med AI-anpassning av CV',
-          color: 'bg-blue-100 text-blue-800 border-blue-300',
-          badgeColor: 'bg-blue-600',
-        };
-      case 3:
-        return {
-          label: 'Tier 3: Potentiell Matchning',
-          description: 'Värda att utforska eller anpassa CV för',
-          color: 'bg-purple-100 text-purple-800 border-purple-300',
-          badgeColor: 'bg-purple-600',
-        };
-      default:
-        return {
-          label: 'Okänd Tier',
-          description: '',
-          color: 'bg-gray-100 text-gray-800 border-gray-300',
-          badgeColor: 'bg-gray-600',
-        };
-    }
-  };
-
-  const groupJobsByTier = (jobs: JobMatch[]): { tier: 1 | 2 | 3; jobs: JobMatch[] }[] => {
-    const tier1 = jobs.filter(j => j.tier === 1);
-    const tier2 = jobs.filter(j => j.tier === 2);
-    const tier3 = jobs.filter(j => j.tier === 3);
-    
-    const grouped: { tier: 1 | 2 | 3; jobs: JobMatch[] }[] = [];
-    if (tier1.length > 0) grouped.push({ tier: 1, jobs: tier1 });
-    if (tier2.length > 0) grouped.push({ tier: 2, jobs: tier2 });
-    if (tier3.length > 0) grouped.push({ tier: 3, jobs: tier3 });
-    
-    return grouped;
-  };
 
   return (
     <div className="min-h-screen bg-background text-foreground pt-16">
@@ -1020,101 +974,106 @@ export default function ResumeAnalysisApp() {
 
                   {/* Job Results */}
                   {jobMatches.length > 0 && (
-                      <div className="space-y-2">
-                        {/* Group jobs by tier */}
-                        {groupJobsByTier(jobMatches).map(({ tier, jobs }) => {
-                          const tierInfo = getTierInfo(tier);
+                      <div className="space-y-3">
+                        {jobMatches.map((match, index) => {
+                          // Determine match quality color based on percentage
+                          const getMatchColor = (percentage: number) => {
+                            if (percentage >= 70) return 'border-green-300 bg-green-50/50';
+                            if (percentage >= 50) return 'border-blue-300 bg-blue-50/50';
+                            if (percentage >= 30) return 'border-purple-300 bg-purple-50/50';
+                            return 'border-gray-300 bg-gray-50/50';
+                          };
+
+                          const getMatchBadgeColor = (percentage: number) => {
+                            if (percentage >= 70) return 'bg-green-600';
+                            if (percentage >= 50) return 'bg-blue-600';
+                            if (percentage >= 30) return 'bg-purple-600';
+                            return 'bg-gray-600';
+                          };
+
                           return (
-                            <div key={tier} className="space-y-2">
-                              <div className={`p-2 rounded-md border ${tierInfo.color}`}>
-                                <div className="flex items-center justify-between">
-                                  <h3 className="font-semibold text-sm">{tierInfo.label}</h3>
-                                  <Badge className={`${tierInfo.badgeColor} text-xs px-2 py-0`}>
-                                    {jobs.length}
-                                  </Badge>
-                                </div>
-                              </div>
-                              <div className="space-y-3 ml-2">
-                                {jobs.map((match, index) => (
-                                  <div
-                                    key={index}
-                                    className="p-4 border rounded-lg"
-                                  >
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div>
-                                        <h4 className="font-medium">{match.jobTitle}</h4>
-                                        <p className="text-sm text-muted-foreground">
-                                          {match.company} {match.location && `• ${match.location}`}
-                                        </p>
-                                      </div>
-                                      <Badge className={`${tier === 1 ? 'bg-green-100 text-green-700' : tier === 2 ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                                        {match.matchPercentage}% match
-                                      </Badge>
-                                    </div>
-                        {match.matchedSkills.length > 0 && (
-                          <div className="mt-3">
-                            <p className="text-xs text-muted-foreground mb-1">Matched Skills:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {match.matchedSkills.slice(0, 5).map((skill, i) => (
-                                <Badge key={i} variant="secondary" className="text-xs">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {match.jobUrl && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(match.jobUrl, '_blank')}
+                            <div
+                              key={index}
+                              className={`p-3 border rounded-md ${getMatchColor(match.matchPercentage)}`}
                             >
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              Visa Jobb
-                            </Button>
-                          )}
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleAdaptResume(match)}
-                            disabled={isAdapting[match.jobId || '']}
-                            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                          >
-                            {isAdapting[match.jobId || ''] ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Anpassar...
-                              </>
-                            ) : (
-                              <>
-                                <Wand2 className="h-4 w-4 mr-2" />
-                                Anpassa CV
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleGenerateApplication(match)}
-                            disabled={generatingApplication[match.jobId || ''] || !uploadedResume}
-                            className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
-                          >
-                            {generatingApplication[match.jobId || ''] ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Genererar...
-                              </>
-                            ) : (
-                              <>
-                                <FileTextIcon className="h-4 w-4 mr-2" />
-                                Skapa Ansökan
-                              </>
-                            )}
-                          </Button>
-                                    </div>
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <h4 className="font-medium">{match.jobTitle}</h4>
+                                  <p className="text-sm text-muted-foreground">
+                                    {match.company} {match.location && `• ${match.location}`}
+                                  </p>
+                                </div>
+                                <Badge className={`${getMatchBadgeColor(match.matchPercentage)} text-white text-xs px-2 py-0`}>
+                                  {Math.round(match.matchPercentage)}% Match
+                                </Badge>
+                              </div>
+                              {match.matchedSkills.length > 0 && (
+                                <div className="mt-3">
+                                  <p className="text-xs text-muted-foreground mb-1">Matchade färdigheter:</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {match.matchedSkills.slice(0, 4).map((skill, i) => (
+                                      <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        {skill}
+                                      </Badge>
+                                    ))}
+                                    {match.matchedSkills.length > 4 && (
+                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        +{match.matchedSkills.length - 4} mer
+                                      </Badge>
+                                    )}
                                   </div>
-                                ))}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {match.jobUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(match.jobUrl, '_blank')}
+                                    className="h-7 text-xs"
+                                  >
+                                    <ExternalLink className="h-3 w-3 mr-1" />
+                                    Visa Jobb
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleAdaptResume(match)}
+                                  disabled={isAdapting[match.jobId || '']}
+                                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-7 text-xs"
+                                >
+                                  {isAdapting[match.jobId || ''] ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Anpassar...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Wand2 className="h-3 w-3 mr-1" />
+                                      Anpassa CV
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleGenerateApplication(match)}
+                                  disabled={generatingApplication[match.jobId || ''] || !uploadedResume}
+                                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 h-7 text-xs"
+                                >
+                                  {generatingApplication[match.jobId || ''] ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Genererar...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FileTextIcon className="h-3 w-3 mr-1" />
+                                      Skapa Ansökan
+                                    </>
+                                  )}
+                                </Button>
                               </div>
                             </div>
                           );
