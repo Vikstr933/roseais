@@ -3,6 +3,17 @@ import { SimpleLogger } from '../utils/SimpleLogger';
 
 const logger = new SimpleLogger('JobMatchingService');
 
+export interface JobRequirements {
+  drivingLicense?: string; // e.g., "B", "BE", "CE", etc.
+  drivingLicenseRequired?: boolean;
+  accessToOwnCar?: boolean;
+  experienceRequired?: boolean;
+  languages?: Array<{ language: string; level?: string }>;
+  education?: string[];
+  certifications?: string[];
+  otherRequirements?: string[]; // Other specific requirements mentioned in description
+}
+
 export interface JobListing {
   id: string;
   title: string;
@@ -14,6 +25,7 @@ export interface JobListing {
   applicationUrl?: string; // Direct application URL
   applicationMethod?: string; // 'url', 'email', 'via_af', or 'other'
   requiredSkills?: string[];
+  requirements?: JobRequirements;
   coordinates?: number[]; // [latitude, longitude] for mapping
   publicationDate?: string;
   applicationDeadline?: string;
