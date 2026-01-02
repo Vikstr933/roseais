@@ -310,17 +310,20 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
     }
 
     // Search for jobs (JobTech API allows up to 100 results per request)
+    console.log(`[JobMatches] Searching jobs with keywords: "${searchKeywords}", location: "${location || 'none'}"`);
     const jobs = await jobMatchingService.searchJobs(
       searchKeywords,
       location as string | undefined,
       100 // Max allowed by JobTech API
     );
+    console.log(`[JobMatches] JobTech API returned ${jobs.length} jobs`);
 
     // Extract location from resume for proximity matching
     const resumeLocation = resumeKeywordExtractor.extractLocation(
       resume.rawText || '',
       parsedData
     );
+    console.log(`[JobMatches] Extracted resume location: "${resumeLocation || 'none'}"`);
 
     // Match resume to jobs (with location for proximity bonus)
     const resumeSkills = parsedData?.sections?.skills || [];
@@ -331,9 +334,11 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       parsedData,
       resumeLocation || undefined
     );
+    console.log(`[JobMatches] Matched ${matches.length} jobs to resume`);
 
     // Save top matches to database (upsert to avoid duplicates)
     const topMatches = matches.slice(0, 10);
+    console.log(`[JobMatches] Top ${topMatches.length} matches selected`);
     for (const match of topMatches) {
       // Check if match already exists
       const existing = await db
