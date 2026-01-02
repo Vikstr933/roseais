@@ -38,10 +38,7 @@ import {
   Info,
   CheckCircle,
   Lightbulb,
-  FileCode,
-  Sparkles,
-  Brain,
-  Search,
+  Briefcase,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
