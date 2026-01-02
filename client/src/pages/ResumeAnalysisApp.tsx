@@ -1570,7 +1570,8 @@ export default function ResumeAnalysisApp() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                const formattedText = formatResumeText(adapted.rawText);
+                                // Use getResumeText which already applies formatting and removes markdown
+                                const formattedText = getResumeText(null, adapted.rawText);
                                 const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
@@ -1670,7 +1671,7 @@ export default function ResumeAnalysisApp() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          const formattedText = formatApplicationText(viewingApplication.data.fullApplication.combinedText);
+                          const formattedText = formatCombinedApplication(viewingApplication.data.fullApplication.combinedText);
                           const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
                           const url = URL.createObjectURL(blob);
                           const a = document.createElement('a');
