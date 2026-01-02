@@ -656,9 +656,16 @@ export class ResumeScoringService {
   private extractExperienceText(text: string, parsedData: any): string {
     const experiences = parsedData.sections?.experience || [];
     if (experiences.length > 0) {
-      return experiences.map((e: any) => 
-        (e.description || e.responsibilities || '').join(' ') || ''
-      ).join(' ');
+      return experiences.map((e: any) => {
+        // Handle description/responsibilities - can be string or array
+        let desc = e.description || e.responsibilities || '';
+        if (Array.isArray(desc)) {
+          desc = desc.join(' ');
+        } else if (typeof desc !== 'string') {
+          desc = String(desc || '');
+        }
+        return desc;
+      }).join(' ');
     }
     
     // Fallback: extract from text
