@@ -236,7 +236,27 @@ export default function ResumeAnalysisApp() {
 
     setIsUploading(true);
     setError(null);
-    setProgress('Uploading resume...');
+    setUploadStep(0);
+
+    // Step indicators with labels
+    const steps = [
+      { label: 'Laddar upp fil...' },
+      { label: 'Parsar dokument...' },
+      { label: 'Formaterar text...' },
+      { label: 'Extraherar data...' },
+    ];
+
+    let stepInterval: NodeJS.Timeout | null = null;
+    
+    // Animate through steps
+    let currentStep = 0;
+    stepInterval = setInterval(() => {
+      if (currentStep < steps.length) {
+        setUploadStep(currentStep);
+        setProgress(steps[currentStep].label);
+        currentStep++;
+      }
+    }, 3000);
 
     try {
       const formData = new FormData();
@@ -262,8 +282,11 @@ export default function ResumeAnalysisApp() {
       const data = await response.json();
 
       if (data.success && data.resume) {
-        setUploadedResume(data.resume);
+        // Mark all steps as complete
+        if (stepInterval) clearInterval(stepInterval);
+        setUploadStep(steps.length);
         setProgress('');
+        setUploadedResume(data.resume);
         toast({
           title: 'Resume Uploaded!',
           description: 'Your resume has been uploaded successfully. Click "Analyze Resume" to get insights.',
@@ -281,7 +304,9 @@ export default function ResumeAnalysisApp() {
         variant: 'destructive',
       });
     } finally {
+      if (stepInterval) clearInterval(stepInterval);
       setIsUploading(false);
+      setUploadStep(0);
     }
   };
 
