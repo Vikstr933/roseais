@@ -1393,7 +1393,7 @@ export default function ResumeAnalysisApp() {
                                   </p>
                                 </div>
                                 <Badge className={`${getMatchBadgeColor(match.matchPercentage)} text-white text-xs px-2 py-0`}>
-                                  {Math.round(match.matchPercentage)}% Match
+                                  {getMatchLabel(match.matchPercentage)}
                                 </Badge>
                               </div>
                               {match.matchedSkills.length > 0 && (
