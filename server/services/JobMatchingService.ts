@@ -51,15 +51,21 @@ export class JobMatchingService {
    */
   async searchJobs(keywords: string, location?: string, limit: number = 100): Promise<JobListing[]> {
     try {
+      // Simplify keywords - take first 2-3 keywords to avoid too specific searches
+      const keywordArray = keywords.split(/\s+/).filter(k => k.length > 2);
+      const simplifiedKeywords = keywordArray.slice(0, 3).join(' ');
+      
+      logger.info(`[JobMatchingService] Searching with keywords: "${simplifiedKeywords}" (original: "${keywords}")`);
+      
       // JobTech API params
       const params: any = {
-        q: keywords,
+        q: simplifiedKeywords,
         limit: Math.min(limit, 100), // Max 100 per request
       };
 
       // Location can be added to query if needed
       if (location) {
-        params.q = `${keywords} ${location}`;
+        params.q = `${simplifiedKeywords} ${location}`;
       }
 
       const response = await axios.get(this.jobTechBaseUrl, {
@@ -73,9 +79,39 @@ export class JobMatchingService {
       // Transform JobTech API response to our format
       // Response structure: { total: { value: number }, hits: Array }
       const hits = response.data.hits || [];
+      logger.info(`[JobMatchingService] JobTech API returned ${hits.length} hits (total: ${response.data.total?.value || 0})`);
       
       // Use transformHitToJobListing helper method
       const jobs: JobListing[] = hits.map((hit: any) => this.transformHitToJobListing(hit));
+
+      // If no results with simplified keywords, try with even simpler search (first keyword only)
+      if (jobs.length === 0 && keywordArray.length > 1) {
+        logger.info(`[JobMatchingService] No results, trying with first keyword only: "${keywordArray[0]}"`);
+        const fallbackParams: any = {
+          q: keywordArray[0],
+          limit: Math.min(limit, 100),
+        };
+        if (location) {
+          fallbackParams.q = `${keywordArray[0]} ${location}`;
+        }
+        
+        try {
+          const fallbackResponse = await axios.get(this.jobTechBaseUrl, {
+            params: fallbackParams,
+            headers: { 'accept': 'application/json' },
+            timeout: 10000,
+          });
+          
+          const fallbackHits = fallbackResponse.data.hits || [];
+          logger.info(`[JobMatchingService] Fallback search returned ${fallbackHits.length} hits`);
+          
+          if (fallbackHits.length > 0) {
+            return fallbackHits.map((hit: any) => this.transformHitToJobListing(hit));
+          }
+        } catch (fallbackError) {
+          logger.error('Fallback search failed', fallbackError as Error);
+        }
+      }
 
       return jobs;
     } catch (error) {

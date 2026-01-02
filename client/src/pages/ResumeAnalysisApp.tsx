@@ -38,6 +38,10 @@ import {
   Info,
   CheckCircle,
   Lightbulb,
+  FileCode,
+  Sparkles,
+  Brain,
+  Search,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
@@ -151,6 +155,7 @@ export default function ResumeAnalysisApp() {
   const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false);
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [uploadStep, setUploadStep] = useState<number>(0);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -875,23 +880,72 @@ export default function ResumeAnalysisApp() {
                     </Button>
                   </div>
                   {!uploadedResume && (
-                    <Button
-                      onClick={handleUpload}
-                      disabled={isUploading}
-                      className="w-full"
-                    >
-                      {isUploading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-4 w-4 mr-2" />
-                          Upload Resume
-                        </>
+                    <>
+                      {isUploading && (
+                        <div className="w-full space-y-4 mb-4">
+                          <div className="flex items-center justify-center gap-8 py-6">
+                            {[
+                              { icon: Upload, label: 'Uppladdning' },
+                              { icon: FileCode, label: 'Parsning' },
+                              { icon: Sparkles, label: 'Formatering' },
+                              { icon: Brain, label: 'Extraktion' },
+                            ].map((step, index) => {
+                              const StepIcon = step.icon;
+                              const isActive = uploadStep >= index;
+                              const isCurrent = uploadStep === index;
+                              return (
+                                <div key={index} className="flex flex-col items-center gap-2">
+                                  <div
+                                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                                      isActive
+                                        ? 'bg-primary text-primary-foreground shadow-lg'
+                                        : 'bg-muted text-muted-foreground'
+                                    } ${isCurrent ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+                                  >
+                                    {isActive && isCurrent ? (
+                                      <Loader2 className="h-5 w-5 animate-spin" />
+                                    ) : isActive ? (
+                                      <CheckCircle className="h-5 w-5" />
+                                    ) : (
+                                      <StepIcon className="h-5 w-5" />
+                                    )}
+                                  </div>
+                                  <span
+                                    className={`text-xs font-medium ${
+                                      isActive ? 'text-foreground' : 'text-muted-foreground'
+                                    }`}
+                                  >
+                                    {step.label}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {progress && (
+                            <div className="text-center">
+                              <p className="text-sm text-muted-foreground">{progress}</p>
+                            </div>
+                          )}
+                        </div>
                       )}
-                    </Button>
+                      <Button
+                        onClick={handleUpload}
+                        disabled={isUploading}
+                        className="w-full"
+                      >
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 mr-2" />
+                            Upload Resume
+                          </>
+                        )}
+                      </Button>
+                    </>
                   )}
                 </div>
               ) : (
