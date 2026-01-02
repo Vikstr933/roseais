@@ -603,7 +603,24 @@ export default function ResumeAnalysisApp() {
     return 'bg-red-100';
   };
 
-  // Format resume text with better spacing and structure
+  // Get the best available text (formattedText from AI, or fallback to formatted rawText)
+  const getResumeText = (resume?: Resume | null, rawText?: string): string => {
+    if (!resume && !rawText) return '';
+    
+    // Priority 1: Use formattedText from parsedData if available (AI-formatted)
+    if (resume?.parsedData?.formattedText) {
+      return resume.parsedData.formattedText;
+    }
+    
+    // Priority 2: Use provided rawText or resume rawText
+    const textToFormat = rawText || resume?.rawText || '';
+    if (!textToFormat) return '';
+    
+    // Priority 3: Format it with rule-based formatting
+    return formatResumeText(textToFormat);
+  };
+
+  // Format resume text with better spacing and structure (fallback when no formattedText available)
   const formatResumeText = (text: string): string => {
     if (!text) return '';
     
