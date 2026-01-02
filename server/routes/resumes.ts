@@ -336,8 +336,8 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
     );
     console.log(`[JobMatches] Matched ${matches.length} jobs to resume`);
 
-    // Save top matches to database (upsert to avoid duplicates)
-    const topMatches = matches.slice(0, 10);
+    // Save top matches to database (upsert to avoid duplicates) - increased to 20
+    const topMatches = matches.slice(0, 20);
     console.log(`[JobMatches] Top ${topMatches.length} matches selected`);
     for (const match of topMatches) {
       // Check if match already exists

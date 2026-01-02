@@ -1358,19 +1358,26 @@ export default function ResumeAnalysisApp() {
                   {jobMatches.length > 0 && (
                       <div className="space-y-3">
                         {jobMatches.map((match, index) => {
-                          // Determine match quality color based on percentage
+                          // Determine match quality color and text based on percentage
                           const getMatchColor = (percentage: number) => {
                             if (percentage >= 70) return 'border-green-300 bg-green-50/50';
                             if (percentage >= 50) return 'border-blue-300 bg-blue-50/50';
-                            if (percentage >= 30) return 'border-purple-300 bg-purple-50/50';
+                            if (percentage >= 30) return 'border-yellow-300 bg-yellow-50/50';
                             return 'border-gray-300 bg-gray-50/50';
                           };
 
                           const getMatchBadgeColor = (percentage: number) => {
                             if (percentage >= 70) return 'bg-green-600';
                             if (percentage >= 50) return 'bg-blue-600';
-                            if (percentage >= 30) return 'bg-purple-600';
+                            if (percentage >= 30) return 'bg-yellow-600';
                             return 'bg-gray-600';
+                          };
+
+                          const getMatchLabel = (percentage: number) => {
+                            if (percentage >= 70) return 'Stark matchning';
+                            if (percentage >= 50) return 'Bra matchning';
+                            if (percentage >= 30) return 'Normal matchning';
+                            return 'Låg matchning';
                           };
 
                           return (
