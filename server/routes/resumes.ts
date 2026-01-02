@@ -208,7 +208,8 @@ router.post('/:id/analyze', authenticateUser, async (req, res) => {
     // Analyze resume
     const score = await resumeScoringService.analyzeResume(
       resume.rawText,
-      resume.parsedData as any
+      resume.parsedData as any,
+      resume.fileType || undefined
     );
 
     // Save analysis
