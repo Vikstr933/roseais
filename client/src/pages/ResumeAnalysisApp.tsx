@@ -52,12 +52,20 @@ interface ResumeAnalysis {
   contentScore: number;
   completenessScore: number;
   keywordScore: number;
+  presentationScore?: number;
   improvements: Array<{
     type: string;
     title: string;
     description: string;
     priority: 'low' | 'medium' | 'high';
   }>;
+  detailedFeedback?: {
+    ats?: { score: number; maxScore: number; percentage: number; feedback: { positives: string[]; negatives: string[]; tips: string[] } };
+    content?: { score: number; maxScore: number; percentage: number; feedback: { positives: string[]; negatives: string[]; tips: string[] } };
+    keywords?: { score: number; maxScore: number; percentage: number; feedback: { positives: string[]; negatives: string[]; tips: string[] } };
+    presentation?: { score: number; maxScore: number; percentage: number; feedback: { positives: string[]; negatives: string[]; tips: string[] } };
+    completeness?: { score: number; maxScore: number; percentage: number; feedback: { positives: string[]; negatives: string[]; tips: string[] } };
+  };
 }
 
 interface Resume {
@@ -996,7 +1004,23 @@ export default function ResumeAnalysisApp() {
         {/* Analysis Results - Compact Layout */}
         {analysis && !editingResume && (
           <div className="space-y-4">
-            {/* Scores - Compact */}
+            {/* ATS Info Box */}
+            <Card className="bg-blue-50 border-blue-200">
+              <CardContent className="pt-4">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-blue-900 mb-1">Vad är ATS?</h4>
+                    <p className="text-sm text-blue-800">
+                      ATS (Applicant Tracking System) är system som många företag använder för att automatiskt sortera och filtrera CV:n. 
+                      Ett ATS-vänligt CV ökar dina chanser att nå en rekryterare. Vi bedömer hur väl ditt CV kan läsas av dessa system.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Overall Score */}
             <Card>
               <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -1024,46 +1048,124 @@ export default function ResumeAnalysisApp() {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-muted-foreground">ATS</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.atsScore ?? 0)}`}>
-                        {analysis?.atsScore ?? 0}
-                      </span>
-                    </div>
-                    <Progress value={analysis?.atsScore ?? 0} className="h-1.5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-muted-foreground">Innehåll</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.contentScore ?? 0)}`}>
-                        {analysis?.contentScore ?? 0}
-                      </span>
-                    </div>
-                    <Progress value={analysis?.contentScore ?? 0} className="h-1.5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-muted-foreground">Komplett</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.completenessScore ?? 0)}`}>
-                        {analysis?.completenessScore ?? 0}
-                      </span>
-                    </div>
-                    <Progress value={analysis?.completenessScore ?? 0} className="h-1.5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-muted-foreground">Nyckelord</span>
-                      <span className={`text-xs font-semibold ${getScoreColor(analysis?.keywordScore ?? 0)}`}>
-                        {analysis?.keywordScore ?? 0}
-                      </span>
-                    </div>
-                    <Progress value={analysis?.keywordScore ?? 0} className="h-1.5" />
-                  </div>
-                </div>
               </CardContent>
             </Card>
+
+            {/* Category Scores - Expandable */}
+            <div className="space-y-3">
+              {[
+                { key: 'ats', label: 'ATS-vänlighet', score: analysis?.atsScore ?? 0, maxScore: 25, description: 'Hur väl ditt CV kan läsas av automatiska system. Viktigt för att nå rekryterare.' },
+                { key: 'content', label: 'Innehållskvalitet', score: analysis?.contentScore ?? 0, maxScore: 30, description: 'Hur väl du kommunicerar dina prestationer och erfarenheter. Fokus på mätbara resultat och aktiva verb.' },
+                { key: 'keywords', label: 'Nyckelordstäckning', score: analysis?.keywordScore ?? 0, maxScore: 20, description: 'Hur väl ditt CV matchar relevanta nyckelord och kompetenser för din bransch.' },
+                { key: 'presentation', label: 'Professionell Presentation', score: analysis?.presentationScore ?? analysis?.completenessScore ?? 0, maxScore: 15, description: 'Formatering, längd och visuell hierarki. Första intrycket är viktigt.' },
+                { key: 'completeness', label: 'Kompletthet', score: analysis?.completenessScore ?? 0, maxScore: 10, description: 'Verifierar att inget viktigt saknas - kontaktuppgifter, erfarenhet, utbildning, etc.' },
+              ].map((category) => {
+                const isExpanded = expandedCategories[category.key] || false;
+                const categoryFeedback = analysis?.detailedFeedback?.[category.key as keyof typeof analysis.detailedFeedback];
+                const percentage = category.score;
+                const getCategoryColor = (pct: number) => {
+                  if (pct >= 70) return 'text-green-600';
+                  if (pct >= 50) return 'text-blue-600';
+                  if (pct >= 30) return 'text-yellow-600';
+                  return 'text-red-600';
+                };
+                const getCategoryBgColor = (pct: number) => {
+                  if (pct >= 70) return 'bg-green-50 border-green-200';
+                  if (pct >= 50) return 'bg-blue-50 border-blue-200';
+                  if (pct >= 30) return 'bg-yellow-50 border-yellow-200';
+                  return 'bg-red-50 border-red-200';
+                };
+
+                return (
+                  <Card key={category.key} className={isExpanded ? getCategoryBgColor(percentage) : ''}>
+                    <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedCategories(prev => ({ ...prev, [category.key]: !prev[category.key] }))}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <CardTitle className="text-base">{category.label}</CardTitle>
+                            <span className={`text-sm font-semibold ${getCategoryColor(percentage)}`}>
+                              {category.score}/100
+                            </span>
+                          </div>
+                          <Progress value={category.score} className="h-2" />
+                        </div>
+                        <Button variant="ghost" size="sm" className="ml-2 h-6 w-6 p-0">
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    {isExpanded && (
+                      <CardContent className="pt-0">
+                        <div className="space-y-4">
+                          {/* Why it matters */}
+                          <div className="bg-white/60 rounded-lg p-3">
+                            <div className="flex items-start gap-2 mb-2">
+                              <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                              <h5 className="font-semibold text-sm">Varför är det viktigt?</h5>
+                            </div>
+                            <p className="text-xs text-gray-700">{category.description}</p>
+                          </div>
+
+                          {/* Positives */}
+                          {categoryFeedback?.feedback.positives && categoryFeedback.feedback.positives.length > 0 && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                                <h5 className="font-semibold text-sm text-green-700">Bra jobbat!</h5>
+                              </div>
+                              <ul className="space-y-1">
+                                {categoryFeedback.feedback.positives.map((positive, idx) => (
+                                  <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
+                                    <span className="text-green-600 mt-0.5">•</span>
+                                    <span>{positive}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Negatives / Areas for improvement */}
+                          {categoryFeedback?.feedback.negatives && categoryFeedback.feedback.negatives.length > 0 && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <AlertCircle className="h-4 w-4 text-orange-600" />
+                                <h5 className="font-semibold text-sm text-orange-700">Förbättringsområden</h5>
+                              </div>
+                              <ul className="space-y-1">
+                                {categoryFeedback.feedback.negatives.map((negative, idx) => (
+                                  <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
+                                    <span className="text-orange-600 mt-0.5">•</span>
+                                    <span>{negative}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Actionable Tips */}
+                          {categoryFeedback?.feedback.tips && categoryFeedback.feedback.tips.length > 0 && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Lightbulb className="h-4 w-4 text-yellow-600" />
+                                <h5 className="font-semibold text-sm text-yellow-700">Actionable Tips</h5>
+                              </div>
+                              <ul className="space-y-1">
+                                {categoryFeedback.feedback.tips.map((tip, idx) => (
+                                  <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
+                                    <span className="text-yellow-600 mt-0.5">💡</span>
+                                    <span>{tip}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
 
             {/* Job Matches - Compact */}
             <Card>
