@@ -378,6 +378,9 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       jobDescription: match.job.description || '', // Include description for adaptation
     }));
 
+    console.log(`[JobMatches] Returning ${transformedMatches.length} matches for resume ${resumeId}`);
+    console.log(`[JobMatches] First match sample:`, transformedMatches[0] ? JSON.stringify(transformedMatches[0], null, 2) : 'none');
+
     res.json({
       matches: transformedMatches,
     });

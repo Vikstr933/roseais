@@ -370,13 +370,20 @@ export default function ResumeAnalysisApp() {
       }
 
       const data = await response.json();
-      console.log('[JobMatches] Response data:', data);
+      console.log('[JobMatches] Full response data:', JSON.stringify(data, null, 2));
+      console.log('[JobMatches] Data type:', typeof data);
+      console.log('[JobMatches] Is array:', Array.isArray(data));
+      console.log('[JobMatches] Has matches:', !!data.matches);
+      console.log('[JobMatches] Has jobMatches:', !!data.jobMatches);
 
       // Handle both 'matches' and direct array response
       const matches = data.matches || data.jobMatches || (Array.isArray(data) ? data : []);
+      console.log('[JobMatches] Extracted matches:', matches);
+      console.log('[JobMatches] Matches length:', matches?.length || 0);
+      console.log('[JobMatches] Matches is array:', Array.isArray(matches));
       
-      if (matches && matches.length > 0) {
-        console.log('[JobMatches] Setting matches:', matches.length);
+      if (matches && Array.isArray(matches) && matches.length > 0) {
+        console.log('[JobMatches] ✅ Setting matches:', matches.length);
         setJobMatches(matches);
         setHasAutoSearched(isAutoSearch);
         setProgress('');
@@ -387,11 +394,18 @@ export default function ResumeAnalysisApp() {
           });
         }
       } else {
-        console.log('[JobMatches] No matches found in response');
+        console.log('[JobMatches] ❌ No matches found - matches:', matches, 'length:', matches?.length);
         // Still set empty array to clear any previous matches
         setJobMatches([]);
         setHasAutoSearched(isAutoSearch);
         setProgress('');
+        if (!isAutoSearch && matches && matches.length === 0) {
+          toast({
+            title: 'Inga jobb hittades',
+            description: 'Prova att ändra sökord eller plats',
+            variant: 'default',
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to find jobs:', err);
