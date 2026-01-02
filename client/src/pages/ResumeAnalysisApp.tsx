@@ -599,24 +599,57 @@ export default function ResumeAnalysisApp() {
   const formatResumeText = (text: string): string => {
     if (!text) return '';
     
-    // Split by common section headers and add spacing
     let formatted = text;
     
-    // Add spacing after common section headers (uppercase or title case)
-    const sectionPatterns = [
-      /(SAMMANFATTNING|ERFARENHET|UTBILDNING|KOMPETENSER|PRESTATIONER|SPRÅK|KONTAKT|PERSONLIGT BREV|CV|ANSOKNING)/g,
-      /(Drivs av|Skills|Experience|Education|Summary|Contact|Languages)/g,
+    // First, add spacing before section headers (common CV sections)
+    const sectionHeaders = [
+      'SAMMANFATTNING', 'ERFARENHET', 'UTBILDNING', 'KOMPETENSER', 'PRESTATIONER', 
+      'SPRÅK', 'KONTAKT', 'PERSONLIGT BREV', 'CV', 'ANSOKNING', 'FÄRDIGHETER',
+      'Arbetslivserfarenhet', 'Utbildning', 'Kompetenser', 'Språk', 'Kontakt'
     ];
     
-    sectionPatterns.forEach(pattern => {
-      formatted = formatted.replace(pattern, (match) => `\n\n${match}\n`);
+    sectionHeaders.forEach(header => {
+      // Match header with optional preceding text on same line
+      const regex = new RegExp(`([^\\n])(${header})`, 'gi');
+      formatted = formatted.replace(regex, '$1\n\n$2');
     });
     
-    // Add spacing after dates and job titles (lines that end with years or dates)
-    formatted = formatted.replace(/(\d{2}\/\d{4}\s*-\s*\d{2}\/\d{4}|\d{4}\s*-\s*\d{4})/g, '$1\n');
+    // Add spacing before headers that start with special characters or are all caps
+    formatted = formatted.replace(/([^\n])([A-ZÅÄÖ][A-ZÅÄÖ\s]{10,})/g, (match, before, header) => {
+      // Check if it looks like a section header (all caps, longer than 10 chars)
+      if (header.trim().length > 10 && header === header.toUpperCase() && !header.match(/\d{4}/)) {
+        return `${before}\n\n${header}`;
+      }
+      return match;
+    });
     
-    // Clean up multiple blank lines (max 2 consecutive)
-    formatted = formatted.replace(/\n{3,}/g, '\n\n');
+    // Add spacing after job titles/company names followed by dates
+    // Pattern: Job Title / Company Name Date range
+    formatted = formatted.replace(/([^\n])\s+(\w+\s+\w+)\s*\/\s*(\w+)/g, '\n\n$2 / $3');
+    
+    // Add spacing after date ranges (both formats: 2022-2023 or 01/2022 - 12/2023)
+    formatted = formatted.replace(/(\d{4}\s*-\s*\d{4}|\d{2}\/\d{4}\s*-\s*\d{2}\/\d{4}|\d{2}\/\d{4}\s*–\s*\d{2}\/\d{4})/g, '$1\n');
+    
+    // Add spacing after company/location lines (lines ending with city names)
+    formatted = formatted.replace(/([A-ZÅÄÖ][a-zåäö]+\s*,\s*[A-ZÅÄÖ][a-zåäö]+)\s*([^\n])/g, '$1\n$2');
+    
+    // Add spacing before bullet points or numbered lists
+    formatted = formatted.replace(/([^\n])([•\-\*]\s|[\d]+\.[\s])/g, '$1\n$2');
+    
+    // Add spacing after email addresses and phone numbers
+    formatted = formatted.replace(/([\w\.-]+@[\w\.-]+\.\w+|[\+]?[\d\s\-\(\)]{10,})/g, '$1\n');
+    
+    // Add spacing around separator lines (--- or ㅡ)
+    formatted = formatted.replace(/([^\n])([─-]{2,}|ㅡ)\s*([^\n])/g, '$1\n\n$2\n\n$3');
+    
+    // Add spacing before "-- 1 of 2 --" style pagination
+    formatted = formatted.replace(/([^\n])(--\s*\d+\s+of\s+\d+\s*--)/g, '$1\n\n$2\n');
+    
+    // Clean up multiple blank lines (max 2 consecutive, but allow 3 for section breaks)
+    formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
+    
+    // Clean up single newlines in the middle of sentences (preserve intentional spacing)
+    // This is tricky - we'll be conservative and only fix obvious issues
     
     // Trim and return
     return formatted.trim();
@@ -635,6 +668,43 @@ export default function ResumeAnalysisApp() {
     formatted = formatted.replace(/Datum:\s*\d{4}-\d{2}-\d{2}/g, '$&\n');
     
     // Clean up multiple blank lines
+    formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
+    
+    return formatted.trim();
+  };
+
+  // Format combined application (cover letter + CV) with proper CV formatting
+  const formatCombinedApplication = (text: string): string => {
+    if (!text) return '';
+    
+    let formatted = text;
+    
+    // Split into cover letter and CV sections
+    const cvStart = formatted.indexOf('CV\n') !== -1 ? formatted.indexOf('CV\n') : formatted.indexOf('CV\n\n');
+    const cvStartAlt = formatted.indexOf('\n\nCV\n');
+    
+    if (cvStart !== -1 || cvStartAlt !== -1) {
+      const splitIndex = cvStart !== -1 ? cvStart : cvStartAlt;
+      const coverLetterPart = formatted.substring(0, splitIndex);
+      const cvPart = formatted.substring(splitIndex);
+      
+      // Format cover letter part
+      let formattedCoverLetter = formatApplicationText(coverLetterPart);
+      
+      // Format CV part using formatResumeText
+      let formattedCV = formatResumeText(cvPart);
+      
+      // Combine with proper spacing
+      formatted = formattedCoverLetter + '\n\n' + formattedCV;
+    } else {
+      // If we can't find the split, format the whole thing
+      formatted = formatApplicationText(text);
+    }
+    
+    // Add spacing around major section headers in combined text
+    formatted = formatted.replace(/(ANSOKNING|PERSONLIGT BREV|CV|Slut på ansökan)/g, '\n\n$1\n\n');
+    
+    // Clean up multiple blank lines (max 3 for major sections)
     formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
     
     return formatted.trim();
@@ -1247,7 +1317,7 @@ export default function ResumeAnalysisApp() {
                       <div className="border rounded-lg p-6 bg-gray-50 max-h-96 overflow-y-auto">
                         <div className="prose prose-sm max-w-none">
                           <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
-                            {formatApplicationText(viewingApplication.data.fullApplication.combinedText)}
+                            {formatCombinedApplication(viewingApplication.data.fullApplication.combinedText)}
                           </div>
                         </div>
                       </div>
