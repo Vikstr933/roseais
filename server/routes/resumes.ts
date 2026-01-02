@@ -537,9 +537,16 @@ router.post('/:id/generate-application/:jobId', authenticateUser, async (req, re
       return res.status(400).json({ error: 'Job title and description are required' });
     }
 
+    // Use formattedText if available (AI-formatted), otherwise use rawText
+    const resumeText = (resume.parsedData as any)?.formattedText || resume.rawText || '';
+    
+    if (!resumeText) {
+      return res.status(400).json({ error: 'Resume text not available' });
+    }
+
     // Generate application (cover letter + resume)
     const application = await applicationService.generateApplication(
-      resume.rawText,
+      resumeText,
       finalJobTitle,
       finalJobDescription,
       finalCompany

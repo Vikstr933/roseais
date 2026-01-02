@@ -61,7 +61,15 @@ interface Resume {
   fileType: string;
   createdAt: string;
   rawText?: string;
-  parsedData?: any;
+  parsedData?: {
+    formattedText?: string;
+    contactInfo?: any;
+    sections?: any;
+    metadata?: {
+      aiFormatted?: boolean;
+      aiStructured?: boolean;
+    };
+  };
 }
 
 interface AdaptedResume {
@@ -1469,7 +1477,7 @@ export default function ResumeAnalysisApp() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          const formattedText = formatResumeText(viewingAdaptedResume.rawText);
+                          const formattedText = getResumeText(null, viewingAdaptedResume.rawText);
                           const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
                           const url = URL.createObjectURL(blob);
                           const a = document.createElement('a');
