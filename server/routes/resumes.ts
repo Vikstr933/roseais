@@ -425,9 +425,12 @@ router.post('/:id/adapt/:jobId', authenticateUser, async (req, res) => {
     }
 
 
+    // Use formattedText if available (AI-formatted), otherwise use rawText
+    const resumeText = (resume.parsedData as any)?.formattedText || resume.rawText || '';
+    
     // Adapt resume to job
     const adaptedResume = await resumeAdaptationService.adaptResumeToJob(
-      resume.rawText || '',
+      resumeText,
       resume.parsedData || {},
       jobMatch.jobTitle,
       jobMatch.jobDescription || '',
