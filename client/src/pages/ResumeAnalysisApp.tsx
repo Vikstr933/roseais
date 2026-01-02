@@ -697,6 +697,26 @@ export default function ResumeAnalysisApp() {
     
     let formatted = text;
     
+    // STEP 1: REMOVE ALL MARKDOWN FORMATTING FIRST
+    // Remove bold markdown (**text** or __text__)
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '$1');
+    formatted = formatted.replace(/__([^_]+)__/g, '$1');
+    
+    // Remove italic markdown (*text* or _text_) - but be careful not to remove bullet points
+    formatted = formatted.replace(/\*([^*\n]+)\*/g, '$1');
+    formatted = formatted.replace(/_([^_\n]+)_/g, '$1');
+    
+    // Remove heading markdown (# ## ###)
+    formatted = formatted.replace(/^#{1,6}\s+/gm, '');
+    
+    // Remove strikethrough (~~text~~)
+    formatted = formatted.replace(/~~([^~]+)~~/g, '$1');
+    
+    // Remove code blocks (```text```)
+    formatted = formatted.replace(/```[a-z]*\n?/g, '');
+    formatted = formatted.replace(/`([^`]+)`/g, '$1');
+    
+    // STEP 2: ADD PROPER SPACING
     // First, add spacing before section headers (common CV sections)
     const sectionHeaders = [
       'SAMMANFATTNING', 'ERFARENHET', 'UTBILDNING', 'KOMPETENSER', 'PRESTATIONER', 
@@ -744,9 +764,6 @@ export default function ResumeAnalysisApp() {
     // Clean up multiple blank lines (max 2 consecutive, but allow 3 for section breaks)
     formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
     
-    // Clean up single newlines in the middle of sentences (preserve intentional spacing)
-    // This is tricky - we'll be conservative and only fix obvious issues
-    
     // Trim and return
     return formatted.trim();
   };
@@ -757,6 +774,26 @@ export default function ResumeAnalysisApp() {
     
     let formatted = text;
     
+    // STEP 1: REMOVE ALL MARKDOWN FORMATTING
+    // Remove bold markdown (**text** or __text__)
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '$1');
+    formatted = formatted.replace(/__([^_]+)__/g, '$1');
+    
+    // Remove italic markdown (*text* or _text_)
+    formatted = formatted.replace(/\*([^*\n]+)\*/g, '$1');
+    formatted = formatted.replace(/_([^_\n]+)_/g, '$1');
+    
+    // Remove heading markdown (# ## ###)
+    formatted = formatted.replace(/^#{1,6}\s+/gm, '');
+    
+    // Remove strikethrough (~~text~~)
+    formatted = formatted.replace(/~~([^~]+)~~/g, '$1');
+    
+    // Remove code blocks
+    formatted = formatted.replace(/```[a-z]*\n?/g, '');
+    formatted = formatted.replace(/`([^`]+)`/g, '$1');
+    
+    // STEP 2: ADD PROPER SPACING
     // Add spacing around section headers
     formatted = formatted.replace(/(PERSONLIGT BREV|CV|ANSOKNING|Slut på ansökan)/g, '\n\n$1\n\n');
     
@@ -1094,65 +1131,66 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
-        {/* Analysis Results - Compact Layout */}
+        {/* Analysis Results - Compact 2-Column Layout */}
         {analysis && !editingResume && (
-          <div className="space-y-4">
-            {/* ATS Info Box */}
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-blue-900 mb-1">Vad är ATS?</h4>
-                    <p className="text-sm text-blue-800">
-                      ATS (Applicant Tracking System) är system som många företag använder för att automatiskt sortera och filtrera CV:n. 
-                      Ett ATS-vänligt CV ökar dina chanser att nå en rekryterare. Vi bedömer hur väl ditt CV kan läsas av dessa system.
-                    </p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left Column: Scores (1/3 width on large screens) */}
+            <div className="lg:col-span-1 space-y-3">
+              {/* ATS Info Box - More Compact */}
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="pt-3 pb-3">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-blue-900 mb-1 text-sm">Vad är ATS?</h4>
+                      <p className="text-xs text-blue-800">
+                        System som automatiskt sorterar CV:n. Ett ATS-vänligt CV ökar dina chanser att nå rekryterare.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Overall Score */}
-            <Card>
-              <CardHeader className="pb-3">
+              {/* Overall Score - More Compact */}
+              <Card>
+                <CardHeader className="pb-2 pt-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">CV Poäng</CardTitle>
+                    <CardTitle className="text-base">CV Poäng</CardTitle>
                     {uploadedResume && (
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={handleEditResume}
-                        className="h-7 px-2"
+                        className="h-6 px-2"
                       >
                         <Edit className="h-3 w-3" />
                       </Button>
                     )}
                   </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-center py-2">
-                  <div className={`relative w-32 h-32 rounded-full ${getScoreBgColor(analysis?.overallScore ?? 0)} flex items-center justify-center`}>
-                    <div className="text-center">
-                      <div className={`text-4xl font-bold ${getScoreColor(analysis?.overallScore ?? 0)}`}>
-                        {analysis?.overallScore ?? 0}
+                </CardHeader>
+                <CardContent className="pb-3">
+                  <div className="flex items-center justify-center py-1">
+                    <div className={`relative w-24 h-24 rounded-full ${getScoreBgColor(analysis?.overallScore ?? 0)} flex items-center justify-center`}>
+                      <div className="text-center">
+                        <div className={`text-3xl font-bold ${getScoreColor(analysis?.overallScore ?? 0)}`}>
+                          {analysis?.overallScore ?? 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground">/100</div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">/100</div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Category Scores - Expandable */}
-            <div className="space-y-3">
-              {[
-                { key: 'ats', label: 'ATS-vänlighet', score: analysis?.atsScore ?? 0, maxScore: 25, description: 'Hur väl ditt CV kan läsas av automatiska system. Viktigt för att nå rekryterare.' },
-                { key: 'content', label: 'Innehållskvalitet', score: analysis?.contentScore ?? 0, maxScore: 30, description: 'Hur väl du kommunicerar dina prestationer och erfarenheter. Fokus på mätbara resultat och aktiva verb.' },
-                { key: 'keywords', label: 'Nyckelordstäckning', score: analysis?.keywordScore ?? 0, maxScore: 20, description: 'Hur väl ditt CV matchar relevanta nyckelord och kompetenser för din bransch.' },
-                { key: 'presentation', label: 'Professionell Presentation', score: analysis?.presentationScore ?? analysis?.completenessScore ?? 0, maxScore: 15, description: 'Formatering, längd och visuell hierarki. Första intrycket är viktigt.' },
-                { key: 'completeness', label: 'Kompletthet', score: analysis?.completenessScore ?? 0, maxScore: 10, description: 'Verifierar att inget viktigt saknas - kontaktuppgifter, erfarenhet, utbildning, etc.' },
-              ].map((category) => {
+              {/* Category Scores - More Compact, Expandable */}
+              <div className="space-y-2">
+                {[
+                  { key: 'ats', label: 'ATS-vänlighet', score: analysis?.atsScore ?? 0, maxScore: 25, description: 'Hur väl ditt CV kan läsas av automatiska system.' },
+                  { key: 'content', label: 'Innehållskvalitet', score: analysis?.contentScore ?? 0, maxScore: 30, description: 'Hur väl du kommunicerar prestationer.' },
+                  { key: 'keywords', label: 'Nyckelord', score: analysis?.keywordScore ?? 0, maxScore: 20, description: 'Matchning mot relevanta kompetenser.' },
+                  { key: 'presentation', label: 'Presentation', score: analysis?.presentationScore ?? analysis?.completenessScore ?? 0, maxScore: 15, description: 'Formatering och visuell hierarki.' },
+                  { key: 'completeness', label: 'Kompletthet', score: analysis?.completenessScore ?? 0, maxScore: 10, description: 'Verifierar att inget saknas.' },
+                ].map((category) => {
                 const isExpanded = expandedCategories[category.key] || false;
                 const categoryFeedback = analysis?.detailedFeedback?.[category.key as keyof typeof analysis.detailedFeedback];
                 const percentage = category.score;
@@ -1187,78 +1225,82 @@ export default function ResumeAnalysisApp() {
                         </Button>
                       </div>
                     </CardHeader>
-                    {isExpanded && (
-                      <CardContent className="pt-0">
-                        <div className="space-y-4">
-                          {/* Why it matters */}
-                          <div className="bg-white/60 rounded-lg p-3">
-                            <div className="flex items-start gap-2 mb-2">
-                              <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-                              <h5 className="font-semibold text-sm">Varför är det viktigt?</h5>
+                      {isExpanded && (
+                        <CardContent className="pt-2 pb-2">
+                          <div className="space-y-2">
+                            {/* Why it matters */}
+                            <div className="bg-white/60 rounded p-2">
+                              <div className="flex items-start gap-1.5 mb-1">
+                                <Info className="h-3 w-3 text-blue-600 mt-0.5" />
+                                <h5 className="font-semibold text-xs">Varför viktigt?</h5>
+                              </div>
+                              <p className="text-xs text-gray-700">{category.description}</p>
                             </div>
-                            <p className="text-xs text-gray-700">{category.description}</p>
+
+                            {/* Positives */}
+                            {categoryFeedback?.feedback.positives && categoryFeedback.feedback.positives.length > 0 && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <CheckCircle className="h-3 w-3 text-green-600" />
+                                  <h5 className="font-semibold text-xs text-green-700">Bra jobbat!</h5>
+                                </div>
+                                <ul className="space-y-0.5">
+                                  {categoryFeedback.feedback.positives.slice(0, 3).map((positive, idx) => (
+                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
+                                      <span className="text-green-600 mt-0.5">•</span>
+                                      <span>{positive}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Negatives / Areas for improvement */}
+                            {categoryFeedback?.feedback.negatives && categoryFeedback.feedback.negatives.length > 0 && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <AlertCircle className="h-3 w-3 text-orange-600" />
+                                  <h5 className="font-semibold text-xs text-orange-700">Förbättringsområden</h5>
+                                </div>
+                                <ul className="space-y-0.5">
+                                  {categoryFeedback.feedback.negatives.slice(0, 3).map((negative, idx) => (
+                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
+                                      <span className="text-orange-600 mt-0.5">•</span>
+                                      <span>{negative}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Actionable Tips */}
+                            {categoryFeedback?.feedback.tips && categoryFeedback.feedback.tips.length > 0 && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Lightbulb className="h-3 w-3 text-yellow-600" />
+                                  <h5 className="font-semibold text-xs text-yellow-700">Tips</h5>
+                                </div>
+                                <ul className="space-y-0.5">
+                                  {categoryFeedback.feedback.tips.slice(0, 2).map((tip, idx) => (
+                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
+                                      <span className="text-yellow-600 mt-0.5">💡</span>
+                                      <span>{tip}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
-
-                          {/* Positives */}
-                          {categoryFeedback?.feedback.positives && categoryFeedback.feedback.positives.length > 0 && (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                                <h5 className="font-semibold text-sm text-green-700">Bra jobbat!</h5>
-                              </div>
-                              <ul className="space-y-1">
-                                {categoryFeedback.feedback.positives.map((positive, idx) => (
-                                  <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
-                                    <span className="text-green-600 mt-0.5">•</span>
-                                    <span>{positive}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* Negatives / Areas for improvement */}
-                          {categoryFeedback?.feedback.negatives && categoryFeedback.feedback.negatives.length > 0 && (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <AlertCircle className="h-4 w-4 text-orange-600" />
-                                <h5 className="font-semibold text-sm text-orange-700">Förbättringsområden</h5>
-                              </div>
-                              <ul className="space-y-1">
-                                {categoryFeedback.feedback.negatives.map((negative, idx) => (
-                                  <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
-                                    <span className="text-orange-600 mt-0.5">•</span>
-                                    <span>{negative}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* Actionable Tips */}
-                          {categoryFeedback?.feedback.tips && categoryFeedback.feedback.tips.length > 0 && (
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <Lightbulb className="h-4 w-4 text-yellow-600" />
-                                <h5 className="font-semibold text-sm text-yellow-700">Actionable Tips</h5>
-                              </div>
-                              <ul className="space-y-1">
-                                {categoryFeedback.feedback.tips.map((tip, idx) => (
-                                  <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
-                                    <span className="text-yellow-600 mt-0.5">💡</span>
-                                    <span>{tip}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    )}
-                  </Card>
-                );
-              })}
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Right Column: Job Matches and Search (2/3 width on large screens) */}
+            <div className="lg:col-span-2 space-y-4">
 
             {/* Job Matches - Compact */}
             <Card>
