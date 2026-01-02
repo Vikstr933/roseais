@@ -228,9 +228,14 @@ router.post('/:id/analyze', authenticateUser, async (req, res) => {
       })
       .returning();
 
+    // Include detailed feedback and presentationScore in response
     res.json({
       success: true,
-      analysis,
+      analysis: {
+        ...analysis,
+        presentationScore: score.presentationScore,
+        detailedFeedback: score.detailedFeedback,
+      },
     });
   } catch (error) {
     console.error('Error analyzing resume:', error);
