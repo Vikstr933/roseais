@@ -679,26 +679,48 @@ export default function ResumeAnalysisApp() {
     
     let formatted = text;
     
-    // Split into cover letter and CV sections
-    const cvStart = formatted.indexOf('CV\n') !== -1 ? formatted.indexOf('CV\n') : formatted.indexOf('CV\n\n');
-    const cvStartAlt = formatted.indexOf('\n\nCV\n');
+    // Split into cover letter and CV sections - try multiple patterns
+    let cvStartIndex = -1;
+    const cvPatterns = [
+      /\n\nCV\n/,
+      /\nCV\n/,
+      /CV\n\n/,
+      /CV\n/,
+      /\n\nCV\s/,
+      /CV\s/
+    ];
     
-    if (cvStart !== -1 || cvStartAlt !== -1) {
-      const splitIndex = cvStart !== -1 ? cvStart : cvStartAlt;
+    for (const pattern of cvPatterns) {
+      const match = formatted.match(pattern);
+      if (match && match.index !== undefined) {
+        cvStartIndex = match.index;
+        break;
+      }
+    }
+    
+    if (cvStartIndex !== -1) {
+      // Find the actual start of CV section (after "CV" header)
+      const cvHeaderEnd = formatted.indexOf('CV', cvStartIndex);
+      const actualCvStart = formatted.indexOf('\n', cvHeaderEnd);
+      const splitIndex = actualCvStart !== -1 ? actualCvStart + 1 : cvStartIndex;
+      
       const coverLetterPart = formatted.substring(0, splitIndex);
       const cvPart = formatted.substring(splitIndex);
       
       // Format cover letter part
       let formattedCoverLetter = formatApplicationText(coverLetterPart);
       
-      // Format CV part using formatResumeText
+      // Format CV part using formatResumeText (which handles the CV structure)
       let formattedCV = formatResumeText(cvPart);
       
       // Combine with proper spacing
       formatted = formattedCoverLetter + '\n\n' + formattedCV;
     } else {
-      // If we can't find the split, format the whole thing
+      // If we can't find the split, try to format the whole thing
+      // But apply more aggressive formatting
       formatted = formatApplicationText(text);
+      // Also apply CV formatting in case there's CV content
+      formatted = formatResumeText(formatted);
     }
     
     // Add spacing around major section headers in combined text
