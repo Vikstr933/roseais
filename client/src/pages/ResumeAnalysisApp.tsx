@@ -974,6 +974,8 @@ export default function ResumeAnalysisApp() {
             </CardHeader>
             <CardContent>
               <textarea
+                id="edit-resume-text"
+                name="editedResumeText"
                 value={editedResumeText}
                 onChange={(e) => setEditedResumeText(e.target.value)}
                 className="w-full min-h-[400px] p-4 border rounded-lg font-mono text-sm resize-y"
