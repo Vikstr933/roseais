@@ -21,7 +21,7 @@ export interface ResumeScore {
   contentScore: number; // 0-30, displayed as 0-100
   keywordScore: number; // 0-20, displayed as 0-100
   presentationScore: number; // 0-15, displayed as 0-100
-  completenessScore: number; // Keep for backwards compatibility, map to presentationScore
+  completenessScore: number; // 0-10, displayed as 0-100
   improvements: Array<{
     type: string;
     title: string;
@@ -33,13 +33,14 @@ export interface ResumeScore {
     content: CategoryScore;
     keywords: CategoryScore;
     presentation: CategoryScore;
+    completeness: CategoryScore;
   };
 }
 
 export class ResumeScoringService {
   /**
-   * Analyze resume and calculate scores using new 4-category system
-   * Total: 90 points (25 ATS + 30 Content + 20 Keywords + 15 Presentation)
+   * Analyze resume and calculate scores using new 5-category system
+   * Total: 100 points (25 ATS + 30 Content + 20 Keywords + 15 Presentation + 10 Completeness)
    */
   async analyzeResume(resumeText: string, parsedData?: any, fileType?: string): Promise<ResumeScore> {
     try {
@@ -51,10 +52,11 @@ export class ResumeScoringService {
       const contentResult = this.calculateContentQualityScore(fullText, parsed);
       const keywordResult = this.calculateKeywordCoverageScore(fullText, parsed);
       const presentationResult = this.calculatePresentationScore(fullText, parsed);
+      const completenessResult = this.calculateCompletenessScore(fullText, parsed);
 
       // Calculate overall score (convert to 0-100 scale)
-      const totalPoints = atsResult.score + contentResult.score + keywordResult.score + presentationResult.score;
-      const overallScore = Math.round((totalPoints / 90) * 100);
+      const totalPoints = atsResult.score + contentResult.score + keywordResult.score + presentationResult.score + completenessResult.score;
+      const overallScore = Math.round((totalPoints / 100) * 100);
 
       // Generate improvements from feedback
       const improvements = this.generateImprovementsFromFeedback({
@@ -62,6 +64,7 @@ export class ResumeScoringService {
         content: contentResult,
         keywords: keywordResult,
         presentation: presentationResult,
+        completeness: completenessResult,
       });
 
       return {
@@ -70,13 +73,14 @@ export class ResumeScoringService {
         contentScore: Math.round((contentResult.score / 30) * 100),
         keywordScore: Math.round((keywordResult.score / 20) * 100),
         presentationScore: Math.round((presentationResult.score / 15) * 100),
-        completenessScore: Math.round((presentationResult.score / 15) * 100), // Backwards compat
+        completenessScore: Math.round((completenessResult.score / 10) * 100),
         improvements,
         detailedFeedback: {
           ats: atsResult,
           content: contentResult,
           keywords: keywordResult,
           presentation: presentationResult,
+          completeness: completenessResult,
         },
       };
     } catch (error) {
@@ -636,6 +640,101 @@ export class ResumeScoringService {
     };
   }
 
+  /**
+   * 5. Kompletthet (10 poäng max)
+   * Verifierar att inget viktigt saknas
+   */
+  private calculateCompletenessScore(text: string, parsedData: any): CategoryScore {
+    let score = 0;
+    const feedback: ScoreFeedback = { positives: [], negatives: [], tips: [] };
+
+    const sections = parsedData.sections || {};
+    const contactInfo = parsedData.contactInfo || {};
+
+    // Required contact information (3p)
+    if (contactInfo.email) {
+      score += 1;
+      feedback.positives.push('Email adress finns med');
+    } else {
+      feedback.negatives.push('Email adress saknas');
+      feedback.tips.push('Lägg till din email adress');
+    }
+
+    if (contactInfo.phone) {
+      score += 1;
+      feedback.positives.push('Telefonnummer finns med');
+    } else {
+      feedback.negatives.push('Telefonnummer saknas');
+      feedback.tips.push('Lägg till ditt telefonnummer');
+    }
+
+    if (contactInfo.location) {
+      score += 1;
+      feedback.positives.push('Plats/Adress finns med');
+    } else {
+      feedback.tips.push('Överväg att lägga till din plats');
+    }
+
+    // Required sections (4p)
+    if (sections.experience && Array.isArray(sections.experience) && sections.experience.length > 0) {
+      score += 2;
+      feedback.positives.push('Arbetslivserfarenhet finns med');
+    } else {
+      feedback.negatives.push('Arbetslivserfarenhet saknas');
+      feedback.tips.push('Lägg till din arbetslivserfarenhet');
+    }
+
+    if (sections.education && Array.isArray(sections.education) && sections.education.length > 0) {
+      score += 1;
+      feedback.positives.push('Utbildning finns med');
+    } else {
+      feedback.negatives.push('Utbildning saknas');
+      feedback.tips.push('Lägg till din utbildning');
+    }
+
+    if (sections.skills && Array.isArray(sections.skills) && sections.skills.length > 0) {
+      score += 1;
+      feedback.positives.push('Kompetenser finns med');
+    } else {
+      feedback.negatives.push('Kompetenser saknas');
+      feedback.tips.push('Lägg till dina kompetenser');
+    }
+
+    // Additional completeness checks (3p)
+    if (sections.summary && sections.summary.trim().length > 50) {
+      score += 1;
+      feedback.positives.push('Sammanfattning finns med');
+    } else {
+      feedback.tips.push('Överväg att lägga till en professionell sammanfattning');
+    }
+
+    // Check for dates on experience entries
+    const experiences = sections.experience || [];
+    const experiencesWithDates = experiences.filter((e: any) => e.dates || e.period || e.startDate);
+    if (experiencesWithDates.length === experiences.length && experiences.length > 0) {
+      score += 1;
+      feedback.positives.push('Alla erfarenheter har datum');
+    } else if (experiences.length > 0) {
+      feedback.tips.push('Lägg till datum på alla arbetslivserfarenheter');
+    }
+
+    // Check for company names
+    const experiencesWithCompanies = experiences.filter((e: any) => e.company || e.employer);
+    if (experiencesWithCompanies.length === experiences.length && experiences.length > 0) {
+      score += 1;
+      feedback.positives.push('Alla erfarenheter har företagsnamn');
+    } else if (experiences.length > 0) {
+      feedback.tips.push('Lägg till företagsnamn på alla arbetslivserfarenheter');
+    }
+
+    return {
+      score: Math.min(score, 10),
+      maxScore: 10,
+      percentage: Math.round((score / 10) * 100),
+      feedback,
+    };
+  }
+
   // Helper methods
   private estimateYearsOfExperience(parsedData: any): number {
     const experiences = parsedData.sections?.experience || [];
@@ -782,6 +881,7 @@ export class ResumeScoringService {
     content: CategoryScore;
     keywords: CategoryScore;
     presentation: CategoryScore;
+    completeness: CategoryScore;
   }): ResumeScore['improvements'] {
     const improvements: ResumeScore['improvements'] = [];
 
@@ -791,6 +891,7 @@ export class ResumeScoringService {
       { key: 'content', name: 'Innehållskvalitet', score: feedback.content },
       { key: 'keywords', name: 'Nyckelordstäckning', score: feedback.keywords },
       { key: 'presentation', name: 'Professionell presentation', score: feedback.presentation },
+      { key: 'completeness', name: 'Kompletthet', score: feedback.completeness },
     ];
 
     for (const category of categories) {

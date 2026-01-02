@@ -302,9 +302,11 @@ export default function ResumeAnalysisApp() {
         });
         // Automatically search for jobs after analysis
         // Use setTimeout to ensure state is updated
+        // Automatically search for jobs after analysis
+        // Use longer timeout to ensure state is fully updated
         setTimeout(() => {
           handleFindJobs(true); // Pass true to indicate auto-search
-        }, 500);
+        }, 1000);
       } else {
         throw new Error(data.error || 'Failed to analyze resume');
       }
