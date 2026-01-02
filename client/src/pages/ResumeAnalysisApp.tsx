@@ -45,6 +45,7 @@ import { apiFetch, getApiUrl } from '../lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { AuthDialog } from '@/components/AuthDialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface ResumeAnalysis {
   id: number;
