@@ -498,6 +498,66 @@ router.post('/:id/adapt/:jobId', authenticateUser, async (req, res) => {
   }
 });
 
+// POST /api/resumes/:id/generate-application/:jobId
+router.post('/:id/generate-application/:jobId', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const resumeId = parseInt(req.params.id);
+    const jobId = req.params.jobId;
+    const { jobTitle, jobDescription, company } = req.body;
+
+    // Get resume
+    const [resume] = await db
+      .select()
+      .from(resumes)
+      .where(eq(resumes.id, resumeId))
+      .limit(1);
+
+    if (!resume || resume.userId !== userId) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    if (!resume.rawText) {
+      return res.status(400).json({ error: 'Resume text not available' });
+    }
+
+    // Get job match details if available
+    let [jobMatch] = await db
+      .select()
+      .from(jobMatches)
+      .where(and(eq(jobMatches.jobId, jobId), eq(jobMatches.resumeId, resumeId)))
+      .limit(1);
+
+    // Use job details from request body or from database match
+    const finalJobTitle = jobTitle || jobMatch?.jobTitle || 'Jobb';
+    const finalJobDescription = jobDescription || jobMatch?.jobDescription || '';
+    const finalCompany = company || jobMatch?.company || 'Företag';
+
+    if (!finalJobTitle || !finalJobDescription) {
+      return res.status(400).json({ error: 'Job title and description are required' });
+    }
+
+    // Generate application (cover letter + resume)
+    const application = await applicationService.generateApplication(
+      resume.rawText,
+      finalJobTitle,
+      finalJobDescription,
+      finalCompany
+    );
+
+    res.json({
+      success: true,
+      application,
+    });
+  } catch (error) {
+    console.error('Error generating application:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate application',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // PUT /api/resumes/:id
 router.put('/:id', authenticateUser, async (req, res) => {
   try {
