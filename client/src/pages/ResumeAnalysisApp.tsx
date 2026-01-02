@@ -1795,6 +1795,7 @@ export default function ResumeAnalysisApp() {
                 </CardContent>
               </Card>
             )}
+            </div>
           </div>
         )}
       </div>
