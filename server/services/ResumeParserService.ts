@@ -1,4 +1,5 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { multiModelAI, AIRequest } from './MultiModelAIService';
 
 const logger = new SimpleLogger('ResumeParserService');
 
@@ -56,6 +57,7 @@ async function getMammoth() {
 
 export interface ParsedResumeData {
   rawText: string;
+  formattedText?: string; // AI-formaterad text med korrekta radbrytningar
   contactInfo: {
     email?: string;
     phone?: string;
@@ -79,6 +81,8 @@ export interface ParsedResumeData {
   };
   metadata?: {
     isLatexSource?: boolean;
+    aiFormatted?: boolean; // Om texten är AI-formaterad
+    aiStructured?: boolean; // Om structured data är AI-genererad
   };
 }
 
@@ -111,14 +115,33 @@ export class ResumeParserService {
       // Ensure no null bytes in rawText (PostgreSQL JSONB doesn't support \u0000)
       rawText = rawText.replace(/\0/g, '');
       
-      // Extract structured data
-      const parsedData = this.extractStructuredData(rawText);
+      // Pre-process text with rule-based formatting (fast, no AI cost)
+      const preprocessedText = this.preprocessTextWithRules(rawText);
+      
+      // Extract structured data (try rule-based first, enhance with AI if needed)
+      const parsedData = await this.extractStructuredDataHybrid(preprocessedText);
+      
+      // Format text with AI for better readability (optional but recommended)
+      let formattedText: string | undefined;
+      let aiFormatted = false;
+      try {
+        formattedText = await this.formatTextWithAI(preprocessedText);
+        aiFormatted = true;
+        logger.info('Successfully AI-formatted CV text');
+      } catch (error) {
+        logger.warn('AI formatting failed, using rule-based formatting', error as Error);
+        // Fallback to rule-based formatting
+        formattedText = preprocessedText;
+      }
 
       return {
         rawText,
+        formattedText,
         ...parsedData,
         metadata: {
           isLatexSource,
+          aiFormatted,
+          aiStructured: parsedData.metadata?.aiStructured || false,
         },
       };
     } catch (error) {
@@ -259,7 +282,179 @@ export class ResumeParserService {
     return latexIndicators.some(pattern => pattern.test(text));
   }
 
-  private extractStructuredData(text: string): Omit<ParsedResumeData, 'rawText' | 'metadata'> {
+  /**
+   * Rule-based text preprocessing for better structure
+   */
+  private preprocessTextWithRules(text: string): string {
+    // Identifiera sektionsrubriker (vanligtvis versaler eller specifika ord)
+    const sections = [
+      'ARBETSLIVSERFARENHET', 'WORK EXPERIENCE', 'ERFARENHET',
+      'UTBILDNING', 'EDUCATION', 
+      'KOMPETENSER', 'SKILLS', 'FÄRDIGHETER',
+      'SPRÅK', 'LANGUAGES',
+      'CERTIFIERINGAR', 'CERTIFICATES', 'SAMMANFATTNING', 'SUMMARY'
+    ];
+    
+    // Lägg till dubbla radbrytningar före sektioner
+    for (const section of sections) {
+      text = text.replace(new RegExp(`(${section})`, 'gi'), '\n\n$1\n');
+    }
+    
+    // Detektera datumintervall (troligen nya arbetserfarenheter)
+    // Format: "2020-2023" eller "Jan 2020 - Dec 2023"
+    text = text.replace(/(\d{4}\s*-\s*\d{4})/g, '\n\n$1');
+    text = text.replace(/([A-ZÅÄÖ][a-zåäö]{2}\s+\d{4}\s*-\s*[A-ZÅÄÖ][a-zåäö]{2}\s+\d{4})/g, '\n\n$1');
+    
+    // Lägg till radbrytning efter meningar som följs av versal (nya meningar)
+    text = text.replace(/\.\s+([A-ZÅÄÖ])/g, '.\n$1');
+    
+    // Ta bort flera på varandra följande radbrytningar
+    text = text.replace(/\n{3,}/g, '\n\n');
+    
+    return text.trim();
+  }
+
+  /**
+   * Format text with AI for better readability
+   */
+  private async formatTextWithAI(rawText: string): Promise<string> {
+    const prompt = `Din uppgift är att ta emot oformaterad CV-text och returnera den välformaterad med korrekta radbrytningar.
+
+Regler:
+- Behåll allt innehåll exakt som det är
+- Lägg till radbrytningar där det är logiskt (efter meningar, mellan sektioner, mellan listpunkter)
+- Identifiera och strukturera sektioner (Arbetslivserfarenhet, Utbildning, etc)
+- Gör INGA innehållsmässiga ändringar
+- Behåll datum, namn och all faktainformation exakt
+
+CV-text:
+${rawText.substring(0, 8000)}${rawText.length > 8000 ? '\n\n[... texten är trunkerad ...]' : ''}
+
+Returnera den formaterade texten direkt utan kommentarer.`;
+
+    try {
+      const response = await multiModelAI.generate({
+        prompt,
+        systemPrompt: 'Du är en expert på att formatera CV-text med korrekta radbrytningar och struktur.',
+        maxTokens: 4000,
+        temperature: 0.3,
+        useCase: 'explanation',
+        priority: 'quality',
+      });
+
+      if (!response.content) {
+        throw new Error('AI did not return formatted text');
+      }
+
+      return response.content.trim();
+    } catch (error) {
+      logger.error('Failed to format text with AI', error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Hybrid approach: Try rule-based first, enhance with AI if needed
+   */
+  private async extractStructuredDataHybrid(text: string): Promise<Omit<ParsedResumeData, 'rawText' | 'formattedText' | 'metadata'> & { metadata?: { aiStructured?: boolean } }> {
+    // First, try rule-based extraction
+    const ruleBasedData = this.extractStructuredData(text);
+
+    // Check if we have enough structured data
+    const hasExperience = ruleBasedData.sections.experience && ruleBasedData.sections.experience.length > 0;
+    const hasEducation = ruleBasedData.sections.education && ruleBasedData.sections.education.length > 0;
+    const hasSkills = ruleBasedData.sections.skills && ruleBasedData.sections.skills.length > 0;
+
+    // If we have good structured data, return it
+    if (hasExperience || (hasEducation && hasSkills)) {
+      return ruleBasedData;
+    }
+
+    // Otherwise, try AI enhancement (optional, can be expensive)
+    try {
+      logger.info('Rule-based extraction insufficient, trying AI enhancement');
+      const aiEnhanced = await this.extractStructuredDataWithAI(text);
+      return {
+        ...aiEnhanced,
+        metadata: { aiStructured: true },
+      };
+    } catch (error) {
+      logger.warn('AI enhancement failed, using rule-based data', error as Error);
+      return ruleBasedData;
+    }
+  }
+
+  /**
+   * Extract structured data using AI
+   */
+  private async extractStructuredDataWithAI(text: string): Promise<Omit<ParsedResumeData, 'rawText' | 'formattedText' | 'metadata'>> {
+    const prompt = `Extrahera strukturerad information från detta CV. Returnera ENDAST valid JSON utan markdown-formatering.
+
+Följ exakt denna struktur:
+{
+  "contactInfo": {
+    "email": "",
+    "phone": "",
+    "location": "",
+    "linkedin": ""
+  },
+  "sections": {
+    "summary": "",
+    "experience": [
+      {
+        "title": "",
+        "company": "",
+        "dates": "",
+        "description": ""
+      }
+    ],
+    "education": [
+      {
+        "degree": "",
+        "school": "",
+        "dates": ""
+      }
+    ],
+    "skills": []
+  }
+}
+
+CV-text:
+${text.substring(0, 6000)}${text.length > 6000 ? '\n\n[... texten är trunkerad ...]' : ''}`;
+
+    try {
+      const response = await multiModelAI.generate({
+        prompt,
+        systemPrompt: 'Du är en expert på att extrahera strukturerad data från CV-text. Returnera endast valid JSON.',
+        maxTokens: 4000,
+        temperature: 0.2, // Lower temperature for more consistent JSON
+        useCase: 'explanation',
+        priority: 'quality',
+      });
+
+      if (!response.content) {
+        throw new Error('AI did not return structured data');
+      }
+
+      // Parse JSON from response
+      let jsonText = response.content.trim();
+      // Remove markdown code blocks if present
+      jsonText = jsonText.replace(/```json\s*|\s*```/g, '');
+      jsonText = jsonText.replace(/```/g, '');
+
+      const structured = JSON.parse(jsonText);
+      
+      return {
+        contactInfo: structured.contactInfo || {},
+        sections: structured.sections || {},
+      };
+    } catch (error) {
+      logger.error('Failed to extract structured data with AI', error as Error);
+      throw error;
+    }
+  }
+
+  private extractStructuredData(text: string): Omit<ParsedResumeData, 'rawText' | 'formattedText' | 'metadata'> {
     // Extract email
     const emailRegex = /[\w\.-]+@[\w\.-]+\.\w+/;
     const emailMatch = text.match(emailRegex);
@@ -275,7 +470,7 @@ export class ResumeParserService {
     const linkedinMatch = text.match(linkedinRegex);
     const linkedin = linkedinMatch ? linkedinMatch[0] : undefined;
 
-    // Basic section extraction (can be improved with AI)
+    // Basic section extraction
     const sections = this.extractSections(text);
 
     return {
