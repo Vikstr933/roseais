@@ -354,17 +354,28 @@ export default function ResumeAnalysisApp() {
       }
 
       const data = await response.json();
+      console.log('[JobMatches] Response data:', data);
 
-      if (data.matches) {
-        setJobMatches(data.matches);
+      // Handle both 'matches' and direct array response
+      const matches = data.matches || data.jobMatches || (Array.isArray(data) ? data : []);
+      
+      if (matches && matches.length > 0) {
+        console.log('[JobMatches] Setting matches:', matches.length);
+        setJobMatches(matches);
         setHasAutoSearched(isAutoSearch);
         setProgress('');
         if (!isAutoSearch) {
           toast({
             title: 'Jobb Hittade!',
-            description: `Hittade ${data.matches.length} matchande jobbannonser`,
+            description: `Hittade ${matches.length} matchande jobbannonser`,
           });
         }
+      } else {
+        console.log('[JobMatches] No matches found in response');
+        // Still set empty array to clear any previous matches
+        setJobMatches([]);
+        setHasAutoSearched(isAutoSearch);
+        setProgress('');
       }
     } catch (err) {
       console.error('Failed to find jobs:', err);
@@ -1075,6 +1086,8 @@ export default function ResumeAnalysisApp() {
                   <div className="space-y-2 pb-3 border-b">
                     <div className="grid grid-cols-2 gap-2">
                       <Input
+                        id="search-keywords"
+                        name="searchKeywords"
                         type="text"
                         placeholder="Sökord..."
                         value={searchKeywords}
@@ -1087,6 +1100,8 @@ export default function ResumeAnalysisApp() {
                         }}
                       />
                       <Input
+                        id="search-location"
+                        name="searchLocation"
                         type="text"
                         placeholder="Plats..."
                         value={searchLocation}
