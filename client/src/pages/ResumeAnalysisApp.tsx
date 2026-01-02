@@ -33,6 +33,11 @@ import {
   Mail,
   ExternalLink,
   Filter,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  CheckCircle,
+  Lightbulb,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
@@ -137,6 +142,7 @@ export default function ResumeAnalysisApp() {
   const [viewingApplication, setViewingApplication] = useState<{ jobMatch: JobMatch; data: ApplicationData } | null>(null);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false);
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
