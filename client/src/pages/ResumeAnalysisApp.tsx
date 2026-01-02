@@ -595,6 +595,51 @@ export default function ResumeAnalysisApp() {
     return 'bg-red-100';
   };
 
+  // Format resume text with better spacing and structure
+  const formatResumeText = (text: string): string => {
+    if (!text) return '';
+    
+    // Split by common section headers and add spacing
+    let formatted = text;
+    
+    // Add spacing after common section headers (uppercase or title case)
+    const sectionPatterns = [
+      /(SAMMANFATTNING|ERFARENHET|UTBILDNING|KOMPETENSER|PRESTATIONER|SPRÅK|KONTAKT|PERSONLIGT BREV|CV|ANSOKNING)/g,
+      /(Drivs av|Skills|Experience|Education|Summary|Contact|Languages)/g,
+    ];
+    
+    sectionPatterns.forEach(pattern => {
+      formatted = formatted.replace(pattern, (match) => `\n\n${match}\n`);
+    });
+    
+    // Add spacing after dates and job titles (lines that end with years or dates)
+    formatted = formatted.replace(/(\d{2}\/\d{4}\s*-\s*\d{2}\/\d{4}|\d{4}\s*-\s*\d{4})/g, '$1\n');
+    
+    // Clean up multiple blank lines (max 2 consecutive)
+    formatted = formatted.replace(/\n{3,}/g, '\n\n');
+    
+    // Trim and return
+    return formatted.trim();
+  };
+
+  // Format application text with better structure
+  const formatApplicationText = (text: string): string => {
+    if (!text) return '';
+    
+    let formatted = text;
+    
+    // Add spacing around section headers
+    formatted = formatted.replace(/(PERSONLIGT BREV|CV|ANSOKNING|Slut på ansökan)/g, '\n\n$1\n\n');
+    
+    // Add spacing after dates
+    formatted = formatted.replace(/Datum:\s*\d{4}-\d{2}-\d{2}/g, '$&\n');
+    
+    // Clean up multiple blank lines
+    formatted = formatted.replace(/\n{4,}/g, '\n\n\n');
+    
+    return formatted.trim();
+  };
+
 
 
   return (
@@ -1139,11 +1184,12 @@ export default function ResumeAnalysisApp() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                const blob = new Blob([adapted.rawText], { type: 'text/plain' });
+                                const formattedText = formatResumeText(adapted.rawText);
+                                const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
-                                a.download = adapted.filename;
+                                a.download = adapted.filename.replace(/\.txt$/, '') + '_formaterad.txt';
                                 a.click();
                                 URL.revokeObjectURL(url);
                               }}
@@ -1185,11 +1231,25 @@ export default function ResumeAnalysisApp() {
                   <div className="space-y-4">
                     {/* Cover Letter Section */}
                     <div>
-                      <h5 className="font-medium mb-2 text-sm">Personligt Brev</h5>
-                      <div className="border rounded-lg p-4 bg-muted/30">
-                        <pre className="whitespace-pre-wrap font-mono text-sm">
-                          {viewingApplication.data.coverLetter}
-                        </pre>
+                      <h5 className="font-semibold mb-3 text-base text-gray-900">Personligt Brev</h5>
+                      <div className="border rounded-lg p-6 bg-white shadow-sm">
+                        <div className="prose prose-sm max-w-none">
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
+                            {formatApplicationText(viewingApplication.data.coverLetter)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Full Application Preview */}
+                    <div className="mt-6">
+                      <h5 className="font-semibold mb-3 text-base text-gray-900">Komplett Ansökan (Förhandsvisning)</h5>
+                      <div className="border rounded-lg p-6 bg-gray-50 max-h-96 overflow-y-auto">
+                        <div className="prose prose-sm max-w-none">
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
+                            {formatApplicationText(viewingApplication.data.fullApplication.combinedText)}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -1224,7 +1284,8 @@ export default function ResumeAnalysisApp() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          const blob = new Blob([viewingApplication.data.fullApplication.combinedText], { type: 'text/plain' });
+                          const formattedText = formatApplicationText(viewingApplication.data.fullApplication.combinedText);
+                          const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
                           const url = URL.createObjectURL(blob);
                           const a = document.createElement('a');
                           a.href = url;
@@ -1305,20 +1366,23 @@ export default function ResumeAnalysisApp() {
                         </ul>
                       </div>
                     )}
-                    <div className="border rounded-lg p-4 bg-muted/30">
-                      <pre className="whitespace-pre-wrap font-mono text-sm">
-                        {viewingAdaptedResume.rawText}
-                      </pre>
+                    <div className="border rounded-lg p-6 bg-white">
+                      <div className="prose prose-sm max-w-none">
+                        <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
+                          {formatResumeText(viewingAdaptedResume.rawText)}
+                        </div>
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         onClick={() => {
-                          const blob = new Blob([viewingAdaptedResume.rawText], { type: 'text/plain' });
+                          const formattedText = formatResumeText(viewingAdaptedResume.rawText);
+                          const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
                           const url = URL.createObjectURL(blob);
                           const a = document.createElement('a');
                           a.href = url;
-                          a.download = viewingAdaptedResume.filename;
+                          a.download = viewingAdaptedResume.filename.replace(/\.txt$/, '') + '_formaterad.txt';
                           a.click();
                           URL.revokeObjectURL(url);
                         }}
