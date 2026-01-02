@@ -223,6 +223,8 @@ router.post('/:id/analyze', authenticateUser, async (req, res) => {
         completenessScore: score.completenessScore,
         keywordScore: score.keywordScore,
         improvements: score.improvements as any,
+        // Store detailed feedback in improvements field as JSON
+        // Note: presentationScore is calculated from completenessScore for backwards compat
       })
       .returning();
 
