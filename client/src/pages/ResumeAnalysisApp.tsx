@@ -46,6 +46,13 @@ import { useToast } from '@/hooks/use-toast';
 import { AuthDialog } from '@/components/AuthDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface ResumeAnalysis {
   id: number;
@@ -157,6 +164,7 @@ export default function ResumeAnalysisApp() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState<boolean>(false);
   const [isGeneratingAdaptedPDF, setIsGeneratingAdaptedPDF] = useState<Record<string, boolean>>({});
   const [isGeneratingApplicationPDF, setIsGeneratingApplicationPDF] = useState<Record<string, boolean>>({});
+  const [selectedTemplate, setSelectedTemplate] = useState<'modern' | 'classic' | 'minimal' | 'professional'>('modern');
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -620,7 +628,7 @@ export default function ResumeAnalysisApp() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          template: 'modern',
+          template: selectedTemplate,
           format: 'A4',
           fontSize: 'medium',
           colorScheme: 'blue',
@@ -675,7 +683,7 @@ export default function ResumeAnalysisApp() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          template: 'modern',
+          template: selectedTemplate,
           format: 'A4',
           fontSize: 'medium',
           colorScheme: 'blue',
@@ -734,6 +742,7 @@ export default function ResumeAnalysisApp() {
           applicationText: applicationData.fullApplication.combinedText,
           jobTitle: jobMatch.jobTitle,
           company: jobMatch.company,
+          template: selectedTemplate,
         }),
       });
 
@@ -1252,24 +1261,37 @@ export default function ResumeAnalysisApp() {
                     )}
                   </Button>
                   {analysis && (
-                    <Button
-                      onClick={handleGeneratePDF}
-                      disabled={isGeneratingPDF}
-                      variant="outline"
-                      className="border-purple-300 text-purple-700 hover:bg-purple-50"
-                    >
-                      {isGeneratingPDF ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="h-4 w-4 mr-2" />
-                          Generate PDF
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                      <Select value={selectedTemplate} onValueChange={(value: 'modern' | 'classic' | 'minimal' | 'professional') => setSelectedTemplate(value)}>
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                          <SelectValue placeholder="Välj mall" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="modern">Modern</SelectItem>
+                          <SelectItem value="classic">Klassisk</SelectItem>
+                          <SelectItem value="minimal">Minimal</SelectItem>
+                          <SelectItem value="professional">Professionell</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={handleGeneratePDF}
+                        disabled={isGeneratingPDF}
+                        variant="outline"
+                        className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full sm:w-auto"
+                      >
+                        {isGeneratingPDF ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Genererar...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Ladda ner PDF
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

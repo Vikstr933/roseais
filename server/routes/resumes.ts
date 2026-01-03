@@ -749,7 +749,7 @@ router.post('/:id/generate-application-pdf/:jobId', authenticateUser, async (req
     const userId = (req as any).user!.id;
     const resumeId = parseInt(req.params.id);
     const jobId = req.params.jobId;
-    const { applicationText, jobTitle, company } = req.body;
+    const { applicationText, jobTitle, company, template } = req.body;
 
     // Get resume
     const [resume] = await db
@@ -780,7 +780,7 @@ router.post('/:id/generate-application-pdf/:jobId', authenticateUser, async (req
 
     // Generate PDF
     const pdfBuffer = await resumePDFService.generatePDF(structuredData, {
-      template: 'modern',
+      template: template || 'modern',
       format: 'A4',
       fontSize: 'medium',
       colorScheme: 'blue',

@@ -836,13 +836,13 @@ export class ResumePDFService {
     <div class="two-column">
       <div class="main-column">
         <div class="section">
-          <h2 class="section-title">Experience</h2>
+          <h2 class="section-title">Erfarenhet</h2>
           {{experience}}
         </div>
         
         {{#if projects}}
         <div class="section">
-          <h2 class="section-title">Projects</h2>
+          <h2 class="section-title">Projekt</h2>
           {{projects}}
         </div>
         {{/if}}
@@ -850,25 +850,25 @@ export class ResumePDFService {
       
       <div class="sidebar">
         <div class="section">
-          <h2 class="section-title">Skills</h2>
+          <h2 class="section-title">Färdigheter</h2>
           {{skills}}
         </div>
         
         <div class="section">
-          <h2 class="section-title">Education</h2>
+          <h2 class="section-title">Utbildning</h2>
           {{education}}
         </div>
         
         {{#if certifications}}
         <div class="section">
-          <h2 class="section-title">Certifications</h2>
+          <h2 class="section-title">Certifieringar</h2>
           {{certifications}}
         </div>
         {{/if}}
         
         {{#if languages}}
         <div class="section">
-          <h2 class="section-title">Languages</h2>
+          <h2 class="section-title">Språk</h2>
           {{languages}}
         </div>
         {{/if}}
@@ -880,24 +880,624 @@ export class ResumePDFService {
   }
 
   /**
-   * Classic template (single column)
+   * Classic template (single column, traditional layout)
    */
   private getClassicTemplate(): string {
-    return this.getModernTemplate(); // Simplified for now
+    return `<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CV</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Times New Roman', serif;
+      font-size: {{fontSizeBase}};
+      line-height: 1.6;
+      color: #000;
+      background: #fff;
+    }
+    
+    .container {
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 15mm 20mm;
+      background: white;
+    }
+    
+    .header {
+      text-align: center;
+      border-bottom: 2px solid {{colorPrimary}};
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+    
+    .header h1 {
+      font-size: 24px;
+      color: {{colorPrimary}};
+      margin-bottom: 5px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .header .title {
+      font-size: {{fontSizeBase}};
+      color: #333;
+      margin-bottom: 10px;
+      font-style: italic;
+    }
+    
+    .contact-info {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 15px;
+      font-size: 11px;
+      color: #555;
+    }
+    
+    .summary {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f9f9f9;
+      border-left: 3px solid {{colorPrimary}};
+      font-size: 12px;
+      line-height: 1.6;
+      text-align: justify;
+    }
+    
+    .section {
+      margin-bottom: 25px;
+      page-break-inside: avoid;
+    }
+    
+    .section-title {
+      font-size: 16px;
+      color: {{colorPrimary}};
+      font-weight: bold;
+      margin-bottom: 15px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ddd;
+      text-transform: uppercase;
+    }
+    
+    .experience-item, .education-item {
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+    }
+    
+    .experience-header, .education-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    
+    .job-title, .degree {
+      font-weight: bold;
+      font-size: 13px;
+      color: #1f2937;
+      margin-bottom: 3px;
+    }
+    
+    .company, .institution {
+      font-size: 12px;
+      color: #555;
+      font-style: italic;
+    }
+    
+    .date {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+    }
+    
+    .description {
+      font-size: 11px;
+      color: #444;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    
+    .skill-group {
+      margin-bottom: 15px;
+    }
+    
+    .skill-category {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+    
+    .skill-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    
+    .skill-tag {
+      display: inline-block;
+      padding: 5px 12px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+    
+    @page {
+      margin: 0;
+      size: A4;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>{{name}}</h1>
+      {{#if title}}<div class="title">{{title}}</div>{{/if}}
+      <div class="contact-info">
+        {{#if email}}<span>📧 {{email}}</span>{{/if}}
+        {{#if phone}}<span>📱 {{phone}}</span>{{/if}}
+        {{#if location}}<span>📍 {{location}}</span>{{/if}}
+      </div>
+    </div>
+    
+    {{summary}}
+    
+    <div class="section">
+      <h2 class="section-title">Erfarenhet</h2>
+      {{experience}}
+    </div>
+    
+    <div class="section">
+      <h2 class="section-title">Utbildning</h2>
+      {{education}}
+    </div>
+    
+    <div class="section">
+      <h2 class="section-title">Färdigheter</h2>
+      {{skills}}
+    </div>
+    
+    {{#if certifications}}
+    <div class="section">
+      <h2 class="section-title">Certifieringar</h2>
+      {{certifications}}
+    </div>
+    {{/if}}
+    
+    {{#if languages}}
+    <div class="section">
+      <h2 class="section-title">Språk</h2>
+      {{languages}}
+    </div>
+    {{/if}}
+  </div>
+</body>
+</html>`;
   }
 
   /**
-   * Minimal template
+   * Minimal template (clean and simple)
    */
   private getMinimalTemplate(): string {
-    return this.getModernTemplate(); // Simplified for now
+    return `<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CV</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: {{fontSizeBase}};
+      line-height: 1.7;
+      color: #2c3e50;
+      background: #fff;
+    }
+    
+    .container {
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 20mm 25mm;
+      background: white;
+    }
+    
+    .header {
+      margin-bottom: 30px;
+    }
+    
+    .header h1 {
+      font-size: 28px;
+      color: #2c3e50;
+      margin-bottom: 8px;
+      font-weight: 300;
+      letter-spacing: -0.5px;
+    }
+    
+    .header .title {
+      font-size: 14px;
+      color: #7f8c8d;
+      margin-bottom: 12px;
+      font-weight: 300;
+    }
+    
+    .contact-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      font-size: 11px;
+      color: #7f8c8d;
+    }
+    
+    .summary {
+      margin: 25px 0 30px 0;
+      padding: 0;
+      font-size: 12px;
+      line-height: 1.8;
+      color: #34495e;
+    }
+    
+    .section {
+      margin-bottom: 30px;
+      page-break-inside: avoid;
+    }
+    
+    .section-title {
+      font-size: 14px;
+      color: #2c3e50;
+      font-weight: 400;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      border-bottom: 1px solid #ecf0f1;
+      padding-bottom: 8px;
+    }
+    
+    .experience-item, .education-item {
+      margin-bottom: 25px;
+      page-break-inside: avoid;
+    }
+    
+    .experience-header, .education-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 6px;
+    }
+    
+    .job-title, .degree {
+      font-weight: 500;
+      font-size: 13px;
+      color: #2c3e50;
+      margin-bottom: 2px;
+    }
+    
+    .company, .institution {
+      font-size: 11px;
+      color: #7f8c8d;
+    }
+    
+    .date {
+      font-size: 10px;
+      color: #95a5a6;
+      white-space: nowrap;
+    }
+    
+    .description {
+      font-size: 11px;
+      color: #34495e;
+      margin-top: 6px;
+      line-height: 1.6;
+    }
+    
+    .skill-tag {
+      display: inline-block;
+      padding: 3px 8px;
+      background: #ecf0f1;
+      color: #2c3e50;
+      border-radius: 2px;
+      font-size: 10px;
+      margin: 3px 3px 3px 0;
+    }
+    
+    @page {
+      margin: 0;
+      size: A4;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>{{name}}</h1>
+      {{#if title}}<div class="title">{{title}}</div>{{/if}}
+      <div class="contact-info">
+        {{#if email}}<span>{{email}}</span>{{/if}}
+        {{#if phone}}<span>{{phone}}</span>{{/if}}
+        {{#if location}}<span>{{location}}</span>{{/if}}
+      </div>
+    </div>
+    
+    {{summary}}
+    
+    <div class="section">
+      <h2 class="section-title">Erfarenhet</h2>
+      {{experience}}
+    </div>
+    
+    <div class="section">
+      <h2 class="section-title">Utbildning</h2>
+      {{education}}
+    </div>
+    
+    <div class="section">
+      <h2 class="section-title">Färdigheter</h2>
+      {{skills}}
+    </div>
+    
+    {{#if certifications}}
+    <div class="section">
+      <h2 class="section-title">Certifieringar</h2>
+      {{certifications}}
+    </div>
+    {{/if}}
+    
+    {{#if languages}}
+    <div class="section">
+      <h2 class="section-title">Språk</h2>
+      {{languages}}
+    </div>
+    {{/if}}
+  </div>
+</body>
+</html>`;
   }
 
   /**
-   * Professional template
+   * Professional template (corporate style with sidebar)
    */
   private getProfessionalTemplate(): string {
-    return this.getModernTemplate(); // Simplified for now
+    return `<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CV</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Calibri', 'Arial', sans-serif;
+      font-size: {{fontSizeBase}};
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: #fff;
+    }
+    
+    .container {
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 0;
+      background: white;
+      display: flex;
+    }
+    
+    .sidebar {
+      width: 70mm;
+      background: {{colorPrimary}};
+      color: white;
+      padding: 20mm 15mm;
+      page-break-inside: avoid;
+    }
+    
+    .main-content {
+      flex: 1;
+      padding: 20mm 20mm;
+    }
+    
+    .header {
+      margin-bottom: 20px;
+    }
+    
+    .header h1 {
+      font-size: 24px;
+      color: white;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    
+    .header .title {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.9);
+      margin-bottom: 15px;
+    }
+    
+    .contact-info {
+      margin-top: 20px;
+    }
+    
+    .contact-info span {
+      display: block;
+      font-size: 10px;
+      margin-bottom: 8px;
+      color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .sidebar-section {
+      margin-top: 25px;
+      margin-bottom: 25px;
+    }
+    
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+      padding-bottom: 5px;
+    }
+    
+    .main-section {
+      margin-bottom: 25px;
+      page-break-inside: avoid;
+    }
+    
+    .main-section-title {
+      font-size: 16px;
+      color: {{colorPrimary}};
+      font-weight: 600;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 2px solid {{colorPrimary}};
+      padding-bottom: 5px;
+    }
+    
+    .summary {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f5f5f5;
+      border-left: 4px solid {{colorPrimary}};
+      font-size: 11px;
+      line-height: 1.7;
+      color: #333;
+    }
+    
+    .experience-item, .education-item {
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+    }
+    
+    .experience-header, .education-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    
+    .job-title, .degree {
+      font-weight: 600;
+      font-size: 13px;
+      color: #1a1a1a;
+      margin-bottom: 3px;
+    }
+    
+    .company, .institution {
+      font-size: 11px;
+      color: #555;
+    }
+    
+    .date {
+      font-size: 10px;
+      color: #777;
+      white-space: nowrap;
+    }
+    
+    .description {
+      font-size: 11px;
+      color: #444;
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+    
+    .skill-tag {
+      display: inline-block;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border-radius: 3px;
+      font-size: 10px;
+      margin: 3px 3px 3px 0;
+    }
+    
+    .white-text {
+      color: white;
+      font-size: 11px;
+    }
+    
+    @page {
+      margin: 0;
+      size: A4;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="sidebar">
+      <div class="header">
+        <h1>{{name}}</h1>
+        {{#if title}}<div class="title">{{title}}</div>{{/if}}
+      </div>
+      
+      <div class="contact-info">
+        {{#if email}}<span>📧 {{email}}</span>{{/if}}
+        {{#if phone}}<span>📱 {{phone}}</span>{{/if}}
+        {{#if location}}<span>📍 {{location}}</span>{{/if}}
+      </div>
+      
+      <div class="sidebar-section">
+        <h3 class="sidebar-title">Färdigheter</h3>
+        <div class="white-text">{{skills}}</div>
+      </div>
+      
+      <div class="sidebar-section">
+        <h3 class="sidebar-title">Utbildning</h3>
+        <div class="white-text">{{education}}</div>
+      </div>
+      
+      {{#if certifications}}
+      <div class="sidebar-section">
+        <h3 class="sidebar-title">Certifieringar</h3>
+        <div class="white-text">{{certifications}}</div>
+      </div>
+      {{/if}}
+      
+      {{#if languages}}
+      <div class="sidebar-section">
+        <h3 class="sidebar-title">Språk</h3>
+        <div class="white-text">{{languages}}</div>
+      </div>
+      {{/if}}
+    </div>
+    
+    <div class="main-content">
+      {{summary}}
+      
+      <div class="main-section">
+        <h2 class="main-section-title">Erfarenhet</h2>
+        {{experience}}
+      </div>
+      
+      {{#if projects}}
+      <div class="main-section">
+        <h2 class="main-section-title">Projekt</h2>
+        {{projects}}
+      </div>
+      {{/if}}
+    </div>
+  </div>
+</body>
+</html>`;
   }
 
   /**
