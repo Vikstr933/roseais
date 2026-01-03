@@ -30,10 +30,10 @@ RUN npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audi
 
 # Installera Playwright browsers (kritiskt för browser automation)
 # Installera med system dependencies för att säkerställa att allt fungerar
+# VIKTIGT: Använd --with-deps för att installera system dependencies
 RUN npx playwright install-deps chromium || true && \
-    npx playwright install --with-deps chromium || \
-    npx playwright install chromium || \
-    (echo "❌ Playwright installation failed" && exit 1)
+    (npx playwright install --with-deps chromium || npx playwright install chromium) && \
+    (test -d /root/.cache/ms-playwright && echo "✅ Playwright browsers installed" || (echo "❌ Playwright browsers not found" && exit 1))
 
 # Skapa Python virtual environment och installera faster-whisper och yt-dlp
 # VIKTIGT: .dockerignore måste exkludera venv-whisper/ så att den inte kopieras från lokal filsystem
@@ -80,10 +80,11 @@ RUN test -f venv-whisper/bin/python3 && \
 
 # Behåll Playwright även om det är en dev dependency (behövs för runtime)
 # Rensa cache och node_modules cache för att frigöra minne
+# VIKTIGT: Behåll /root/.cache/ms-playwright/ eftersom det innehåller Playwright browsers
 RUN npm cache clean --force && \
     rm -rf /tmp/* && \
     rm -rf /root/.npm && \
-    rm -rf /root/.cache
+    find /root/.cache -mindepth 1 -maxdepth 1 ! -name 'ms-playwright' -exec rm -rf {} + || true
 
 # Skapa directories för workspaces och temp files
 # Använd relativ path för temp så att det matchar process.cwd()/temp

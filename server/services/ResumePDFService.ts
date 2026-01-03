@@ -97,6 +97,32 @@ export class ResumePDFService {
   }
 
   /**
+   * Install Playwright browsers at runtime (fallback if build-time installation failed)
+   */
+  private async installBrowsers(): Promise<void> {
+    try {
+      logger.info('Installing Playwright chromium browser...');
+      const { execa } = await import('execa');
+      const { stdout, stderr } = await execa('npx', ['playwright', 'install', 'chromium'], {
+        timeout: 120000, // 2 minutes timeout
+        cwd: process.cwd()
+      });
+      
+      if (stdout) {
+        logger.info(`Playwright installation output: ${stdout.substring(0, 200)}`);
+      }
+      if (stderr && !stderr.includes('already installed')) {
+        logger.warn(`Playwright installation warnings: ${stderr.substring(0, 200)}`);
+      }
+      
+      logger.info('✅ Playwright browsers installed successfully');
+    } catch (error: any) {
+      logger.error('Failed to install Playwright browsers:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Generate PDF from structured resume data
    */
   async generatePDF(
@@ -108,10 +134,40 @@ export class ResumePDFService {
       const html = await this.renderTemplate(resumeData, template, options);
       
       const playwright = await this.getPlaywright();
-      const browser = await playwright.chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      
+      let browser;
+      try {
+        browser = await playwright.chromium.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+          ],
+        });
+      } catch (launchError: any) {
+        // If browser launch fails, try to install browsers and retry
+        if (launchError.message?.includes('Executable doesn\'t exist') || 
+            launchError.message?.includes('chromium') ||
+            launchError.message?.includes('browser')) {
+          logger.warn('Browser executable not found, attempting to install Playwright browsers...', launchError);
+          await this.installBrowsers();
+          
+          // Retry launching browser
+          browser = await playwright.chromium.launch({
+            headless: true,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu'
+            ],
+          });
+        } else {
+          throw launchError;
+        }
+      }
 
       try {
         const page = await browser.newPage();
