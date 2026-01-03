@@ -316,18 +316,43 @@ export class ResumePDFService {
     if (data.summary && data.summary.trim()) {
       // Clean up summary - remove duplicates and limit length
       let cleanSummary = data.summary.trim();
+      
       // Remove if summary is just the name or title
       if (cleanSummary.toLowerCase() === data.personalInfo.name.toLowerCase() || 
           cleanSummary.length < 20) {
         summaryHtml = '';
       } else {
+        // Additional deduplication check here as well
+        // Normalize whitespace
+        cleanSummary = cleanSummary.replace(/\s+/g, ' ').trim();
+        
+        // Check if summary is duplicated (same text twice)
+        const summaryLength = cleanSummary.length;
+        if (summaryLength > 100) {
+          const midPoint = Math.floor(summaryLength / 2);
+          const firstHalf = cleanSummary.substring(0, midPoint).trim();
+          const secondHalf = cleanSummary.substring(midPoint).trim();
+          
+          if (firstHalf.length > 50 && secondHalf.length > 50) {
+            // Compare first 20 words
+            const firstWords = firstHalf.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
+            const secondWords = secondHalf.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
+            
+            if (firstWords === secondWords || this.calculateSimilarity(firstHalf, secondHalf) > 0.9) {
+              cleanSummary = firstHalf;
+            }
+          }
+        }
+        
         // Limit summary to reasonable length for PDF
         if (cleanSummary.length > 500) {
           cleanSummary = cleanSummary.substring(0, 497) + '...';
         }
+        
         summaryHtml = `<div class="summary">${this.escapeHtml(cleanSummary)}</div>`;
       }
     }
+    // Replace ALL occurrences of {{summary}} with the same content (only once)
     html = html.replace(/\{\{summary\}\}/g, summaryHtml);
 
     // Replace experience
@@ -1637,96 +1662,107 @@ export class ResumePDFService {
     // Remove "Your Name" placeholder if it appears in summary
     if (summary) {
       summary = summary.replace(/Your Name/gi, extractedName || '');
-      // Remove duplicate summary if it appears twice (check for exact duplicates)
-      const summaryLines = summary.split('\n');
-      const uniqueLines: string[] = [];
-      const seen = new Set<string>();
-      for (const line of summaryLines) {
-        const trimmed = line.trim();
-        // Skip empty lines and very short lines
-        if (trimmed && trimmed.length > 10) {
-          const normalized = trimmed.toLowerCase().replace(/\s+/g, ' ');
-          if (!seen.has(normalized)) {
-            seen.add(normalized);
-            uniqueLines.push(line);
-          }
-        } else if (trimmed.length <= 10) {
-          // Keep short lines (like dates) but don't check for duplicates
-          uniqueLines.push(line);
-        }
-      }
-      summary = uniqueLines.join('\n').trim();
       
-      // Also check if the entire summary is duplicated (appears twice in a row)
-      // First normalize whitespace
+      // First, normalize all whitespace to single spaces
       summary = summary.replace(/\s+/g, ' ').trim();
-      const summaryText = summary;
       
-      // Check multiple split points to find where duplication might occur
-      if (summaryText.length > 100) {
-        // Try splitting at different points (40%, 45%, 50%, 55%, 60% of length)
-        const splitPoints = [0.4, 0.45, 0.5, 0.55, 0.6];
-        let bestMatch = false;
-        let bestSplit = 0.5;
+      // Check if the entire text is duplicated (same text appears twice)
+      // This is the most common case - exact duplication
+      const textLength = summary.length;
+      
+      if (textLength > 100) {
+        // Try to find where duplication starts by checking if second half matches first half
+        // Check multiple split points
+        const splitPoints = [0.45, 0.48, 0.5, 0.52, 0.55];
+        let foundDuplicate = false;
+        let bestSplitIndex = 0;
         
-        for (const splitPoint of splitPoints) {
-          const splitIndex = Math.floor(summaryText.length * splitPoint);
-          const firstPart = summaryText.substring(0, splitIndex).trim();
-          const secondPart = summaryText.substring(splitIndex).trim();
+        for (const splitRatio of splitPoints) {
+          const splitIndex = Math.floor(textLength * splitRatio);
+          const firstPart = summary.substring(0, splitIndex).trim();
+          const secondPart = summary.substring(splitIndex).trim();
           
           if (firstPart.length > 50 && secondPart.length > 50) {
-            // Check if second part starts with same words as first part
-            const firstWords = firstPart.split(/\s+/).slice(0, 15).join(' ').toLowerCase();
-            const secondWords = secondPart.split(/\s+/).slice(0, 15).join(' ').toLowerCase();
+            // Get first 20 words of each part for comparison
+            const firstWords = firstPart.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
+            const secondWords = secondPart.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
+            
+            // If they start the same, it's likely a duplicate
+            if (firstWords === secondWords && firstWords.length > 40) {
+              foundDuplicate = true;
+              bestSplitIndex = splitIndex;
+              break;
+            }
             
             // Also check similarity
             const similarity = this.calculateSimilarity(firstPart, secondPart);
-            
-            // If second part starts the same way as first part, or similarity is very high
-            if ((firstWords === secondWords && firstWords.length > 30) || similarity > 0.85) {
-              bestMatch = true;
-              bestSplit = splitPoint;
-              break; // Found a clear duplicate, use this split
+            if (similarity > 0.88) {
+              foundDuplicate = true;
+              bestSplitIndex = splitIndex;
+              break;
             }
           }
         }
         
-        if (bestMatch) {
-          const splitIndex = Math.floor(summaryText.length * bestSplit);
-          summary = summaryText.substring(0, splitIndex).trim();
+        if (foundDuplicate) {
+          summary = summary.substring(0, bestSplitIndex).trim();
         } else {
-          // Fallback: check if text is exactly duplicated (first half == second half)
-          const midPoint = Math.floor(summaryText.length / 2);
-          const firstHalf = summaryText.substring(0, midPoint).trim();
-          const secondHalf = summaryText.substring(midPoint).trim();
+          // Check if it's a simple 50/50 split duplicate
+          const midPoint = Math.floor(textLength / 2);
+          const firstHalf = summary.substring(0, midPoint).trim();
+          const secondHalf = summary.substring(midPoint).trim();
           
           if (firstHalf.length > 50 && secondHalf.length > 50) {
-            const similarity = this.calculateSimilarity(firstHalf, secondHalf);
-            if (similarity > 0.9) {
+            // Compare first 25 words
+            const firstWords = firstHalf.split(/\s+/).slice(0, 25).join(' ').toLowerCase();
+            const secondWords = secondHalf.split(/\s+/).slice(0, 25).join(' ').toLowerCase();
+            
+            if (firstWords === secondWords || this.calculateSimilarity(firstHalf, secondHalf) > 0.92) {
               summary = firstHalf;
             }
           }
         }
       }
       
-      // Final cleanup: remove any remaining duplicate sentences
-      const sentences = summary.split(/[.!?]\s+/).filter((s: string) => s.trim().length > 0);
-      const uniqueSentences: string[] = [];
-      const seenSentences = new Set<string>();
+      // Remove duplicate lines (if summary has line breaks)
+      const summaryLines = summary.split('\n');
+      const uniqueLines: string[] = [];
+      const seenLines = new Set<string>();
       
-      for (const sentence of sentences) {
-        const normalized = sentence.trim().toLowerCase().replace(/\s+/g, ' ');
-        if (normalized.length > 20 && !seenSentences.has(normalized)) {
-          seenSentences.add(normalized);
-          uniqueSentences.push(sentence.trim());
+      for (const line of summaryLines) {
+        const trimmed = line.trim();
+        if (trimmed && trimmed.length > 10) {
+          const normalized = trimmed.toLowerCase().replace(/\s+/g, ' ');
+          if (!seenLines.has(normalized)) {
+            seenLines.add(normalized);
+            uniqueLines.push(trimmed);
+          }
+        } else if (trimmed.length <= 10) {
+          uniqueLines.push(trimmed);
         }
       }
       
-      if (uniqueSentences.length < sentences.length) {
-        summary = uniqueSentences.join('. ').trim();
-        // Preserve ending punctuation if original had it
-        if (summaryText.endsWith('.') && !summary.endsWith('.')) {
-          summary += '.';
+      summary = uniqueLines.join(' ').trim();
+      
+      // Final check: remove duplicate sentences
+      const sentences = summary.split(/[.!?]\s+/).filter((s: string) => s.trim().length > 15);
+      if (sentences.length > 1) {
+        const uniqueSentences: string[] = [];
+        const seenSentences = new Set<string>();
+        
+        for (const sentence of sentences) {
+          const normalized = sentence.trim().toLowerCase().replace(/\s+/g, ' ');
+          if (!seenSentences.has(normalized)) {
+            seenSentences.add(normalized);
+            uniqueSentences.push(sentence.trim());
+          }
+        }
+        
+        if (uniqueSentences.length < sentences.length) {
+          summary = uniqueSentences.join('. ').trim();
+          if (summary && !summary.endsWith('.') && !summary.endsWith('!') && !summary.endsWith('?')) {
+            summary += '.';
+          }
         }
       }
     }
