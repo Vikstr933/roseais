@@ -688,13 +688,20 @@ export class JobMatchingService {
     baseMatch += titleBonus;
 
     // Apply profession match as a STRICT multiplier
-    // If profession match is low (< 0.7), cap the final score to prevent false positives
-    if (professionMatch < 0.7) {
+    // If profession match is perfect (1.0), ensure high score regardless of other factors
+    if (professionMatch >= 1.0) {
+      // Perfect profession match - ensure minimum 70% match for same profession
+      // Boost baseMatch and ensure it's at least 70%
+      baseMatch = Math.max(70, Math.min(100, baseMatch * 1.3)); // Boost by 30% and ensure min 70%
+    } else if (professionMatch >= 0.75) {
+      // Very similar professions - good match
+      baseMatch = baseMatch * (0.7 + professionMatch * 0.3); // Scale to 0.7-1.0 range
+    } else if (professionMatch < 0.5) {
       // For different or uncertain fields, cap at 40% maximum to prevent "Stark matchning"
       baseMatch = Math.min(40, baseMatch * professionMatch);
     } else {
-      // For same/similar fields, apply normal multiplier
-      baseMatch = baseMatch * (0.6 + professionMatch * 0.4); // Scale profession match to 0.6-1.0 range
+      // For same field but different professions, apply moderate multiplier
+      baseMatch = baseMatch * (0.5 + professionMatch * 0.3); // Scale to 0.5-0.8 range
     }
 
     // Normalize to 0-100 range

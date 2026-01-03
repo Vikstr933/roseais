@@ -155,6 +155,8 @@ export default function ResumeAnalysisApp() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [uploadStep, setUploadStep] = useState<number>(0);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState<boolean>(false);
+  const [isGeneratingAdaptedPDF, setIsGeneratingAdaptedPDF] = useState<Record<string, boolean>>({});
+  const [isGeneratingApplicationPDF, setIsGeneratingApplicationPDF] = useState<Record<string, boolean>>({});
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -657,6 +659,116 @@ export default function ResumeAnalysisApp() {
       });
     } finally {
       setIsGeneratingPDF(false);
+    }
+  };
+
+  const handleGenerateAdaptedPDF = async (adaptedResume: AdaptedResume) => {
+    if (!uploadedResume) return;
+
+    setIsGeneratingAdaptedPDF(prev => ({ ...prev, [adaptedResume.id]: true }));
+    setProgress('Genererar PDF från anpassat CV...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/generate-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          template: 'modern',
+          format: 'A4',
+          fontSize: 'medium',
+          colorScheme: 'blue',
+          resumeText: adaptedResume.rawText,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate PDF');
+      }
+
+      // Get PDF blob
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = adaptedResume.filename.replace(/\.txt$/, '') + '_anpassad.pdf';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setProgress('');
+      toast({
+        title: 'PDF Genererad!',
+        description: 'Din anpassade CV-PDF har laddats ner.',
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate PDF';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingAdaptedPDF(prev => ({ ...prev, [adaptedResume.id]: false }));
+    }
+  };
+
+  const handleGenerateApplicationPDF = async (jobMatch: JobMatch, applicationData: ApplicationData) => {
+    if (!uploadedResume || !jobMatch.jobId) return;
+
+    setIsGeneratingApplicationPDF(prev => ({ ...prev, [jobMatch.jobId!]: true }));
+    setProgress('Genererar PDF från ansökan...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/generate-application-pdf/${jobMatch.jobId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          applicationText: applicationData.fullApplication.combinedText,
+          jobTitle: jobMatch.jobTitle,
+          company: jobMatch.company,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate PDF');
+      }
+
+      // Get PDF blob
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Ansokan_${jobMatch.jobTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setProgress('');
+      toast({
+        title: 'PDF Genererad!',
+        description: 'Din ansökan som PDF har laddats ner.',
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate PDF';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingApplicationPDF(prev => ({ ...prev, [jobMatch.jobId!]: false }));
     }
   };
 
@@ -1662,7 +1774,26 @@ export default function ResumeAnalysisApp() {
                               }}
                             >
                               <Download className="h-4 w-4 mr-2" />
-                              Ladda ner
+                              Ladda ner TXT
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleGenerateAdaptedPDF(adapted)}
+                              disabled={isGeneratingAdaptedPDF[adapted.id]}
+                              className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                            >
+                              {isGeneratingAdaptedPDF[adapted.id] ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Genererar...
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Ladda ner PDF
+                                </>
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -1762,7 +1893,25 @@ export default function ResumeAnalysisApp() {
                         }}
                       >
                         <Download className="h-4 w-4 mr-2" />
-                        Ladda ner som Text
+                        Ladda ner TXT
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleGenerateApplicationPDF(viewingApplication.jobMatch, viewingApplication.data)}
+                        disabled={isGeneratingApplicationPDF[viewingApplication.jobMatch.jobId || '']}
+                        className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                      >
+                        {isGeneratingApplicationPDF[viewingApplication.jobMatch.jobId || ''] ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Genererar...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Ladda ner PDF
+                          </>
+                        )}
                       </Button>
                       {viewingApplication.jobMatch.applicationUrl && (
                         <Button
@@ -1855,7 +2004,25 @@ export default function ResumeAnalysisApp() {
                         }}
                       >
                         <Download className="h-4 w-4 mr-2" />
-                        Ladda ner
+                        Ladda ner TXT
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleGenerateAdaptedPDF(viewingAdaptedResume)}
+                        disabled={isGeneratingAdaptedPDF[viewingAdaptedResume.id]}
+                        className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                      >
+                        {isGeneratingAdaptedPDF[viewingAdaptedResume.id] ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Genererar...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Ladda ner PDF
+                          </>
+                        )}
                       </Button>
                       <Button
                         variant="outline"

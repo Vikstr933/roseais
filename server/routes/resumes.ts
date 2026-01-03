@@ -689,7 +689,7 @@ router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
   try {
     const userId = (req as any).user!.id;
     const resumeId = parseInt(req.params.id);
-    const { template, format, fontSize, colorScheme } = req.body;
+    const { template, format, fontSize, colorScheme, resumeText } = req.body;
 
     // Get resume
     const [resume] = await db
@@ -702,13 +702,15 @@ router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Resume not found' });
     }
 
-    if (!resume.rawText) {
+    // Use provided text or fallback to resume text
+    const textToUse = resumeText || resume.rawText;
+    if (!textToUse) {
       return res.status(400).json({ error: 'Resume text not available' });
     }
 
     // Extract structured data from resume
     const structuredData = await resumePDFService.extractStructuredData(
-      resume.rawText,
+      textToUse,
       resume.parsedData as any
     );
 
@@ -730,6 +732,65 @@ router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
     console.error('Error generating PDF:', error);
     res.status(500).json({ 
       error: 'Failed to generate PDF',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/resumes/:id/generate-application-pdf/:jobId
+router.post('/:id/generate-application-pdf/:jobId', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const resumeId = parseInt(req.params.id);
+    const jobId = req.params.jobId;
+    const { applicationText, jobTitle, company } = req.body;
+
+    // Get resume
+    const [resume] = await db
+      .select()
+      .from(resumes)
+      .where(eq(resumes.id, resumeId))
+      .limit(1);
+
+    if (!resume || resume.userId !== userId) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    if (!applicationText) {
+      return res.status(400).json({ error: 'Application text is required' });
+    }
+
+    // Extract structured data from application text (which includes cover letter + CV)
+    // For applications, we'll create a combined document
+    const structuredData = await resumePDFService.extractStructuredData(
+      applicationText,
+      resume.parsedData as any
+    );
+
+    // Update personal info if job title/company provided
+    if (jobTitle) {
+      structuredData.personalInfo.title = jobTitle;
+    }
+
+    // Generate PDF
+    const pdfBuffer = await resumePDFService.generatePDF(structuredData, {
+      template: 'modern',
+      format: 'A4',
+      fontSize: 'medium',
+      colorScheme: 'blue',
+    });
+
+    // Set headers for PDF download
+    const filename = `Ansokan_${(jobTitle || 'Jobb').replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating application PDF:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate application PDF',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
