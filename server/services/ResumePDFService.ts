@@ -591,15 +591,15 @@ export class ResumePDFService {
   }
 
   /**
-   * Modern template (two-column layout)
+   * Modern template (redesigned from scratch - clean and professional)
    */
   private getModernTemplate(): string {
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Resume</title>
+  <title>CV</title>
   <style>
     * {
       margin: 0;
@@ -608,91 +608,85 @@ export class ResumePDFService {
     }
     
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      font-size: {{fontSizeBase}};
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 11px;
       line-height: 1.6;
-      color: #333;
+      color: #2c3e50;
       background: #fff;
     }
     
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 20mm 20mm;
+      padding: 18mm 20mm;
       background: white;
-      page-break-inside: avoid;
     }
     
+    /* Header Section */
     .header {
-      text-align: center;
-      padding-bottom: 20px;
-      margin-bottom: 25px;
-      border-bottom: 2px solid {{colorPrimary}};
-      page-break-inside: avoid;
+      border-bottom: 3px solid {{colorPrimary}};
+      padding-bottom: 15px;
+      margin-bottom: 20px;
     }
     
     .header h1 {
-      font-size: 28px;
-      color: #1a1a1a;
-      margin-bottom: 8px;
+      font-size: 24px;
       font-weight: 700;
-      line-height: 1.2;
-      letter-spacing: -0.5px;
+      color: #1a1a1a;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
     }
     
     .header .title {
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 12px;
-      line-height: 1.4;
-      font-weight: 400;
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 10px;
+      font-weight: 500;
     }
     
     .contact-info {
       display: flex;
-      justify-content: center;
       flex-wrap: wrap;
-      gap: 15px;
-      font-size: 11px;
-      color: #555;
-      line-height: 1.5;
+      gap: 12px;
+      font-size: 10px;
+      color: #666;
     }
     
     .contact-info span {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
     }
     
+    /* Summary */
     .summary {
-      margin: 25px 0 30px 0;
+      margin: 18px 0 22px 0;
       padding: 0;
-      font-size: 12px;
+      font-size: 11px;
       line-height: 1.7;
-      color: #333;
-      text-align: left;
-      page-break-inside: avoid;
+      color: #444;
+      text-align: justify;
     }
     
+    /* Two Column Layout */
     .two-column {
       display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 30px;
-      margin-top: 25px;
+      grid-template-columns: 1.8fr 1fr;
+      gap: 25px;
+      margin-top: 20px;
     }
     
     .main-column {
-      /* Left column - experience, projects */
-      page-break-inside: avoid;
+      /* Left: Experience, Projects */
     }
     
     .sidebar {
-      /* Right column - skills, education, certifications */
-      page-break-inside: avoid;
+      /* Right: Skills, Education, Certifications, Languages */
     }
     
+    /* Sections */
     .section {
-      margin-bottom: 30px;
+      margin-bottom: 24px;
       page-break-inside: avoid;
     }
     
@@ -701,20 +695,22 @@ export class ResumePDFService {
     }
     
     .section-title {
-      font-size: 14px;
-      color: #1a1a1a;
+      font-size: 13px;
       font-weight: 700;
-      margin-bottom: 18px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #ddd;
+      color: {{colorPrimary}};
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid {{colorPrimary}};
       text-transform: uppercase;
-      letter-spacing: 1.5px;
+      letter-spacing: 0.8px;
     }
     
+    /* Experience & Education Items */
     .experience-item, .education-item, .project-item {
-      margin-bottom: 22px;
-      padding-bottom: 18px;
-      border-bottom: 1px solid #e5e7eb;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #e8e8e8;
+      page-break-inside: avoid;
     }
     
     .experience-item:last-child, .education-item:last-child, .project-item:last-child {
@@ -727,118 +723,124 @@ export class ResumePDFService {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
     
     .job-title, .degree {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: #1a1a1a;
-      margin-bottom: 4px;
-      line-height: 1.4;
+      margin-bottom: 3px;
     }
     
     .company, .institution {
+      font-size: 11px;
       color: #555;
-      font-size: 12px;
       font-weight: 400;
-      margin-bottom: 2px;
     }
     
     .date {
-      font-size: 11px;
+      font-size: 10px;
       color: #777;
       white-space: nowrap;
       font-weight: 400;
     }
     
     .job-description {
-      margin: 10px 0;
+      margin: 8px 0 0 0;
+      font-size: 10px;
       color: #444;
-      font-size: 11px;
-      line-height: 1.7;
+      line-height: 1.6;
     }
     
     .achievements {
-      margin-top: 8px;
-      padding-left: 20px;
+      margin-top: 6px;
+      padding-left: 16px;
     }
     
     .achievements li {
-      margin-bottom: 4px;
-      font-size: 11px;
+      margin-bottom: 3px;
+      font-size: 10px;
       color: #555;
+      line-height: 1.5;
     }
     
+    /* Skills */
     .skill-group {
-      margin-bottom: 15px;
+      margin-bottom: 12px;
     }
     
     .skill-category {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
-      color: #374151;
-      margin-bottom: 8px;
+      color: #555;
+      margin-bottom: 6px;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     
     .skill-items {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 5px;
     }
     
     .skill-tag {
       display: inline-block;
-      padding: 4px 10px;
-      background: {{colorPrimary}};
-      color: white;
-      border-radius: 12px;
-      font-size: 10px;
+      padding: 3px 9px;
+      background: #f0f4f8;
+      color: #2c3e50;
+      border: 1px solid #d1d9e0;
+      border-radius: 3px;
+      font-size: 9px;
       font-weight: 500;
     }
     
+    /* Certifications & Languages */
     .certification-item, .language-item {
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     
     .cert-name, .language-name {
       font-weight: 600;
-      font-size: 11px;
-      color: #1f2937;
+      font-size: 10px;
+      color: #1a1a1a;
+      margin-bottom: 2px;
     }
     
     .cert-issuer, .language-level {
-      font-size: 10px;
-      color: #6b7280;
-      margin-top: 2px;
+      font-size: 9px;
+      color: #666;
     }
     
+    /* Projects */
     .project-name {
       font-weight: 600;
       font-size: 11px;
-      color: #1f2937;
-      margin-bottom: 5px;
+      color: #1a1a1a;
+      margin-bottom: 4px;
     }
     
     .project-description {
-      font-size: 11px;
+      font-size: 10px;
       color: #555;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
+      line-height: 1.6;
     }
     
     .project-tech {
-      font-size: 10px;
-      color: #6b7280;
+      font-size: 9px;
+      color: #777;
       font-style: italic;
     }
     
     .project-url {
-      font-size: 10px;
+      font-size: 9px;
       color: {{colorPrimary}};
       text-decoration: none;
     }
     
+    /* Print Styles */
     @media print {
       .container {
         padding: 0;
@@ -848,11 +850,7 @@ export class ResumePDFService {
         page-break-inside: avoid;
       }
       
-      .experience-item, .education-item {
-        page-break-inside: avoid;
-      }
-      
-      .two-column {
+      .experience-item, .education-item, .project-item {
         page-break-inside: avoid;
       }
     }
@@ -869,11 +867,11 @@ export class ResumePDFService {
       <h1>{{name}}</h1>
       {{#if title}}<div class="title">{{title}}</div>{{/if}}
       <div class="contact-info">
-        {{#if email}}<span>📧 {{email}}</span>{{/if}}
-        {{#if phone}}<span>📱 {{phone}}</span>{{/if}}
-        {{#if location}}<span>📍 {{location}}</span>{{/if}}
-        {{#if linkedIn}}<span>💼 {{linkedIn}}</span>{{/if}}
-        {{#if website}}<span>🌐 {{website}}</span>{{/if}}
+        {{#if email}}<span>{{email}}</span>{{/if}}
+        {{#if phone}}<span>{{phone}}</span>{{/if}}
+        {{#if location}}<span>{{location}}</span>{{/if}}
+        {{#if linkedIn}}<span>{{linkedIn}}</span>{{/if}}
+        {{#if website}}<span>{{website}}</span>{{/if}}
       </div>
     </div>
     
