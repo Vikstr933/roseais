@@ -538,6 +538,44 @@ export class ResumePDFService {
   }
 
   /**
+   * Calculate similarity between two strings (0-1)
+   */
+  private calculateSimilarity(str1: string, str2: string): number {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    if (longer.length === 0) return 1.0;
+    const distance = this.levenshteinDistance(longer.toLowerCase(), shorter.toLowerCase());
+    return (longer.length - distance) / longer.length;
+  }
+
+  /**
+   * Calculate Levenshtein distance between two strings
+   */
+  private levenshteinDistance(str1: string, str2: string): number {
+    const matrix: number[][] = [];
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[str2.length][str1.length];
+  }
+
+  /**
    * Escape HTML
    */
   private escapeHtml(text: string): string {
@@ -580,65 +618,67 @@ export class ResumePDFService {
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 15mm 15mm;
+      padding: 20mm 20mm;
       background: white;
       page-break-inside: avoid;
     }
     
     .header {
-      border-bottom: 3px solid {{colorPrimary}};
-      padding-bottom: 12px;
-      margin-bottom: 15px;
+      text-align: center;
+      padding-bottom: 20px;
+      margin-bottom: 25px;
+      border-bottom: 2px solid {{colorPrimary}};
       page-break-inside: avoid;
     }
     
     .header h1 {
-      font-size: {{fontSizeHeading}};
-      color: {{colorPrimary}};
-      margin-bottom: 4px;
+      font-size: 28px;
+      color: #1a1a1a;
+      margin-bottom: 8px;
       font-weight: 700;
       line-height: 1.2;
+      letter-spacing: -0.5px;
     }
     
     .header .title {
-      font-size: {{fontSizeBase}};
+      font-size: 14px;
       color: #666;
-      margin-bottom: 8px;
-      line-height: 1.3;
+      margin-bottom: 12px;
+      line-height: 1.4;
+      font-weight: 400;
     }
     
     .contact-info {
       display: flex;
+      justify-content: center;
       flex-wrap: wrap;
-      gap: 12px;
-      font-size: 10px;
+      gap: 15px;
+      font-size: 11px;
       color: #555;
-      line-height: 1.4;
+      line-height: 1.5;
     }
     
     .contact-info span {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
     
     .summary {
-      margin: 15px 0;
-      padding: 12px;
-      background: #f8f9fa;
-      border-left: 4px solid {{colorPrimary}};
-      font-style: italic;
-      color: #555;
-      font-size: 11px;
-      line-height: 1.5;
+      margin: 25px 0 30px 0;
+      padding: 0;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #333;
+      text-align: left;
       page-break-inside: avoid;
     }
     
     .two-column {
       display: grid;
       grid-template-columns: 2fr 1fr;
-      gap: 25px;
-      margin-top: 20px;
+      gap: 30px;
+      margin-top: 25px;
     }
     
     .main-column {
@@ -652,7 +692,7 @@ export class ResumePDFService {
     }
     
     .section {
-      margin-bottom: 20px;
+      margin-bottom: 30px;
       page-break-inside: avoid;
     }
     
@@ -661,56 +701,62 @@ export class ResumePDFService {
     }
     
     .section-title {
-      font-size: {{fontSizeHeading}};
-      color: {{colorPrimary}};
-      font-weight: 600;
-      margin-bottom: 15px;
-      padding-bottom: 5px;
-      border-bottom: 2px solid {{colorPrimary}};
+      font-size: 14px;
+      color: #1a1a1a;
+      font-weight: 700;
+      margin-bottom: 18px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #ddd;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
     }
     
     .experience-item, .education-item, .project-item {
-      margin-bottom: 20px;
-      padding-bottom: 15px;
+      margin-bottom: 22px;
+      padding-bottom: 18px;
       border-bottom: 1px solid #e5e7eb;
     }
     
     .experience-item:last-child, .education-item:last-child, .project-item:last-child {
       border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
     }
     
     .experience-header, .education-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     
     .job-title, .degree {
-      font-size: {{fontSizeBase}};
+      font-size: 13px;
       font-weight: 600;
-      color: #1f2937;
-      margin-bottom: 3px;
+      color: #1a1a1a;
+      margin-bottom: 4px;
+      line-height: 1.4;
     }
     
     .company, .institution {
-      color: #6b7280;
-      font-size: 11px;
+      color: #555;
+      font-size: 12px;
+      font-weight: 400;
+      margin-bottom: 2px;
     }
     
     .date {
-      font-size: 10px;
-      color: #9ca3af;
+      font-size: 11px;
+      color: #777;
       white-space: nowrap;
-      margin-left: 10px;
+      font-weight: 400;
     }
     
     .job-description {
-      margin: 8px 0;
-      color: #555;
+      margin: 10px 0;
+      color: #444;
       font-size: 11px;
+      line-height: 1.7;
     }
     
     .achievements {
@@ -907,15 +953,15 @@ export class ResumePDFService {
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 15mm 20mm;
+      padding: 20mm 25mm;
       background: white;
     }
     
     .header {
       text-align: center;
       border-bottom: 2px solid {{colorPrimary}};
-      padding-bottom: 15px;
-      margin-bottom: 25px;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
     }
     
     .header h1 {
@@ -944,66 +990,77 @@ export class ResumePDFService {
     }
     
     .summary {
-      margin: 20px 0;
-      padding: 15px;
-      background: #f9f9f9;
-      border-left: 3px solid {{colorPrimary}};
+      margin: 25px 0 30px 0;
+      padding: 0;
       font-size: 12px;
-      line-height: 1.6;
-      text-align: justify;
+      line-height: 1.7;
+      text-align: left;
+      color: #333;
     }
     
     .section {
-      margin-bottom: 25px;
+      margin-bottom: 30px;
       page-break-inside: avoid;
     }
     
     .section-title {
-      font-size: 16px;
+      font-size: 14px;
       color: {{colorPrimary}};
-      font-weight: bold;
-      margin-bottom: 15px;
-      padding-bottom: 5px;
+      font-weight: 700;
+      margin-bottom: 18px;
+      padding-bottom: 8px;
       border-bottom: 1px solid #ddd;
       text-transform: uppercase;
+      letter-spacing: 1.5px;
     }
     
     .experience-item, .education-item {
-      margin-bottom: 20px;
+      margin-bottom: 22px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid #e5e7eb;
       page-break-inside: avoid;
+    }
+    
+    .experience-item:last-child, .education-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
     }
     
     .experience-header, .education-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     
     .job-title, .degree {
-      font-weight: bold;
+      font-weight: 600;
       font-size: 13px;
-      color: #1f2937;
-      margin-bottom: 3px;
+      color: #1a1a1a;
+      margin-bottom: 4px;
+      line-height: 1.4;
     }
     
     .company, .institution {
       font-size: 12px;
       color: #555;
-      font-style: italic;
+      font-weight: 400;
+      margin-bottom: 2px;
     }
     
     .date {
       font-size: 11px;
-      color: #666;
+      color: #777;
       white-space: nowrap;
+      font-weight: 400;
     }
     
     .description {
       font-size: 11px;
       color: #444;
-      margin-top: 8px;
-      line-height: 1.5;
+      margin-top: 10px;
+      line-height: 1.7;
     }
     
     .skill-group {
@@ -1582,18 +1639,41 @@ export class ResumePDFService {
     // Remove "Your Name" placeholder if it appears in summary
     if (summary) {
       summary = summary.replace(/Your Name/gi, extractedName || '');
-      // Remove duplicate summary if it appears twice
+      // Remove duplicate summary if it appears twice (check for exact duplicates)
       const summaryLines = summary.split('\n');
       const uniqueLines: string[] = [];
       const seen = new Set<string>();
       for (const line of summaryLines) {
         const trimmed = line.trim();
-        if (trimmed && !seen.has(trimmed.toLowerCase())) {
-          seen.add(trimmed.toLowerCase());
+        // Skip empty lines and very short lines
+        if (trimmed && trimmed.length > 10) {
+          const normalized = trimmed.toLowerCase().replace(/\s+/g, ' ');
+          if (!seen.has(normalized)) {
+            seen.add(normalized);
+            uniqueLines.push(line);
+          }
+        } else if (trimmed.length <= 10) {
+          // Keep short lines (like dates) but don't check for duplicates
           uniqueLines.push(line);
         }
       }
       summary = uniqueLines.join('\n').trim();
+      
+      // Also check if the entire summary is duplicated (appears twice in a row)
+      const summaryText = summary.trim();
+      const halfLength = Math.floor(summaryText.length / 2);
+      if (halfLength > 0) {
+        const firstHalf = summaryText.substring(0, halfLength).trim();
+        const secondHalf = summaryText.substring(halfLength).trim();
+        // If first half and second half are very similar, it's likely a duplicate
+        if (firstHalf.length > 50 && secondHalf.length > 50) {
+          const similarity = this.calculateSimilarity(firstHalf, secondHalf);
+          if (similarity > 0.8) {
+            // It's likely a duplicate, keep only first half
+            summary = firstHalf;
+          }
+        }
+      }
     }
 
     return {

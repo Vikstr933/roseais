@@ -1242,56 +1242,63 @@ export default function ResumeAnalysisApp() {
                     {uploadedResume.filename}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleAnalyze}
-                    disabled={isAnalyzing}
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Analyze Resume
-                      </>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleAnalyze}
+                      disabled={isAnalyzing}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Analyze Resume
+                        </>
+                      )}
+                    </Button>
+                    {uploadedResume && (
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="template-select" className="text-sm text-muted-foreground whitespace-nowrap">
+                          Mall:
+                        </Label>
+                        <Select value={selectedTemplate} onValueChange={(value: 'modern' | 'classic' | 'minimal' | 'professional') => setSelectedTemplate(value)}>
+                          <SelectTrigger id="template-select" className="w-[160px]">
+                            <SelectValue placeholder="Välj mall" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="modern">Modern</SelectItem>
+                            <SelectItem value="classic">Klassisk</SelectItem>
+                            <SelectItem value="minimal">Minimal</SelectItem>
+                            <SelectItem value="professional">Professionell</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     )}
-                  </Button>
+                  </div>
                   {analysis && (
-                    <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-                      <Select value={selectedTemplate} onValueChange={(value: 'modern' | 'classic' | 'minimal' | 'professional') => setSelectedTemplate(value)}>
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue placeholder="Välj mall" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="modern">Modern</SelectItem>
-                          <SelectItem value="classic">Klassisk</SelectItem>
-                          <SelectItem value="minimal">Minimal</SelectItem>
-                          <SelectItem value="professional">Professionell</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        onClick={handleGeneratePDF}
-                        disabled={isGeneratingPDF}
-                        variant="outline"
-                        className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full sm:w-auto"
-                      >
-                        {isGeneratingPDF ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Genererar...
-                          </>
-                        ) : (
-                          <>
-                            <FileText className="h-4 w-4 mr-2" />
-                            Ladda ner PDF
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                    <Button
+                      onClick={handleGeneratePDF}
+                      disabled={isGeneratingPDF}
+                      variant="outline"
+                      className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full sm:w-auto"
+                    >
+                      {isGeneratingPDF ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Genererar...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Ladda ner PDF
+                        </>
+                      )}
+                    </Button>
                   )}
                 </div>
               </div>
