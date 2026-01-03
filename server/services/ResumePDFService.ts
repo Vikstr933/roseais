@@ -310,8 +310,25 @@ export class ResumePDFService {
     html = html.replace(/\{\{linkedIn\}\}/g, data.personalInfo.linkedIn || '');
     html = html.replace(/\{\{website\}\}/g, data.personalInfo.website || '');
 
-    // Replace summary
-    html = html.replace(/\{\{summary\}\}/g, data.summary ? `<p class="summary">${this.escapeHtml(data.summary)}</p>` : '');
+    // Replace summary - only render if it exists and is not empty
+    // Also limit length to prevent layout issues
+    let summaryHtml = '';
+    if (data.summary && data.summary.trim()) {
+      // Clean up summary - remove duplicates and limit length
+      let cleanSummary = data.summary.trim();
+      // Remove if summary is just the name or title
+      if (cleanSummary.toLowerCase() === data.personalInfo.name.toLowerCase() || 
+          cleanSummary.length < 20) {
+        summaryHtml = '';
+      } else {
+        // Limit summary to reasonable length for PDF
+        if (cleanSummary.length > 500) {
+          cleanSummary = cleanSummary.substring(0, 497) + '...';
+        }
+        summaryHtml = `<div class="summary">${this.escapeHtml(cleanSummary)}</div>`;
+      }
+    }
+    html = html.replace(/\{\{summary\}\}/g, summaryHtml);
 
     // Replace experience
     html = html.replace(/\{\{experience\}\}/g, this.renderExperience(data.experience));
@@ -563,69 +580,84 @@ export class ResumePDFService {
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 20mm 15mm;
+      padding: 15mm 15mm;
       background: white;
+      page-break-inside: avoid;
     }
     
     .header {
       border-bottom: 3px solid {{colorPrimary}};
-      padding-bottom: 15px;
-      margin-bottom: 20px;
+      padding-bottom: 12px;
+      margin-bottom: 15px;
+      page-break-inside: avoid;
     }
     
     .header h1 {
       font-size: {{fontSizeHeading}};
       color: {{colorPrimary}};
-      margin-bottom: 5px;
+      margin-bottom: 4px;
       font-weight: 700;
+      line-height: 1.2;
     }
     
     .header .title {
       font-size: {{fontSizeBase}};
       color: #666;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      line-height: 1.3;
     }
     
     .contact-info {
       display: flex;
       flex-wrap: wrap;
-      gap: 15px;
-      font-size: 11px;
+      gap: 12px;
+      font-size: 10px;
       color: #555;
+      line-height: 1.4;
     }
     
     .contact-info span {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
     }
     
     .summary {
-      margin: 20px 0;
-      padding: 15px;
+      margin: 15px 0;
+      padding: 12px;
       background: #f8f9fa;
       border-left: 4px solid {{colorPrimary}};
       font-style: italic;
       color: #555;
+      font-size: 11px;
+      line-height: 1.5;
+      page-break-inside: avoid;
     }
     
     .two-column {
       display: grid;
       grid-template-columns: 2fr 1fr;
-      gap: 30px;
-      margin-top: 25px;
+      gap: 25px;
+      margin-top: 20px;
     }
     
     .main-column {
       /* Left column - experience, projects */
+      page-break-inside: avoid;
     }
     
     .sidebar {
       /* Right column - skills, education, certifications */
+      page-break-inside: avoid;
     }
     
     .section {
-      margin-bottom: 25px;
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+    }
+    
+    .section:last-child {
+      margin-bottom: 0;
     }
     
     .section-title {
@@ -765,6 +797,23 @@ export class ResumePDFService {
       .container {
         padding: 0;
       }
+      
+      .section {
+        page-break-inside: avoid;
+      }
+      
+      .experience-item, .education-item {
+        page-break-inside: avoid;
+      }
+      
+      .two-column {
+        page-break-inside: avoid;
+      }
+    }
+    
+    @page {
+      margin: 0;
+      size: A4;
     }
   </style>
 </head>
@@ -855,9 +904,27 @@ export class ResumePDFService {
    * Extract structured data from resume text using AI
    */
   async extractStructuredData(resumeText: string, parsedData?: any): Promise<ResumeData> {
+    // Extract name - try multiple sources
+    let extractedName = parsedData?.contactInfo?.name || this.extractName(resumeText);
+    
+    // If name is still "Your Name" or similar placeholder, try to extract from filename or other sources
+    if (!extractedName || extractedName.toLowerCase().includes('your name') || extractedName.toLowerCase().includes('namn')) {
+      // Try to extract from parsedData filename if available
+      if (parsedData?.filename) {
+        const filenameMatch = parsedData.filename.match(/CV\s+([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/i);
+        if (filenameMatch) {
+          extractedName = filenameMatch[1];
+        }
+      }
+      // If still not found, use fallback
+      if (!extractedName || extractedName.toLowerCase().includes('your name')) {
+        extractedName = 'Your Name';
+      }
+    }
+    
     // Use parsed data if available, otherwise extract from text
     const personalInfo = {
-      name: parsedData?.contactInfo?.name || this.extractName(resumeText) || 'Your Name',
+      name: extractedName,
       title: parsedData?.sections?.summary?.split('\n')[0] || this.extractTitle(resumeText) || '',
       email: parsedData?.contactInfo?.email || this.extractEmail(resumeText) || '',
       phone: parsedData?.contactInfo?.phone || this.extractPhone(resumeText) || '',
@@ -909,8 +976,25 @@ export class ResumePDFService {
       }
     }
 
-    // Extract summary
-    const summary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
+    // Extract summary - clean up duplicates and placeholders
+    let summary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
+    
+    // Remove "Your Name" placeholder if it appears in summary
+    if (summary) {
+      summary = summary.replace(/Your Name/gi, extractedName || '');
+      // Remove duplicate summary if it appears twice
+      const summaryLines = summary.split('\n');
+      const uniqueLines: string[] = [];
+      const seen = new Set<string>();
+      for (const line of summaryLines) {
+        const trimmed = line.trim();
+        if (trimmed && !seen.has(trimmed.toLowerCase())) {
+          seen.add(trimmed.toLowerCase());
+          uniqueLines.push(line);
+        }
+      }
+      summary = uniqueLines.join('\n').trim();
+    }
 
     return {
       personalInfo,
@@ -928,8 +1012,35 @@ export class ResumePDFService {
    * Helper methods to extract data from text
    */
   private extractName(text: string): string | null {
-    const nameMatch = text.match(/^([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/m);
-    return nameMatch ? nameMatch[1] : null;
+    // Try multiple patterns to find name
+    // Pattern 1: Name at the start of text (before "Your Name" or other placeholders)
+    let nameMatch = text.match(/^([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/m);
+    if (nameMatch && !nameMatch[1].toLowerCase().includes('your name') && !nameMatch[1].toLowerCase().includes('namn')) {
+      return nameMatch[1];
+    }
+    
+    // Pattern 2: Look for common name patterns (First Last or First Middle Last)
+    // Skip if it's "Your Name" or similar placeholders
+    const namePatterns = [
+      /(?:^|\n)([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+){1,2})(?:\s|$|,|\.)/m,
+      /(?:CV|Resume|Curriculum Vitae)[\s:]+([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/i,
+    ];
+    
+    for (const pattern of namePatterns) {
+      nameMatch = text.match(pattern);
+      if (nameMatch && nameMatch[1]) {
+        const name = nameMatch[1].trim();
+        // Skip common placeholders
+        if (!name.toLowerCase().includes('your name') && 
+            !name.toLowerCase().includes('namn') &&
+            !name.toLowerCase().includes('example') &&
+            name.length > 3 && name.length < 50) {
+          return name;
+        }
+      }
+    }
+    
+    return null;
   }
 
   private extractTitle(text: string): string | null {

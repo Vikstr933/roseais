@@ -709,9 +709,15 @@ router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
     }
 
     // Extract structured data from resume
+    // Include filename in parsedData for name extraction
+    const parsedDataWithFilename = resume.parsedData ? {
+      ...resume.parsedData,
+      filename: resume.filename
+    } : { filename: resume.filename };
+    
     const structuredData = await resumePDFService.extractStructuredData(
       textToUse,
-      resume.parsedData as any
+      parsedDataWithFilename as any
     );
 
     // Generate PDF
