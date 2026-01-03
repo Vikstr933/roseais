@@ -39,6 +39,7 @@ import {
   CheckCircle,
   Lightbulb,
   Briefcase,
+  Eye,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
