@@ -1068,7 +1068,7 @@ If no projectId is provided, will use the currently selected project from the co
 
     this.generateResumePdfTool = {
       name: 'generate_resume_pdf',
-      description: 'Generate a PDF or LaTeX version of a resume/CV. Use this when the user wants to download their CV as a PDF file or LaTeX document. IMPORTANT: If user asks for "latex cv" or "latex", set format to "latex" and the file will be sent as a .tex attachment in Discord.',
+      description: 'Generate a PDF or LaTeX version of a resume/CV. **CRITICAL**: When user asks for "latex cv", "latex", "LaTeX CV", or any LaTeX request, you MUST use this tool with format: "latex". NEVER write LaTeX code directly in your message - always use this tool. The file will be automatically sent as a .tex attachment in Discord. For PDF requests, use format: "pdf" (default). PDFs are automatically optimized to fit on 1 page.',
       parameters: {
         type: 'object',
         properties: {
@@ -2854,7 +2854,11 @@ ${playgroundContext ? `
   * **search_jobs**: Search for jobs matching the user's resume. **CRITICAL**: Always check if user has a resume first using check_resume_exists. If no resume exists, offer to create one. This tool searches the JobTech API for matching jobs based on the CV.
   * **improve_resume**: Get AI suggestions to improve a CV. Use when user wants to enhance their CV.
   * **adapt_resume**: Adapt a CV for a specific job. Use when user wants to customize their CV for a particular job application.
-  * **generate_resume_pdf**: Generate a PDF version of a CV. Use when user wants to download their CV as a PDF. The PDF can be sent as an attachment in Discord or downloaded on the web platform.
+  * **generate_resume_pdf**: Generate a PDF or LaTeX version of a CV. **CRITICAL RULES**:
+    - When user asks for "latex cv", "latex", "LaTeX CV", or similar: ALWAYS use this tool with format: "latex". NEVER write LaTeX code directly in your message.
+    - When user asks for PDF: Use this tool with format: "pdf" (default).
+    - The file will be automatically sent as an attachment in Discord (never write code/content in messages when files can be sent).
+    - PDFs must fit on 1 page maximum - the system handles this automatically.
   * **get_job_matches**: Get previously matched jobs for a resume. Use when user wants to see their job matches.
   * **CV Creation Flow**:
     - When user asks about jobs or job searching: First use check_resume_exists

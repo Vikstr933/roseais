@@ -679,66 +679,70 @@ export class ResumePDFService {
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 15mm 20mm !important;
+      padding: 12mm 18mm !important;
       background: white;
       min-height: 100vh;
+      max-height: 297mm; /* A4 height - force single page */
+      overflow: hidden;
     }
     
     @media print {
       .container {
-        padding: 15mm 20mm !important;
+        padding: 12mm 18mm !important;
+        max-height: 297mm !important;
+        overflow: hidden !important;
       }
     }
     
     /* Header Section */
     .header {
-      border-bottom: 3px solid {{colorPrimary}};
-      padding-bottom: 12px;
-      margin-bottom: 16px;
+      border-bottom: 2px solid {{colorPrimary}};
+      padding-bottom: 8px;
+      margin-bottom: 10px;
     }
     
     .header h1 {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 700;
       color: #1a1a1a;
-      margin-bottom: 4px;
-      letter-spacing: 0.3px;
+      margin-bottom: 2px;
+      letter-spacing: 0.2px;
       padding: 0;
-      line-height: 1.2;
+      line-height: 1.1;
     }
     
     .header .title {
-      font-size: 13px;
+      font-size: 11px;
       color: #555;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       font-weight: 500;
       padding: 0;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     .contact-info {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
-      font-size: 9px;
+      gap: 8px;
+      font-size: 8px;
       color: #666;
       padding: 0;
-      line-height: 1.4;
+      line-height: 1.3;
     }
     
     .contact-info span {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       padding: 0;
     }
     
     /* Summary */
     .summary {
-      margin: 14px 0 18px 0;
+      margin: 8px 0 12px 0;
       padding: 0;
-      font-size: 10px;
-      line-height: 1.6;
+      font-size: 9px;
+      line-height: 1.4;
       color: #444;
       text-align: left;
     }
@@ -747,8 +751,8 @@ export class ResumePDFService {
     .two-column {
       display: grid;
       grid-template-columns: 1.8fr 1fr;
-      gap: 22px;
-      margin-top: 18px;
+      gap: 16px;
+      margin-top: 12px;
     }
     
     .main-column {
@@ -761,7 +765,7 @@ export class ResumePDFService {
     
     /* Sections */
     .section {
-      margin-bottom: 20px;
+      margin-bottom: 12px;
       padding: 0;
       page-break-inside: avoid;
     }
@@ -771,23 +775,23 @@ export class ResumePDFService {
     }
     
     .section-title {
-      font-size: 12px;
+      font-size: 10px;
       font-weight: 700;
       color: {{colorPrimary}};
-      margin-bottom: 10px;
-      padding-bottom: 5px;
+      margin-bottom: 6px;
+      padding-bottom: 3px;
       padding-left: 0;
       padding-right: 0;
-      border-bottom: 2px solid {{colorPrimary}};
+      border-bottom: 1.5px solid {{colorPrimary}};
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      line-height: 1.3;
+      letter-spacing: 0.6px;
+      line-height: 1.2;
     }
     
     /* Experience & Education Items */
     .experience-item, .education-item, .project-item {
-      margin-bottom: 14px;
-      padding-bottom: 12px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
       padding-left: 0;
       padding-right: 0;
       border-bottom: 1px solid #e8e8e8;
@@ -804,29 +808,29 @@ export class ResumePDFService {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       padding: 0;
     }
     
     .job-title, .degree {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       color: #1a1a1a;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
       padding: 0;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     .company, .institution {
-      font-size: 10px;
+      font-size: 9px;
       color: #555;
       font-weight: 400;
       padding: 0;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     .date {
-      font-size: 9px;
+      font-size: 8px;
       color: #777;
       white-space: nowrap;
       font-weight: 400;
@@ -834,108 +838,108 @@ export class ResumePDFService {
     }
     
     .job-description {
-      margin: 8px 0 0 0;
+      margin: 5px 0 0 0;
       padding: 0;
-      font-size: 9px;
+      font-size: 8px;
       color: #444;
-      line-height: 1.65;
+      line-height: 1.5;
     }
     
     .achievements {
-      margin-top: 8px;
-      padding-left: 18px;
+      margin-top: 4px;
+      padding-left: 14px;
       padding-right: 0;
     }
     
     .achievements li {
-      margin-bottom: 4px;
-      font-size: 10px;
+      margin-bottom: 2px;
+      font-size: 8px;
       color: #555;
-      line-height: 1.6;
+      line-height: 1.4;
       padding: 0;
     }
     
     /* Skills */
     .skill-group {
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       padding: 0;
     }
     
     .skill-category {
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 600;
       color: #555;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       padding: 0;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
     }
     
     .skill-items {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 3px;
       padding: 0;
     }
     
     .skill-tag {
       display: inline-block;
-      padding: 3px 8px;
+      padding: 2px 6px;
       background: #f0f4f8;
       color: #2c3e50;
       border: 1px solid #d1d9e0;
-      border-radius: 3px;
-      font-size: 8px;
+      border-radius: 2px;
+      font-size: 7px;
       font-weight: 500;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     /* Certifications & Languages */
     .certification-item, .language-item {
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       padding: 0;
     }
     
     .cert-name, .language-name {
       font-weight: 600;
-      font-size: 9px;
+      font-size: 8px;
       color: #1a1a1a;
-      margin-bottom: 2px;
+      margin-bottom: 1px;
       padding: 0;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     .cert-issuer, .language-level {
-      font-size: 8px;
+      font-size: 7px;
       color: #666;
       padding: 0;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     /* Projects */
     .project-name {
       font-weight: 600;
-      font-size: 10px;
+      font-size: 9px;
       color: #1a1a1a;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       padding: 0;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     .project-description {
-      font-size: 9px;
+      font-size: 8px;
       color: #555;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       padding: 0;
-      line-height: 1.5;
+      line-height: 1.4;
     }
     
     .project-tech {
-      font-size: 8px;
+      font-size: 7px;
       color: #777;
       font-style: italic;
       padding: 0;
-      line-height: 1.3;
+      line-height: 1.2;
     }
     
     .project-url {
@@ -948,9 +952,9 @@ export class ResumePDFService {
     /* Print Styles - Optimized for single page */
     @media print {
       .container {
-        padding: 15mm 20mm !important;
-        max-height: 297mm; /* A4 height */
-        overflow: hidden;
+        padding: 12mm 18mm !important;
+        max-height: 297mm !important; /* A4 height - force single page */
+        overflow: hidden !important;
       }
       
       body {
@@ -960,44 +964,72 @@ export class ResumePDFService {
       
       .section {
         page-break-inside: avoid;
-        margin-bottom: 16px !important;
+        margin-bottom: 10px !important;
       }
       
       .experience-item, .education-item, .project-item {
         page-break-inside: avoid;
-        margin-bottom: 12px !important;
-        padding-bottom: 10px !important;
+        margin-bottom: 8px !important;
+        padding-bottom: 6px !important;
       }
       
       .summary {
-        margin: 12px 0 16px 0 !important;
-        font-size: 9.5px !important;
-        line-height: 1.5 !important;
+        margin: 6px 0 10px 0 !important;
+        font-size: 8.5px !important;
+        line-height: 1.4 !important;
       }
       
       .header {
-        padding-bottom: 10px !important;
-        margin-bottom: 14px !important;
+        padding-bottom: 6px !important;
+        margin-bottom: 8px !important;
       }
       
       .header h1 {
-        font-size: 22px !important;
-        margin-bottom: 3px !important;
+        font-size: 18px !important;
+        margin-bottom: 1px !important;
+        line-height: 1.1 !important;
       }
       
       .header .title {
-        font-size: 12px !important;
-        margin-bottom: 6px !important;
+        font-size: 10px !important;
+        margin-bottom: 3px !important;
+        line-height: 1.2 !important;
       }
       
       .contact-info {
-        font-size: 8.5px !important;
-        gap: 10px !important;
+        font-size: 7.5px !important;
+        gap: 6px !important;
+        line-height: 1.2 !important;
       }
       
       .two-column {
-        gap: 18px !important;
-        margin-top: 14px !important;
+        gap: 14px !important;
+        margin-top: 10px !important;
+      }
+      
+      .section-title {
+        font-size: 9px !important;
+        margin-bottom: 5px !important;
+        padding-bottom: 2px !important;
+      }
+      
+      .job-title, .degree {
+        font-size: 9px !important;
+        line-height: 1.2 !important;
+      }
+      
+      .company, .institution {
+        font-size: 8px !important;
+        line-height: 1.2 !important;
+      }
+      
+      .date {
+        font-size: 7px !important;
+      }
+      
+      .job-description {
+        font-size: 7.5px !important;
+        line-height: 1.4 !important;
       }
     }
     
