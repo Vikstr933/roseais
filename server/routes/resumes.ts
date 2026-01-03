@@ -717,7 +717,8 @@ router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
     
     const structuredData = await resumePDFService.extractStructuredData(
       textToUse,
-      parsedDataWithFilename as any
+      parsedDataWithFilename as any,
+      resume.filename
     );
 
     // Generate PDF
@@ -770,7 +771,8 @@ router.post('/:id/generate-application-pdf/:jobId', authenticateUser, async (req
     // For applications, we'll create a combined document
     const structuredData = await resumePDFService.extractStructuredData(
       applicationText,
-      resume.parsedData as any
+      resume.parsedData as any,
+      resume.filename
     );
 
     // Update personal info if job title/company provided

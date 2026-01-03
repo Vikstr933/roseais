@@ -1736,15 +1736,20 @@ export class ResumePDFService {
   /**
    * Extract structured data from resume text using AI
    */
-  async extractStructuredData(resumeText: string, parsedData?: any): Promise<ResumeData> {
-    // Extract name - try multiple sources
-    let extractedName = parsedData?.contactInfo?.name || this.extractName(resumeText);
+  async extractStructuredData(resumeText: string, parsedData?: any, filename?: string): Promise<ResumeData> {
+    // Extract name - try multiple sources (check all possible locations in parsedData)
+    let extractedName = parsedData?.contactInfo?.name || 
+                       parsedData?.personalInfo?.name || 
+                       parsedData?.sections?.personal?.name ||
+                       parsedData?.sections?.personalInfo?.name ||
+                       this.extractName(resumeText);
     
     // If name is still "Your Name" or similar placeholder, try to extract from filename or other sources
     if (!extractedName || extractedName.toLowerCase().includes('your name') || extractedName.toLowerCase().includes('namn')) {
-      // Try to extract from parsedData filename if available
-      if (parsedData?.filename) {
-        const filenameMatch = parsedData.filename.match(/CV\s+([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/i);
+      // Try to extract from filename parameter first, then parsedData filename
+      const filenameToCheck = filename || parsedData?.filename;
+      if (filenameToCheck) {
+        const filenameMatch = filenameToCheck.match(/CV[_\s]+([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/i);
         if (filenameMatch) {
           extractedName = filenameMatch[1];
         }
@@ -1810,50 +1815,40 @@ export class ResumePDFService {
     }
 
     // Extract summary - clean up duplicates and placeholders
-    // IMPORTANT: For adapted resumes, extract summary from text first to avoid duplication
-    // If summary appears in text (at the beginning), use that instead of parsedData
+    // IMPORTANT: If parsedData has a summary, use it directly (don't extract from text to avoid duplication)
+    // Only extract from text if parsedData doesn't have a summary (for adapted resumes or raw text)
     let summary = '';
     
-    // First, try to extract summary from the beginning of resumeText (for adapted resumes)
-    // Look for summary/profil section at the start of text (before experience/education sections)
-    // Pattern: Everything from start until we hit a section header (ERFARENHET, UTBILDNING, etc.)
-    const sectionHeaders = /(?:^|\n\n)(ERFARENHET|UTBILDNING|FÄRDIGHETER|CERTIFIERINGAR|SPRÅK|PROJEKT|SAMMANFATTNING|PROFIL)/i;
-    const sectionMatch = resumeText.match(sectionHeaders);
-    
-    if (sectionMatch && sectionMatch.index !== undefined && sectionMatch.index > 50) {
-      // Extract text before first section header
-      const textBeforeSection = resumeText.substring(0, sectionMatch.index).trim();
-      
-      // Remove name and contact info (they're usually at the very start)
-      // Name is usually first line, then contact info
-      const lines = textBeforeSection.split('\n').filter(line => line.trim().length > 0);
-      
-      // Skip first 2-3 lines (name, title, contact info)
-      // BUG FIX: Use Math.min to handle cases with fewer lines, ensure skipLines >= 0 and < lines.length
-      const skipLines = lines.length > 0 ? Math.min(2, Math.max(0, lines.length - 1)) : 0;
-      const potentialSummary = lines.length > skipLines ? lines.slice(skipLines).join(' ').trim() : '';
-      
-      // Check if this looks like a summary (not just name/contact info)
-      if (potentialSummary.length > 100 && 
-          !potentialSummary.match(/^[A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+\s*$/) &&
-          potentialSummary.length < 500) { // Reasonable summary length
-        summary = potentialSummary;
-      }
-    }
-    
-    // If no summary found in text, use parsedData
-    if (!summary) {
-      summary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
+    // First, check if parsedData has a summary (preferred source)
+    const parsedSummary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
+    if (parsedSummary && parsedSummary.trim().length > 20) {
+      // Use parsedData summary directly
+      summary = parsedSummary.trim();
     } else {
-      // Summary was extracted from text - check if parsedData has a similar one
-      // If they're very similar, we already have the one from text (more up-to-date for adapted resumes)
-      const parsedSummary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
-      if (parsedSummary && parsedSummary.length > 50) {
-        // Check if they're similar (likely duplicates)
-        const similarity = this.calculateSimilarity(summary.substring(0, 200), parsedSummary.substring(0, 200));
-        if (similarity > 0.7) {
-          // They're similar - use the one from text (it's more up-to-date for adapted resumes)
-          // summary already set from text above, so we keep it
+      // No summary in parsedData - try to extract from text (for adapted resumes or raw text)
+      // Look for summary/profil section at the start of text (before experience/education sections)
+      // Pattern: Everything from start until we hit a section header (ERFARENHET, UTBILDNING, etc.)
+      const sectionHeaders = /(?:^|\n\n)(ERFARENHET|UTBILDNING|FÄRDIGHETER|CERTIFIERINGAR|SPRÅK|PROJEKT|SAMMANFATTNING|PROFIL)/i;
+      const sectionMatch = resumeText.match(sectionHeaders);
+      
+      if (sectionMatch && sectionMatch.index !== undefined && sectionMatch.index > 50) {
+        // Extract text before first section header
+        const textBeforeSection = resumeText.substring(0, sectionMatch.index).trim();
+        
+        // Remove name and contact info (they're usually at the very start)
+        // Name is usually first line, then contact info
+        const lines = textBeforeSection.split('\n').filter(line => line.trim().length > 0);
+        
+        // Skip first 2-3 lines (name, title, contact info)
+        // BUG FIX: Use Math.min to handle cases with fewer lines, ensure skipLines >= 0 and < lines.length
+        const skipLines = lines.length > 0 ? Math.min(2, Math.max(0, lines.length - 1)) : 0;
+        const potentialSummary = lines.length > skipLines ? lines.slice(skipLines).join(' ').trim() : '';
+        
+        // Check if this looks like a summary (not just name/contact info)
+        if (potentialSummary.length > 100 && 
+            !potentialSummary.match(/^[A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+\s*$/) &&
+            potentialSummary.length < 500) { // Reasonable summary length
+          summary = potentialSummary;
         }
       }
     }

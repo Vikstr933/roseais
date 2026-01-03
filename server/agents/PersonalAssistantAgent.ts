@@ -2859,13 +2859,15 @@ ${playgroundContext ? `
     - When user asks for PDF: Use this tool with format: "pdf" (default).
     - The file will be automatically sent as an attachment in Discord (never write code/content in messages when files can be sent).
     - PDFs must fit on 1 page maximum - the system handles this automatically.
+    - **CRITICAL**: If you just created a CV via answer_resume_question and received a resumeId, you MUST pass that resumeId to this tool. Do NOT rely on "most recent resume" when you have a specific resumeId from CV creation.
   * **get_job_matches**: Get previously matched jobs for a resume. Use when user wants to see their job matches.
   * **CV Creation Flow**:
     - When user asks about jobs or job searching: First use check_resume_exists
     - If no CV exists: Ask "Har du ett CV?" (Do you have a CV?) and offer to help create one
     - If user says "nej" (no) or wants to create one: Use create_resume_conversation to start
     - During CV creation: Ask questions one at a time, use answer_resume_question after each answer
-    - When complete: The system will generate the CV automatically
+    - When complete: The system will generate the CV automatically and return a resumeId
+    - **CRITICAL**: When CV is created via conversation, the answer_resume_question tool returns a resumeId. You MUST use this resumeId when calling generate_resume_pdf or any other resume tool. NEVER use "most recent resume" when you just created a CV - always use the resumeId that was returned.
     - After CV is created: Offer to search for jobs or improve the CV
   * **Job Search Flow**:
     - User asks: "hitta jobb" or "hjälp mig söka jobb" or "find jobs"
@@ -7516,7 +7518,8 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
       // Extract structured data
       const structuredData = await resumePDFService.extractStructuredData(
         resume.rawText || '',
-        resume.parsedData as any
+        resume.parsedData as any,
+        resume.filename
       );
 
       // Generate LaTeX or PDF
