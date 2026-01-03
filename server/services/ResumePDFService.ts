@@ -1660,18 +1660,75 @@ export class ResumePDFService {
       summary = uniqueLines.join('\n').trim();
       
       // Also check if the entire summary is duplicated (appears twice in a row)
-      const summaryText = summary.trim();
-      const halfLength = Math.floor(summaryText.length / 2);
-      if (halfLength > 0) {
-        const firstHalf = summaryText.substring(0, halfLength).trim();
-        const secondHalf = summaryText.substring(halfLength).trim();
-        // If first half and second half are very similar, it's likely a duplicate
-        if (firstHalf.length > 50 && secondHalf.length > 50) {
-          const similarity = this.calculateSimilarity(firstHalf, secondHalf);
-          if (similarity > 0.8) {
-            // It's likely a duplicate, keep only first half
-            summary = firstHalf;
+      // First normalize whitespace
+      summary = summary.replace(/\s+/g, ' ').trim();
+      const summaryText = summary;
+      
+      // Check multiple split points to find where duplication might occur
+      if (summaryText.length > 100) {
+        // Try splitting at different points (40%, 45%, 50%, 55%, 60% of length)
+        const splitPoints = [0.4, 0.45, 0.5, 0.55, 0.6];
+        let bestMatch = false;
+        let bestSplit = 0.5;
+        
+        for (const splitPoint of splitPoints) {
+          const splitIndex = Math.floor(summaryText.length * splitPoint);
+          const firstPart = summaryText.substring(0, splitIndex).trim();
+          const secondPart = summaryText.substring(splitIndex).trim();
+          
+          if (firstPart.length > 50 && secondPart.length > 50) {
+            // Check if second part starts with same words as first part
+            const firstWords = firstPart.split(/\s+/).slice(0, 15).join(' ').toLowerCase();
+            const secondWords = secondPart.split(/\s+/).slice(0, 15).join(' ').toLowerCase();
+            
+            // Also check similarity
+            const similarity = this.calculateSimilarity(firstPart, secondPart);
+            
+            // If second part starts the same way as first part, or similarity is very high
+            if ((firstWords === secondWords && firstWords.length > 30) || similarity > 0.85) {
+              bestMatch = true;
+              bestSplit = splitPoint;
+              break; // Found a clear duplicate, use this split
+            }
           }
+        }
+        
+        if (bestMatch) {
+          const splitIndex = Math.floor(summaryText.length * bestSplit);
+          summary = summaryText.substring(0, splitIndex).trim();
+        } else {
+          // Fallback: check if text is exactly duplicated (first half == second half)
+          const midPoint = Math.floor(summaryText.length / 2);
+          const firstHalf = summaryText.substring(0, midPoint).trim();
+          const secondHalf = summaryText.substring(midPoint).trim();
+          
+          if (firstHalf.length > 50 && secondHalf.length > 50) {
+            const similarity = this.calculateSimilarity(firstHalf, secondHalf);
+            if (similarity > 0.9) {
+              summary = firstHalf;
+            }
+          }
+        }
+      }
+      
+      // Final cleanup: remove any remaining duplicate sentences
+      const sentences = summary.split(/[.!?]\s+/).filter((s: string) => s.trim().length > 0);
+      const uniqueSentences: string[] = [];
+      const seenSentences = new Set<string>();
+      
+      for (const sentence of sentences) {
+        const normalized = sentence.trim().toLowerCase().replace(/\s+/g, ' ');
+        if (normalized.length > 20 && !seenSentences.has(normalized)) {
+          seenSentences.add(normalized);
+          uniqueSentences.push(sentence.trim());
+        }
+      }
+      
+      if (uniqueSentences.length < sentences.length) {
+        summary = uniqueSentences.join('. ').trim();
+        // Preserve ending punctuation if original had it
+        if (summaryText.endsWith('.') && !summary.endsWith('.')) {
+          summary += '.';
         }
       }
     }
