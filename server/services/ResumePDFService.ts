@@ -176,10 +176,10 @@ export class ResumePDFService {
         const pdfBuffer = await page.pdf({
           format: options.format || 'A4',
           margin: {
-            top: options.margin?.top || '20mm',
-            right: options.margin?.right || '15mm',
-            bottom: options.margin?.bottom || '20mm',
-            left: options.margin?.left || '15mm',
+            top: options.margin?.top || '12mm',
+            right: options.margin?.right || '18mm',
+            bottom: options.margin?.bottom || '12mm',
+            left: options.margin?.left || '18mm',
           },
           printBackground: true,
           preferCSSPageSize: true,
@@ -1829,7 +1829,9 @@ export class ResumePDFService {
       const lines = textBeforeSection.split('\n').filter(line => line.trim().length > 0);
       
       // Skip first 2-3 lines (name, title, contact info)
-      const potentialSummary = lines.slice(2).join(' ').trim();
+      // BUG FIX: Use Math.min to handle cases with fewer lines, ensure skipLines >= 0 and < lines.length
+      const skipLines = lines.length > 0 ? Math.min(2, Math.max(0, lines.length - 1)) : 0;
+      const potentialSummary = lines.length > skipLines ? lines.slice(skipLines).join(' ').trim() : '';
       
       // Check if this looks like a summary (not just name/contact info)
       if (potentialSummary.length > 100 && 
