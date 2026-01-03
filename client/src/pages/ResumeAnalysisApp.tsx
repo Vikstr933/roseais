@@ -154,6 +154,7 @@ export default function ResumeAnalysisApp() {
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [uploadStep, setUploadStep] = useState<number>(0);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState<boolean>(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -604,6 +605,61 @@ export default function ResumeAnalysisApp() {
     setEditedResumeText('');
   };
 
+  const handleGeneratePDF = async () => {
+    if (!uploadedResume) return;
+
+    setIsGeneratingPDF(true);
+    setProgress('Genererar professionell PDF...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/generate-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          template: 'modern',
+          format: 'A4',
+          fontSize: 'medium',
+          colorScheme: 'blue',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate PDF');
+      }
+
+      // Get PDF blob
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${uploadedResume.filename.replace(/\.[^/.]+$/, '')}_resume.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setProgress('');
+      toast({
+        title: 'PDF Genererad!',
+        description: 'Din professionella CV-PDF har laddats ner.',
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate PDF';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
 
   const handleGenerateApplication = async (jobMatch: JobMatch) => {
     if (!uploadedResume || !jobMatch.jobId) return;
@@ -867,7 +923,7 @@ export default function ResumeAnalysisApp() {
 
   return (
     <div className="min-h-screen bg-background text-foreground pt-16">
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -883,19 +939,19 @@ export default function ResumeAnalysisApp() {
             Back to Community
           </Button>
 
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
-              <FileText className="h-8 w-8 text-purple-600" />
+          <div className="flex flex-col sm:flex-row items-start gap-4">
+            <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20 flex-shrink-0">
+              <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <h1 className="text-3xl font-bold">CV Analys & Jobb-matchning</h1>
-                <Badge className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/20 text-purple-700">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold break-words">CV Analys & Jobb-matchning</h1>
+                <Badge className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/20 text-purple-700 w-fit">
                   <Brain className="h-3 w-3 mr-1" />
                   AI-Powered
                 </Badge>
               </div>
-              <p className="text-muted-foreground">
+              <p className="text-sm sm:text-base text-muted-foreground">
                 Analysera ditt CV med AI, få detaljerad feedback och hitta matchade jobb på svenska marknaden.
                 Stöder PDF, DOCX och LaTeX-filer.
               </p>
@@ -943,7 +999,7 @@ export default function ResumeAnalysisApp() {
                     <>
                       {isUploading && (
                         <div className="w-full space-y-4 mb-4">
-                          <div className="flex items-center justify-center gap-8 py-6">
+                          <div className="flex items-center justify-center gap-2 sm:gap-4 md:gap-8 py-6 flex-wrap">
                             {[
                               { icon: Upload, label: 'Uppladdning' },
                               { icon: FileCode, label: 'Parsning' },
@@ -956,7 +1012,7 @@ export default function ResumeAnalysisApp() {
                               return (
                                 <div key={index} className="flex flex-col items-center gap-2">
                                   <div
-                                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all ${
                                       isActive
                                         ? 'bg-primary text-primary-foreground shadow-lg'
                                         : 'bg-muted text-muted-foreground'
@@ -1065,23 +1121,45 @@ export default function ResumeAnalysisApp() {
                     {uploadedResume.filename}
                   </p>
                 </div>
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Analyze Resume
-                    </>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Analyze Resume
+                      </>
+                    )}
+                  </Button>
+                  {analysis && (
+                    <Button
+                      onClick={handleGeneratePDF}
+                      disabled={isGeneratingPDF}
+                      variant="outline"
+                      className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                    >
+                      {isGeneratingPDF ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          Generate PDF
+                        </>
+                      )}
+                    </Button>
                   )}
-                </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1329,7 +1407,7 @@ export default function ResumeAnalysisApp() {
                 <div className="space-y-3">
                   {/* Search Form - always visible but can be toggled */}
                   <div className="space-y-2 pb-3 border-b">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <Input
                         id="search-keywords"
                         name="searchKeywords"
@@ -1337,7 +1415,7 @@ export default function ResumeAnalysisApp() {
                         placeholder="Sökord..."
                         value={searchKeywords}
                         onChange={(e) => setSearchKeywords(e.target.value)}
-                        className="h-8 text-xs"
+                        className="h-9 sm:h-8 text-sm sm:text-xs"
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
                             handleFindJobs(false);
@@ -1351,7 +1429,7 @@ export default function ResumeAnalysisApp() {
                         placeholder="Plats..."
                         value={searchLocation}
                         onChange={(e) => setSearchLocation(e.target.value)}
-                        className="h-8 text-xs"
+                        className="h-9 sm:h-8 text-sm sm:text-xs"
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
                             handleFindJobs(false);
@@ -1400,23 +1478,27 @@ export default function ResumeAnalysisApp() {
                         {jobMatches.map((match, index) => {
                           // Determine match quality color and text based on percentage
                           const getMatchColor = (percentage: number) => {
-                            if (percentage >= 70) return 'border-green-300 bg-green-50/50';
-                            if (percentage >= 50) return 'border-blue-300 bg-blue-50/50';
-                            if (percentage >= 30) return 'border-yellow-300 bg-yellow-50/50';
+                            // Updated thresholds to match new label thresholds
+                            if (percentage >= 75) return 'border-green-300 bg-green-50/50';
+                            if (percentage >= 55) return 'border-blue-300 bg-blue-50/50';
+                            if (percentage >= 35) return 'border-yellow-300 bg-yellow-50/50';
                             return 'border-gray-300 bg-gray-50/50';
                           };
 
                           const getMatchBadgeColor = (percentage: number) => {
-                            if (percentage >= 70) return 'bg-green-600';
-                            if (percentage >= 50) return 'bg-blue-600';
-                            if (percentage >= 30) return 'bg-yellow-600';
+                            // Updated thresholds to match new label thresholds
+                            if (percentage >= 75) return 'bg-green-600';
+                            if (percentage >= 55) return 'bg-blue-600';
+                            if (percentage >= 35) return 'bg-yellow-600';
                             return 'bg-gray-600';
                           };
 
                           const getMatchLabel = (percentage: number) => {
-                            if (percentage >= 70) return 'Stark matchning';
-                            if (percentage >= 50) return 'Bra matchning';
-                            if (percentage >= 30) return 'Normal matchning';
+                            // Higher threshold for "Stark matchning" to avoid false positives
+                            // Only show "Stark matchning" for truly well-matched jobs
+                            if (percentage >= 75) return 'Stark matchning';
+                            if (percentage >= 55) return 'Bra matchning';
+                            if (percentage >= 35) return 'Normal matchning';
                             return 'Låg matchning';
                           };
 
@@ -1453,13 +1535,13 @@ export default function ResumeAnalysisApp() {
                                   </div>
                                 </div>
                               )}
-                              <div className="flex flex-wrap gap-2 mt-3">
+                              <div className="flex flex-col sm:flex-row flex-wrap gap-2 mt-3">
                                 {match.jobUrl && (
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => window.open(match.jobUrl, '_blank')}
-                                    className="h-7 text-xs"
+                                    className="h-9 sm:h-7 text-xs w-full sm:w-auto"
                                   >
                                     <ExternalLink className="h-3 w-3 mr-1" />
                                     Visa Jobb
@@ -1470,7 +1552,7 @@ export default function ResumeAnalysisApp() {
                                   size="sm"
                                   onClick={() => handleAdaptResume(match)}
                                   disabled={isAdapting[match.jobId || '']}
-                                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-7 text-xs"
+                                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-9 sm:h-7 text-xs w-full sm:w-auto"
                                 >
                                   {isAdapting[match.jobId || ''] ? (
                                     <>
@@ -1489,7 +1571,7 @@ export default function ResumeAnalysisApp() {
                                   size="sm"
                                   onClick={() => handleGenerateApplication(match)}
                                   disabled={generatingApplication[match.jobId || ''] || !uploadedResume}
-                                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 h-7 text-xs"
+                                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 h-9 sm:h-7 text-xs w-full sm:w-auto"
                                 >
                                   {generatingApplication[match.jobId || ''] ? (
                                     <>

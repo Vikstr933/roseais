@@ -11,6 +11,7 @@ import { resumeAdaptationService } from '../services/ResumeAdaptationService';
 import { resumeKeywordExtractor } from '../services/ResumeKeywordExtractor';
 import { applicationService } from '../services/ApplicationService';
 import { resumeImprovementService } from '../services/ResumeImprovementService';
+import { resumePDFService } from '../services/ResumePDFService';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -680,6 +681,57 @@ router.post('/:id/apply-improvement', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('Error applying improvement:', error);
     res.status(500).json({ error: 'Failed to apply improvement' });
+  }
+});
+
+// POST /api/resumes/:id/generate-pdf
+router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const resumeId = parseInt(req.params.id);
+    const { template, format, fontSize, colorScheme } = req.body;
+
+    // Get resume
+    const [resume] = await db
+      .select()
+      .from(resumes)
+      .where(eq(resumes.id, resumeId))
+      .limit(1);
+
+    if (!resume || resume.userId !== userId) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    if (!resume.rawText) {
+      return res.status(400).json({ error: 'Resume text not available' });
+    }
+
+    // Extract structured data from resume
+    const structuredData = await resumePDFService.extractStructuredData(
+      resume.rawText,
+      resume.parsedData as any
+    );
+
+    // Generate PDF
+    const pdfBuffer = await resumePDFService.generatePDF(structuredData, {
+      template: template || 'modern',
+      format: format || 'A4',
+      fontSize: fontSize || 'medium',
+      colorScheme: colorScheme || 'blue',
+    });
+
+    // Set headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${resume.filename.replace(/\.[^/.]+$/, '')}_resume.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate PDF',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

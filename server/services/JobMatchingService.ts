@@ -292,7 +292,20 @@ export class JobMatchingService {
     // Fallback: extract from description
     if (requiredSkills.length === 0) {
       const extractedSkills = this.extractSkills(description);
-      requiredSkills.push(...extractedSkills);
+      // Filter out "Go" unless it's clearly programming language
+      const filteredSkills = extractedSkills.filter(skill => {
+        const skillLower = skill.toLowerCase();
+        if (skillLower === 'go') {
+          // Only keep "Go" if it's in programming context
+          const hasProgrammingContext = description.toLowerCase().includes('programming') ||
+                                       description.toLowerCase().includes('developer') ||
+                                       description.toLowerCase().includes('software') ||
+                                       description.toLowerCase().includes('golang');
+          return hasProgrammingContext;
+        }
+        return true;
+      });
+      requiredSkills.push(...filteredSkills);
     }
 
     // Extract structured requirements
@@ -542,6 +555,20 @@ export class JobMatchingService {
       ? job.requiredSkills
       : this.extractSkills(job.description);
 
+    // CRITICAL: Check profession/field mismatch first - this prevents cross-field matches
+    const professionMatch = this.calculateProfessionMatch(resumeText, resumeParsedData, job.title, job.description);
+    
+    // If profession mismatch is severe (score < 0.5), heavily penalize the match
+    // This prevents cross-field matches (e.g., ställverksmontör matching ekonomi jobs)
+    if (professionMatch < 0.5) {
+      // Maximum 35% match if professions don't align - this prevents "Stark matchning" (75%+) for wrong field
+      return {
+        matchPercentage: Math.min(35, Math.round(professionMatch * 100)),
+        matchedSkills: this.filterRelevantSkills([], jobSkills), // Filter out languages and generic skills
+        missingSkills: jobSkills,
+      };
+    }
+
     // Calculate skill match (base score)
     let skillMatchRatio = 0;
     let matchedSkills: string[] = [];
@@ -554,8 +581,38 @@ export class JobMatchingService {
       const normalizedJobSkills = jobSkills.map(normalize);
 
       // Find matched skills (fuzzy matching)
+      // IMPORTANT: Filter out languages and generic skills that don't indicate profession match
       normalizedJobSkills.forEach((jobSkill, index) => {
+        // Skip languages - they're not relevant for profession matching
+        if (this.isLanguageSkill(jobSkill)) {
+          return; // Don't count languages as matched skills
+        }
+        
+        // Skip "Go" unless it's clearly the programming language
+        const jobSkillLower = jobSkill.toLowerCase();
+        if (jobSkillLower === 'go' || (jobSkillLower.includes('go') && !jobSkillLower.includes('golang') && !jobSkillLower.includes('programming'))) {
+          // Check if it's in a programming context in the job description
+          const hasProgrammingContext = job.description?.toLowerCase().includes('programming') ||
+                                       job.description?.toLowerCase().includes('developer') ||
+                                       job.description?.toLowerCase().includes('software') ||
+                                       job.description?.toLowerCase().includes('golang');
+          if (!hasProgrammingContext) {
+            return; // Skip "Go" if not in programming context
+          }
+        }
+        
         const matched = normalizedResumeSkills.some(resumeSkill => {
+          // Skip languages in resume too
+          if (this.isLanguageSkill(resumeSkill)) {
+            return false;
+          }
+          
+          // Skip "Go" in resume unless it's clearly programming
+          const resumeSkillLower = resumeSkill.toLowerCase();
+          if (resumeSkillLower === 'go' || (resumeSkillLower.includes('go') && !resumeSkillLower.includes('golang') && !resumeSkillLower.includes('programming'))) {
+            return false; // Don't match standalone "Go"
+          }
+          
           // Exact match
           if (resumeSkill === jobSkill) return true;
           // Contains match (e.g., "javascript" matches "javascript developer")
@@ -622,12 +679,25 @@ export class JobMatchingService {
     const titleBonus = jobTitleMatch * 20;
     baseMatch += titleBonus;
 
+    // Apply profession match as a STRICT multiplier
+    // If profession match is low (< 0.7), cap the final score to prevent false positives
+    if (professionMatch < 0.7) {
+      // For different or uncertain fields, cap at 40% maximum to prevent "Stark matchning"
+      baseMatch = Math.min(40, baseMatch * professionMatch);
+    } else {
+      // For same/similar fields, apply normal multiplier
+      baseMatch = baseMatch * (0.6 + professionMatch * 0.4); // Scale profession match to 0.6-1.0 range
+    }
+
     // Normalize to 0-100 range
     const matchPercentage = Math.round(Math.min(100, Math.max(0, baseMatch)));
 
+    // Filter out languages and generic skills from matched skills
+    const filteredMatchedSkills = this.filterRelevantSkills(matchedSkills, jobSkills);
+
     return {
       matchPercentage: Math.min(100, Math.max(0, matchPercentage)), // Clamp 0-100
-      matchedSkills: [...new Set(matchedSkills)], // Remove duplicates
+      matchedSkills: [...new Set(filteredMatchedSkills)], // Remove duplicates and filter languages
       missingSkills: [...new Set(missingSkills)],
     };
   }
@@ -795,9 +865,11 @@ export class JobMatchingService {
   private extractSkills(text: string): string[] {
     // Common Swedish IT/tech skills (svenska och engelska)
     const commonSkills = [
-      // Programming languages
+      // Programming languages (be more specific for ambiguous ones)
       'JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Java', 'C#', '.NET',
-      'PHP', 'Ruby', 'Go', 'Rust', 'Swift', 'Kotlin', 'Dart', 'Flutter',
+      'PHP', 'Ruby', 'Rust', 'Swift', 'Kotlin', 'Dart', 'Flutter',
+      // Go programming language - only match explicit "Golang" or "Go programming"
+      'Golang', 'Go programming', 'Go language',
       // Frameworks & Libraries
       'Vue.js', 'Angular', 'Svelte', 'Next.js', 'Nuxt', 'Express', 'Django', 'Flask',
       'Spring', 'Laravel', 'Symfony', 'ASP.NET',
@@ -808,18 +880,26 @@ export class JobMatchingService {
       'Terraform', 'Ansible', 'Linux', 'Unix',
       // Methodologies
       'Agile', 'Scrum', 'Kanban', 'DevOps', 'TDD', 'BDD',
-      // Soft skills (på svenska och engelska)
-      'Project Management', 'Leadership', 'Communication', 'Problem Solving',
-      'Teamwork', 'Projektledning', 'Ledarskap', 'Kommunikation',
-      'Problemlösning', 'Teamarbete',
       // Languages
       'Swedish', 'English', 'Svenska', 'Engelska'
     ];
 
     const textLower = text.toLowerCase();
-    const foundSkills = commonSkills.filter(skill =>
-      textLower.includes(skill.toLowerCase())
-    );
+    const foundSkills: string[] = [];
+    
+    // Check each skill with context awareness
+    for (const skill of commonSkills) {
+      const skillLower = skill.toLowerCase();
+      
+      // NEVER match standalone "Go" - it's too ambiguous (could be "go" as in "go to", etc.)
+      // Only match explicit programming language references
+      if (skillLower === 'go' || (skillLower.includes('go') && !skillLower.includes('golang'))) {
+        // Skip - don't match "Go" at all unless it's explicitly "Golang" or "Go programming"
+        continue;
+      } else if (textLower.includes(skillLower)) {
+        foundSkills.push(skill);
+      }
+    }
 
     return foundSkills;
   }
@@ -917,6 +997,336 @@ export class JobMatchingService {
     }
 
     return 0;
+  }
+
+  /**
+   * Calculate profession/field match between resume and job
+   * Returns a score between 0 and 1, where 0 = completely different fields, 1 = same field
+   * This prevents cross-field matches (e.g., ställverksmontör matching ekonomiassistent jobs)
+   */
+  private calculateProfessionMatch(resumeText: string, parsedData: any, jobTitle: string, jobDescription: string): number {
+    const lowerResumeText = resumeText.toLowerCase();
+    const lowerJobTitle = jobTitle.toLowerCase();
+    const lowerJobDesc = jobDescription.toLowerCase();
+
+    // Extract profession from resume (from experience section or text)
+    const resumeProfessions = this.extractProfessions(resumeText, parsedData);
+    
+    // Extract profession from job
+    const jobProfessions = this.extractProfessionsFromJob(jobTitle, jobDescription);
+
+    // If we can't determine professions, be very conservative
+    if (resumeProfessions.length === 0 || jobProfessions.length === 0) {
+      // If we can't determine, check field categories as fallback
+      const resumeField = this.determineField([], lowerResumeText);
+      const jobField = this.determineField([], lowerJobDesc);
+      
+      if (resumeField && jobField && resumeField === jobField) {
+        return 0.5; // Same field category but uncertain - reduced from 0.6
+      }
+      
+      // If we can't determine, be very conservative - don't give high scores
+      return 0.3; // Reduced from 0.4 to be more strict
+    }
+
+    // Check for profession overlap
+    let matchCount = 0;
+    let exactMatch = false;
+    
+    for (const resumeProf of resumeProfessions) {
+      for (const jobProf of jobProfessions) {
+        // Exact match
+        if (resumeProf === jobProf) {
+          exactMatch = true;
+          break;
+        }
+        // Contains match (e.g., "ekonom" matches "ekonomiassistent")
+        // But be more strict - only if one is clearly a subset of the other
+        if ((resumeProf.length > 5 && jobProf.includes(resumeProf)) || 
+            (jobProf.length > 5 && resumeProf.includes(jobProf))) {
+          matchCount++;
+        }
+      }
+      if (exactMatch) break;
+    }
+
+    // If exact profession matches, return high score
+    if (exactMatch) {
+      return 1.0;
+    }
+
+    // If professions are similar (subset match), return good score
+    if (matchCount > 0) {
+      return 0.75; // Good match for similar professions
+    }
+
+    // Check for field categories (e.g., technical, finance, healthcare)
+    const resumeField = this.determineField(resumeProfessions, lowerResumeText);
+    const jobField = this.determineField(jobProfessions, lowerJobDesc);
+
+    if (resumeField && jobField) {
+      if (resumeField === jobField) {
+        return 0.45; // Same field category but different professions - reduced from 0.5
+      } else {
+        // Different fields - return very low score (ställverksmontör vs ekonomi = different fields)
+        return 0.1; // Very strict for different fields
+      }
+    }
+
+    // Different fields or can't determine - return very low score
+    return 0.1; // Very strict - assume mismatch if uncertain
+  }
+
+  /**
+   * Extract professions from resume
+   */
+  private extractProfessions(resumeText: string, parsedData?: any): string[] {
+    const professions: string[] = [];
+    const lowerText = resumeText.toLowerCase();
+
+    // Extract from experience section
+    if (parsedData?.sections?.experience && Array.isArray(parsedData.sections.experience)) {
+      parsedData.sections.experience.forEach((exp: any) => {
+        if (exp.title) {
+          const prof = this.normalizeProfession(exp.title);
+          if (prof) professions.push(prof);
+        }
+      });
+    }
+
+    // Extract from text using profession patterns
+    const professionPatterns = [
+      /(?:jag\s+är|är|som|arbetar\s+som|yrke)\s+([a-zåäö]+(?:\s+[a-zåäö]+){0,2})/i,
+      /(?:ställverksmontör|ekonomiassistent|ekonom|redovisningsekonom|utvecklare|programmerare|sjuksköterska|lärare|säljare|inköpare|projektledare|administratör)/i,
+    ];
+
+    for (const pattern of professionPatterns) {
+      const matches = resumeText.matchAll(pattern);
+      for (const match of matches) {
+        if (match[1]) {
+          const prof = this.normalizeProfession(match[1]);
+          if (prof) professions.push(prof);
+        } else if (match[0]) {
+          const prof = this.normalizeProfession(match[0]);
+          if (prof) professions.push(prof);
+        }
+      }
+    }
+
+    // Common Swedish professions to check for (prioritize longer/more specific matches first)
+    const commonProfessions = [
+      // Technical/Electrical (check longer phrases first)
+      'ställverksmontör', 'resemontör', 'elektriker', 'distributionselektriker',
+      'montör', 'tekniker', 'elmontör', 'ställverksmontage',
+      // Finance/Economics
+      'ekonomiassistent', 'redovisningsekonom', 'ekonom', 'bokförare', 'revisor',
+      'controller', 'ekonomist', 'kreditanalytiker', 'finansanalytiker',
+      // IT/Tech
+      'utvecklare', 'programmerare', 'systemutvecklare', 'systemarkitekt',
+      // Healthcare
+      'sjuksköterska', 'läkare', 'undersköterska',
+      // Education
+      'lärare', 'pedagog',
+      // Sales/Marketing
+      'säljare', 'inköpare', 'marknadsförare',
+      // Management
+      'projektledare', 'chef', 'ledare',
+      // Administrative
+      'administratör', 'kundtjänst',
+    ];
+
+    // Check for professions in order (longer/more specific first)
+    for (const prof of commonProfessions) {
+      if (lowerText.includes(prof)) {
+        professions.push(prof);
+        // If we found a specific profession, prioritize it
+        break; // Don't add more generic ones if we found a specific match
+      }
+    }
+    
+    // Also check for compound profession patterns like "Resemontör/Ställverksmontör"
+    const compoundPattern = /(?:resemontör|ställverksmontör|elektriker|ekonomiassistent|ekonom|redovisningsekonom|bokförare|utvecklare|programmerare)/gi;
+    const compoundMatches = resumeText.match(compoundPattern);
+    if (compoundMatches) {
+      compoundMatches.forEach(match => {
+        const normalized = match.toLowerCase();
+        if (!professions.includes(normalized)) {
+          professions.push(normalized);
+        }
+      });
+    }
+
+    return [...new Set(professions)]; // Remove duplicates
+  }
+
+  /**
+   * Extract professions from job title and description
+   */
+  private extractProfessionsFromJob(jobTitle: string, jobDescription: string): string[] {
+    const professions: string[] = [];
+    const lowerTitle = jobTitle.toLowerCase();
+    const lowerDesc = jobDescription.toLowerCase();
+    const combinedText = `${lowerTitle} ${lowerDesc}`;
+
+    // Normalize job title - this is the most reliable source
+    const titleProf = this.normalizeProfession(jobTitle);
+    if (titleProf && titleProf.length > 3) {
+      professions.push(titleProf);
+    }
+
+    // Check for common professions in title and description (prioritize longer/more specific)
+    const commonProfessions = [
+      // Technical/Electrical (check longer phrases first)
+      'ställverksmontör', 'resemontör', 'elektriker', 'distributionselektriker',
+      'montör', 'tekniker', 'elmontör', 'ställverksmontage',
+      // Finance/Economics (prioritize specific roles)
+      'redovisningsekonom', 'ekonomiassistent', 'ekonom', 'bokförare', 'revisor',
+      'controller', 'ekonomist', 'kreditanalytiker', 'finansanalytiker',
+      // IT/Tech
+      'systemutvecklare', 'utvecklare', 'programmerare', 'systemarkitekt',
+      // Healthcare
+      'sjuksköterska', 'läkare', 'undersköterska',
+      // Education
+      'lärare', 'pedagog',
+      // Sales/Marketing
+      'säljare', 'inköpare', 'marknadsförare',
+      // Management
+      'projektledare', 'chef', 'ledare',
+      // Administrative
+      'administratör', 'kundtjänst',
+    ];
+
+    // Check in order (longer/more specific first) - stop after first match to avoid generic matches
+    for (const prof of commonProfessions) {
+      if (combinedText.includes(prof)) {
+        if (!professions.includes(prof)) {
+          professions.push(prof);
+        }
+        // If we found a specific profession in title, prioritize it
+        if (lowerTitle.includes(prof)) {
+          break; // Title is most reliable, stop here
+        }
+      }
+    }
+
+    return [...new Set(professions)]; // Remove duplicates
+  }
+
+  /**
+   * Normalize profession name (remove prefixes, keep core profession)
+   */
+  private normalizeProfession(title: string): string | null {
+    const lower = title.toLowerCase();
+    
+    // Remove common prefixes
+    const prefixes = ['senior', 'junior', 'lead', 'principal', 'associate', 'staff', 'head', 
+                     'ledande', 'chef', 'ansvarig', 'specialist', 'expert', 'assistent'];
+    const words = lower.split(/\s+/).filter(w => !prefixes.includes(w) && w.length > 3);
+    
+    if (words.length === 0) return null;
+    
+    // Return the most significant word (usually the last one)
+    return words[words.length - 1];
+  }
+
+  /**
+   * Check if a skill is a language (not relevant for profession matching)
+   */
+  private isLanguageSkill(skill: string): boolean {
+    const lowerSkill = skill.toLowerCase().trim();
+    const languageKeywords = [
+      'svenska', 'swedish', 'engelska', 'english', 'tyska', 'german', 
+      'franska', 'french', 'spanska', 'spanish', 'norska', 'norwegian',
+      'danska', 'danish', 'språk', 'language', 'tal', 'skrift'
+    ];
+    return languageKeywords.some(keyword => lowerSkill.includes(keyword));
+  }
+
+  /**
+   * Filter out languages and generic skills that don't indicate profession match
+   */
+  private filterRelevantSkills(skills: string[], allJobSkills: string[]): string[] {
+    return skills.filter(skill => {
+      // Remove languages
+      if (this.isLanguageSkill(skill)) {
+        return false;
+      }
+      
+      // Remove very generic skills that don't indicate profession
+      const lowerSkill = skill.toLowerCase().trim();
+      const genericSkills = [
+        'go', // Only if it's not clearly "Go programming language"
+        'kommunikation', 'communication', 
+        'samarbete', 'teamwork',
+        'problem solving', 'problemlösning',
+        'leadership', 'ledarskap'
+      ];
+      
+      // Check if it's a generic skill (but allow "Go" if it's clearly the programming language)
+      if (genericSkills.includes(lowerSkill)) {
+        // Special case: "Go" is only valid if it's clearly the programming language
+        if (lowerSkill === 'go') {
+          // Check if it appears in a programming context in job skills
+          const hasGoContext = allJobSkills.some(js => {
+            const jsLower = js.toLowerCase();
+            return jsLower.includes('golang') || 
+                   jsLower.includes('go programming') ||
+                   jsLower.includes('go language') ||
+                   (jsLower === 'go' && allJobSkills.some(other => 
+                     ['programming', 'developer', 'software', 'backend'].some(term => 
+                       other.toLowerCase().includes(term))));
+          });
+          return hasGoContext; // Only keep if it's clearly the programming language
+        }
+        return false; // Remove other generic skills
+      }
+      
+      return true;
+    });
+  }
+
+  /**
+   * Determine field category (technical, finance, healthcare, education, sales, etc.)
+   */
+  private determineField(professions: string[], text: string): string | null {
+    const lowerText = text.toLowerCase();
+    
+    // Technical field
+    const technicalKeywords = ['ställverksmontör', 'elektriker', 'montör', 'tekniker', 'utvecklare', 'programmerare', 'systemutvecklare', 'it', 'teknik', 'elektro'];
+    if (professions.some(p => technicalKeywords.some(k => p.includes(k))) || 
+        technicalKeywords.some(k => lowerText.includes(k))) {
+      return 'technical';
+    }
+
+    // Finance field
+    const financeKeywords = ['ekonomiassistent', 'ekonom', 'redovisningsekonom', 'bokförare', 'revisor', 'controller', 'ekonomi', 'redovisning', 'bokföring'];
+    if (professions.some(p => financeKeywords.some(k => p.includes(k))) || 
+        financeKeywords.some(k => lowerText.includes(k))) {
+      return 'finance';
+    }
+
+    // Healthcare field
+    const healthcareKeywords = ['sjuksköterska', 'läkare', 'undersköterska', 'vård', 'sjukvård', 'hälsa'];
+    if (professions.some(p => healthcareKeywords.some(k => p.includes(k))) || 
+        healthcareKeywords.some(k => lowerText.includes(k))) {
+      return 'healthcare';
+    }
+
+    // Education field
+    const educationKeywords = ['lärare', 'pedagog', 'utbildning', 'skola'];
+    if (professions.some(p => educationKeywords.some(k => p.includes(k))) || 
+        educationKeywords.some(k => lowerText.includes(k))) {
+      return 'education';
+    }
+
+    // Sales/Marketing field
+    const salesKeywords = ['säljare', 'inköpare', 'marknadsförare', 'sälj', 'marknadsföring'];
+    if (professions.some(p => salesKeywords.some(k => p.includes(k))) || 
+        salesKeywords.some(k => lowerText.includes(k))) {
+      return 'sales';
+    }
+
+    return null;
   }
 }
 
