@@ -3,6 +3,14 @@ import { SimpleLogger } from '../utils/SimpleLogger';
 
 const logger = new SimpleLogger('JobMatchingService');
 
+// JobTech API response types
+interface JobTechApiResponse {
+  total?: {
+    value: number;
+  };
+  hits?: any[];
+}
+
 export interface JobRequirements {
   drivingLicense?: string; // e.g., "B", "BE", "CE", etc.
   drivingLicenseRequired?: boolean;
@@ -68,7 +76,7 @@ export class JobMatchingService {
         params.q = `${simplifiedKeywords} ${location}`;
       }
 
-      const response = await axios.get(this.jobTechBaseUrl, {
+      const response = await axios.get<JobTechApiResponse>(this.jobTechBaseUrl, {
         params,
         headers: {
           'accept': 'application/json',
@@ -96,7 +104,7 @@ export class JobMatchingService {
         }
         
         try {
-          const fallbackResponse = await axios.get(this.jobTechBaseUrl, {
+          const fallbackResponse = await axios.get<JobTechApiResponse>(this.jobTechBaseUrl, {
             params: fallbackParams,
             headers: { 'accept': 'application/json' },
             timeout: 10000,
@@ -134,7 +142,7 @@ export class JobMatchingService {
         params.q = `${keywords} ${location}`;
       }
 
-      const response = await axios.get(this.jobTechBaseUrl, {
+      const response = await axios.get<JobTechApiResponse>(this.jobTechBaseUrl, {
         params,
         headers: {
           'accept': 'application/json',
@@ -190,7 +198,7 @@ export class JobMatchingService {
         params.region = options.region;
       }
 
-      const response = await axios.get(this.jobTechBaseUrl, {
+      const response = await axios.get<JobTechApiResponse>(this.jobTechBaseUrl, {
         params,
         headers: {
           'accept': 'application/json',
@@ -1096,8 +1104,8 @@ export class JobMatchingService {
 
     // Extract from text using profession patterns
     const professionPatterns = [
-      /(?:jag\s+är|är|som|arbetar\s+som|yrke)\s+([a-zåäö]+(?:\s+[a-zåäö]+){0,2})/i,
-      /(?:ställverksmontör|ekonomiassistent|ekonom|redovisningsekonom|utvecklare|programmerare|sjuksköterska|lärare|säljare|inköpare|projektledare|administratör)/i,
+      /(?:jag\s+är|är|som|arbetar\s+som|yrke)\s+([a-zåäö]+(?:\s+[a-zåäö]+){0,2})/gi,
+      /(?:ställverksmontör|ekonomiassistent|ekonom|redovisningsekonom|utvecklare|programmerare|sjuksköterska|lärare|säljare|inköpare|projektledare|administratör)/gi,
     ];
 
     for (const pattern of professionPatterns) {
