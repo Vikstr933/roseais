@@ -1129,6 +1129,18 @@ export const jobSearchQueries = pgTable('job_search_queries', {
   expiresAt: timestamp('expires_at'),
 });
 
+export const resumeCreationSessions = pgTable('resume_creation_sessions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: text('session_id').notNull(),
+  state: jsonb('state').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  expiresAt: timestamp('expires_at'),
+}, (table) => ({
+  userIdSessionIdx: unique().on(table.userId, table.sessionId),
+}));
+
 // Resume Relations
 export const resumesRelations = relations(resumes, ({ one, many }) => ({
   user: one(users, { fields: [resumes.userId], references: [users.id] }),
@@ -1148,6 +1160,10 @@ export const jobSearchQueriesRelations = relations(jobSearchQueries, ({ one }) =
   user: one(users, { fields: [jobSearchQueries.userId], references: [users.id] }),
 }));
 
+export const resumeCreationSessionsRelations = relations(resumeCreationSessions, ({ one }) => ({
+  user: one(users, { fields: [resumeCreationSessions.userId], references: [users.id] }),
+}));
+
 // TypeScript types
 export type Resume = typeof resumes.$inferSelect;
 export type NewResume = typeof resumes.$inferInsert;
@@ -1157,6 +1173,8 @@ export type JobMatch = typeof jobMatches.$inferSelect;
 export type NewJobMatch = typeof jobMatches.$inferInsert;
 export type JobSearchQuery = typeof jobSearchQueries.$inferSelect;
 export type NewJobSearchQuery = typeof jobSearchQueries.$inferInsert;
+export type ResumeCreationSession = typeof resumeCreationSessions.$inferSelect;
+export type NewResumeCreationSession = typeof resumeCreationSessions.$inferInsert;
 export type ChainExecution = typeof chainExecutions.$inferSelect;
 export type NewChainExecution = typeof chainExecutions.$inferInsert;
 export type PromptChain = typeof promptChains.$inferSelect;

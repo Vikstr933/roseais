@@ -4,7 +4,7 @@
  * Uses discord.js library for bot interactions
  */
 
-import { Client, GatewayIntentBits, Message, TextChannel, EmbedBuilder, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Message, TextChannel, EmbedBuilder, Events, Attachment, AttachmentBuilder } from 'discord.js';
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { personalAssistantAgent } from '../agents/PersonalAssistantAgent';
 import { getCredentialVault } from './CredentialVault';
@@ -426,16 +426,6 @@ Generate ONLY the status message, nothing else.`
       
       logger.info(`Processing message from ${message.author.tag}: "${userMessage}"`);
       
-      if (!userMessage) {
-        await message.reply('Hej! Hur kan jag hjälpa dig?');
-        return;
-      }
-
-      // Show typing indicator
-      if (message.channel instanceof TextChannel) {
-        message.channel.sendTyping();
-      }
-
       // Get user ID from Discord
       const discordUserId = message.author.id;
       const discordUsername = message.author.username;
@@ -463,6 +453,28 @@ Generate ONLY the status message, nothing else.`
           // No mapping found - user needs to link their account
           logger.warn(`No Discord user mapping found for ${discordUsername} (${discordUserId})`);
           
+          // Check for attachments even without mapping - we can still inform them
+          if (message.attachments && message.attachments.size > 0) {
+            const resumeAttachments = Array.from(message.attachments.values()).filter(att => {
+              const ext = att.name?.toLowerCase().split('.').pop();
+              return ext === 'pdf' || ext === 'docx' || ext === 'tex' || 
+                     att.contentType === 'application/pdf' ||
+                     att.contentType?.includes('wordprocessingml') ||
+                     att.contentType === 'application/x-latex' ||
+                     att.contentType === 'text/x-latex';
+            });
+
+            if (resumeAttachments.length > 0) {
+              const linkMessage = await this.generateLocalizedRegistrationMessage(
+                userMessage,
+                discordUsername,
+                discordUserId
+              );
+              await message.reply(`📎 Jag ser att du har laddat upp en CV-fil, men du behöver länka ditt konto först.\n\n${linkMessage}`);
+              return;
+            }
+          }
+          
           // Generate localized message based on user's language
           const linkMessage = await this.generateLocalizedRegistrationMessage(
             userMessage,
@@ -478,6 +490,49 @@ Generate ONLY the status message, nothing else.`
         // Fallback: use generic Discord ID (no project access)
         systemUserId = `discord_${discordUserId}`;
       }
+
+      // Check for file attachments (resume files) - after we have systemUserId
+      if (message.attachments && message.attachments.size > 0 && systemUserId && !systemUserId.startsWith('discord_')) {
+        const resumeAttachments = Array.from(message.attachments.values()).filter(att => {
+          const ext = att.name?.toLowerCase().split('.').pop();
+          return ext === 'pdf' || ext === 'docx' || ext === 'tex' || 
+                 att.contentType === 'application/pdf' ||
+                 att.contentType?.includes('wordprocessingml') ||
+                 att.contentType === 'application/x-latex' ||
+                 att.contentType === 'text/x-latex';
+        });
+
+        if (resumeAttachments.length > 0) {
+          // Process the first resume attachment
+          const attachment = resumeAttachments[0];
+          try {
+            const result = await this.processDiscordAttachment(attachment, systemUserId, message);
+            if (result.success && result.resumeId) {
+              await message.reply(`✅ Jag har laddat upp ditt CV! (ID: ${result.resumeId}). Du kan nu be mig hitta jobb eller förbättra ditt CV.`);
+              // Continue processing the message text if any
+              if (!userMessage || userMessage.trim().length === 0) {
+                return;
+              }
+            } else {
+              await message.reply(`❌ Kunde inte ladda upp CV-filen: ${result.error || 'Okänt fel'}`);
+            }
+          } catch (error) {
+            logger.error('Error processing Discord attachment', error as Error);
+            await message.reply('❌ Ett fel uppstod när jag försökte ladda upp din CV-fil.');
+          }
+        }
+      }
+      
+      if (!userMessage) {
+        await message.reply('Hej! Hur kan jag hjälpa dig?');
+        return;
+      }
+
+      // Show typing indicator
+      if (message.channel instanceof TextChannel) {
+        message.channel.sendTyping();
+      }
+
 
       // Load user's projects if we have a system user ID
       let playgroundContext: any = undefined;
@@ -711,6 +766,149 @@ Generate ONLY the status message, nothing else.`
     } catch (error) {
       logger.error('Error reading messages from Discord', error as Error);
       return [];
+    }
+  }
+
+  /**
+   * Process Discord attachment (resume file) and upload it
+   */
+  private async processDiscordAttachment(
+    attachment: Attachment,
+    userId: string,
+    message: Message
+  ): Promise<{ success: boolean; resumeId?: number; error?: string }> {
+    try {
+      // Validate file size (max 5MB)
+      if (attachment.size && attachment.size > 5 * 1024 * 1024) {
+        return {
+          success: false,
+          error: 'Filen är för stor. Max storlek är 5MB.',
+        };
+      }
+
+      // Validate file type
+      const ext = attachment.name?.toLowerCase().split('.').pop();
+      const isValidType = ext === 'pdf' || ext === 'docx' || ext === 'tex' ||
+                         attachment.contentType === 'application/pdf' ||
+                         attachment.contentType?.includes('wordprocessingml') ||
+                         attachment.contentType === 'application/x-latex' ||
+                         attachment.contentType === 'text/x-latex';
+
+      if (!isValidType) {
+        return {
+          success: false,
+          error: 'Ogiltig filtyp. Endast PDF, DOCX och TEX filer är tillåtna.',
+        };
+      }
+
+      // Download file from Discord CDN
+      logger.info(`Downloading attachment ${attachment.name} from ${attachment.url}`);
+      const response = await fetch(attachment.url);
+      if (!response.ok) {
+        return {
+          success: false,
+          error: 'Kunde inte ladda ner filen från Discord.',
+        };
+      }
+
+      const fileBuffer = Buffer.from(await response.arrayBuffer());
+      const filename = attachment.name || `resume.${ext}`;
+
+      // Import resume services
+      const { resumeParserService } = await import('./ResumeParserService');
+      const { db } = await import('../../db');
+      const { resumes } = await import('../../db/schema-pg');
+      const { v4 as uuidv4 } = await import('uuid');
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Parse resume
+      const parsedData = await resumeParserService.parseResume(
+        fileBuffer,
+        attachment.contentType || 'application/pdf',
+        filename
+      );
+
+      // Generate unique filename
+      const resumeId = uuidv4();
+      const fileExtension = ext || 'pdf';
+      const uniqueFilename = `${resumeId}.${fileExtension}`;
+      const filePath = `resumes/${userId}/${uniqueFilename}`;
+
+      // Upload to local storage
+      const uploadDir = path.join(process.cwd(), 'uploads', 'resumes', userId);
+      await fs.mkdir(uploadDir, { recursive: true });
+      const localPath = path.join(uploadDir, uniqueFilename);
+      await fs.writeFile(localPath, fileBuffer);
+      const storageUrl = `/uploads/resumes/${userId}/${uniqueFilename}`;
+
+      // Save to database
+      const [resume] = await db
+        .insert(resumes)
+        .values({
+          userId,
+          filename: filename,
+          filePath: storageUrl,
+          fileSize: attachment.size || fileBuffer.length,
+          fileType: fileExtension,
+          parsedData: parsedData as any,
+          rawText: parsedData.rawText,
+        })
+        .returning();
+
+      logger.info(`Successfully uploaded resume from Discord attachment: ${resume.id}`);
+      return {
+        success: true,
+        resumeId: resume.id,
+      };
+    } catch (error) {
+      logger.error('Error processing Discord attachment', error as Error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Okänt fel',
+      };
+    }
+  }
+
+  /**
+   * Send a file as attachment to Discord channel
+   */
+  async sendFileAsAttachment(
+    channelId: string,
+    fileBuffer: Buffer,
+    filename: string,
+    message?: string
+  ): Promise<boolean> {
+    try {
+      if (!this.client || !this.isConnected) {
+        logger.warn('Discord bot not connected, cannot send file');
+        return false;
+      }
+
+      // Validate file size (Discord max 25MB)
+      if (fileBuffer.length > 25 * 1024 * 1024) {
+        logger.error(`File too large for Discord: ${fileBuffer.length} bytes`);
+        return false;
+      }
+
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !(channel instanceof TextChannel)) {
+        logger.error(`Channel ${channelId} not found or is not a text channel`);
+        return false;
+      }
+
+      const attachment = new AttachmentBuilder(fileBuffer, { name: filename });
+      const messageOptions: any = { files: [attachment] };
+      if (message) {
+        messageOptions.content = message;
+      }
+
+      await channel.send(messageOptions);
+      logger.info(`File sent to Discord channel ${channelId}: ${filename}`);
+      return true;
+    } catch (error) {
+      logger.error('Error sending file to Discord', error as Error);
+      return false;
     }
   }
 

@@ -311,7 +311,7 @@ export class ResumePDFService {
     html = html.replace(/\{\{website\}\}/g, data.personalInfo.website || '');
 
     // Replace summary - only render if it exists and is not empty
-    // Also limit length to prevent layout issues
+    // Also limit length to prevent layout issues and remove duplicates
     let summaryHtml = '';
     if (data.summary && data.summary.trim()) {
       // Clean up summary - remove duplicates and limit length
@@ -326,20 +326,56 @@ export class ResumePDFService {
         // Normalize whitespace
         cleanSummary = cleanSummary.replace(/\s+/g, ' ').trim();
         
-        // Check if summary is duplicated (same text twice)
+        // Check if summary is duplicated (same text twice) - more aggressive check
         const summaryLength = cleanSummary.length;
         if (summaryLength > 100) {
-          const midPoint = Math.floor(summaryLength / 2);
-          const firstHalf = cleanSummary.substring(0, midPoint).trim();
-          const secondHalf = cleanSummary.substring(midPoint).trim();
+          // Check multiple split points
+          const splitPoints = [0.45, 0.48, 0.5, 0.52, 0.55];
+          let foundDuplicate = false;
+          let bestSplitIndex = 0;
           
-          if (firstHalf.length > 50 && secondHalf.length > 50) {
-            // Compare first 20 words
-            const firstWords = firstHalf.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
-            const secondWords = secondHalf.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
+          for (const splitRatio of splitPoints) {
+            const splitIndex = Math.floor(summaryLength * splitRatio);
+            const firstPart = cleanSummary.substring(0, splitIndex).trim();
+            const secondPart = cleanSummary.substring(splitIndex).trim();
             
-            if (firstWords === secondWords || this.calculateSimilarity(firstHalf, secondHalf) > 0.9) {
-              cleanSummary = firstHalf;
+            if (firstPart.length > 50 && secondPart.length > 50) {
+              // Compare first 20 words
+              const firstWords = firstPart.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
+              const secondWords = secondPart.split(/\s+/).slice(0, 20).join(' ').toLowerCase();
+              
+              if (firstWords === secondWords && firstWords.length > 40) {
+                foundDuplicate = true;
+                bestSplitIndex = splitIndex;
+                break;
+              }
+              
+              // Also check similarity
+              const similarity = this.calculateSimilarity(firstPart, secondPart);
+              if (similarity > 0.85) {
+                foundDuplicate = true;
+                bestSplitIndex = splitIndex;
+                break;
+              }
+            }
+          }
+          
+          if (foundDuplicate) {
+            cleanSummary = cleanSummary.substring(0, bestSplitIndex).trim();
+          } else {
+            // Fallback: check 50/50 split
+            const midPoint = Math.floor(summaryLength / 2);
+            const firstHalf = cleanSummary.substring(0, midPoint).trim();
+            const secondHalf = cleanSummary.substring(midPoint).trim();
+            
+            if (firstHalf.length > 50 && secondHalf.length > 50) {
+              // Compare first 25 words
+              const firstWords = firstHalf.split(/\s+/).slice(0, 25).join(' ').toLowerCase();
+              const secondWords = secondHalf.split(/\s+/).slice(0, 25).join(' ').toLowerCase();
+              
+              if (firstWords === secondWords || this.calculateSimilarity(firstHalf, secondHalf) > 0.9) {
+                cleanSummary = firstHalf;
+              }
             }
           }
         }
@@ -643,57 +679,66 @@ export class ResumePDFService {
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 20mm 25mm;
+      padding: 15mm 20mm !important;
       background: white;
       min-height: 100vh;
+    }
+    
+    @media print {
+      .container {
+        padding: 15mm 20mm !important;
+      }
     }
     
     /* Header Section */
     .header {
       border-bottom: 3px solid {{colorPrimary}};
-      padding-bottom: 18px;
-      margin-bottom: 22px;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
     }
     
     .header h1 {
-      font-size: 26px;
+      font-size: 24px;
       font-weight: 700;
       color: #1a1a1a;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       letter-spacing: 0.3px;
       padding: 0;
+      line-height: 1.2;
     }
     
     .header .title {
-      font-size: 14px;
+      font-size: 13px;
       color: #555;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       font-weight: 500;
       padding: 0;
+      line-height: 1.3;
     }
     
     .contact-info {
       display: flex;
       flex-wrap: wrap;
-      gap: 15px;
-      font-size: 10px;
+      gap: 12px;
+      font-size: 9px;
       color: #666;
       padding: 0;
+      line-height: 1.4;
     }
     
     .contact-info span {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       padding: 0;
     }
     
     /* Summary */
     .summary {
-      margin: 22px 0 26px 0;
+      margin: 14px 0 18px 0;
       padding: 0;
-      font-size: 11px;
-      line-height: 1.75;
+      font-size: 10px;
+      line-height: 1.6;
       color: #444;
       text-align: left;
     }
@@ -702,8 +747,8 @@ export class ResumePDFService {
     .two-column {
       display: grid;
       grid-template-columns: 1.8fr 1fr;
-      gap: 28px;
-      margin-top: 24px;
+      gap: 22px;
+      margin-top: 18px;
     }
     
     .main-column {
@@ -716,7 +761,7 @@ export class ResumePDFService {
     
     /* Sections */
     .section {
-      margin-bottom: 28px;
+      margin-bottom: 20px;
       padding: 0;
       page-break-inside: avoid;
     }
@@ -726,22 +771,23 @@ export class ResumePDFService {
     }
     
     .section-title {
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 700;
       color: {{colorPrimary}};
-      margin-bottom: 14px;
-      padding-bottom: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
       padding-left: 0;
       padding-right: 0;
       border-bottom: 2px solid {{colorPrimary}};
       text-transform: uppercase;
       letter-spacing: 0.8px;
+      line-height: 1.3;
     }
     
     /* Experience & Education Items */
     .experience-item, .education-item, .project-item {
-      margin-bottom: 18px;
-      padding-bottom: 16px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
       padding-left: 0;
       padding-right: 0;
       border-bottom: 1px solid #e8e8e8;
@@ -758,27 +804,29 @@ export class ResumePDFService {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       padding: 0;
     }
     
     .job-title, .degree {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       color: #1a1a1a;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       padding: 0;
+      line-height: 1.3;
     }
     
     .company, .institution {
-      font-size: 11px;
+      font-size: 10px;
       color: #555;
       font-weight: 400;
       padding: 0;
+      line-height: 1.3;
     }
     
     .date {
-      font-size: 10px;
+      font-size: 9px;
       color: #777;
       white-space: nowrap;
       font-weight: 400;
@@ -786,9 +834,9 @@ export class ResumePDFService {
     }
     
     .job-description {
-      margin: 10px 0 0 0;
+      margin: 8px 0 0 0;
       padding: 0;
-      font-size: 10px;
+      font-size: 9px;
       color: #444;
       line-height: 1.65;
     }
@@ -809,15 +857,15 @@ export class ResumePDFService {
     
     /* Skills */
     .skill-group {
-      margin-bottom: 14px;
+      margin-bottom: 10px;
       padding: 0;
     }
     
     .skill-category {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       color: #555;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       padding: 0;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -826,63 +874,68 @@ export class ResumePDFService {
     .skill-items {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px;
       padding: 0;
     }
     
     .skill-tag {
       display: inline-block;
-      padding: 4px 10px;
+      padding: 3px 8px;
       background: #f0f4f8;
       color: #2c3e50;
       border: 1px solid #d1d9e0;
       border-radius: 3px;
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 500;
+      line-height: 1.3;
     }
     
     /* Certifications & Languages */
     .certification-item, .language-item {
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       padding: 0;
     }
     
     .cert-name, .language-name {
       font-weight: 600;
-      font-size: 10px;
+      font-size: 9px;
       color: #1a1a1a;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
       padding: 0;
+      line-height: 1.3;
     }
     
     .cert-issuer, .language-level {
-      font-size: 9px;
+      font-size: 8px;
       color: #666;
       padding: 0;
+      line-height: 1.3;
     }
     
     /* Projects */
     .project-name {
       font-weight: 600;
-      font-size: 11px;
+      font-size: 10px;
       color: #1a1a1a;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
       padding: 0;
+      line-height: 1.3;
     }
     
     .project-description {
-      font-size: 10px;
+      font-size: 9px;
       color: #555;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
       padding: 0;
-      line-height: 1.65;
+      line-height: 1.5;
     }
     
     .project-tech {
-      font-size: 9px;
+      font-size: 8px;
       color: #777;
       font-style: italic;
       padding: 0;
+      line-height: 1.3;
     }
     
     .project-url {
@@ -892,10 +945,12 @@ export class ResumePDFService {
       padding: 0;
     }
     
-    /* Print Styles - Keep padding for proper spacing */
+    /* Print Styles - Optimized for single page */
     @media print {
       .container {
-        padding: 20mm 25mm !important;
+        padding: 15mm 20mm !important;
+        max-height: 297mm; /* A4 height */
+        overflow: hidden;
       }
       
       body {
@@ -905,10 +960,44 @@ export class ResumePDFService {
       
       .section {
         page-break-inside: avoid;
+        margin-bottom: 16px !important;
       }
       
       .experience-item, .education-item, .project-item {
         page-break-inside: avoid;
+        margin-bottom: 12px !important;
+        padding-bottom: 10px !important;
+      }
+      
+      .summary {
+        margin: 12px 0 16px 0 !important;
+        font-size: 9.5px !important;
+        line-height: 1.5 !important;
+      }
+      
+      .header {
+        padding-bottom: 10px !important;
+        margin-bottom: 14px !important;
+      }
+      
+      .header h1 {
+        font-size: 22px !important;
+        margin-bottom: 3px !important;
+      }
+      
+      .header .title {
+        font-size: 12px !important;
+        margin-bottom: 6px !important;
+      }
+      
+      .contact-info {
+        font-size: 8.5px !important;
+        gap: 10px !important;
+      }
+      
+      .two-column {
+        gap: 18px !important;
+        margin-top: 14px !important;
       }
     }
     
@@ -1689,7 +1778,51 @@ export class ResumePDFService {
     }
 
     // Extract summary - clean up duplicates and placeholders
-    let summary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
+    // IMPORTANT: For adapted resumes, extract summary from text first to avoid duplication
+    // If summary appears in text (at the beginning), use that instead of parsedData
+    let summary = '';
+    
+    // First, try to extract summary from the beginning of resumeText (for adapted resumes)
+    // Look for summary/profil section at the start of text (before experience/education sections)
+    // Pattern: Everything from start until we hit a section header (ERFARENHET, UTBILDNING, etc.)
+    const sectionHeaders = /(?:^|\n\n)(ERFARENHET|UTBILDNING|FÄRDIGHETER|CERTIFIERINGAR|SPRÅK|PROJEKT|SAMMANFATTNING|PROFIL)/i;
+    const sectionMatch = resumeText.match(sectionHeaders);
+    
+    if (sectionMatch && sectionMatch.index !== undefined && sectionMatch.index > 50) {
+      // Extract text before first section header
+      const textBeforeSection = resumeText.substring(0, sectionMatch.index).trim();
+      
+      // Remove name and contact info (they're usually at the very start)
+      // Name is usually first line, then contact info
+      const lines = textBeforeSection.split('\n').filter(line => line.trim().length > 0);
+      
+      // Skip first 2-3 lines (name, title, contact info)
+      const potentialSummary = lines.slice(2).join(' ').trim();
+      
+      // Check if this looks like a summary (not just name/contact info)
+      if (potentialSummary.length > 100 && 
+          !potentialSummary.match(/^[A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+\s*$/) &&
+          potentialSummary.length < 500) { // Reasonable summary length
+        summary = potentialSummary;
+      }
+    }
+    
+    // If no summary found in text, use parsedData
+    if (!summary) {
+      summary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
+    } else {
+      // Summary was extracted from text - check if parsedData has a similar one
+      // If they're very similar, we already have the one from text (more up-to-date for adapted resumes)
+      const parsedSummary = parsedData?.sections?.summary || parsedData?.sections?.profile || '';
+      if (parsedSummary && parsedSummary.length > 50) {
+        // Check if they're similar (likely duplicates)
+        const similarity = this.calculateSimilarity(summary.substring(0, 200), parsedSummary.substring(0, 200));
+        if (similarity > 0.7) {
+          // They're similar - use the one from text (it's more up-to-date for adapted resumes)
+          // summary already set from text above, so we keep it
+        }
+      }
+    }
     
     // Remove "Your Name" placeholder if it appears in summary
     if (summary) {

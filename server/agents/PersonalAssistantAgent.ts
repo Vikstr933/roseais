@@ -63,7 +63,18 @@ export class PersonalAssistantAgent {
   private trackErrorTool: Tool;
   private getUsageStatsTool: Tool;
   private getDataInsightsTool: Tool;
-    private browserUseTool: Tool;
+  private browserUseTool: Tool;
+  // Resume tools
+  private checkResumeExistsTool: Tool;
+  private listResumesTool: Tool;
+  private createResumeConversationTool: Tool;
+  private answerResumeQuestionTool: Tool;
+  private analyzeResumeTool: Tool;
+  private searchJobsTool: Tool;
+  private improveResumeTool: Tool;
+  private adaptResumeTool: Tool;
+  private generateResumePdfTool: Tool;
+  private getJobMatchesTool: Tool;
   private selectedProjects: Map<string, { projectId: string; projectName: string; projectDescription?: string; isGitHubRepo?: boolean; githubRepo?: { fullName: string; owner: string; repo: string; defaultBranch?: string } }> = new Map(); // Store selected project per session
   private userMessageCounts: Map<string, number> = new Map(); // Track message count per user for Discord recommendations
   private lastDiscordRecommendation: Map<string, number> = new Map(); // Track last recommendation timestamp
@@ -912,6 +923,189 @@ If no projectId is provided, will use the currently selected project from the co
           return await this.useBrowser(params);
         }
       };
+
+    // Initialize resume tools
+    this.checkResumeExistsTool = {
+      name: 'check_resume_exists',
+      description: 'Check if the user has a resume/CV. Use this BEFORE searching for jobs to determine if the user needs to create a resume first. Always use this tool when the user asks about jobs or job searching.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.checkResumeExists(params);
+      }
+    };
+
+    this.listResumesTool = {
+      name: 'list_resumes',
+      description: 'List all resumes/CVs for the user. Use this when the user asks about their CVs or wants to see what resumes they have.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.listResumes(params);
+      }
+    };
+
+    this.createResumeConversationTool = {
+      name: 'create_resume_conversation',
+      description: 'Start a conversation to create a resume/CV. Use this when the user wants to create a CV or when they don\'t have one and need help creating it. This will begin asking questions to gather information for the CV.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.createResumeConversation(params);
+      }
+    };
+
+    this.answerResumeQuestionTool = {
+      name: 'answer_resume_question',
+      description: 'Process an answer during CV creation conversation. Use this when the user is answering questions during CV creation. The answer will be saved and the next question will be returned.',
+      parameters: {
+        type: 'object',
+        properties: {
+          answer: {
+            type: 'string',
+            description: 'The user\'s answer to the current CV creation question'
+          }
+        },
+        required: ['answer']
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.answerResumeQuestion(params);
+      }
+    };
+
+    this.analyzeResumeTool = {
+      name: 'analyze_resume',
+      description: 'Analyze a resume/CV and get scores and improvement suggestions. Use this when the user wants to improve their CV or see how good it is.',
+      parameters: {
+        type: 'object',
+        properties: {
+          resumeId: {
+            type: 'number',
+            description: 'The ID of the resume to analyze. If not provided, uses the most recent resume.'
+          }
+        },
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.analyzeResume(params);
+      }
+    };
+
+    this.searchJobsTool = {
+      name: 'search_jobs',
+      description: 'Search for jobs matching the user\'s resume. Use this when the user asks to find jobs, search for jobs, or get job recommendations. ALWAYS check if user has a resume first using check_resume_exists. If no resume exists, offer to create one.',
+      parameters: {
+        type: 'object',
+        properties: {
+          resumeId: {
+            type: 'number',
+            description: 'The ID of the resume to search jobs for. If not provided, uses the most recent resume.'
+          },
+          keywords: {
+            type: 'string',
+            description: 'Optional search keywords (e.g., "frontend developer", "ekonomiassistent")'
+          },
+          location: {
+            type: 'string',
+            description: 'Optional location filter (e.g., "Stockholm", "Göteborg")'
+          }
+        },
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.searchJobs(params);
+      }
+    };
+
+    this.improveResumeTool = {
+      name: 'improve_resume',
+      description: 'Improve a resume/CV with AI suggestions. Use this when the user wants to enhance their CV or get suggestions for making it better.',
+      parameters: {
+        type: 'object',
+        properties: {
+          resumeId: {
+            type: 'number',
+            description: 'The ID of the resume to improve. If not provided, uses the most recent resume.'
+          }
+        },
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.improveResume(params);
+      }
+    };
+
+    this.adaptResumeTool = {
+      name: 'adapt_resume',
+      description: 'Adapt a resume/CV for a specific job. Use this when the user wants to customize their CV for a particular job application.',
+      parameters: {
+        type: 'object',
+        properties: {
+          resumeId: {
+            type: 'number',
+            description: 'The ID of the resume to adapt. If not provided, uses the most recent resume.'
+          },
+          jobId: {
+            type: 'string',
+            description: 'The job ID or job description to adapt the resume for'
+          }
+        },
+        required: ['jobId']
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.adaptResume(params);
+      }
+    };
+
+    this.generateResumePdfTool = {
+      name: 'generate_resume_pdf',
+      description: 'Generate a PDF version of a resume/CV. Use this when the user wants to download their CV as a PDF file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          resumeId: {
+            type: 'number',
+            description: 'The ID of the resume to generate PDF for. If not provided, uses the most recent resume.'
+          },
+          template: {
+            type: 'string',
+            enum: ['modern', 'classic', 'minimal', 'professional'],
+            description: 'Template style for the PDF (default: modern)'
+          }
+        },
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.generateResumePdf(params);
+      }
+    };
+
+    this.getJobMatchesTool = {
+      name: 'get_job_matches',
+      description: 'Get previously matched jobs for a resume. Use this when the user wants to see their job matches or previously found jobs.',
+      parameters: {
+        type: 'object',
+        properties: {
+          resumeId: {
+            type: 'number',
+            description: 'The ID of the resume to get matches for. If not provided, uses the most recent resume.'
+          }
+        },
+        required: []
+      },
+      execute: async (params: Record<string, any>) => {
+        return await this.getJobMatches(params);
+      }
+    };
   }
 
   /**
@@ -1122,6 +1316,9 @@ If no projectId is provided, will use the currently selected project from the co
     suggestions?: string[];
   }> {
     const sessionId = options?.sessionId || userId;
+    // Store userId and sessionId for tool access
+    (this as any).currentUserId = userId;
+    (this as any).currentSessionId = sessionId;
 
     try {
       const source = options?.discordContext 
@@ -1239,6 +1436,93 @@ If no projectId is provided, will use the currently selected project from the co
       
       // Add legacy tools that aren't in handlers yet
       builtInTools.push(...legacyTools);
+      
+      // Add resume tools (always available)
+      if (!toolNameExists('check_resume_exists')) {
+        builtInTools.push({
+          ...this.checkResumeExistsTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.checkResumeExists({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('list_resumes')) {
+        builtInTools.push({
+          ...this.listResumesTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.listResumes({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('create_resume_conversation')) {
+        builtInTools.push({
+          ...this.createResumeConversationTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.createResumeConversation({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('answer_resume_question')) {
+        builtInTools.push({
+          ...this.answerResumeQuestionTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.answerResumeQuestion({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('analyze_resume')) {
+        builtInTools.push({
+          ...this.analyzeResumeTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.analyzeResume({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('search_jobs')) {
+        builtInTools.push({
+          ...this.searchJobsTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.searchJobs({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('improve_resume')) {
+        builtInTools.push({
+          ...this.improveResumeTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.improveResume({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('adapt_resume')) {
+        builtInTools.push({
+          ...this.adaptResumeTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.adaptResume({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('generate_resume_pdf')) {
+        builtInTools.push({
+          ...this.generateResumePdfTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.generateResumePdf({ 
+              ...params, 
+              _userId: userId, 
+              _sessionId: sessionId,
+              _discordContext: options?.discordContext 
+            });
+          }
+        });
+      }
+      if (!toolNameExists('get_job_matches')) {
+        builtInTools.push({
+          ...this.getJobMatchesTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.getJobMatches({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
       
       // Add code generation tool if we have playground context or a selected project
       const hasProjectContext = options?.playgroundContext?.projectId || this.selectedProjects.has(sessionId);
@@ -2552,6 +2836,41 @@ ${playgroundContext ? `
     - Remember important facts about projects or workflows
     - Recall memories when relevant to the conversation
 
+- **RESUME/CV MANAGEMENT**: You have comprehensive resume/CV management capabilities:
+  * **CRITICAL - ALWAYS CHECK FOR RESUME FIRST**: When a user asks about jobs, job searching, or finding employment, you MUST first use check_resume_exists to see if they have a CV. This is essential!
+  * **check_resume_exists**: Check if the user has a resume/CV. **ALWAYS use this BEFORE searching for jobs**. If no resume exists, offer to help create one using create_resume_conversation.
+  * **create_resume_conversation**: Start a conversational flow to create a CV. Use this when:
+    - User explicitly asks to create a CV (e.g., "skapa CV åt mig", "help me create a resume")
+    - User wants to search for jobs but has no CV (after checking with check_resume_exists)
+    - User says they don't have a CV when you ask
+  * **answer_resume_question**: Process answers during CV creation. When the user is in CV creation mode and answers your questions, use this tool to save their answer and get the next question.
+  * **list_resumes**: List all of the user's CVs. Use when they ask about their CVs or want to see what they have.
+  * **analyze_resume**: Analyze a CV and get scores (ATS score, content score, etc.) and improvement suggestions. Use when user wants to improve their CV or see how good it is.
+  * **search_jobs**: Search for jobs matching the user's resume. **CRITICAL**: Always check if user has a resume first using check_resume_exists. If no resume exists, offer to create one. This tool searches the JobTech API for matching jobs based on the CV.
+  * **improve_resume**: Get AI suggestions to improve a CV. Use when user wants to enhance their CV.
+  * **adapt_resume**: Adapt a CV for a specific job. Use when user wants to customize their CV for a particular job application.
+  * **generate_resume_pdf**: Generate a PDF version of a CV. Use when user wants to download their CV as a PDF. The PDF can be sent as an attachment in Discord or downloaded on the web platform.
+  * **get_job_matches**: Get previously matched jobs for a resume. Use when user wants to see their job matches.
+  * **CV Creation Flow**:
+    - When user asks about jobs or job searching: First use check_resume_exists
+    - If no CV exists: Ask "Har du ett CV?" (Do you have a CV?) and offer to help create one
+    - If user says "nej" (no) or wants to create one: Use create_resume_conversation to start
+    - During CV creation: Ask questions one at a time, use answer_resume_question after each answer
+    - When complete: The system will generate the CV automatically
+    - After CV is created: Offer to search for jobs or improve the CV
+  * **Job Search Flow**:
+    - User asks: "hitta jobb" or "hjälp mig söka jobb" or "find jobs"
+    - Step 1: Use check_resume_exists (CRITICAL - always do this first!)
+    - Step 2a: If no CV exists: "Jag ser att du inte har ett CV än. Vill du att jag hjälper dig skapa ett först? Det tar bara några minuter!" Then use create_resume_conversation if they agree
+    - Step 2b: If CV exists: Use search_jobs to find matching jobs
+    - Present results clearly with match percentages and job details
+  * **Best practices**:
+    - Always check for CV existence before job searching
+    - Be helpful and encouraging when helping create CVs
+    - Ask questions naturally, one at a time during CV creation
+    - When CV creation is complete, confirm and offer next steps (job search, improvements, PDF generation)
+    - Match the user's language (Swedish/English)
+
 - **IMAGE PROCESSING**: You have access to image processing tools:
   * **process_image**: Process and optimize images. Use this when the user asks you to resize, crop, optimize, or process images.
   * **Note**: Requires the "sharp" package to be installed.
@@ -3192,7 +3511,7 @@ Respond with ONLY 3 suggestions, one per line, no numbering, no extra text.`;
           if (typeof msg.content === 'string') {
             return msg.content.trim().length > 0;
           } else if (Array.isArray(msg.content)) {
-            return msg.content.length > 0;
+            return (msg.content as any[]).length > 0;
           }
           return false;
         });
@@ -6701,6 +7020,596 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
     
     // Fallback to empty array - legacy tools will be used
     return [];
+  }
+
+  // Resume tool methods
+  private async checkResumeExists(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { resumeCreationService } = await import('../services/ResumeCreationService');
+      const exists = await resumeCreationService.checkIfResumeExists(userId);
+
+      return {
+        success: true,
+        hasResume: exists,
+        message: exists ? 'Användaren har ett CV' : 'Användaren saknar CV'
+      };
+    } catch (error) {
+      logger.error('Error checking resume existence', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async listResumes(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { db } = await import('../../db');
+      const { resumes } = await import('../../db/schema-pg');
+      const { eq, desc } = await import('drizzle-orm');
+
+      const userResumes = await db
+        .select()
+        .from(resumes)
+        .where(eq(resumes.userId, userId))
+        .orderBy(desc(resumes.createdAt));
+
+      return {
+        success: true,
+        resumes: userResumes.map(r => ({
+          id: r.id,
+          filename: r.filename,
+          createdAt: r.createdAt,
+        })),
+        count: userResumes.length
+      };
+    } catch (error) {
+      logger.error('Error listing resumes', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async createResumeConversation(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const sessionId = params._sessionId || (this as any).currentSessionId || userId;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { resumeCreationService } = await import('../services/ResumeCreationService');
+      const state = await resumeCreationService.getOrCreateSession(userId, sessionId);
+      const question = await resumeCreationService.getNextQuestion(state);
+
+      return {
+        success: true,
+        question,
+        message: 'Jag hjälper dig att skapa ett CV. Låt oss börja!'
+      };
+    } catch (error) {
+      logger.error('Error creating resume conversation', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async answerResumeQuestion(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const sessionId = params._sessionId || (this as any).currentSessionId || userId;
+      const answer = params.answer as string;
+      if (!userId || !answer) {
+        return { success: false, error: 'User ID and answer required' };
+      }
+
+      const { resumeCreationService } = await import('../services/ResumeCreationService');
+      let state = await resumeCreationService.getOrCreateSession(userId, sessionId);
+      state = await resumeCreationService.processAnswer(state, answer);
+
+      if (state.isComplete) {
+        // Check if user wants to generate
+        const lowerAnswer = answer.toLowerCase().trim();
+        if (lowerAnswer === 'ja' || lowerAnswer === 'yes' || lowerAnswer === 'skapa' || lowerAnswer === 'create') {
+          const resumeId = await resumeCreationService.generateResume(state);
+          return {
+            success: true,
+            resumeId,
+            complete: true,
+            message: `Perfekt! Jag har skapat ditt CV (ID: ${resumeId}). Du kan nu be mig hitta jobb eller förbättra ditt CV.`
+          };
+        } else {
+          return {
+            success: true,
+            complete: true,
+            message: 'All information är samlad. Skriv "ja" för att skapa CV:t.'
+          };
+        }
+      }
+
+      const nextQuestion = await resumeCreationService.getNextQuestion(state);
+      return {
+        success: true,
+        question: nextQuestion,
+        complete: false
+      };
+    } catch (error) {
+      logger.error('Error processing resume answer', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async analyzeResume(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const resumeId = params.resumeId as number | undefined;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { db } = await import('../../db');
+      const { resumes, resumeAnalyses } = await import('../../db/schema-pg');
+      const { eq, desc } = await import('drizzle-orm');
+      const { resumeScoringService } = await import('../services/ResumeScoringService');
+
+      // Get resume
+      let resume;
+      if (resumeId) {
+        const [found] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1);
+        if (!found || found.userId !== userId) {
+          return { success: false, error: 'Resume not found' };
+        }
+        resume = found;
+      } else {
+        const userResumes = await db
+          .select()
+          .from(resumes)
+          .where(eq(resumes.userId, userId))
+          .orderBy(desc(resumes.createdAt))
+          .limit(1);
+        if (userResumes.length === 0) {
+          return { success: false, error: 'No resume found' };
+        }
+        resume = userResumes[0];
+      }
+
+      // Analyze
+      const analysis = await resumeScoringService.analyzeResume(resume.rawText || '', resume.parsedData as any, resume.fileType || undefined);
+
+      return {
+        success: true,
+        analysis: {
+          overallScore: analysis.overallScore,
+          atsScore: analysis.atsScore,
+          contentScore: analysis.contentScore,
+          completenessScore: analysis.completenessScore,
+          keywordScore: analysis.keywordScore,
+          improvements: analysis.improvements,
+        }
+      };
+    } catch (error) {
+      logger.error('Error analyzing resume', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async searchJobs(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const resumeId = params.resumeId as number | undefined;
+      const keywords = params.keywords as string | undefined;
+      const location = params.location as string | undefined;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { db } = await import('../../db');
+      const { resumes } = await import('../../db/schema-pg');
+      const { eq, desc } = await import('drizzle-orm');
+      const { jobMatchingService } = await import('../services/JobMatchingService');
+      const { resumeKeywordExtractor } = await import('../services/ResumeKeywordExtractor');
+
+      // Get resume
+      let resume;
+      if (resumeId) {
+        const [found] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1);
+        if (!found || found.userId !== userId) {
+          return { success: false, error: 'Resume not found' };
+        }
+        resume = found;
+      } else {
+        const userResumes = await db
+          .select()
+          .from(resumes)
+          .where(eq(resumes.userId, userId))
+          .orderBy(desc(resumes.createdAt))
+          .limit(1);
+        if (userResumes.length === 0) {
+          return { success: false, error: 'No resume found. Please create a resume first.' };
+        }
+        resume = userResumes[0];
+      }
+
+      // Extract skills from resume
+      const parsedData = resume.parsedData as any;
+      const resumeSkills = parsedData?.sections?.skills || [];
+
+      // Extract search keywords
+      const searchKeywords = keywords || resumeKeywordExtractor.extractJobSearchKeywords(resume.rawText || '', parsedData) || 'job';
+
+      // Search for jobs
+      const jobs = await jobMatchingService.searchJobs(searchKeywords, location, 100);
+
+      // Extract location for proximity matching
+      const resumeLocation = resumeKeywordExtractor.extractLocation(resume.rawText || '', parsedData);
+
+      // Match resume to jobs
+      const matches = await jobMatchingService.matchResumeToJobs(
+        resume.rawText || '',
+        resumeSkills,
+        jobs,
+        parsedData,
+        resumeLocation || undefined
+      );
+
+      // Save matches to database
+      const { jobMatches } = await import('../../db/schema-pg');
+      for (const match of matches.slice(0, 20)) { // Save top 20 matches
+        try {
+          await db.insert(jobMatches).values({
+            resumeId: resume.id,
+            jobTitle: match.job.title,
+            company: match.job.company,
+            location: match.job.location,
+            matchPercentage: match.matchPercentage,
+            jobDescription: match.job.description,
+            jobUrl: match.job.url,
+            jobId: match.job.id,
+            requiredSkills: match.job.requiredSkills || [],
+            matchedSkills: match.matchedSkills,
+            missingSkills: match.missingSkills,
+          }).onConflictDoNothing();
+        } catch (error) {
+          // Ignore duplicate errors
+        }
+      }
+
+      return {
+        success: true,
+        jobs: matches.map(match => ({
+          id: match.job.id,
+          title: match.job.title,
+          company: match.job.company,
+          location: match.job.location,
+          matchPercentage: match.matchPercentage,
+          jobUrl: match.job.url,
+        })),
+        count: matches.length
+      };
+    } catch (error) {
+      logger.error('Error searching jobs', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async improveResume(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const resumeId = params.resumeId as number | undefined;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { db } = await import('../../db');
+      const { resumes } = await import('../../db/schema-pg');
+      const { eq, desc } = await import('drizzle-orm');
+      const { resumeImprovementService } = await import('../services/ResumeImprovementService');
+
+      // Get resume
+      let resume;
+      if (resumeId) {
+        const [found] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1);
+        if (!found || found.userId !== userId) {
+          return { success: false, error: 'Resume not found' };
+        }
+        resume = found;
+      } else {
+        const userResumes = await db
+          .select()
+          .from(resumes)
+          .where(eq(resumes.userId, userId))
+          .orderBy(desc(resumes.createdAt))
+          .limit(1);
+        if (userResumes.length === 0) {
+          return { success: false, error: 'No resume found' };
+        }
+        resume = userResumes[0];
+      }
+
+      // Get improvement suggestions from analysis
+      const { resumeScoringService } = await import('../services/ResumeScoringService');
+      const analysis = await resumeScoringService.analyzeResume(resume.rawText || '', resume.parsedData as any, resume.fileType || undefined);
+      
+      // Apply first high-priority improvement if available
+      const highPriorityImprovement = analysis.improvements.find((imp: any) => imp.priority === 'high');
+      let improvedText = resume.rawText || '';
+      let appliedImprovement = null;
+
+      if (highPriorityImprovement) {
+        const { resumeImprovementService } = await import('../services/ResumeImprovementService');
+        const result = await resumeImprovementService.applyImprovement(
+          resume.rawText || '',
+          resume.parsedData as any,
+          highPriorityImprovement.type,
+          highPriorityImprovement.description
+        );
+        improvedText = result.updatedText;
+        appliedImprovement = highPriorityImprovement;
+      }
+
+      return {
+        success: true,
+        improvedText,
+        suggestions: analysis.improvements,
+        appliedImprovement,
+      };
+    } catch (error) {
+      logger.error('Error improving resume', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async adaptResume(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const resumeId = params.resumeId as number | undefined;
+      const jobId = params.jobId as string;
+      if (!userId || !jobId) {
+        return { success: false, error: 'User ID and job ID required' };
+      }
+
+      const { db } = await import('../../db');
+      const { resumes, jobMatches } = await import('../../db/schema-pg');
+      const { eq, desc } = await import('drizzle-orm');
+      const { resumeAdaptationService } = await import('../services/ResumeAdaptationService');
+
+      // Get resume
+      let resume;
+      if (resumeId) {
+        const [found] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1);
+        if (!found || found.userId !== userId) {
+          return { success: false, error: 'Resume not found' };
+        }
+        resume = found;
+      } else {
+        const userResumes = await db
+          .select()
+          .from(resumes)
+          .where(eq(resumes.userId, userId))
+          .orderBy(desc(resumes.createdAt))
+          .limit(1);
+        if (userResumes.length === 0) {
+          return { success: false, error: 'No resume found' };
+        }
+        resume = userResumes[0];
+      }
+
+      // Get job details - try to find in jobMatches first
+      const [jobMatch] = await db
+        .select()
+        .from(jobMatches)
+        .where(eq(jobMatches.jobId, jobId))
+        .limit(1);
+
+      if (!jobMatch) {
+        // If not found, search for the job
+        const { jobMatchingService } = await import('../services/JobMatchingService');
+        const jobs = await jobMatchingService.searchJobs(jobId, undefined, 10);
+        if (jobs.length === 0) {
+          return { success: false, error: 'Job not found' };
+        }
+        const job = jobs[0];
+        const parsedData = resume.parsedData as any;
+        const resumeSkills = parsedData?.sections?.skills || [];
+        const matches = await jobMatchingService.matchResumeToJobs(
+          resume.rawText || '',
+          resumeSkills,
+          [job],
+          parsedData
+        );
+        if (matches.length === 0) {
+          return { success: false, error: 'Could not match resume to job' };
+        }
+        const match = matches[0];
+        
+        // Adapt
+        const adapted = await resumeAdaptationService.adaptResumeToJob(
+          resume.rawText || '',
+          parsedData,
+          job.title,
+          job.description,
+          job.requiredSkills || [],
+          match.missingSkills
+        );
+
+        return {
+          success: true,
+          adaptedText: adapted.rawText,
+          improvements: adapted.improvements,
+          adaptationNotes: adapted.adaptationNotes,
+        };
+      }
+
+      // Adapt using job match data
+      const adapted = await resumeAdaptationService.adaptResumeToJob(
+        resume.rawText || '',
+        resume.parsedData as any,
+        jobMatch.jobTitle,
+        jobMatch.jobDescription || '',
+        (jobMatch.requiredSkills as string[]) || [],
+        (jobMatch.missingSkills as string[]) || []
+      );
+
+      return {
+        success: true,
+        adaptedText: adapted.rawText,
+        improvements: adapted.improvements,
+        adaptationNotes: adapted.adaptationNotes,
+      };
+    } catch (error) {
+      logger.error('Error adapting resume', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async generateResumePdf(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const resumeId = params.resumeId as number | undefined;
+      const template = (params.template as 'modern' | 'classic' | 'minimal' | 'professional') || 'modern';
+      const discordContext = params._discordContext;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { db } = await import('../../db');
+      const { resumes } = await import('../../db/schema-pg');
+      const { eq, desc } = await import('drizzle-orm');
+      const { resumePDFService } = await import('../services/ResumePDFService');
+
+      // Get resume
+      let resume;
+      if (resumeId) {
+        const [found] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1);
+        if (!found || found.userId !== userId) {
+          return { success: false, error: 'Resume not found' };
+        }
+        resume = found;
+      } else {
+        const userResumes = await db
+          .select()
+          .from(resumes)
+          .where(eq(resumes.userId, userId))
+          .orderBy(desc(resumes.createdAt))
+          .limit(1);
+        if (userResumes.length === 0) {
+          return { success: false, error: 'No resume found' };
+        }
+        resume = userResumes[0];
+      }
+
+      // Generate PDF
+      const structuredData = await resumePDFService.extractStructuredData(
+        resume.rawText || '',
+        resume.parsedData as any
+      );
+      const pdfBuffer = await resumePDFService.generatePDF(structuredData, {
+        template,
+        format: 'A4',
+        fontSize: 'medium',
+        colorScheme: 'blue',
+      });
+
+      const filename = `${resume.filename.replace(/\.[^/.]+$/, '')}_${template}.pdf`;
+
+      // If in Discord context, send file as attachment
+      if (discordContext && discordContext.channelId) {
+        try {
+          const { DiscordBotService } = await import('../services/DiscordBotService');
+          const discordBot = DiscordBotService.getInstance();
+          const sent = await discordBot.sendFileAsAttachment(
+            discordContext.channelId,
+            pdfBuffer,
+            filename,
+            'Här är din CV som PDF! 📄'
+          );
+          if (sent) {
+            return {
+              success: true,
+              sentToDiscord: true,
+              filename,
+              message: 'PDF genererad och skickad till Discord!'
+            };
+          }
+        } catch (discordError) {
+          logger.error('Error sending PDF to Discord', discordError as Error);
+          // Fall through to return base64
+        }
+      }
+
+      return {
+        success: true,
+        pdfBuffer: pdfBuffer.toString('base64'),
+        filename,
+        message: 'PDF genererad framgångsrikt'
+      };
+    } catch (error) {
+      logger.error('Error generating resume PDF', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async getJobMatches(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      const resumeId = params.resumeId as number | undefined;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { db } = await import('../../db');
+      const { resumes, jobMatches } = await import('../../db/schema-pg');
+      const { eq, desc } = await import('drizzle-orm');
+
+      // Get resume
+      let resume;
+      if (resumeId) {
+        const [found] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1);
+        if (!found || found.userId !== userId) {
+          return { success: false, error: 'Resume not found' };
+        }
+        resume = found;
+      } else {
+        const userResumes = await db
+          .select()
+          .from(resumes)
+          .where(eq(resumes.userId, userId))
+          .orderBy(desc(resumes.createdAt))
+          .limit(1);
+        if (userResumes.length === 0) {
+          return { success: false, error: 'No resume found' };
+        }
+        resume = userResumes[0];
+      }
+
+      // Get matches
+      const matches = await db
+        .select()
+        .from(jobMatches)
+        .where(eq(jobMatches.resumeId, resume.id))
+        .orderBy(desc(jobMatches.matchPercentage));
+
+      return {
+        success: true,
+        matches: matches.map(m => ({
+          id: m.id,
+          title: m.jobTitle,
+          company: m.company,
+          location: m.location,
+          matchPercentage: m.matchPercentage,
+          jobUrl: m.jobUrl,
+        })),
+        count: matches.length
+      };
+    } catch (error) {
+      logger.error('Error getting job matches', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 }
 
