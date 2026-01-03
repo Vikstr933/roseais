@@ -818,7 +818,8 @@ Generate ONLY the status message, nothing else.`
       const { resumeParserService } = await import('./ResumeParserService');
       const { db } = await import('../../db');
       const { resumes } = await import('../../db/schema-pg');
-      const { v4 as uuidv4 } = await import('uuid');
+      const uuidModule = await import('uuid');
+      const uuidv4 = uuidModule.v4;
       const fs = await import('fs/promises');
       const path = await import('path');
 

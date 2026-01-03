@@ -2008,6 +2008,197 @@ export class ResumePDFService {
     const websiteMatch = text.match(/(https?:\/\/[^\s]+)/i);
     return websiteMatch ? websiteMatch[1] : null;
   }
+
+  /**
+   * Generate LaTeX CV from structured data
+   */
+  async generateLaTeX(data: ResumeData): Promise<string> {
+    const escapeLaTeX = (text: string): string => {
+      if (!text) return '';
+      return text
+        .replace(/\\/g, '\\textbackslash{}')
+        .replace(/\{/g, '\\{')
+        .replace(/\}/g, '\\}')
+        .replace(/\$/g, '\\$')
+        .replace(/\&/g, '\\&')
+        .replace(/#/g, '\\#')
+        .replace(/\^/g, '\\textasciicircum{}')
+        .replace(/_/g, '\\_')
+        .replace(/%/g, '\\%')
+        .replace(/~/g, '\\textasciitilde{}');
+    };
+
+    let latex = `\\documentclass[11pt,a4paper]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage[swedish]{babel}
+\\usepackage[margin=1.5cm]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+\\usepackage{hyperref}
+
+\\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    pdftitle={${escapeLaTeX(data.personalInfo.name)} - CV},
+    pdfauthor={${escapeLaTeX(data.personalInfo.name)}}
+}
+
+\\titleformat{\\section}
+{\\Large\\bfseries\\color{blue!70!black}}
+{}{0em}{}[\\titlerule]
+
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{0.5em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\bfseries ${escapeLaTeX(data.personalInfo.name)}}\\\\[0.5em]
+`;
+
+    if (data.personalInfo.title) {
+      latex += `{\\large ${escapeLaTeX(data.personalInfo.title)}}\\\\[0.5em]\n`;
+    }
+
+    latex += `\\vspace{0.3em}\n`;
+
+    // Contact information
+    const contactInfo: string[] = [];
+    if (data.personalInfo.email) contactInfo.push(`\\href{mailto:${data.personalInfo.email}}{${escapeLaTeX(data.personalInfo.email)}}`);
+    if (data.personalInfo.phone) contactInfo.push(escapeLaTeX(data.personalInfo.phone));
+    if (data.personalInfo.location) contactInfo.push(escapeLaTeX(data.personalInfo.location));
+    if (data.personalInfo.linkedIn) contactInfo.push(`\\href{https://${data.personalInfo.linkedIn}}{${escapeLaTeX(data.personalInfo.linkedIn)}}`);
+    if (data.personalInfo.website) contactInfo.push(`\\href{${data.personalInfo.website}}{${escapeLaTeX(data.personalInfo.website)}}`);
+
+    if (contactInfo.length > 0) {
+      latex += contactInfo.join(' $\\bullet$ ') + `\\\\[0.5em]\n`;
+    }
+
+    latex += `\\end{center}\n\n`;
+
+    // Summary
+    if (data.summary && data.summary.trim()) {
+      latex += `\\section*{Sammanfattning}\n${escapeLaTeX(data.summary)}\n\n`;
+    }
+
+    // Experience
+    if (data.experience && data.experience.length > 0) {
+      latex += `\\section*{Erfarenhet}\n\\begin{itemize}[leftmargin=*,itemsep=0.3em]\n`;
+      for (const exp of data.experience) {
+        latex += `\\item[\\textbf{${escapeLaTeX(exp.title)}}] `;
+        if (exp.company) {
+          latex += `\\textit{${escapeLaTeX(exp.company)}}`;
+          if (exp.location) latex += `, ${escapeLaTeX(exp.location)}`;
+        }
+        if (exp.startDate || exp.endDate) {
+          latex += ` \\hfill `;
+          if (exp.current) {
+            latex += `${escapeLaTeX(exp.startDate)} -- Nuvarande`;
+          } else {
+            latex += `${escapeLaTeX(exp.startDate)} -- ${escapeLaTeX(exp.endDate || '')}`;
+          }
+        }
+        latex += `\n`;
+        if (exp.description) {
+          latex += `\\begin{itemize}[leftmargin=1.5em]\n`;
+          latex += `\\item ${escapeLaTeX(exp.description)}\n`;
+          latex += `\\end{itemize}\n`;
+        }
+        if (exp.achievements && exp.achievements.length > 0) {
+          latex += `\\begin{itemize}[leftmargin=1.5em]\n`;
+          for (const achievement of exp.achievements) {
+            latex += `\\item ${escapeLaTeX(achievement)}\n`;
+          }
+          latex += `\\end{itemize}\n`;
+        }
+      }
+      latex += `\\end{itemize}\n\n`;
+    }
+
+    // Education
+    if (data.education && data.education.length > 0) {
+      latex += `\\section*{Utbildning}\n\\begin{itemize}[leftmargin=*,itemsep=0.3em]\n`;
+      for (const edu of data.education) {
+        latex += `\\item[\\textbf{${escapeLaTeX(edu.degree)}}] `;
+        if (edu.institution) {
+          latex += `\\textit{${escapeLaTeX(edu.institution)}}`;
+          if (edu.location) latex += `, ${escapeLaTeX(edu.location)}`;
+        }
+        if (edu.endDate) {
+          latex += ` \\hfill ${escapeLaTeX(edu.endDate)}`;
+        }
+        latex += `\n`;
+        if (edu.honors && edu.honors.length > 0) {
+          latex += `\\begin{itemize}[leftmargin=1.5em]\n`;
+          for (const honor of edu.honors) {
+            latex += `\\item ${escapeLaTeX(honor)}\n`;
+          }
+          latex += `\\end{itemize}\n`;
+        }
+      }
+      latex += `\\end{itemize}\n\n`;
+    }
+
+    // Skills
+    if (data.skills && data.skills.length > 0) {
+      latex += `\\section*{Färdigheter}\n`;
+      for (const skillGroup of data.skills) {
+        if (skillGroup.category) {
+          latex += `\\textbf{${escapeLaTeX(skillGroup.category)}}: `;
+        }
+        if (skillGroup.items && skillGroup.items.length > 0) {
+          latex += skillGroup.items.map(item => escapeLaTeX(item)).join(', ') + `\\\\[0.3em]\n`;
+        }
+      }
+      latex += `\n`;
+    }
+
+    // Certifications
+    if (data.certifications && data.certifications.length > 0) {
+      latex += `\\section*{Certifieringar}\n\\begin{itemize}[leftmargin=*,itemsep=0.3em]\n`;
+      for (const cert of data.certifications) {
+        latex += `\\item[\\textbf{${escapeLaTeX(cert.name)}}] ${escapeLaTeX(cert.issuer)}`;
+        if (cert.date) latex += ` (${escapeLaTeX(cert.date)})`;
+        latex += `\n`;
+      }
+      latex += `\\end{itemize}\n\n`;
+    }
+
+    // Languages
+    if (data.languages && data.languages.length > 0) {
+      latex += `\\section*{Språk}\n\\begin{itemize}[leftmargin=*,itemsep=0.3em]\n`;
+      for (const lang of data.languages) {
+        latex += `\\item \\textbf{${escapeLaTeX(lang.language)}}: ${escapeLaTeX(lang.level)}\n`;
+      }
+      latex += `\\end{itemize}\n\n`;
+    }
+
+    // Projects
+    if (data.projects && data.projects.length > 0) {
+      latex += `\\section*{Projekt}\n\\begin{itemize}[leftmargin=*,itemsep=0.3em]\n`;
+      for (const project of data.projects) {
+        latex += `\\item[\\textbf{${escapeLaTeX(project.name)}}] `;
+        if (project.description) {
+          latex += `${escapeLaTeX(project.description)}`;
+        }
+        if (project.technologies && project.technologies.length > 0) {
+          latex += ` \\textit{(${project.technologies.map(t => escapeLaTeX(t)).join(', ')})}`;
+        }
+        if (project.url) {
+          latex += ` \\href{${project.url}}{Länk}`;
+        }
+        latex += `\n`;
+      }
+      latex += `\\end{itemize}\n\n`;
+    }
+
+    latex += `\\end{document}\n`;
+
+    return latex;
+  }
 }
 
 export const resumePDFService = new ResumePDFService();

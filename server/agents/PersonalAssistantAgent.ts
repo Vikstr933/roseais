@@ -1068,18 +1068,23 @@ If no projectId is provided, will use the currently selected project from the co
 
     this.generateResumePdfTool = {
       name: 'generate_resume_pdf',
-      description: 'Generate a PDF version of a resume/CV. Use this when the user wants to download their CV as a PDF file.',
+      description: 'Generate a PDF or LaTeX version of a resume/CV. Use this when the user wants to download their CV as a PDF file or LaTeX document. IMPORTANT: If user asks for "latex cv" or "latex", set format to "latex" and the file will be sent as a .tex attachment in Discord.',
       parameters: {
         type: 'object',
         properties: {
           resumeId: {
             type: 'number',
-            description: 'The ID of the resume to generate PDF for. If not provided, uses the most recent resume.'
+            description: 'The ID of the resume to generate PDF/LaTeX for. If not provided, uses the most recent resume.'
           },
           template: {
             type: 'string',
             enum: ['modern', 'classic', 'minimal', 'professional'],
-            description: 'Template style for the PDF (default: modern)'
+            description: 'Template style for the PDF (default: modern). Not used for LaTeX format.'
+          },
+          format: {
+            type: 'string',
+            enum: ['pdf', 'latex'],
+            description: 'Output format: "pdf" for PDF file, "latex" for LaTeX source code. Default: pdf. Use "latex" when user asks for LaTeX CV.'
           }
         },
         required: []
@@ -7472,6 +7477,7 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
       const userId = params._userId || (this as any).currentUserId;
       const resumeId = params.resumeId as number | undefined;
       const template = (params.template as 'modern' | 'classic' | 'minimal' | 'professional') || 'modern';
+      const format = (params.format as 'pdf' | 'latex') || 'pdf';
       const discordContext = params._discordContext;
       if (!userId) {
         return { success: false, error: 'User ID required' };
@@ -7503,19 +7509,34 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
         resume = userResumes[0];
       }
 
-      // Generate PDF
+      // Extract structured data
       const structuredData = await resumePDFService.extractStructuredData(
         resume.rawText || '',
         resume.parsedData as any
       );
-      const pdfBuffer = await resumePDFService.generatePDF(structuredData, {
-        template,
-        format: 'A4',
-        fontSize: 'medium',
-        colorScheme: 'blue',
-      });
 
-      const filename = `${resume.filename.replace(/\.[^/.]+$/, '')}_${template}.pdf`;
+      // Generate LaTeX or PDF
+      let fileBuffer: Buffer;
+      let filename: string;
+      let message: string;
+
+      if (format === 'latex') {
+        // Generate LaTeX
+        const latexContent = await resumePDFService.generateLaTeX(structuredData);
+        fileBuffer = Buffer.from(latexContent, 'utf-8');
+        filename = `${resume.filename.replace(/\.[^/.]+$/, '')}_cv.tex`;
+        message = 'LaTeX CV genererad och skickad till Discord! 📄';
+      } else {
+        // Generate PDF
+        fileBuffer = await resumePDFService.generatePDF(structuredData, {
+          template,
+          format: 'A4',
+          fontSize: 'medium',
+          colorScheme: 'blue',
+        });
+        filename = `${resume.filename.replace(/\.[^/.]+$/, '')}_${template}.pdf`;
+        message = 'PDF genererad och skickad till Discord! 📄';
+      }
 
       // If in Discord context, send file as attachment
       if (discordContext && discordContext.channelId) {
@@ -7524,32 +7545,34 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
           const discordBot = DiscordBotService.getInstance();
           const sent = await discordBot.sendFileAsAttachment(
             discordContext.channelId,
-            pdfBuffer,
+            fileBuffer,
             filename,
-            'Här är din CV som PDF! 📄'
+            format === 'latex' ? 'Här är din CV som LaTeX-fil! 📄' : 'Här är din CV som PDF! 📄'
           );
           if (sent) {
             return {
               success: true,
               sentToDiscord: true,
               filename,
-              message: 'PDF genererad och skickad till Discord!'
+              format,
+              message
             };
           }
         } catch (discordError) {
-          logger.error('Error sending PDF to Discord', discordError as Error);
+          logger.error(`Error sending ${format.toUpperCase()} to Discord`, discordError as Error);
           // Fall through to return base64
         }
       }
 
       return {
         success: true,
-        pdfBuffer: pdfBuffer.toString('base64'),
+        fileBuffer: fileBuffer.toString('base64'),
         filename,
-        message: 'PDF genererad framgångsrikt'
+        format,
+        message: format === 'latex' ? 'LaTeX CV genererad framgångsrikt' : 'PDF genererad framgångsrikt'
       };
     } catch (error) {
-      logger.error('Error generating resume PDF', error as Error);
+      logger.error('Error generating resume', error as Error);
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
