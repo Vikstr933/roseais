@@ -643,62 +643,67 @@ export class ResumePDFService {
     .container {
       max-width: 210mm;
       margin: 0 auto;
-      padding: 18mm 20mm;
+      padding: 20mm 25mm;
       background: white;
+      min-height: 100vh;
     }
     
     /* Header Section */
     .header {
       border-bottom: 3px solid {{colorPrimary}};
-      padding-bottom: 15px;
-      margin-bottom: 20px;
+      padding-bottom: 18px;
+      margin-bottom: 22px;
     }
     
     .header h1 {
-      font-size: 24px;
+      font-size: 26px;
       font-weight: 700;
       color: #1a1a1a;
-      margin-bottom: 6px;
-      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      letter-spacing: 0.3px;
+      padding: 0;
     }
     
     .header .title {
-      font-size: 13px;
+      font-size: 14px;
       color: #555;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
       font-weight: 500;
+      padding: 0;
     }
     
     .contact-info {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 15px;
       font-size: 10px;
       color: #666;
+      padding: 0;
     }
     
     .contact-info span {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
+      padding: 0;
     }
     
     /* Summary */
     .summary {
-      margin: 18px 0 22px 0;
+      margin: 22px 0 26px 0;
       padding: 0;
       font-size: 11px;
-      line-height: 1.7;
+      line-height: 1.75;
       color: #444;
-      text-align: justify;
+      text-align: left;
     }
     
     /* Two Column Layout */
     .two-column {
       display: grid;
       grid-template-columns: 1.8fr 1fr;
-      gap: 25px;
-      margin-top: 20px;
+      gap: 28px;
+      margin-top: 24px;
     }
     
     .main-column {
@@ -711,7 +716,8 @@ export class ResumePDFService {
     
     /* Sections */
     .section {
-      margin-bottom: 24px;
+      margin-bottom: 28px;
+      padding: 0;
       page-break-inside: avoid;
     }
     
@@ -720,11 +726,13 @@ export class ResumePDFService {
     }
     
     .section-title {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
       color: {{colorPrimary}};
-      margin-bottom: 12px;
-      padding-bottom: 6px;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      padding-left: 0;
+      padding-right: 0;
       border-bottom: 2px solid {{colorPrimary}};
       text-transform: uppercase;
       letter-spacing: 0.8px;
@@ -732,8 +740,10 @@ export class ResumePDFService {
     
     /* Experience & Education Items */
     .experience-item, .education-item, .project-item {
-      margin-bottom: 16px;
-      padding-bottom: 14px;
+      margin-bottom: 18px;
+      padding-bottom: 16px;
+      padding-left: 0;
+      padding-right: 0;
       border-bottom: 1px solid #e8e8e8;
       page-break-inside: avoid;
     }
@@ -748,20 +758,23 @@ export class ResumePDFService {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
+      padding: 0;
     }
     
     .job-title, .degree {
       font-size: 12px;
       font-weight: 600;
       color: #1a1a1a;
-      margin-bottom: 3px;
+      margin-bottom: 4px;
+      padding: 0;
     }
     
     .company, .institution {
       font-size: 11px;
       color: #555;
       font-weight: 400;
+      padding: 0;
     }
     
     .date {
@@ -769,37 +782,43 @@ export class ResumePDFService {
       color: #777;
       white-space: nowrap;
       font-weight: 400;
+      padding: 0;
     }
     
     .job-description {
-      margin: 8px 0 0 0;
+      margin: 10px 0 0 0;
+      padding: 0;
       font-size: 10px;
       color: #444;
-      line-height: 1.6;
+      line-height: 1.65;
     }
     
     .achievements {
-      margin-top: 6px;
-      padding-left: 16px;
+      margin-top: 8px;
+      padding-left: 18px;
+      padding-right: 0;
     }
     
     .achievements li {
-      margin-bottom: 3px;
+      margin-bottom: 4px;
       font-size: 10px;
       color: #555;
-      line-height: 1.5;
+      line-height: 1.6;
+      padding: 0;
     }
     
     /* Skills */
     .skill-group {
-      margin-bottom: 12px;
+      margin-bottom: 14px;
+      padding: 0;
     }
     
     .skill-category {
       font-size: 10px;
       font-weight: 600;
       color: #555;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
+      padding: 0;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -807,12 +826,13 @@ export class ResumePDFService {
     .skill-items {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
+      gap: 6px;
+      padding: 0;
     }
     
     .skill-tag {
       display: inline-block;
-      padding: 3px 9px;
+      padding: 4px 10px;
       background: #f0f4f8;
       color: #2c3e50;
       border: 1px solid #d1d9e0;
@@ -823,19 +843,22 @@ export class ResumePDFService {
     
     /* Certifications & Languages */
     .certification-item, .language-item {
-      margin-bottom: 10px;
+      margin-bottom: 12px;
+      padding: 0;
     }
     
     .cert-name, .language-name {
       font-weight: 600;
       font-size: 10px;
       color: #1a1a1a;
-      margin-bottom: 2px;
+      margin-bottom: 3px;
+      padding: 0;
     }
     
     .cert-issuer, .language-level {
       font-size: 9px;
       color: #666;
+      padding: 0;
     }
     
     /* Projects */
@@ -843,31 +866,40 @@ export class ResumePDFService {
       font-weight: 600;
       font-size: 11px;
       color: #1a1a1a;
-      margin-bottom: 4px;
+      margin-bottom: 5px;
+      padding: 0;
     }
     
     .project-description {
       font-size: 10px;
       color: #555;
-      margin-bottom: 4px;
-      line-height: 1.6;
+      margin-bottom: 5px;
+      padding: 0;
+      line-height: 1.65;
     }
     
     .project-tech {
       font-size: 9px;
       color: #777;
       font-style: italic;
+      padding: 0;
     }
     
     .project-url {
       font-size: 9px;
       color: {{colorPrimary}};
       text-decoration: none;
+      padding: 0;
     }
     
-    /* Print Styles */
+    /* Print Styles - Keep padding for proper spacing */
     @media print {
       .container {
+        padding: 20mm 25mm !important;
+      }
+      
+      body {
+        margin: 0;
         padding: 0;
       }
       
