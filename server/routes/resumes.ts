@@ -831,5 +831,95 @@ router.delete('/:id', authenticateUser, async (req, res) => {
   }
 });
 
+// POST /api/resumes/preview-template - Generate preview for template selection
+router.post('/preview-template', async (req, res) => {
+  try {
+    const { template } = req.body;
+
+    // Create sample resume data for preview
+    const sampleData = {
+      personalInfo: {
+        name: 'Anna Andersson',
+        title: 'Frontend-utvecklare',
+        email: 'anna.andersson@email.com',
+        phone: '+46 70 123 45 67',
+        location: 'Stockholm, Sverige',
+        linkedIn: '',
+        website: '',
+      },
+      summary: 'Erfaren frontend-utvecklare med expertis inom React, TypeScript och modern webbutveckling. Passionerad för att skapa användarvänliga gränssnitt och lösa komplexa tekniska utmaningar.',
+      experience: [
+        {
+          title: 'Senior Frontend-utvecklare',
+          company: 'Tech Solutions AB',
+          location: 'Stockholm',
+          startDate: '2020-01',
+          endDate: '',
+          current: true,
+          description: 'Ledde utvecklingen av flera storskaliga React-applikationer.',
+          achievements: [
+            'Förbättrade prestanda med 40% genom optimering',
+            'Implementerade nya funktioner med TypeScript',
+          ],
+        },
+        {
+          title: 'Frontend-utvecklare',
+          company: 'Digital Agency',
+          location: 'Göteborg',
+          startDate: '2018-06',
+          endDate: '2019-12',
+          current: false,
+          description: 'Utvecklade responsiva webbapplikationer för olika kunder.',
+          achievements: [],
+        },
+      ],
+      education: [
+        {
+          degree: 'Kandidatexamen i Datavetenskap',
+          institution: 'KTH',
+          location: 'Stockholm',
+          startDate: '2014-09',
+          endDate: '2018-06',
+          gpa: '',
+          honors: [],
+        },
+      ],
+      skills: [
+        {
+          category: '',
+          items: ['React', 'TypeScript', 'JavaScript', 'CSS', 'HTML', 'Node.js'],
+        },
+      ],
+      certifications: [],
+      languages: [
+        { language: 'Svenska', level: 'Modersmål' },
+        { language: 'Engelska', level: 'Flytande' },
+      ],
+      projects: [],
+    };
+
+    // Generate PDF preview
+    const pdfBuffer = await resumePDFService.generatePDF(sampleData, {
+      template: template || 'modern',
+      format: 'A4',
+      fontSize: 'medium',
+      colorScheme: 'blue',
+    });
+
+    // Set headers for PDF preview
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="preview_${template}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating template preview:', error);
+    res.status(500).json({
+      error: 'Failed to generate preview',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;
 

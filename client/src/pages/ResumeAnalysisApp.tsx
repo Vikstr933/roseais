@@ -53,6 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { TemplatePreviewDialog } from '@/components/TemplatePreviewDialog';
 
 interface ResumeAnalysis {
   id: number;
@@ -165,6 +166,7 @@ export default function ResumeAnalysisApp() {
   const [isGeneratingAdaptedPDF, setIsGeneratingAdaptedPDF] = useState<Record<string, boolean>>({});
   const [isGeneratingApplicationPDF, setIsGeneratingApplicationPDF] = useState<Record<string, boolean>>({});
   const [selectedTemplate, setSelectedTemplate] = useState<'modern' | 'classic' | 'minimal' | 'professional'>('modern');
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1277,6 +1279,16 @@ export default function ResumeAnalysisApp() {
                             <SelectItem value="professional">Professionell</SelectItem>
                           </SelectContent>
                         </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowTemplatePreview(true)}
+                          className="flex items-center gap-1"
+                        >
+                          <Eye className="h-4 w-4" />
+                          Förhandsgranska
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -2077,6 +2089,12 @@ export default function ResumeAnalysisApp() {
       </div>
 
       <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
+      <TemplatePreviewDialog
+        open={showTemplatePreview}
+        onOpenChange={setShowTemplatePreview}
+        onSelectTemplate={setSelectedTemplate}
+        selectedTemplate={selectedTemplate}
+      />
     </div>
   );
 }
