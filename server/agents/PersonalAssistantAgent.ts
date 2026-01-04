@@ -7136,6 +7136,7 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
             resumeId,
             createdAt: Date.now()
           });
+          logger.info(`✅ Stored resumeId ${resumeId} in session cache: ${sessionKey}`);
           
           return {
             success: true,
@@ -7516,18 +7517,36 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
       } else {
         // First, check if there's a recently created resume in this session (within last 30 minutes)
         const sessionKey = `${userId}:${sessionId}`;
+        logger.info(`Checking for recently created resume in session: ${sessionKey}`);
+        
+        // Clean up expired entries
+        const now = Date.now();
+        const thirtyMinutesAgo = now - (30 * 60 * 1000);
+        for (const [key, value] of this.recentResumeIds.entries()) {
+          if (value.createdAt < thirtyMinutesAgo) {
+            this.recentResumeIds.delete(key);
+          }
+        }
+        
         const recentResume = this.recentResumeIds.get(sessionKey);
-        const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
         
         if (recentResume && recentResume.createdAt > thirtyMinutesAgo) {
+          logger.info(`Found recently created resume ${recentResume.resumeId} in session ${sessionId}, created ${Math.round((now - recentResume.createdAt) / 1000)}s ago`);
           // Use the recently created resume from this session
           const [found] = await db.select().from(resumes).where(eq(resumes.id, recentResume.resumeId)).limit(1);
           if (found && found.userId === userId) {
             resume = found;
-            logger.info(`Using recently created resume ${recentResume.resumeId} from session ${sessionId}`);
+            logger.info(`✅ Using recently created resume ${recentResume.resumeId} (${found.filename}) from session ${sessionId}`);
           } else {
             // Resume not found, remove from cache and fall through to get most recent
+            logger.warn(`Recently created resume ${recentResume.resumeId} not found in database, removing from cache`);
             this.recentResumeIds.delete(sessionKey);
+          }
+        } else {
+          if (recentResume) {
+            logger.info(`Recently created resume ${recentResume.resumeId} expired (created ${Math.round((now - recentResume.createdAt) / 1000 / 60)} minutes ago)`);
+          } else {
+            logger.info(`No recently created resume found in session ${sessionKey}`);
           }
         }
         
@@ -7543,6 +7562,7 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
             return { success: false, error: 'No resume found' };
           }
           resume = userResumes[0];
+          logger.info(`Using most recent resume: ${resume.id} (${resume.filename})`);
         }
       }
 
