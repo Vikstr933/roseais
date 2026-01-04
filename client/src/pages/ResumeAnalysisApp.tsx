@@ -631,6 +631,8 @@ export default function ResumeAnalysisApp() {
   const [applicationCount, setApplicationCount] = useState<number | null>(null);
   const [jobApplications, setJobApplications] = useState<any[]>([]);
   const [loadingApplications, setLoadingApplications] = useState(false);
+  const [applicationStats, setApplicationStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   const handleGeneratePDF = async () => {
     if (!uploadedResume) return;
@@ -703,8 +705,35 @@ export default function ResumeAnalysisApp() {
     }
   };
 
+  const fetchAllJobApplications = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingApplications(true);
+      const response = await apiFetch('/api/job-applications');
+      if (response.ok) {
+        const data = await response.json();
+        setJobApplications(data.applications || []);
+        setApplicationCount((data.applications || []).length);
+      }
+    } catch (error) {
+      console.error('Error fetching job applications:', error);
+      toast({
+        title: 'Error',
+        description: 'Kunde inte hämta jobbansökningar',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingApplications(false);
+    }
+  };
+
   const fetchJobApplications = async () => {
-    if (!uploadedResume) return;
+    if (!uploadedResume) {
+      // If no resume, fetch all applications
+      await fetchAllJobApplications();
+      return;
+    }
     
     try {
       setLoadingApplications(true);
@@ -723,6 +752,23 @@ export default function ResumeAnalysisApp() {
       });
     } finally {
       setLoadingApplications(false);
+    }
+  };
+
+  const fetchApplicationStats = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingStats(true);
+      const response = await apiFetch('/api/job-applications/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setApplicationStats(data.stats || null);
+      }
+    } catch (error) {
+      console.error('Error fetching application stats:', error);
+    } finally {
+      setLoadingStats(false);
     }
   };
 
@@ -1239,49 +1285,21 @@ export default function ResumeAnalysisApp() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                <h1 className="text-2xl sm:text-3xl font-bold break-words">CV Analys & Jobb-matchning</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold break-words">CV & Jobbsökning Dashboard</h1>
                 <Badge className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/20 text-purple-700 w-fit">
                   <Brain className="h-3 w-3 mr-1" />
                   AI-Powered
                 </Badge>
               </div>
               <p className="text-sm sm:text-base text-muted-foreground">
-                Analysera ditt CV med AI, få detaljerad feedback och hitta matchade jobb på svenska marknaden.
-                Stöder PDF, DOCX och LaTeX-filer.
+                Hantera dina jobbansökningar, analysera ditt CV och hitta matchade jobb på svenska marknaden.
               </p>
-              {uploadedResume && (
-                <div className="mt-4">
-                  <Button
-                    onClick={() => {
-                      setShowApplicationsSection(!showApplicationsSection);
-                      if (!showApplicationsSection && jobApplications.length === 0) {
-                        fetchJobApplications();
-                      }
-                    }}
-                    variant="outline"
-                    className="border-green-300 text-green-700 hover:bg-green-50"
-                  >
-                    <Briefcase className="h-4 w-4 mr-2" />
-                    {showApplicationsSection ? 'Dölj' : 'Visa'} Jobbansökningar
-                    {applicationCount !== null && applicationCount > 0 && (
-                      <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
-                    )}
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
         </motion.div>
 
-        {/* Upload Section */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Ladda upp CV</CardTitle>
-            <CardDescription>
-              Stödjer PDF, DOCX och LaTeX (.tex) filer. Max 5MB.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            {/* Upload Section */}
+            <div className="mb-6">
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
