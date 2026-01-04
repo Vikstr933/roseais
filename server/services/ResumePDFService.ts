@@ -326,7 +326,8 @@ export class ResumePDFService {
         // Normalize whitespace
         cleanSummary = cleanSummary.replace(/\s+/g, ' ').trim();
         
-        // Check if summary is duplicated (same text twice) - more aggressive check
+        // CRITICAL: Check if summary is duplicated (same text twice) - more aggressive check
+        // This handles cases where summary comes already duplicated from parsedData
         const summaryLength = cleanSummary.length;
         if (summaryLength > 100) {
           // Check multiple split points
@@ -347,6 +348,7 @@ export class ResumePDFService {
               if (firstWords === secondWords && firstWords.length > 40) {
                 foundDuplicate = true;
                 bestSplitIndex = splitIndex;
+                logger.info(`Found duplicate summary in populateTemplate, removing duplicate (split at ${splitIndex}/${summaryLength})`);
                 break;
               }
               
@@ -355,6 +357,7 @@ export class ResumePDFService {
               if (similarity > 0.85) {
                 foundDuplicate = true;
                 bestSplitIndex = splitIndex;
+                logger.info(`Found similar duplicate summary in populateTemplate (similarity: ${similarity}), removing duplicate`);
                 break;
               }
             }
@@ -375,8 +378,32 @@ export class ResumePDFService {
               
               if (firstWords === secondWords || this.calculateSimilarity(firstHalf, secondHalf) > 0.9) {
                 cleanSummary = firstHalf;
+                logger.info(`Found 50/50 duplicate summary in populateTemplate, using first half`);
               }
             }
+          }
+        }
+        
+        // Final check: remove duplicate sentences (in case entire summary is duplicated sentence-by-sentence)
+        const sentences = cleanSummary.split(/[.!?]\s+/).filter(s => s.trim().length > 15);
+        if (sentences.length >= 2) {
+          const uniqueSentences: string[] = [];
+          const seenSentences = new Set<string>();
+          
+          for (const sentence of sentences) {
+            const normalized = sentence.trim().toLowerCase().replace(/\s+/g, ' ');
+            if (!seenSentences.has(normalized)) {
+              seenSentences.add(normalized);
+              uniqueSentences.push(sentence.trim());
+            }
+          }
+          
+          if (uniqueSentences.length < sentences.length) {
+            cleanSummary = uniqueSentences.join('. ').trim();
+            if (cleanSummary && !cleanSummary.endsWith('.') && !cleanSummary.endsWith('!') && !cleanSummary.endsWith('?')) {
+              cleanSummary += '.';
+            }
+            logger.info(`Removed ${sentences.length - uniqueSentences.length} duplicate sentences from summary`);
           }
         }
         
@@ -389,6 +416,7 @@ export class ResumePDFService {
       }
     }
     // Replace ALL occurrences of {{summary}} with the same content (only once)
+    // IMPORTANT: This replaces all {{summary}} placeholders with the same cleaned summary
     html = html.replace(/\{\{summary\}\}/g, summaryHtml);
 
     // Replace experience
@@ -1977,28 +2005,56 @@ export class ResumePDFService {
    * Helper methods to extract data from text
    */
   private extractName(text: string): string | null {
+    // Common company names to exclude (Swedish companies)
+    const companyNames = [
+      'volvo', 'ericsson', 'ikea', 'spotify', 'skanska', 'atlas copco',
+      'astrazeneca', 'electrolux', 'sandvik', 'scania', 'telia', 'nordea',
+      'seb', 'swedbank', 'handelsbanken', 'kpmg', 'pwc', 'deloitte', 'ey',
+      'extend media', 'apple', 'microsoft', 'google', 'amazon', 'meta'
+    ];
+    
     // Try multiple patterns to find name
     // Pattern 1: Name at the start of text (before "Your Name" or other placeholders)
-    let nameMatch = text.match(/^([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/m);
-    if (nameMatch && !nameMatch[1].toLowerCase().includes('your name') && !nameMatch[1].toLowerCase().includes('namn')) {
-      return nameMatch[1];
+    // IMPORTANT: Must be before any section headers (ERFARENHET, UTBILDNING, etc.)
+    const sectionHeaders = /(?:^|\n\n)(ERFARENHET|UTBILDNING|FÄRDIGHETER|CERTIFIERINGAR|SPRÅK|PROJEKT|SAMMANFATTNING|PROFIL|EXPERIENCE|EDUCATION|SKILLS)/i;
+    const sectionMatch = text.match(sectionHeaders);
+    const textBeforeSections = sectionMatch && sectionMatch.index !== undefined 
+      ? text.substring(0, sectionMatch.index) 
+      : text;
+    
+    // Look for name in the first few lines (before sections)
+    const firstLines = textBeforeSections.split('\n').slice(0, 5).join('\n');
+    let nameMatch = firstLines.match(/^([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/m);
+    if (nameMatch) {
+      const name = nameMatch[1].trim();
+      const nameLower = name.toLowerCase();
+      // Skip if it's a placeholder or company name
+      if (!nameLower.includes('your name') && 
+          !nameLower.includes('namn') &&
+          !nameLower.includes('example') &&
+          !companyNames.some(company => nameLower.includes(company)) &&
+          name.length > 3 && name.length < 50) {
+        return name;
+      }
     }
     
     // Pattern 2: Look for common name patterns (First Last or First Middle Last)
-    // Skip if it's "Your Name" or similar placeholders
+    // Skip if it's "Your Name" or similar placeholders or company names
     const namePatterns = [
       /(?:^|\n)([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+){1,2})(?:\s|$|,|\.)/m,
       /(?:CV|Resume|Curriculum Vitae)[\s:]+([A-ZÅÄÖ][a-zåäö]+(?:\s+[A-ZÅÄÖ][a-zåäö]+)+)/i,
     ];
     
     for (const pattern of namePatterns) {
-      nameMatch = text.match(pattern);
+      nameMatch = textBeforeSections.match(pattern);
       if (nameMatch && nameMatch[1]) {
         const name = nameMatch[1].trim();
-        // Skip common placeholders
-        if (!name.toLowerCase().includes('your name') && 
-            !name.toLowerCase().includes('namn') &&
-            !name.toLowerCase().includes('example') &&
+        const nameLower = name.toLowerCase();
+        // Skip common placeholders and company names
+        if (!nameLower.includes('your name') && 
+            !nameLower.includes('namn') &&
+            !nameLower.includes('example') &&
+            !companyNames.some(company => nameLower.includes(company)) &&
             name.length > 3 && name.length < 50) {
           return name;
         }
