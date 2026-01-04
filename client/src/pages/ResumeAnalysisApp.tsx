@@ -2369,6 +2369,7 @@ export default function ResumeAnalysisApp() {
               </Card>
             )}
       </div>
+      </div>
 
       <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
       <TemplatePreviewDialog
