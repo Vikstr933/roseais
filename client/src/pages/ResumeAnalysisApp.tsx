@@ -168,6 +168,7 @@ export default function ResumeAnalysisApp() {
   const [isGeneratingApplicationPDF, setIsGeneratingApplicationPDF] = useState<Record<string, boolean>>({});
   const [selectedTemplate, setSelectedTemplate] = useState<'modern' | 'classic' | 'minimal' | 'professional'>('modern');
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
+  const [showApplicationsSection, setShowApplicationsSection] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
