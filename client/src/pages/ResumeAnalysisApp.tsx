@@ -828,12 +828,9 @@ export default function ResumeAnalysisApp() {
         description: 'Jobbansökan sparad i tracker!',
       });
 
-      // Optionally navigate to job applications page
-      setTimeout(() => {
-        if (confirm('Vill du gå till Jobbansökningar-sidan för att se alla dina ansökningar?')) {
-          setLocation(`/community/job-applications/resume/${uploadedResume.id}`);
-        }
-      }, 500);
+      // Show applications section and refresh
+      setShowApplicationsSection(true);
+      fetchJobApplications();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
       toast({
