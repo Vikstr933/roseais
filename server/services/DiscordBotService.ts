@@ -344,6 +344,13 @@ Use Discord markdown formatting (**bold**, etc.) and emojis appropriately. Write
       return; // Skip to avoid spam
     }
 
+    // Don't send empty messages
+    const trimmedContent = content?.trim() || '';
+    if (!trimmedContent) {
+      logger.warn('Empty status message, skipping');
+      return;
+    }
+
     try {
       if (delayMs > 0) {
         await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -354,7 +361,7 @@ Use Discord markdown formatting (**bold**, etc.) and emojis appropriately. Write
         message.channel.sendTyping();
       }
       
-      await message.reply(content);
+      await message.reply(trimmedContent);
       this.lastStatusMessageTime.set(channelKey, Date.now());
     } catch (error) {
       logger.warn('Failed to send status message', error as Error);
@@ -693,12 +700,21 @@ Generate ONLY the status message, nothing else.`
 
       // Send response back to Discord
       // Split long messages into chunks (Discord has 2000 char limit)
-      const responseText = response.response;
+      const responseText = response.response?.trim() || '';
+      
+      // Don't send empty messages
+      if (!responseText || responseText.length === 0) {
+        logger.warn('Empty response from agent, skipping Discord message');
+        return;
+      }
+      
       if (responseText.length > 1900) {
         // Split into chunks
         const chunks = this.splitMessage(responseText, 1900);
         for (const chunk of chunks) {
-          await message.reply(chunk);
+          if (chunk.trim().length > 0) {
+            await message.reply(chunk);
+          }
         }
       } else {
         await message.reply(responseText);
@@ -731,7 +747,17 @@ Generate ONLY the status message, nothing else.`
         return false;
       }
 
-      const messageOptions: any = { content };
+      // Don't send empty messages unless there's an embed
+      const trimmedContent = content?.trim() || '';
+      if (!trimmedContent && !embed) {
+        logger.warn('Cannot send empty message without embed');
+        return false;
+      }
+
+      const messageOptions: any = {};
+      if (trimmedContent) {
+        messageOptions.content = trimmedContent;
+      }
       if (embed) {
         messageOptions.embeds = [embed];
       }

@@ -269,7 +269,7 @@ BEGIN
         p_discovered_by,
         p_code_example
     )
-    ON CONFLICT (solution_hash) 
+    ON CONFLICT (agent_solutions.solution_hash) 
     DO UPDATE SET
         times_used = agent_solutions.times_used + 1,
         times_successful = agent_solutions.times_successful + 1,
