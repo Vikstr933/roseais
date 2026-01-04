@@ -1255,12 +1255,17 @@ export default function ResumeAnalysisApp() {
               {uploadedResume && (
                 <div className="mt-4">
                   <Button
-                    onClick={() => setLocation(`/community/job-applications/resume/${uploadedResume.id}`)}
+                    onClick={() => {
+                      setShowApplicationsSection(!showApplicationsSection);
+                      if (!showApplicationsSection && jobApplications.length === 0) {
+                        fetchJobApplications();
+                      }
+                    }}
                     variant="outline"
                     className="border-green-300 text-green-700 hover:bg-green-50"
                   >
                     <Briefcase className="h-4 w-4 mr-2" />
-                    Visa Jobbansökningar
+                    {showApplicationsSection ? 'Dölj' : 'Visa'} Jobbansökningar
                     {applicationCount !== null && applicationCount > 0 && (
                       <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
                     )}
