@@ -7551,18 +7551,34 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
         }
         
         // If no recent resume found, get the most recent resume
+        // Prioritize resumes with parsedData (created via conversation) from the last hour
         if (!resume) {
-          const userResumes = await db
+          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+          const recentResumes = await db
             .select()
             .from(resumes)
             .where(eq(resumes.userId, userId))
             .orderBy(desc(resumes.createdAt))
-            .limit(1);
-          if (userResumes.length === 0) {
+            .limit(10);
+          
+          if (recentResumes.length === 0) {
             return { success: false, error: 'No resume found' };
           }
-          resume = userResumes[0];
-          logger.info(`Using most recent resume: ${resume.id} (${resume.filename})`);
+          
+          // Prioritize resumes with parsedData created in the last hour (likely from conversation)
+          const recentConversationResume = recentResumes.find(r => 
+            r.parsedData && 
+            r.createdAt && 
+            new Date(r.createdAt) > oneHourAgo
+          );
+          
+          if (recentConversationResume) {
+            resume = recentConversationResume;
+            logger.info(`Using recent conversation-created resume: ${resume.id} (${resume.filename}), created ${Math.round((Date.now() - new Date(resume.createdAt!).getTime()) / 1000 / 60)} minutes ago`);
+          } else {
+            resume = recentResumes[0];
+            logger.info(`Using most recent resume: ${resume.id} (${resume.filename})`);
+          }
         }
       }
 
