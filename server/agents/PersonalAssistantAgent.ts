@@ -78,6 +78,7 @@ export class PersonalAssistantAgent {
   private selectedProjects: Map<string, { projectId: string; projectName: string; projectDescription?: string; isGitHubRepo?: boolean; githubRepo?: { fullName: string; owner: string; repo: string; defaultBranch?: string } }> = new Map(); // Store selected project per session
   private userMessageCounts: Map<string, number> = new Map(); // Track message count per user for Discord recommendations
   private lastDiscordRecommendation: Map<string, number> = new Map(); // Track last recommendation timestamp
+  private recentResumeIds: Map<string, { resumeId: number; createdAt: number }> = new Map(); // Track recently created resumes per session (expires after 30 minutes)
 
   constructor() {
     this.anthropic = new Anthropic({
@@ -2859,7 +2860,7 @@ ${playgroundContext ? `
     - When user asks for PDF: Use this tool with format: "pdf" (default).
     - The file will be automatically sent as an attachment in Discord (never write code/content in messages when files can be sent).
     - PDFs must fit on 1 page maximum - the system handles this automatically.
-    - **CRITICAL**: If you just created a CV via answer_resume_question and received a resumeId, you MUST pass that resumeId to this tool. Do NOT rely on "most recent resume" when you have a specific resumeId from CV creation.
+    - **CRITICAL**: If you just created a CV via answer_resume_question and received a resumeId, you MUST pass that resumeId to this tool. The system will automatically use the recently created CV from the current session if no resumeId is provided, but it's better to explicitly pass the resumeId when you have it.
   * **get_job_matches**: Get previously matched jobs for a resume. Use when user wants to see their job matches.
   * **CV Creation Flow**:
     - When user asks about jobs or job searching: First use check_resume_exists
@@ -2867,7 +2868,7 @@ ${playgroundContext ? `
     - If user says "nej" (no) or wants to create one: Use create_resume_conversation to start
     - During CV creation: Ask questions one at a time, use answer_resume_question after each answer
     - When complete: The system will generate the CV automatically and return a resumeId
-    - **CRITICAL**: When CV is created via conversation, the answer_resume_question tool returns a resumeId. You MUST use this resumeId when calling generate_resume_pdf or any other resume tool. NEVER use "most recent resume" when you just created a CV - always use the resumeId that was returned.
+    - **IMPORTANT**: When CV is created via conversation, the answer_resume_question tool returns a resumeId. You should use this resumeId when calling generate_resume_pdf or any other resume tool. The system will automatically prioritize the CV created in the current session if no resumeId is provided, but explicitly passing the resumeId is preferred.
     - After CV is created: Offer to search for jobs or improve the CV
   * **Job Search Flow**:
     - User asks: "hitta jobb" or "hjälp mig söka jobb" or "find jobs"
@@ -7128,6 +7129,14 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
         const lowerAnswer = answer.toLowerCase().trim();
         if (lowerAnswer === 'ja' || lowerAnswer === 'yes' || lowerAnswer === 'skapa' || lowerAnswer === 'create') {
           const resumeId = await resumeCreationService.generateResume(state);
+          
+          // Store resumeId in session for later use (expires after 30 minutes)
+          const sessionKey = `${userId}:${sessionId}`;
+          this.recentResumeIds.set(sessionKey, {
+            resumeId,
+            createdAt: Date.now()
+          });
+          
           return {
             success: true,
             resumeId,
@@ -7496,6 +7505,8 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
 
       // Get resume
       let resume;
+      const sessionId = params._sessionId || (this as any).currentSessionId || userId;
+      
       if (resumeId) {
         const [found] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1);
         if (!found || found.userId !== userId) {
@@ -7503,16 +7514,36 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
         }
         resume = found;
       } else {
-        const userResumes = await db
-          .select()
-          .from(resumes)
-          .where(eq(resumes.userId, userId))
-          .orderBy(desc(resumes.createdAt))
-          .limit(1);
-        if (userResumes.length === 0) {
-          return { success: false, error: 'No resume found' };
+        // First, check if there's a recently created resume in this session (within last 30 minutes)
+        const sessionKey = `${userId}:${sessionId}`;
+        const recentResume = this.recentResumeIds.get(sessionKey);
+        const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+        
+        if (recentResume && recentResume.createdAt > thirtyMinutesAgo) {
+          // Use the recently created resume from this session
+          const [found] = await db.select().from(resumes).where(eq(resumes.id, recentResume.resumeId)).limit(1);
+          if (found && found.userId === userId) {
+            resume = found;
+            logger.info(`Using recently created resume ${recentResume.resumeId} from session ${sessionId}`);
+          } else {
+            // Resume not found, remove from cache and fall through to get most recent
+            this.recentResumeIds.delete(sessionKey);
+          }
         }
-        resume = userResumes[0];
+        
+        // If no recent resume found, get the most recent resume
+        if (!resume) {
+          const userResumes = await db
+            .select()
+            .from(resumes)
+            .where(eq(resumes.userId, userId))
+            .orderBy(desc(resumes.createdAt))
+            .limit(1);
+          if (userResumes.length === 0) {
+            return { success: false, error: 'No resume found' };
+          }
+          resume = userResumes[0];
+        }
       }
 
       // Extract structured data
