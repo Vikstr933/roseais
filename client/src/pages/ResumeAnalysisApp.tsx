@@ -2031,8 +2031,11 @@ export default function ResumeAnalysisApp() {
                 </div>
               </CardContent>
             </Card>
+            </div>
+          </div>
+        )}
 
-            {/* Adapted Resumes - Compact */}
+        {/* Adapted Resumes - Compact */}
             {adaptedResumes.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
