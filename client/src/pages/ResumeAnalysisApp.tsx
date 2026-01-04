@@ -1307,6 +1307,16 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
+        {/* CV Upload & Analysis Section */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>CV Analys & Jobb-matchning</CardTitle>
+            <CardDescription>
+              Ladda upp ditt CV för att analysera det med AI, få detaljerad feedback och hitta matchade jobb.
+              Stöder PDF, DOCX och LaTeX-filer.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             {/* Upload Section */}
             <div className="mb-6">
             <div
