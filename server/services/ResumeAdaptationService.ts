@@ -49,7 +49,10 @@ Din uppgift är att anpassa ett CV så att det matchar bättre med en jobbannons
 3. Anpassa sammanfattningen (summary) till jobbets fokus
 4. Föreslå konkreta förbättringar utan att ändra fakta
 
-VIKTIGT: Ändra INTE fakta, datum, företagsnamn eller utbildningar. Fokusera på att förbättra beskrivningar och lägga till relevanta nyckelord.`;
+VIKTIGT: 
+- Ändra INTE fakta, datum, företagsnamn eller utbildningar. Fokusera på att förbättra beskrivningar och lägga till relevanta nyckelord.
+- Lägg ALDRIG till text som "(krav uppfyllt)", "(requirement met)", "(krav uppfyllda)" eller liknande i CV:t. Detta är oprofessionellt och ska inte finnas i ett CV.
+- Skriv CV:t som om det är ett professionellt dokument - använd inte meta-kommentarer om krav eller matchningar.`;
 
       const userPrompt = `Anpassa följande CV till jobbannonsen nedan.
 
@@ -73,6 +76,8 @@ Anpassa CV:et enligt följande:
 3. Förbättra bullet points för att matcha jobbkraven
 4. Behåll all fakta (datum, företag, utbildningar) oförändrad
 5. Lägg INTE till erfarenhet eller utbildning som inte finns i original CV
+6. Lägg ALDRIG till text som "(krav uppfyllt)", "(requirement met)" eller liknande - detta är oprofessionellt
+7. Skriv CV:t som ett professionellt dokument utan meta-kommentarer om krav eller matchningar
 
 VIKTIGT: Returnera ENDAST JSON, utan ytterligare text eller förklaringar före eller efter.
 

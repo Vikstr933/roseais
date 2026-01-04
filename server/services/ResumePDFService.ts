@@ -1850,14 +1850,14 @@ export class ResumePDFService {
     let experience: ResumeData['experience'] = [];
     if (parsedData?.sections?.experience && Array.isArray(parsedData.sections.experience)) {
       experience = parsedData.sections.experience.map((exp: any) => ({
-        title: exp.title || '',
-        company: exp.company || '',
+        title: this.cleanUnprofessionalText(exp.title || ''),
+        company: this.cleanUnprofessionalText(exp.company || ''),
         location: exp.location || '',
         startDate: exp.startDate || exp.period?.split('-')[0]?.trim() || '',
         endDate: exp.endDate || (exp.period?.includes('-') ? exp.period.split('-')[1]?.trim() : ''),
         current: exp.current || exp.period?.toLowerCase().includes('present') || false,
-        description: exp.description || '',
-        achievements: exp.achievements || exp.responsibilities || [],
+        description: this.cleanUnprofessionalText(exp.description || ''),
+        achievements: (exp.achievements || exp.responsibilities || []).map((a: string) => this.cleanUnprofessionalText(a)),
       }));
     }
 
@@ -1865,13 +1865,13 @@ export class ResumePDFService {
     let education: ResumeData['education'] = [];
     if (parsedData?.sections?.education && Array.isArray(parsedData.sections.education)) {
       education = parsedData.sections.education.map((edu: any) => ({
-        degree: edu.degree || edu.program || '',
-        institution: edu.institution || edu.school || '',
+        degree: this.cleanUnprofessionalText(edu.degree || edu.program || ''),
+        institution: this.cleanUnprofessionalText(edu.institution || edu.school || ''),
         location: edu.location || '',
         startDate: edu.startDate || '',
         endDate: edu.endDate || edu.graduationDate || '',
         gpa: edu.gpa || '',
-        honors: edu.honors || [],
+        honors: (edu.honors || []).map((h: string) => this.cleanUnprofessionalText(h)),
       }));
     }
 
@@ -1881,11 +1881,15 @@ export class ResumePDFService {
       // Group skills by category if available
       if (typeof parsedData.sections.skills[0] === 'object') {
         skills = parsedData.sections.skills.map((skill: any) => ({
-          category: skill.category || '',
-          items: Array.isArray(skill.items) ? skill.items : [skill.name || skill],
+          category: this.cleanUnprofessionalText(skill.category || ''),
+          items: Array.isArray(skill.items) 
+            ? skill.items.map((item: string) => this.cleanUnprofessionalText(item))
+            : [this.cleanUnprofessionalText(skill.name || skill)],
         }));
       } else {
-        skills = [{ items: parsedData.sections.skills }];
+        skills = [{ 
+          items: parsedData.sections.skills.map((item: string) => this.cleanUnprofessionalText(item))
+        }];
       }
     }
 
@@ -1931,6 +1935,9 @@ export class ResumePDFService {
     // Remove "Your Name" placeholder if it appears in summary
     if (summary) {
       summary = summary.replace(/Your Name/gi, extractedName || '');
+      
+      // Remove unprofessional text like "(krav uppfyllt)" using helper function
+      summary = this.cleanUnprofessionalText(summary);
       
       // First, normalize all whitespace to single spaces
       summary = summary.replace(/\s+/g, ' ').trim();
@@ -2036,21 +2043,69 @@ export class ResumePDFService {
       }
     }
 
+    // Clean up certifications, languages, and projects
+    const certifications = (parsedData?.sections?.certifications || []).map((cert: any) => ({
+      ...cert,
+      name: this.cleanUnprofessionalText(cert.name || ''),
+      issuer: this.cleanUnprofessionalText(cert.issuer || ''),
+    }));
+    
+    const languages = (parsedData?.sections?.languages || []).map((lang: any) => ({
+      ...lang,
+      language: this.cleanUnprofessionalText(lang.language || ''),
+      level: this.cleanUnprofessionalText(lang.level || ''),
+    }));
+    
+    const projects = (parsedData?.sections?.projects || []).map((proj: any) => ({
+      ...proj,
+      name: this.cleanUnprofessionalText(proj.name || ''),
+      description: this.cleanUnprofessionalText(proj.description || ''),
+      technologies: (proj.technologies || []).map((tech: string) => this.cleanUnprofessionalText(tech)),
+    }));
+
     return {
       personalInfo,
       summary,
       experience,
       education,
       skills,
-      certifications: parsedData?.sections?.certifications || [],
-      languages: parsedData?.sections?.languages || [],
-      projects: parsedData?.sections?.projects || [],
+      certifications,
+      languages,
+      projects,
     };
   }
 
   /**
    * Helper methods to extract data from text
    */
+  /**
+   * Remove unprofessional text like "(krav uppfyllt)" from resume text
+   */
+  private cleanUnprofessionalText(text: string): string {
+    if (!text) return text;
+    
+    // Remove various forms of "(krav uppfyllt)" and similar meta-comments
+    const patterns = [
+      /\s*\(krav\s+uppfyllt\)/gi,
+      /\s*\(krav\s+uppfyllda\)/gi,
+      /\s*\(requirement\s+met\)/gi,
+      /\s*\(requirements?\s+fulfilled?\)/gi,
+      /\s*\(krav\s+matchat\)/gi,
+      /\s*\(requirement\s+matched\)/gi,
+      /\s*\(krav\s+uppfylld\)/gi,
+    ];
+    
+    let cleaned = text;
+    for (const pattern of patterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    
+    // Clean up double spaces that might result
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    
+    return cleaned;
+  }
+
   private extractName(text: string): string | null {
     // Common company names to exclude (Swedish companies)
     const companyNames = [
