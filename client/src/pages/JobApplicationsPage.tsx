@@ -109,6 +109,7 @@ const METHOD_LABELS: Record<ApplicationMethod, string> = {
 export default function JobApplicationsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const [match, params] = useRoute('/community/job-applications/resume/:resumeId');
   const { toast } = useToast();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [applications, setApplications] = useState<JobApplication[]>([]);
@@ -154,6 +155,14 @@ export default function JobApplicationsPage() {
       }
       if (searchQuery) {
         params.append('search', searchQuery);
+      }
+      // If viewing applications for a specific resume
+      if (params?.resumeId) {
+        const response = await apiFetch(`/api/job-applications/resume/${params.resumeId}`);
+        if (!response.ok) throw new Error('Failed to fetch applications');
+        const data = await response.json();
+        setApplications(data.applications || []);
+        return;
       }
 
       const response = await apiFetch(`/api/job-applications?${params.toString()}`);
@@ -319,9 +328,20 @@ export default function JobApplicationsPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
-              Jobbansökningar
-            </h1>
+            <div className="flex items-center gap-4 mb-2">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                Jobbansökningar
+              </h1>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLocation('/community/resume-analysis')}
+                className="border-purple-300 text-purple-700 hover:bg-purple-50"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                CV Analys
+              </Button>
+            </div>
             <p className="text-muted-foreground mt-2">
               Spåra och hantera alla dina jobbansökningar på ett ställe
             </p>

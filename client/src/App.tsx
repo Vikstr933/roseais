@@ -84,6 +84,7 @@ function AppContent() {
           <Route path="/public-projects/:id" component={PublicProjectDetail} />
           <Route path="/community/video-transcription" component={VideoTranscriptionApp} />
           <Route path="/community/resume-analysis" component={ResumeAnalysisApp} />
+          <Route path="/community/job-applications/resume/:resumeId" component={JobApplicationsPage} />
           <Route path="/community/job-applications" component={JobApplicationsPage} />
           <Route path="/auth/callback" component={AuthCallback} />
           <Route path="/callback" component={AuthCallback} />

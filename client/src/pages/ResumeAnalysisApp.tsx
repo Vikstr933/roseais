@@ -297,8 +297,14 @@ export default function ResumeAnalysisApp() {
         // Mark all steps as complete
         if (stepInterval) clearInterval(stepInterval);
         setUploadStep(steps.length);
+        
         setProgress('');
         setUploadedResume(data.resume);
+        
+        // Fetch application count for this resume
+        if (data.resume?.id) {
+          fetchApplicationCount(data.resume.id);
+        }
         toast({
           title: 'Resume Uploaded!',
           description: 'Your resume has been uploaded successfully. Click "Analyze Resume" to get insights.',
@@ -619,6 +625,8 @@ export default function ResumeAnalysisApp() {
   };
 
   const [isGeneratingLaTeX, setIsGeneratingLaTeX] = useState(false);
+  const [creatingApplication, setCreatingApplication] = useState<Record<string, boolean>>({});
+  const [applicationCount, setApplicationCount] = useState<number | null>(null);
 
   const handleGeneratePDF = async () => {
     if (!uploadedResume) return;
@@ -676,6 +684,64 @@ export default function ResumeAnalysisApp() {
     }
   };
 
+  const handleTrackApplication = async (jobMatch: JobMatch) => {
+    if (!uploadedResume) {
+      toast({
+        title: 'Error',
+        description: 'Inget CV är uppladdat',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const jobId = jobMatch.jobId || '';
+    setCreatingApplication(prev => ({ ...prev, [jobId]: true }));
+
+    try {
+      const response = await apiFetch('/api/job-applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobTitle: jobMatch.jobTitle,
+          companyName: jobMatch.company,
+          location: jobMatch.location,
+          resumeId: uploadedResume.id,
+          applicationMethod: 'manual',
+          jobUrl: jobMatch.jobUrl,
+          recruiterEmail: jobMatch.applicationEmail,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to create application');
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Jobbansökan sparad i tracker!',
+      });
+
+      // Optionally navigate to job applications page
+      setTimeout(() => {
+        if (confirm('Vill du gå till Jobbansökningar-sidan för att se alla dina ansökningar?')) {
+          setLocation('/community/job-applications');
+        }
+      }, 500);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingApplication(prev => ({ ...prev, [jobId]: false }));
+    }
+  };
+
   const handleGenerateLaTeX = async () => {
     if (!uploadedResume) return;
 
@@ -730,6 +796,64 @@ export default function ResumeAnalysisApp() {
       });
     } finally {
       setIsGeneratingLaTeX(false);
+    }
+  };
+
+  const handleTrackApplication = async (jobMatch: JobMatch) => {
+    if (!uploadedResume) {
+      toast({
+        title: 'Error',
+        description: 'Inget CV är uppladdat',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const jobId = jobMatch.jobId || '';
+    setCreatingApplication(prev => ({ ...prev, [jobId]: true }));
+
+    try {
+      const response = await apiFetch('/api/job-applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobTitle: jobMatch.jobTitle,
+          companyName: jobMatch.company,
+          location: jobMatch.location,
+          resumeId: uploadedResume.id,
+          applicationMethod: 'manual',
+          jobUrl: jobMatch.jobUrl,
+          recruiterEmail: jobMatch.applicationEmail,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to create application');
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Jobbansökan sparad i tracker!',
+      });
+
+      // Optionally navigate to job applications page
+      setTimeout(() => {
+        if (confirm('Vill du gå till Jobbansökningar-sidan för att se alla dina ansökningar?')) {
+          setLocation('/community/job-applications');
+        }
+      }, 500);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingApplication(prev => ({ ...prev, [jobId]: false }));
     }
   };
 
@@ -1391,6 +1515,17 @@ export default function ResumeAnalysisApp() {
                           </>
                         )}
                       </Button>
+                      <Button
+                        onClick={() => setLocation(uploadedResume ? `/community/job-applications/resume/${uploadedResume.id}` : '/community/job-applications')}
+                        variant="outline"
+                        className="border-green-300 text-green-700 hover:bg-green-50 w-full sm:w-auto"
+                      >
+                        <Briefcase className="h-4 w-4 mr-2" />
+                        Jobbansökningar
+                        {applicationCount !== null && applicationCount > 0 && (
+                          <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
+                        )}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1816,6 +1951,25 @@ export default function ResumeAnalysisApp() {
                                     <>
                                       <FileTextIcon className="h-3 w-3 mr-1" />
                                       Skapa Ansökan
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleTrackApplication(match)}
+                                  disabled={creatingApplication[match.jobId || ''] || !uploadedResume}
+                                  className="h-9 sm:h-7 text-xs w-full sm:w-auto border-green-300 text-green-700 hover:bg-green-50"
+                                >
+                                  {creatingApplication[match.jobId || ''] ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Sparar...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Briefcase className="h-3 w-3 mr-1" />
+                                      Spåra Ansökan
                                     </>
                                   )}
                                 </Button>
