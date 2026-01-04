@@ -1307,6 +1307,122 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
+        {/* Job Applications Dashboard - Always visible, first section */}
+        {user && (
+          <Card className="mb-6 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <Briefcase className="h-5 w-5 text-green-700" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Jobbansökningar</CardTitle>
+                    <CardDescription>
+                      Översikt över alla dina jobbansökningar
+                    </CardDescription>
+                  </div>
+                </div>
+                {applicationStats && (
+                  <div className="flex gap-4 text-sm">
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-green-700">{applicationStats.total || 0}</div>
+                      <div className="text-xs text-muted-foreground">Totalt</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-blue-700">{applicationStats.byStatus?.interview || 0}</div>
+                      <div className="text-xs text-muted-foreground">Intervjuer</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-lg text-purple-700">{applicationStats.byStatus?.offer || 0}</div>
+                      <div className="text-xs text-muted-foreground">Erbjudanden</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingApplications ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-green-600" />
+                </div>
+              ) : jobApplications.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-sm font-medium mb-2">Inga jobbansökningar ännu</p>
+                  <p className="text-xs">Ladda upp ditt CV och hitta matchande jobb för att börja spåra ansökningar</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {jobApplications.slice(0, 10).map((app) => (
+                    <div
+                      key={app.id}
+                      className="p-4 border rounded-lg bg-white hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="font-semibold">{app.jobTitle}</h4>
+                            <Badge className={`${
+                              app.status === 'applied' ? 'bg-blue-100 text-blue-800' :
+                              app.status === 'interview' ? 'bg-yellow-100 text-yellow-800' :
+                              app.status === 'offer' ? 'bg-green-100 text-green-800' :
+                              app.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                              app.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {app.status === 'applied' ? 'Ansökt' :
+                               app.status === 'interview' ? 'Intervju' :
+                               app.status === 'offer' ? 'Erbjudande' :
+                               app.status === 'rejected' ? 'Avslagen' :
+                               app.status === 'accepted' ? 'Accepterad' :
+                               app.status}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                            {app.companyName && (
+                              <span>{app.companyName}</span>
+                            )}
+                            {app.location && (
+                              <span>{app.location}</span>
+                            )}
+                            <span>
+                              {new Date(app.appliedAt).toLocaleDateString('sv-SE')}
+                            </span>
+                          </div>
+                          {app.notes && (
+                            <p className="text-sm text-muted-foreground mt-2">{app.notes}</p>
+                          )}
+                        </div>
+                        {app.jobUrl && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(app.jobUrl, '_blank')}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {jobApplications.length > 10 && (
+                    <div className="text-center pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setLocation('/community/job-applications')}
+                      >
+                        Visa alla {jobApplications.length} ansökningar →
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* CV Upload & Analysis Section */}
         <Card className="mb-6">
           <CardHeader>
