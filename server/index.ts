@@ -61,6 +61,7 @@ import pythonSandboxRouter from './routes/python-sandbox';
 import whisperRouter from './routes/whisper';
 import videoRouter from './routes/video';
 import resumesRouter from './routes/resumes';
+import jobApplicationsRouter from './routes/job-applications';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -596,6 +597,9 @@ const initializeApp = async () => {
     try {
       app.use('/api/resumes', resumesRouter); // Resume analysis and job matching
       console.log('✅ Resumes router registered at /api/resumes');
+      
+      app.use('/api/job-applications', jobApplicationsRouter); // Job application tracking
+      console.log('✅ Job applications router registered at /api/job-applications');
     } catch (error) {
       console.error('❌ Failed to register resumes router:', error);
     }

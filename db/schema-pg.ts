@@ -1102,6 +1102,31 @@ export const resumeAnalyses = pgTable('resume_analyses', {
   analyzedAt: timestamp('analyzed_at').defaultNow(),
 });
 
+export const jobApplications = pgTable('job_applications', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  resumeId: integer('resume_id').references(() => resumes.id, { onDelete: 'set null' }),
+  jobId: integer('job_id'), // Optional reference to external job (if we store jobs)
+  status: text('status').notNull().default('applied'), // 'applied', 'viewed', 'interview', 'rejected', 'offer', 'accepted', 'declined'
+  appliedAt: timestamp('applied_at').defaultNow(),
+  companyName: text('company_name'),
+  jobTitle: text('job_title').notNull(),
+  location: text('location'),
+  applicationMethod: text('application_method'), // 'email', 'form', 'linkedin', 'website', 'manual'
+  jobUrl: text('job_url'),
+  recruiterEmail: text('recruiter_email'),
+  emailSent: boolean('email_sent').default(false),
+  emailOpened: boolean('email_opened').default(false),
+  emailOpenedAt: timestamp('email_opened_at'),
+  emailReplied: boolean('email_replied').default(false),
+  emailRepliedAt: timestamp('email_replied_at'),
+  interviewScheduled: boolean('interview_scheduled').default(false),
+  interviewDate: timestamp('interview_date'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 export const jobMatches = pgTable('job_matches', {
   id: serial('id').primaryKey(),
   resumeId: integer('resume_id').notNull().references(() => resumes.id, { onDelete: 'cascade' }),
@@ -1146,6 +1171,7 @@ export const resumesRelations = relations(resumes, ({ one, many }) => ({
   user: one(users, { fields: [resumes.userId], references: [users.id] }),
   analyses: many(resumeAnalyses),
   jobMatches: many(jobMatches),
+  jobApplications: many(jobApplications),
 }));
 
 export const resumeAnalysesRelations = relations(resumeAnalyses, ({ one }) => ({
@@ -1154,6 +1180,11 @@ export const resumeAnalysesRelations = relations(resumeAnalyses, ({ one }) => ({
 
 export const jobMatchesRelations = relations(jobMatches, ({ one }) => ({
   resume: one(resumes, { fields: [jobMatches.resumeId], references: [resumes.id] }),
+}));
+
+export const jobApplicationsRelations = relations(jobApplications, ({ one }) => ({
+  user: one(users, { fields: [jobApplications.userId], references: [users.id] }),
+  resume: one(resumes, { fields: [jobApplications.resumeId], references: [resumes.id] }),
 }));
 
 export const jobSearchQueriesRelations = relations(jobSearchQueries, ({ one }) => ({
@@ -1171,6 +1202,8 @@ export type ResumeAnalysis = typeof resumeAnalyses.$inferSelect;
 export type NewResumeAnalysis = typeof resumeAnalyses.$inferInsert;
 export type JobMatch = typeof jobMatches.$inferSelect;
 export type NewJobMatch = typeof jobMatches.$inferInsert;
+export type JobApplication = typeof jobApplications.$inferSelect;
+export type NewJobApplication = typeof jobApplications.$inferInsert;
 export type JobSearchQuery = typeof jobSearchQueries.$inferSelect;
 export type NewJobSearchQuery = typeof jobSearchQueries.$inferInsert;
 export type ResumeCreationSession = typeof resumeCreationSessions.$inferSelect;

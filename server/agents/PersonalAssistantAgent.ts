@@ -75,6 +75,10 @@ export class PersonalAssistantAgent {
   private adaptResumeTool: Tool;
   private generateResumePdfTool: Tool;
   private getJobMatchesTool: Tool;
+  private createJobApplicationTool: Tool;
+  private getJobApplicationsTool: Tool;
+  private updateJobApplicationTool: Tool;
+  private getJobApplicationStatsTool: Tool;
   private selectedProjects: Map<string, { projectId: string; projectName: string; projectDescription?: string; isGitHubRepo?: boolean; githubRepo?: { fullName: string; owner: string; repo: string; defaultBranch?: string } }> = new Map(); // Store selected project per session
   private userMessageCounts: Map<string, number> = new Map(); // Track message count per user for Discord recommendations
   private lastDiscordRecommendation: Map<string, number> = new Map(); // Track last recommendation timestamp
@@ -1526,6 +1530,38 @@ If no projectId is provided, will use the currently selected project from the co
           ...this.getJobMatchesTool,
           execute: async (params: Record<string, any>) => {
             return await this.getJobMatches({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('create_job_application')) {
+        builtInTools.push({
+          ...this.createJobApplicationTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.createJobApplication({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('get_job_applications')) {
+        builtInTools.push({
+          ...this.getJobApplicationsTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.getJobApplications({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('update_job_application')) {
+        builtInTools.push({
+          ...this.updateJobApplicationTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.updateJobApplication({ ...params, _userId: userId, _sessionId: sessionId });
+          }
+        });
+      }
+      if (!toolNameExists('get_job_application_stats')) {
+        builtInTools.push({
+          ...this.getJobApplicationStatsTool,
+          execute: async (params: Record<string, any>) => {
+            return await this.getJobApplicationStats({ ...params, _userId: userId, _sessionId: sessionId });
           }
         });
       }
@@ -7705,6 +7741,158 @@ Make this feel personal and helpful, like a briefing from a trusted assistant wh
       };
     } catch (error) {
       logger.error('Error getting job matches', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async createJobApplication(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { jobApplicationService } = await import('../services/JobApplicationService');
+
+      const application = await jobApplicationService.createApplication({
+        userId,
+        jobTitle: params.jobTitle as string,
+        companyName: params.companyName as string | undefined,
+        location: params.location as string | undefined,
+        resumeId: params.resumeId as number | undefined,
+        applicationMethod: params.applicationMethod as any,
+        jobUrl: params.jobUrl as string | undefined,
+        recruiterEmail: params.recruiterEmail as string | undefined,
+        notes: params.notes as string | undefined,
+      });
+
+      return {
+        success: true,
+        application: {
+          id: application.id,
+          jobTitle: application.jobTitle,
+          companyName: application.companyName,
+          status: application.status,
+          appliedAt: application.appliedAt,
+        },
+        message: `Jobbansökan skapad för ${application.jobTitle}${application.companyName ? ` vid ${application.companyName}` : ''}`
+      };
+    } catch (error) {
+      logger.error('Error creating job application', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async getJobApplications(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { jobApplicationService } = await import('../services/JobApplicationService');
+
+      let applications;
+      if (params.resumeId) {
+        applications = await jobApplicationService.getApplicationsByResume(
+          params.resumeId as number,
+          userId
+        );
+      } else {
+        applications = await jobApplicationService.getUserApplications(userId, {
+          status: params.status as any,
+          search: params.search as string | undefined,
+          limit: params.limit as number | undefined,
+        });
+      }
+
+      return {
+        success: true,
+        applications: applications.map(app => ({
+          id: app.id,
+          jobTitle: app.jobTitle,
+          companyName: app.companyName,
+          location: app.location,
+          status: app.status,
+          appliedAt: app.appliedAt,
+          applicationMethod: app.applicationMethod,
+        })),
+        count: applications.length
+      };
+    } catch (error) {
+      logger.error('Error getting job applications', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async updateJobApplication(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const applicationId = params.applicationId as number;
+      if (!applicationId) {
+        return { success: false, error: 'Application ID required' };
+      }
+
+      const { jobApplicationService } = await import('../services/JobApplicationService');
+
+      const application = await jobApplicationService.updateApplication(
+        applicationId,
+        userId,
+        {
+          status: params.status as any,
+          notes: params.notes as string | undefined,
+          emailOpened: params.emailOpened as boolean | undefined,
+          emailReplied: params.emailReplied as boolean | undefined,
+          interviewScheduled: params.interviewScheduled as boolean | undefined,
+          interviewDate: params.interviewDate ? new Date(params.interviewDate) : undefined,
+        }
+      );
+
+      return {
+        success: true,
+        application: {
+          id: application.id,
+          jobTitle: application.jobTitle,
+          companyName: application.companyName,
+          status: application.status,
+        },
+        message: `Jobbansökan uppdaterad för ${application.jobTitle}${application.companyName ? ` vid ${application.companyName}` : ''}`
+      };
+    } catch (error) {
+      logger.error('Error updating job application', error as Error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  private async getJobApplicationStats(params: Record<string, any>): Promise<any> {
+    try {
+      const userId = params._userId || (this as any).currentUserId;
+      if (!userId) {
+        return { success: false, error: 'User ID required' };
+      }
+
+      const { jobApplicationService } = await import('../services/JobApplicationService');
+
+      const stats = await jobApplicationService.getApplicationStats(userId);
+
+      return {
+        success: true,
+        stats: {
+          total: stats.total,
+          byStatus: stats.byStatus,
+          byMethod: stats.byMethod,
+          recentApplications: stats.recentApplications,
+          interviewRate: stats.interviewRate,
+          offerRate: stats.offerRate,
+        },
+        message: `Du har ${stats.total} jobbansökningar totalt. ${stats.recentApplications} ansökningar de senaste 30 dagarna. Intervjufrekvens: ${stats.interviewRate}%, Erbjudandefrekvens: ${stats.offerRate}%`
+      };
+    } catch (error) {
+      logger.error('Error getting job application stats', error as Error);
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
