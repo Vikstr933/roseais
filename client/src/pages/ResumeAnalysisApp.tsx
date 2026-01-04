@@ -301,9 +301,10 @@ export default function ResumeAnalysisApp() {
         setProgress('');
         setUploadedResume(data.resume);
         
-        // Fetch application count for this resume
+        // Fetch application count and applications for this resume
         if (data.resume?.id) {
           fetchApplicationCount(data.resume.id);
+          setShowApplicationsSection(false); // Reset section visibility
         }
         toast({
           title: 'Resume Uploaded!',
@@ -627,6 +628,9 @@ export default function ResumeAnalysisApp() {
   const [isGeneratingLaTeX, setIsGeneratingLaTeX] = useState(false);
   const [creatingApplication, setCreatingApplication] = useState<Record<string, boolean>>({});
   const [applicationCount, setApplicationCount] = useState<number | null>(null);
+  const [jobApplications, setJobApplications] = useState<any[]>([]);
+  const [loadingApplications, setLoadingApplications] = useState(false);
+  const [showApplicationsSection, setShowApplicationsSection] = useState(false);
 
   const handleGeneratePDF = async () => {
     if (!uploadedResume) return;
@@ -689,11 +693,36 @@ export default function ResumeAnalysisApp() {
       const response = await apiFetch(`/api/job-applications/resume/${resumeId}`);
       if (response.ok) {
         const data = await response.json();
-        setApplicationCount((data.applications || []).length);
+        const apps = data.applications || [];
+        setApplicationCount(apps.length);
+        setJobApplications(apps);
       }
     } catch (error) {
       // Silently fail - not critical
       console.error('Error fetching application count:', error);
+    }
+  };
+
+  const fetchJobApplications = async () => {
+    if (!uploadedResume) return;
+    
+    try {
+      setLoadingApplications(true);
+      const response = await apiFetch(`/api/job-applications/resume/${uploadedResume.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setJobApplications(data.applications || []);
+        setApplicationCount((data.applications || []).length);
+      }
+    } catch (error) {
+      console.error('Error fetching job applications:', error);
+      toast({
+        title: 'Error',
+        description: 'Kunde inte hämta jobbansökningar',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingApplications(false);
     }
   };
 
