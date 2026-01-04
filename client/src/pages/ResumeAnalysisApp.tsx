@@ -684,61 +684,16 @@ export default function ResumeAnalysisApp() {
     }
   };
 
-  const handleTrackApplication = async (jobMatch: JobMatch) => {
-    if (!uploadedResume) {
-      toast({
-        title: 'Error',
-        description: 'Inget CV är uppladdat',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const jobId = jobMatch.jobId || '';
-    setCreatingApplication(prev => ({ ...prev, [jobId]: true }));
-
+  const fetchApplicationCount = async (resumeId: number) => {
     try {
-      const response = await apiFetch('/api/job-applications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jobTitle: jobMatch.jobTitle,
-          companyName: jobMatch.company,
-          location: jobMatch.location,
-          resumeId: uploadedResume.id,
-          applicationMethod: 'manual',
-          jobUrl: jobMatch.jobUrl,
-          recruiterEmail: jobMatch.applicationEmail,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || 'Failed to create application');
+      const response = await apiFetch(`/api/job-applications/resume/${resumeId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setApplicationCount((data.applications || []).length);
       }
-
-      toast({
-        title: 'Success',
-        description: 'Jobbansökan sparad i tracker!',
-      });
-
-      // Optionally navigate to job applications page
-      setTimeout(() => {
-        if (confirm('Vill du gå till Jobbansökningar-sidan för att se alla dina ansökningar?')) {
-          setLocation('/community/job-applications');
-        }
-      }, 500);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
-      setCreatingApplication(prev => ({ ...prev, [jobId]: false }));
+    } catch (error) {
+      // Silently fail - not critical
+      console.error('Error fetching application count:', error);
     }
   };
 
