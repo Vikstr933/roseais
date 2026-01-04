@@ -61,6 +61,40 @@ router.get('/stats', authenticateUser, async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/job-applications/resume/:resumeId
+ * Get all applications for a specific resume
+ * NOTE: This must come before /:id route to avoid route conflicts
+ */
+router.get('/resume/:resumeId', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user!.id;
+    const resumeId = parseInt(req.params.resumeId);
+
+    if (isNaN(resumeId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid resume ID',
+      });
+    }
+
+    const applications = await jobApplicationService.getApplicationsByResume(resumeId, userId);
+
+    res.json({
+      success: true,
+      applications,
+      count: applications.length,
+    });
+  } catch (error) {
+    console.error('Error fetching applications by resume:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch applications',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
  * GET /api/job-applications/:id
  * Get a single job application by ID
  */
@@ -237,39 +271,6 @@ router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete job application',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-/**
- * GET /api/job-applications/resume/:resumeId
- * Get all applications for a specific resume
- */
-router.get('/resume/:resumeId', authenticateUser, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user!.id;
-    const resumeId = parseInt(req.params.resumeId);
-
-    if (isNaN(resumeId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid resume ID',
-      });
-    }
-
-    const applications = await jobApplicationService.getApplicationsByResume(resumeId, userId);
-
-    res.json({
-      success: true,
-      applications,
-      count: applications.length,
-    });
-  } catch (error) {
-    console.error('Error fetching applications by resume:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch applications',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
