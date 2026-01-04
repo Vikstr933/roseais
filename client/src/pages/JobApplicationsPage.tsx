@@ -324,7 +324,7 @@ export default function JobApplicationsPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-7xl">
+    <div className="container mx-auto py-8 px-4 max-w-7xl pt-24">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>

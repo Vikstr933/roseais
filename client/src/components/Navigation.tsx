@@ -32,6 +32,8 @@ export function Navigation() {
     { href: '/workspaces', icon: Laptop, text: 'Workspaces', requireAuth: false },
     { href: '/playground', icon: Terminal, text: 'Playground', requireAuth: false },
     { href: '/public-projects', icon: Sparkles, text: 'Community', requireAuth: false },
+    { href: '/community/resume-analysis', icon: FileText, text: 'CV Analys', requireAuth: false },
+    { href: '/community/job-applications', icon: Briefcase, text: 'Jobbansökningar', requireAuth: false },
     { href: '/agent-manager', icon: Settings, text: 'Agents', requireAuth: false },
     { href: '/integrations', icon: Plug, text: 'Skills', requireAuth: false },
     { href: '/admin', icon: Shield, text: 'Admin', requireAuth: true, adminOnly: true },
