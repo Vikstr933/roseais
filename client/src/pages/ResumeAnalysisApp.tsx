@@ -2091,6 +2091,112 @@ export default function ResumeAnalysisApp() {
               </Card>
             )}
 
+            {/* Job Applications Section */}
+            {uploadedResume && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Jobbansökningar</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowApplicationsSection(!showApplicationsSection);
+                          if (!showApplicationsSection && jobApplications.length === 0) {
+                            fetchJobApplications();
+                          }
+                        }}
+                      >
+                        {showApplicationsSection ? (
+                          <>
+                            <X className="h-4 w-4 mr-2" />
+                            Dölj
+                          </>
+                        ) : (
+                          <>
+                            <Briefcase className="h-4 w-4 mr-2" />
+                            Visa
+                            {applicationCount !== null && applicationCount > 0 && (
+                              <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
+                            )}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                {showApplicationsSection && (
+                  <CardContent>
+                    {loadingApplications ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+                      </div>
+                    ) : jobApplications.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-sm">Inga jobbansökningar ännu</p>
+                        <p className="text-xs mt-2">Använd "Spåra Ansökan" på matchande jobb för att börja spåra</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {jobApplications.map((app) => (
+                          <div
+                            key={app.id}
+                            className="p-4 border rounded-lg hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <h4 className="font-semibold">{app.jobTitle}</h4>
+                                  <Badge className={`${
+                                    app.status === 'applied' ? 'bg-blue-100 text-blue-800' :
+                                    app.status === 'interview' ? 'bg-yellow-100 text-yellow-800' :
+                                    app.status === 'offer' ? 'bg-green-100 text-green-800' :
+                                    app.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {app.status === 'applied' ? 'Ansökt' :
+                                     app.status === 'interview' ? 'Intervju' :
+                                     app.status === 'offer' ? 'Erbjudande' :
+                                     app.status === 'rejected' ? 'Avslagen' :
+                                     app.status}
+                                  </Badge>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                                  {app.companyName && (
+                                    <span>{app.companyName}</span>
+                                  )}
+                                  {app.location && (
+                                    <span>{app.location}</span>
+                                  )}
+                                  <span>
+                                    {new Date(app.appliedAt).toLocaleDateString('sv-SE')}
+                                  </span>
+                                </div>
+                                {app.notes && (
+                                  <p className="text-sm text-muted-foreground mt-2">{app.notes}</p>
+                                )}
+                              </div>
+                              {app.jobUrl && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(app.jobUrl, '_blank')}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
             {/* Viewing Application */}
             {viewingApplication && (
               <Card>
