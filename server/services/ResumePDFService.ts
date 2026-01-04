@@ -303,7 +303,28 @@ export class ResumePDFService {
 
     // Replace personal info
     html = html.replace(/\{\{name\}\}/g, this.escapeHtml(data.personalInfo.name));
-    html = html.replace(/\{\{title\}\}/g, data.personalInfo.title ? this.escapeHtml(data.personalInfo.title) : '');
+    
+    // CRITICAL: Don't show title if it's too long (likely contains summary text) or matches summary
+    // Title should be max 50 characters and not be the same as summary
+    let titleToShow = '';
+    if (data.personalInfo.title) {
+      const title = data.personalInfo.title.trim();
+      const summaryText = data.summary?.trim() || '';
+      
+      // Don't show title if:
+      // 1. It's too long (likely summary text)
+      // 2. It matches or is very similar to summary
+      // 3. It contains multiple sentences (likely summary)
+      if (title.length <= 50 && 
+          title.length > 0 &&
+          !title.includes('.') &&
+          !title.includes('med') &&
+          !(summaryText && (title === summaryText || summaryText.includes(title) || title.includes(summaryText.substring(0, 50))))) {
+        titleToShow = this.escapeHtml(title);
+      }
+    }
+    html = html.replace(/\{\{title\}\}/g, titleToShow);
+    
     html = html.replace(/\{\{email\}\}/g, data.personalInfo.email || '');
     html = html.replace(/\{\{phone\}\}/g, data.personalInfo.phone || '');
     html = html.replace(/\{\{location\}\}/g, data.personalInfo.location || '');
@@ -1789,9 +1810,35 @@ export class ResumePDFService {
     }
     
     // Use parsed data if available, otherwise extract from text
+    // IMPORTANT: title should be a short job title (e.g., "Full Stack Developer"), NOT the summary text
+    // Extract title from personalInfo/title field, not from summary
+    let extractedTitle = parsedData?.personalInfo?.title || 
+                        parsedData?.contactInfo?.title ||
+                        parsedData?.sections?.personal?.title ||
+                        this.extractTitle(resumeText) || '';
+    
+    // If title is too long (likely contains summary text), try to extract a shorter title
+    // Title should be max 50 characters (e.g., "Full Stack Developer", "Ekonomiassistent")
+    if (extractedTitle.length > 50) {
+      // Try to extract first sentence or first few words
+      const firstSentence = extractedTitle.split(/[.!?]/)[0].trim();
+      if (firstSentence.length <= 50 && firstSentence.length > 5) {
+        extractedTitle = firstSentence;
+      } else {
+        // If still too long, take first 3-4 words
+        const words = extractedTitle.split(/\s+/).slice(0, 4).join(' ');
+        if (words.length <= 50) {
+          extractedTitle = words;
+        } else {
+          // Fallback: empty title if it's clearly summary text
+          extractedTitle = '';
+        }
+      }
+    }
+    
     const personalInfo = {
       name: extractedName,
-      title: parsedData?.sections?.summary?.split('\n')[0] || this.extractTitle(resumeText) || '',
+      title: extractedTitle,
       email: parsedData?.contactInfo?.email || this.extractEmail(resumeText) || '',
       phone: parsedData?.contactInfo?.phone || this.extractPhone(resumeText) || '',
       location: parsedData?.contactInfo?.location || this.extractLocation(resumeText) || '',
@@ -2065,8 +2112,44 @@ export class ResumePDFService {
   }
 
   private extractTitle(text: string): string | null {
-    const titleMatch = text.match(/(?:Titel|Title|Yrke|Profession)[:\s]+(.+)/i);
-    return titleMatch ? titleMatch[1].trim() : null;
+    // Look for title patterns - should be short (max 50 chars)
+    // Pattern 1: Explicit title field
+    let titleMatch = text.match(/(?:Titel|Title|Yrke|Profession|Position)[:\s]+([^\n]{5,50})/i);
+    if (titleMatch) {
+      const title = titleMatch[1].trim();
+      // Don't use if it looks like summary text (too long, multiple sentences)
+      if (title.length <= 50 && !title.includes('.') && !title.includes('med')) {
+        return title;
+      }
+    }
+    
+    // Pattern 2: Look for common job titles in first few lines (before sections)
+    const sectionHeaders = /(?:^|\n\n)(ERFARENHET|UTBILDNING|FÄRDIGHETER|CERTIFIERINGAR|SPRÅK|PROJEKT|SAMMANFATTNING|PROFIL|EXPERIENCE|EDUCATION|SKILLS)/i;
+    const sectionMatch = text.match(sectionHeaders);
+    const textBeforeSections = sectionMatch && sectionMatch.index !== undefined 
+      ? text.substring(0, sectionMatch.index) 
+      : text;
+    
+    const firstLines = textBeforeSections.split('\n').slice(0, 3).join('\n');
+    
+    // Common Swedish job titles
+    const jobTitlePatterns = [
+      /(?:^|\n)((?:Full Stack|Frontend|Backend|Fullstack|System|Data|DevOps|Cloud|AI|ML)\s+(?:Developer|Utvecklare|Engineer|Ingenjör|Analytiker|Arkitekt|Specialist))/i,
+      /(?:^|\n)((?:Ekonomiassistent|Ekonom|Lagerchef|Projektledare|Scrum Master|Product Owner|Designer|UX|UI|Testare|QA|Säljare|Konsult|Chef|Manager|Ledare))/i,
+      /(?:^|\n)((?:Distributionselektriker|Ställverksmontör|Elektriker|Montör|Tekniker|Mekaniker|Sjuksköterska|Lärare|Jurist|Advokat))/i,
+    ];
+    
+    for (const pattern of jobTitlePatterns) {
+      titleMatch = firstLines.match(pattern);
+      if (titleMatch && titleMatch[1]) {
+        const title = titleMatch[1].trim();
+        if (title.length <= 50 && title.length > 3) {
+          return title;
+        }
+      }
+    }
+    
+    return null;
   }
 
   private extractEmail(text: string): string | null {
