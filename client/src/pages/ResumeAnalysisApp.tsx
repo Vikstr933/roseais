@@ -789,6 +789,11 @@ export default function ResumeAnalysisApp() {
         throw new Error(errorData.error || 'Failed to create application');
       }
 
+      // Update application count
+      if (uploadedResume) {
+        fetchApplicationCount(uploadedResume.id);
+      }
+
       toast({
         title: 'Success',
         description: 'Jobbansökan sparad i tracker!',
@@ -797,7 +802,7 @@ export default function ResumeAnalysisApp() {
       // Optionally navigate to job applications page
       setTimeout(() => {
         if (confirm('Vill du gå till Jobbansökningar-sidan för att se alla dina ansökningar?')) {
-          setLocation('/community/job-applications');
+          setLocation(`/community/job-applications/resume/${uploadedResume.id}`);
         }
       }, 500);
     } catch (err) {
