@@ -1223,6 +1223,21 @@ export default function ResumeAnalysisApp() {
                 Analysera ditt CV med AI, få detaljerad feedback och hitta matchade jobb på svenska marknaden.
                 Stöder PDF, DOCX och LaTeX-filer.
               </p>
+              {uploadedResume && (
+                <div className="mt-4">
+                  <Button
+                    onClick={() => setLocation(`/community/job-applications/resume/${uploadedResume.id}`)}
+                    variant="outline"
+                    className="border-green-300 text-green-700 hover:bg-green-50"
+                  >
+                    <Briefcase className="h-4 w-4 mr-2" />
+                    Visa Jobbansökningar
+                    {applicationCount !== null && applicationCount > 0 && (
+                      <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>
