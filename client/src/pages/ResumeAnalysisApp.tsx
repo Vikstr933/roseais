@@ -1444,6 +1444,7 @@ export default function ResumeAnalysisApp() {
                 </div>
               )}
             </div>
+            </div>
 
             {progress && (
               <div className="mt-4">
