@@ -689,7 +689,7 @@ router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
   try {
     const userId = (req as any).user!.id;
     const resumeId = parseInt(req.params.id);
-    const { template, format, fontSize, colorScheme, resumeText } = req.body;
+    const { template, format, fontSize, colorScheme, resumeText, outputFormat } = req.body;
 
     // Get resume
     const [resume] = await db
@@ -721,24 +721,39 @@ router.post('/:id/generate-pdf', authenticateUser, async (req, res) => {
       resume.filename
     );
 
-    // Generate PDF
-    const pdfBuffer = await resumePDFService.generatePDF(structuredData, {
-      template: template || 'modern',
-      format: format || 'A4',
-      fontSize: fontSize || 'medium',
-      colorScheme: colorScheme || 'blue',
-    });
+    // Check if user wants LaTeX instead of PDF
+    const isLaTeX = outputFormat === 'latex' || outputFormat === 'tex';
 
-    // Set headers for PDF download
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${resume.filename.replace(/\.[^/.]+$/, '')}_resume.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length.toString());
+    if (isLaTeX) {
+      // Generate LaTeX
+      const latexContent = await resumePDFService.generateLaTeX(structuredData);
 
-    res.send(pdfBuffer);
+      // Set headers for LaTeX download
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${resume.filename.replace(/\.[^/.]+$/, '')}_resume.tex"`);
+      res.setHeader('Content-Length', Buffer.byteLength(latexContent, 'utf8').toString());
+
+      res.send(latexContent);
+    } else {
+      // Generate PDF
+      const pdfBuffer = await resumePDFService.generatePDF(structuredData, {
+        template: template || 'modern',
+        format: format || 'A4',
+        fontSize: fontSize || 'medium',
+        colorScheme: colorScheme || 'blue',
+      });
+
+      // Set headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${resume.filename.replace(/\.[^/.]+$/, '')}_resume.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+
+      res.send(pdfBuffer);
+    }
   } catch (error) {
-    console.error('Error generating PDF:', error);
+    console.error('Error generating PDF/LaTeX:', error);
     res.status(500).json({ 
-      error: 'Failed to generate PDF',
+      error: 'Failed to generate file',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

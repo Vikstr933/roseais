@@ -618,6 +618,8 @@ export default function ResumeAnalysisApp() {
     setEditedResumeText('');
   };
 
+  const [isGeneratingLaTeX, setIsGeneratingLaTeX] = useState(false);
+
   const handleGeneratePDF = async () => {
     if (!uploadedResume) return;
 
@@ -635,6 +637,7 @@ export default function ResumeAnalysisApp() {
           format: 'A4',
           fontSize: 'medium',
           colorScheme: 'blue',
+          outputFormat: 'pdf',
         }),
       });
 
@@ -670,6 +673,63 @@ export default function ResumeAnalysisApp() {
       });
     } finally {
       setIsGeneratingPDF(false);
+    }
+  };
+
+  const handleGenerateLaTeX = async () => {
+    if (!uploadedResume) return;
+
+    setIsGeneratingLaTeX(true);
+    setProgress('Genererar LaTeX CV...');
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}/generate-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          template: selectedTemplate,
+          format: 'A4',
+          fontSize: 'medium',
+          colorScheme: 'blue',
+          outputFormat: 'latex',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate LaTeX');
+      }
+
+      // Get LaTeX text
+      const latexText = await response.text();
+      const blob = new Blob([latexText], { type: 'text/plain; charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${uploadedResume.filename.replace(/\.[^/.]+$/, '')}_resume.tex`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setProgress('');
+      toast({
+        title: 'LaTeX CV Genererad!',
+        description: 'Din LaTeX CV-fil har laddats ner. Du kan kompilera den med pdflatex.',
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate LaTeX';
+      setError(errorMessage);
+      setProgress('');
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingLaTeX(false);
     }
   };
 
@@ -1294,24 +1354,44 @@ export default function ResumeAnalysisApp() {
                     )}
                   </div>
                   {analysis && (
-                    <Button
-                      onClick={handleGeneratePDF}
-                      disabled={isGeneratingPDF}
-                      variant="outline"
-                      className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full sm:w-auto"
-                    >
-                      {isGeneratingPDF ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Genererar...
-                        </>
-                      ) : (
-                        <>
-                          <FileText className="h-4 w-4 mr-2" />
-                          Ladda ner PDF
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        onClick={handleGeneratePDF}
+                        disabled={isGeneratingPDF || isGeneratingLaTeX}
+                        variant="outline"
+                        className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full sm:w-auto"
+                      >
+                        {isGeneratingPDF ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Genererar...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Ladda ner PDF
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleGenerateLaTeX}
+                        disabled={isGeneratingPDF || isGeneratingLaTeX}
+                        variant="outline"
+                        className="border-blue-300 text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
+                      >
+                        {isGeneratingLaTeX ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Genererar...
+                          </>
+                        ) : (
+                          <>
+                            <FileCode className="h-4 w-4 mr-2" />
+                            Ladda ner LaTeX
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
