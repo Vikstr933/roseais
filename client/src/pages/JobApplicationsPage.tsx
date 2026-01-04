@@ -142,20 +142,14 @@ export default function JobApplicationsPage() {
       fetchApplications();
       fetchStats();
     }
-  }, [user, statusFilter, searchQuery]);
+  }, [user, statusFilter, searchQuery, params?.resumeId]);
 
   const fetchApplications = async () => {
     if (!user) return;
     
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter);
-      }
-      if (searchQuery) {
-        params.append('search', searchQuery);
-      }
+      
       // If viewing applications for a specific resume
       if (params?.resumeId) {
         const response = await apiFetch(`/api/job-applications/resume/${params.resumeId}`);
@@ -165,7 +159,16 @@ export default function JobApplicationsPage() {
         return;
       }
 
-      const response = await apiFetch(`/api/job-applications?${params.toString()}`);
+      // Otherwise, fetch all applications with filters
+      const queryParams = new URLSearchParams();
+      if (statusFilter !== 'all') {
+        queryParams.append('status', statusFilter);
+      }
+      if (searchQuery) {
+        queryParams.append('search', searchQuery);
+      }
+
+      const response = await apiFetch(`/api/job-applications?${queryParams.toString()}`);
       if (!response.ok) throw new Error('Failed to fetch applications');
       
       const data = await response.json();
