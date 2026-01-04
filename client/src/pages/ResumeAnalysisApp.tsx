@@ -1522,12 +1522,17 @@ export default function ResumeAnalysisApp() {
                         )}
                       </Button>
                       <Button
-                        onClick={() => setLocation(uploadedResume ? `/community/job-applications/resume/${uploadedResume.id}` : '/community/job-applications')}
+                        onClick={() => {
+                          setShowApplicationsSection(!showApplicationsSection);
+                          if (!showApplicationsSection && jobApplications.length === 0) {
+                            fetchJobApplications();
+                          }
+                        }}
                         variant="outline"
                         className="border-green-300 text-green-700 hover:bg-green-50 w-full sm:w-auto"
                       >
                         <Briefcase className="h-4 w-4 mr-2" />
-                        Jobbansökningar
+                        {showApplicationsSection ? 'Dölj' : 'Visa'} Jobbansökningar
                         {applicationCount !== null && applicationCount > 0 && (
                           <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
                         )}
