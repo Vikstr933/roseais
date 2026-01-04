@@ -1190,7 +1190,7 @@ export default function ResumeAnalysisApp() {
 
 
   return (
-    <div className="min-h-screen bg-background text-foreground pt-16">
+    <div className="min-h-screen bg-background text-foreground pt-24">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Header */}
         <motion.div
