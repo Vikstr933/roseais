@@ -11,6 +11,8 @@ import {
   X,
   Sparkles,
   Zap,
+  FileText,
+  Briefcase,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useState } from 'react';
