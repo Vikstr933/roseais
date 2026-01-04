@@ -246,10 +246,10 @@ CREATE OR REPLACE FUNCTION record_agent_solution(
 RETURNS INTEGER AS $$
 DECLARE
     solution_id INTEGER;
-    solution_hash TEXT;
+    v_solution_hash TEXT;
 BEGIN
     -- Generate hash from problem pattern + strategy
-    solution_hash := MD5(p_problem_pattern || p_solution_strategy || p_agent_type);
+    v_solution_hash := MD5(p_problem_pattern || p_solution_strategy || p_agent_type);
     
     -- Insert or update existing solution
     INSERT INTO agent_solutions (
@@ -261,7 +261,7 @@ BEGIN
         discovered_by,
         code_example
     ) VALUES (
-        solution_hash,
+        v_solution_hash,
         p_agent_type,
         p_problem_pattern,
         p_solution_strategy,
