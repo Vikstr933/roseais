@@ -631,7 +631,6 @@ export default function ResumeAnalysisApp() {
   const [applicationCount, setApplicationCount] = useState<number | null>(null);
   const [jobApplications, setJobApplications] = useState<any[]>([]);
   const [loadingApplications, setLoadingApplications] = useState(false);
-  const [showApplicationsSection, setShowApplicationsSection] = useState(false);
 
   const handleGeneratePDF = async () => {
     if (!uploadedResume) return;
