@@ -772,6 +772,15 @@ export default function ResumeAnalysisApp() {
     }
   };
 
+  // Fetch job applications and stats when user is available
+  useEffect(() => {
+    if (user) {
+      fetchAllJobApplications();
+      fetchApplicationStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const handleGenerateLaTeX = async () => {
     if (!uploadedResume) return;
 
