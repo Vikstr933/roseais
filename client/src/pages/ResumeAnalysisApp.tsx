@@ -1345,7 +1345,7 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
-        {/* Unified Dashboard Section - Minimalist */}
+        {/* Unified Dashboard Section - Minimalist - Moved to top */}
         {user && (
           <Card className="mb-6">
             <CardHeader className="pb-3">
@@ -1454,36 +1454,51 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
-        {/* CV Upload & Analysis Section */}
+        {/* CV Upload & Analysis Section - Compact */}
         <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>CV Analys & Jobb-matchning</CardTitle>
-            <CardDescription>
-              Ladda upp ditt CV för att analysera det med AI, få detaljerad feedback och hitta matchade jobb.
-              Stöder PDF, DOCX och LaTeX-filer.
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">CV Analys & Jobb-matchning</CardTitle>
+            <CardDescription className="text-xs">
+              Ladda upp ditt CV för att analysera det med AI och hitta matchade jobb. Stöder PDF, DOCX och LaTeX.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Upload Section */}
-            <div className="mb-6">
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
-              className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 transition-colors"
+              className="border-2 border-dashed rounded-lg p-4 text-center hover:border-primary/50 transition-colors"
             >
               {selectedFile ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-center gap-3">
-                    <FileText className="h-8 w-8 text-primary" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary" />
                     <div className="text-left">
-                      <p className="font-medium">{selectedFile.name}</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="font-medium text-sm">{selectedFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
                         {(selectedFile.size / 1024).toFixed(0)} KB
                       </p>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!uploadedResume && !isUploading && (
+                      <Button
+                        onClick={handleUpload}
+                        size="sm"
+                        className="h-8"
+                      >
+                        Ladda upp
+                      </Button>
+                    )}
+                    {isUploading && (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-xs text-muted-foreground">Laddar upp...</span>
+                      </div>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
+                      className="h-8 w-8 p-0"
                       onClick={() => {
                         setSelectedFile(null);
                         setUploadedResume(null);
@@ -1493,117 +1508,33 @@ export default function ResumeAnalysisApp() {
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                  {!uploadedResume && (
-                    <>
-                      {isUploading && (
-                        <div className="w-full space-y-4 mb-4">
-                          <div className="flex items-center justify-center gap-2 sm:gap-4 md:gap-8 py-6 flex-wrap">
-                            {[
-                              { icon: Upload, label: 'Uppladdning' },
-                              { icon: FileCode, label: 'Parsning' },
-                              { icon: Sparkles, label: 'Formatering' },
-                              { icon: Brain, label: 'Extraktion' },
-                            ].map((step, index) => {
-                              const StepIcon = step.icon;
-                              const isActive = uploadStep >= index;
-                              const isCurrent = uploadStep === index;
-                              return (
-                                <div key={index} className="flex flex-col items-center gap-2">
-                                  <div
-                                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all ${
-                                      isActive
-                                        ? 'bg-primary text-primary-foreground shadow-lg'
-                                        : 'bg-muted text-muted-foreground'
-                                    } ${isCurrent ? 'ring-2 ring-primary ring-offset-2' : ''}`}
-                                  >
-                                    {isActive && isCurrent ? (
-                                      <Loader2 className="h-5 w-5 animate-spin" />
-                                    ) : isActive ? (
-                                      <CheckCircle className="h-5 w-5" />
-                                    ) : (
-                                      <StepIcon className="h-5 w-5" />
-                                    )}
-                                  </div>
-                                  <span
-                                    className={`text-xs font-medium ${
-                                      isActive ? 'text-foreground' : 'text-muted-foreground'
-                                    }`}
-                                  >
-                                    {step.label}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          {progress && (
-                            <div className="text-center">
-                              <p className="text-sm text-muted-foreground">{progress}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <Button
-                        onClick={handleUpload}
-                        disabled={isUploading}
-                        className="w-full"
-                      >
-                        {isUploading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 mr-2" />
-                            Upload Resume
-                          </>
-                        )}
-                      </Button>
-                    </>
-                  )}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
-                  <div>
-                    <p className="font-medium mb-2">Drag & drop your resume here</p>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      or click to browse
-                    </p>
-                    <input
-                      type="file"
-                      id="file-upload"
-                      className="hidden"
-                      accept=".pdf,.docx,.tex"
-                      onChange={handleFileSelect}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => document.getElementById('file-upload')?.click()}
+                <div className="space-y-2">
+                  <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Drag & drop eller{' '}
+                    <button
+                      onClick={() => document.getElementById('file-input')?.click()}
+                      className="text-primary hover:underline"
                     >
-                      Select File
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                    <FileCode className="h-3 w-3" />
-                    <span>Supports: PDF, DOCX, LaTeX</span>
-                  </div>
+                      välj fil
+                    </button>
+                  </p>
+                  <input
+                    id="file-input"
+                    type="file"
+                    accept=".pdf,.docx,.tex"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
                 </div>
               )}
             </div>
-            </div>
-
-            {progress && (
-              <div className="mt-4">
-                <p className="text-sm text-muted-foreground mb-2">{progress}</p>
-                <Progress value={isUploading || isAnalyzing ? 50 : 100} />
-              </div>
-            )}
-
             {error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">{error}</p>
+              <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700">{error}</p>
               </div>
             )}
           </CardContent>
