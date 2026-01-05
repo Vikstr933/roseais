@@ -998,8 +998,8 @@ export default function ResumeAnalysisApp() {
       }
 
       toast({
-        title: 'Jobb spårat!',
-        description: `${jobMatch.jobTitle} har lagts till i dina spårade ansökningar.`,
+        title: 'Ansökan loggad!',
+        description: `${jobMatch.jobTitle} har lagts till i din tracker.`,
       });
 
       // Refresh applications and show dashboard
@@ -1507,23 +1507,25 @@ export default function ResumeAnalysisApp() {
                     {applicationCount ?? jobApplications.length}
                   </Badge>
                 </div>
-                <Button
-                  onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                  variant={showApplicationsDashboard ? "default" : "outline"}
-                  size="sm"
-                >
-                  {showApplicationsDashboard ? (
-                    <>
-                      <Eye className="h-4 w-4 mr-2" />
-                      Dölj
-                    </>
-                  ) : (
-                    <>
-                      <Briefcase className="h-4 w-4 mr-2" />
-                      Visa Alla
-                    </>
-                  )}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                    variant={showApplicationsDashboard ? "default" : "outline"}
+                    size="sm"
+                  >
+                    {showApplicationsDashboard ? (
+                      <>
+                        <Eye className="h-4 w-4 mr-2" />
+                        Visa Snabbvy
+                      </>
+                    ) : (
+                      <>
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        Hantera Alla Ansökningar
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             {!showApplicationsDashboard && (
@@ -1541,7 +1543,11 @@ export default function ResumeAnalysisApp() {
                         </p>
                       </div>
                       <Badge variant="outline" className="ml-2 shrink-0">
-                        {app.applicationStatus || 'pending'}
+                        {app.applicationStatus === 'applied' ? 'Ansökt' :
+                         app.applicationStatus === 'interview' ? 'Intervju' :
+                         app.applicationStatus === 'offer' ? 'Erbjudande' :
+                         app.applicationStatus === 'rejected' ? 'Avslagen' :
+                         app.applicationStatus || 'Väntar'}
                       </Badge>
                     </div>
                   ))}
@@ -1552,7 +1558,7 @@ export default function ResumeAnalysisApp() {
                       className="w-full mt-2"
                       onClick={() => setShowApplicationsDashboard(true)}
                     >
-                      Visa alla {jobApplications.length} ansökningar →
+                      Visa alla {jobApplications.length} ansökningar och statistik →
                     </Button>
                   )}
                 </div>
@@ -1561,184 +1567,7 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
-        {/* Unified Dashboard Section - Enhanced with Quick Actions */}
-        {false && user && (
-          <Card className="mb-6">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">Jobbansökningar</CardTitle>
-                </div>
-                <Button
-                  onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                  variant={showApplicationsDashboard ? "default" : "outline"}
-                  size="sm"
-                  className="h-8"
-                >
-                  <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
-                  {showApplicationsDashboard ? 'Dölj' : 'Visa'} Dashboard
-                </Button>
-              </div>
-            </CardHeader>
-            {!showApplicationsDashboard && (
-              <CardContent className="pt-0">
-                {loadingApplications ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : jobApplications.length === 0 ? (
-                  <div className="space-y-4">
-                    <div className="text-center py-6 text-muted-foreground">
-                      <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                      <p className="text-sm font-medium">Inga jobbansökningar ännu</p>
-                      <p className="text-xs mt-1">Börja med att ladda upp ditt CV och sök matchande jobb</p>
-                    </div>
-                    {/* Quick Actions */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (!uploadedResume) {
-                            document.getElementById('file-input')?.click();
-                          } else {
-                            handleFindJobs(false);
-                          }
-                        }}
-                        className="h-9 text-xs"
-                      >
-                        <Search className="h-3.5 w-3.5 mr-1.5" />
-                        {uploadedResume ? 'Sök Jobb' : 'Ladda upp CV'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (uploadedResume && !analysis) {
-                            handleAnalyze();
-                          } else if (uploadedResume) {
-                            handleFindJobs(false);
-                          }
-                        }}
-                        disabled={!uploadedResume}
-                        className="h-9 text-xs"
-                      >
-                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                        {uploadedResume && !analysis ? 'Analysera CV' : 'Hitta Jobb'}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Statistics */}
-                    {applicationStats && (
-                      <div className="grid grid-cols-4 gap-2 pb-3 border-b">
-                        <div className="text-center">
-                          <div className="text-base font-semibold">{applicationStats.total || 0}</div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">Totalt</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-base font-semibold text-blue-600">{applicationStats.byStatus?.interview || 0}</div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">Intervjuer</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-base font-semibold text-green-600">{applicationStats.byStatus?.offer || 0}</div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">Erbjudanden</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-base font-semibold text-purple-600">
-                            {applicationStats.total > 0 
-                              ? Math.round(((applicationStats.byStatus?.interview || 0) / applicationStats.total) * 100)
-                              : 0}%
-                          </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">Svarsfrekvens</div>
-                        </div>
-                      </div>
-                    )}
-                    {/* Recent Applications */}
-                    <div className="space-y-2 max-h-[240px] overflow-y-auto">
-                      {jobApplications.slice(0, 5).map((app) => (
-                        <div
-                          key={app.id}
-                          className="group p-3 border rounded-lg hover:border-primary/50 hover:bg-accent/30 transition-all"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xs shrink-0">
-                              {app.companyName?.charAt(0).toUpperCase() || '?'}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2 mb-1">
-                                <h4 className="font-semibold text-sm leading-tight">{app.jobTitle}</h4>
-                                <Badge variant="outline" className="text-xs shrink-0">
-                                  {app.status === 'applied' ? 'Ansökt' :
-                                   app.status === 'interview' ? 'Intervju' :
-                                   app.status === 'offer' ? 'Erbjudande' :
-                                   app.status === 'rejected' ? 'Avslagen' :
-                                   app.status}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                {app.companyName && <span className="truncate">{app.companyName}</span>}
-                                {app.location && <span>• {app.location}</span>}
-                              </div>
-                            </div>
-                            {app.jobUrl && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => window.open(app.jobUrl, '_blank')}
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Quick Actions & View All */}
-                    <div className="space-y-2 pt-2 border-t">
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleFindJobs(false)}
-                          disabled={!uploadedResume || isSearchingJobs}
-                          className="h-8 text-xs"
-                        >
-                          <Search className="h-3.5 w-3.5 mr-1.5" />
-                          {isSearchingJobs ? 'Söker...' : 'Sök Nya Jobb'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowApplicationsDashboard(true)}
-                          className="h-8 text-xs"
-                        >
-                          <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
-                          Full Statistik
-                        </Button>
-                      </div>
-                      {jobApplications.length > 5 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowApplicationsDashboard(true)}
-                          className="w-full text-xs h-7"
-                        >
-                          Visa alla {jobApplications.length} ansökningar →
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            )}
-          </Card>
-        )}
-
-        {/* CV Builder Section */}
+        {/* CV Builder Section - Hidden */}
         {false && (
           <Card className="mb-6">
             <CardHeader className="pb-3">

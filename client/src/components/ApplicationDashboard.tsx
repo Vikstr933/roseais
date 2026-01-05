@@ -108,9 +108,9 @@ export function ApplicationDashboard() {
       {/* Header with Filter */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold">Alla Ansökningar</h3>
+          <h3 className="text-lg font-semibold">Min Ansöknings-Tracker</h3>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {applications.length} {applications.length === 1 ? 'ansökan' : 'ansökningar'}
+            Här ser du alla jobb du har loggat eller ansökt till
           </p>
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>

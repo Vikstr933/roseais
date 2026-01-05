@@ -377,7 +377,7 @@ export function JobFeed({
                       ) : (
                         <>
                           <Briefcase className="h-3.5 w-3.5 mr-1.5" />
-                          Spåra
+                          Logga Ansökan
                         </>
                       )}
                     </Button>
