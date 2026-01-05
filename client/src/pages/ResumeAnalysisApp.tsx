@@ -2152,40 +2152,71 @@ export default function ResumeAnalysisApp() {
           </div>
         )}
 
-        {/* Original CV - Quick access */}
+        {/* Kompakt CV-ruta - Visas alltid när CV finns */}
         {uploadedResume && !editingResume && (
-          <Card className="mb-6">
+          <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Original-CV
-              </CardTitle>
-              <CardDescription>
-                {uploadedResume.filename || 'Uppladdat CV'} • Uppladdat {uploadedResume.createdAt ? new Date(uploadedResume.createdAt).toLocaleDateString() : '–'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {(uploadedResume as any).filePath && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
+                    <FileText className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      Ditt CV
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      {uploadedResume.filename || 'Uppladdat CV'} • 
+                      Uppladdat {uploadedResume.createdAt ? new Date(uploadedResume.createdAt).toLocaleDateString('sv-SE') : '–'}
+                      {uploadedResume.updatedAt && uploadedResume.updatedAt !== uploadedResume.createdAt && (
+                        <> • Uppdaterat {new Date(uploadedResume.updatedAt).toLocaleDateString('sv-SE')}</>
+                      )}
+                    </CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(uploadedResume as any).filePath && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(getApiUrl((uploadedResume as any).filePath), '_blank')}
+                      className="h-8"
+                    >
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      Ladda ner
+                    </Button>
+                  )}
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="sm"
-                    onClick={() => window.open(getApiUrl((uploadedResume as any).filePath), '_blank')}
+                    onClick={handleEditResume}
+                    className="h-8"
                   >
-                    <Download className="h-4 w-4 mr-2" />
-                    Ladda ner original
+                    <Edit className="h-3.5 w-3.5 mr-1.5" />
+                    Redigera
                   </Button>
-                )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={() => setShowOriginalResume(prev => !prev)}
+                  className="h-7 text-xs"
                 >
-                  {showOriginalResume ? 'Dölj text' : 'Visa text'}
+                  <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  {showOriginalResume ? 'Dölj CV-text' : 'Visa CV-text'}
                 </Button>
+                {uploadedResume.rawText && (
+                  <span className="text-muted-foreground/70">
+                    • {uploadedResume.rawText.length} tecken
+                  </span>
+                )}
               </div>
               {showOriginalResume && (
-                <div className="border rounded-lg p-4 bg-white max-h-72 overflow-y-auto">
+                <div className="mt-3 border rounded-lg p-4 bg-white/80 backdrop-blur-sm max-h-64 overflow-y-auto shadow-sm">
                   <div className="prose prose-sm max-w-none">
                     <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
                       {getResumeText(uploadedResume, uploadedResume.rawText)}
