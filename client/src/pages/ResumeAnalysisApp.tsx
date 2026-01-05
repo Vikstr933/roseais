@@ -2269,16 +2269,16 @@ export default function ResumeAnalysisApp() {
                 Original-CV
               </CardTitle>
               <CardDescription>
-                {uploadedResume.filename || 'Uppladdat CV'} • Senast uppdaterad {uploadedResume.updatedAt ? new Date(uploadedResume.updatedAt).toLocaleDateString() : '–'}
+                {uploadedResume.filename || 'Uppladdat CV'} • Uppladdat {uploadedResume.createdAt ? new Date(uploadedResume.createdAt).toLocaleDateString() : '–'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                {uploadedResume.filePath && (
+                {(uploadedResume as any).filePath && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(getApiUrl(uploadedResume.filePath), '_blank')}
+                    onClick={() => window.open(getApiUrl((uploadedResume as any).filePath), '_blank')}
                   >
                     <Download className="h-4 w-4 mr-2" />
                     Ladda ner original
