@@ -56,7 +56,6 @@ import {
 } from '@/components/ui/select';
 import { TemplatePreviewDialog } from '@/components/TemplatePreviewDialog';
 import { ApplicationDashboard } from '@/components/ApplicationDashboard';
-import { StatisticsDashboard } from '@/components/StatisticsDashboard';
 import { JobFeed } from '@/components/JobFeed';
 import { ResumeBuilder } from '@/components/ResumeBuilder';
 import { AutoApplySettings } from '@/components/AutoApplySettings';
@@ -2231,17 +2230,6 @@ export default function ResumeAnalysisApp() {
         {/* Full Dashboard View - Minimalist */}
         {showApplicationsDashboard && user && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  Statistik
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <StatisticsDashboard />
-              </CardContent>
-            </Card>
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
