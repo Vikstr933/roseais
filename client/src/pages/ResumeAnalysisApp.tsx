@@ -192,12 +192,6 @@ export default function ResumeAnalysisApp() {
             setUploadedResume(mostRecentResume);
             setShowLanding(false);
             
-            // Load job applications for this resume
-            if (mostRecentResume.id) {
-              fetchApplicationCount(mostRecentResume.id);
-              fetchJobApplications();
-            }
-            
             // Optionally load analysis and job matches if they exist
             if (mostRecentResume.id) {
               try {
