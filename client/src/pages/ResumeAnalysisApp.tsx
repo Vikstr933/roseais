@@ -2168,8 +2168,8 @@ export default function ResumeAnalysisApp() {
                     <CardDescription className="text-xs mt-0.5">
                       {uploadedResume.filename || 'Uppladdat CV'} • 
                       Uppladdat {uploadedResume.createdAt ? new Date(uploadedResume.createdAt).toLocaleDateString('sv-SE') : '–'}
-                      {uploadedResume.updatedAt && uploadedResume.updatedAt !== uploadedResume.createdAt && (
-                        <> • Uppdaterat {new Date(uploadedResume.updatedAt).toLocaleDateString('sv-SE')}</>
+                      {(uploadedResume as any).updatedAt && (uploadedResume as any).updatedAt !== uploadedResume.createdAt && (
+                        <> • Uppdaterat {new Date((uploadedResume as any).updatedAt).toLocaleDateString('sv-SE')}</>
                       )}
                     </CardDescription>
                   </div>
