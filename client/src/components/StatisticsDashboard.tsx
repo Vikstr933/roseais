@@ -109,19 +109,20 @@ export function StatisticsDashboard() {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
       {statCards.map((stat, idx) => {
         const Icon = stat.icon;
         return (
-          <Card key={idx} className={`${stat.bgColor}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+          <div
+            key={idx}
+            className={`p-4 rounded-lg border ${stat.bgColor} border-transparent hover:border-primary/20 transition-colors`}
+          >
+            <div className="flex items-center justify-between mb-2">
               <Icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-            </CardContent>
-          </Card>
+            </div>
+            <div className={`text-2xl font-bold ${stat.color} mb-1`}>{stat.value}</div>
+            <div className="text-xs text-muted-foreground">{stat.title}</div>
+          </div>
         );
       })}
     </div>

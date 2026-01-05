@@ -1356,10 +1356,11 @@ export default function ResumeAnalysisApp() {
                 </div>
                 <Button
                   onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                  variant={showApplicationsDashboard ? "default" : "ghost"}
+                  variant={showApplicationsDashboard ? "default" : "outline"}
                   size="sm"
+                  className="h-8"
                 >
-                  <BarChart3 className="h-4 w-4 mr-1.5" />
+                  <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
                   {showApplicationsDashboard ? 'Dölj' : 'Visa'} Dashboard
                 </Button>
               </div>
@@ -1367,43 +1368,46 @@ export default function ResumeAnalysisApp() {
             {!showApplicationsDashboard && (
               <CardContent className="pt-0">
                 {loadingApplications ? (
-                  <div className="flex items-center justify-center py-6">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : jobApplications.length === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Inga jobbansökningar ännu</p>
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm font-medium">Inga jobbansökningar ännu</p>
                     <p className="text-xs mt-1">Klicka på "Spåra Ansökan" när du hittar matchande jobb</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {applicationStats && (
-                      <div className="flex gap-4 pb-3 border-b">
-                        <div>
-                          <div className="font-semibold">{applicationStats.total || 0}</div>
-                          <div className="text-xs text-muted-foreground">Totalt</div>
+                      <div className="grid grid-cols-3 gap-3 pb-3 border-b">
+                        <div className="text-center">
+                          <div className="text-lg font-semibold">{applicationStats.total || 0}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">Totalt</div>
                         </div>
-                        <div>
-                          <div className="font-semibold text-blue-600">{applicationStats.byStatus?.interview || 0}</div>
-                          <div className="text-xs text-muted-foreground">Intervjuer</div>
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-blue-600">{applicationStats.byStatus?.interview || 0}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">Intervjuer</div>
                         </div>
-                        <div>
-                          <div className="font-semibold text-green-600">{applicationStats.byStatus?.offer || 0}</div>
-                          <div className="text-xs text-muted-foreground">Erbjudanden</div>
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-green-600">{applicationStats.byStatus?.offer || 0}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">Erbjudanden</div>
                         </div>
                       </div>
                     )}
-                    <div className="space-y-1.5 max-h-[250px] overflow-y-auto">
+                    <div className="space-y-2 max-h-[280px] overflow-y-auto">
                       {jobApplications.slice(0, 5).map((app) => (
                         <div
                           key={app.id}
-                          className="p-2.5 border rounded-md hover:bg-accent/50 transition-colors"
+                          className="group p-3 border rounded-lg hover:border-primary/50 hover:bg-accent/30 transition-all"
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xs shrink-0">
+                              {app.companyName?.charAt(0).toUpperCase() || '?'}
+                            </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-medium text-sm truncate">{app.jobTitle}</h4>
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <h4 className="font-semibold text-sm leading-tight">{app.jobTitle}</h4>
                                 <Badge variant="outline" className="text-xs shrink-0">
                                   {app.status === 'applied' ? 'Ansökt' :
                                    app.status === 'interview' ? 'Intervju' :
@@ -1421,10 +1425,10 @@ export default function ResumeAnalysisApp() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0 shrink-0"
+                                className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={() => window.open(app.jobUrl, '_blank')}
                               >
-                                <ExternalLink className="h-3 w-3" />
+                                <ExternalLink className="h-3.5 w-3.5" />
                               </Button>
                             )}
                           </div>
@@ -1437,7 +1441,7 @@ export default function ResumeAnalysisApp() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setShowApplicationsDashboard(true)}
-                          className="text-xs"
+                          className="text-xs h-7"
                         >
                           Visa alla {jobApplications.length} ansökningar →
                         </Button>

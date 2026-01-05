@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '../lib/api';
-import { Clock, Building2, MapPin, TrendingUp, CheckCircle2, XCircle, Loader2, Filter } from 'lucide-react';
+import { Clock, Building2, MapPin, TrendingUp, CheckCircle2, XCircle, Loader2, Filter, Briefcase } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -42,7 +42,11 @@ export function ApplicationDashboard() {
       const response = await apiFetch(`/api/job-applications${params}`);
       const data = await response.json();
       if (data.success) {
-        setApplications(data.applications || []);
+        // Remove duplicates based on id
+        const uniqueApplications = Array.from(
+          new Map((data.applications || []).map((app: JobApplication) => [app.id, app])).values()
+        );
+        setApplications(uniqueApplications);
       }
     } catch (error) {
       console.error('Error fetching applications:', error);
@@ -102,93 +106,100 @@ export function ApplicationDashboard() {
   return (
     <div className="space-y-4">
       {/* Header with Filter */}
-      <div className="flex items-center justify-between">
-        <CardTitle className="text-2xl">Job Applications</CardTitle>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">Alla Ansökningar</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {applications.length} {applications.length === 1 ? 'ansökan' : 'ansökningar'}
+          </p>
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filter by status" />
+          <SelectTrigger className="w-[160px]">
+            <Filter className="h-3.5 w-3.5 mr-2" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Applications</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="applied">Applied</SelectItem>
-            <SelectItem value="waiting">Waiting</SelectItem>
-            <SelectItem value="interview">Interview</SelectItem>
-            <SelectItem value="offer">Offer</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="all">Alla</SelectItem>
+            <SelectItem value="pending">Väntar</SelectItem>
+            <SelectItem value="applied">Ansökt</SelectItem>
+            <SelectItem value="waiting">Väntar på svar</SelectItem>
+            <SelectItem value="interview">Intervju</SelectItem>
+            <SelectItem value="offer">Erbjudande</SelectItem>
+            <SelectItem value="rejected">Avslagen</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* Applications List */}
-      <div className="space-y-3">
-        {applications.map((app) => (
-          <Card key={app.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4 flex-1">
-                  {/* Company Logo Placeholder */}
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                    {app.companyName.charAt(0).toUpperCase()}
-                  </div>
+      {applications.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Briefcase className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">Inga ansökningar hittades</p>
+          <p className="text-xs mt-1">Börja spåra jobb för att se dem här</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {applications.map((app) => (
+            <div
+              key={app.id}
+              className="group p-4 border rounded-lg hover:border-primary/50 hover:bg-accent/30 transition-all"
+            >
+              <div className="flex items-start gap-3">
+                {/* Company Logo */}
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+                  {app.companyName?.charAt(0).toUpperCase() || '?'}
+                </div>
 
-                  {/* Job Details */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-lg">{app.jobTitle}</h3>
-                      {getStatusBadge(app.applicationStatus)}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
-                      <div className="flex items-center gap-1">
-                        <Building2 className="h-4 w-4" />
-                        {app.companyName}
+                {/* Job Details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-sm leading-tight mb-1">{app.jobTitle}</h4>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+                        {app.companyName && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="h-3 w-3" />
+                            {app.companyName}
+                          </span>
+                        )}
+                        {app.location && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {app.location}
+                          </span>
+                        )}
                       </div>
-                      {app.location && (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          {app.location}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {getStatusBadge(app.applicationStatus)}
+                      {app.matchPercentage !== undefined && (
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-50 text-green-700 text-xs font-medium">
+                          <TrendingUp className="h-3 w-3" />
+                          {app.matchPercentage}%
                         </div>
                       )}
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between">
                     {app.jobUrl && (
                       <a
                         href={app.jobUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-blue-500 hover:underline"
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
                       >
-                        View Job Posting →
+                        Visa jobbannons →
                       </a>
                     )}
-                  </div>
-
-                  {/* Match Score & Time */}
-                  <div className="text-right">
-                    {app.matchPercentage !== undefined && (
-                      <div className="flex items-center gap-1 mb-2">
-                        <TrendingUp className="h-4 w-4 text-green-500" />
-                        <span className="font-semibold text-green-600">{app.matchPercentage}%</span>
-                      </div>
-                    )}
-                    <div className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {formatTimeAgo(app.appliedAt || app.createdAt)}
-                    </div>
+                    </span>
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {applications.length === 0 && (
-        <Card>
-          <CardContent className="p-8 text-center text-muted-foreground">
-            <p>No applications found.</p>
-            <p className="text-sm mt-2">Start applying to jobs to see them here!</p>
-          </CardContent>
-        </Card>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
