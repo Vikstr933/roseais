@@ -233,6 +233,15 @@ export default function ResumeAnalysisApp() {
 
     loadUserResumes();
   }, [user]);
+
+  // Load job applications when resume is loaded
+  useEffect(() => {
+    if (uploadedResume?.id) {
+      fetchApplicationCount(uploadedResume.id);
+      fetchJobApplications();
+    }
+  }, [uploadedResume?.id]);
+
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [uploadStep, setUploadStep] = useState<number>(0);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState<boolean>(false);
