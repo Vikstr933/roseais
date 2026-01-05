@@ -60,6 +60,8 @@ import { StatisticsDashboard } from '@/components/StatisticsDashboard';
 import { JobFeed } from '@/components/JobFeed';
 import { ResumeBuilder } from '@/components/ResumeBuilder';
 import { AutoApplySettings } from '@/components/AutoApplySettings';
+import { WorkmeLanding } from '@/components/WorkmeLanding';
+import { CVBuilderForm } from '@/components/CVBuilderForm';
 
 interface ResumeAnalysis {
   id: number;
@@ -166,6 +168,16 @@ export default function ResumeAnalysisApp() {
   const [viewingApplication, setViewingApplication] = useState<{ jobMatch: JobMatch; data: ApplicationData } | null>(null);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false);
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
+  const [showLanding, setShowLanding] = useState<boolean>(false);
+  const [showCVBuilder, setShowCVBuilder] = useState<boolean>(false);
+
+  // Check if user has uploaded resume on mount
+  useEffect(() => {
+    if (!uploadedResume && !showCVBuilder) {
+      // Only show landing if no resume exists
+      setShowLanding(true);
+    }
+  }, []);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [uploadStep, setUploadStep] = useState<number>(0);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState<boolean>(false);
@@ -306,6 +318,7 @@ export default function ResumeAnalysisApp() {
         
         setProgress('');
         setUploadedResume(data.resume);
+        setShowLanding(false); // Hide landing when CV is uploaded
         
         // Fetch application count and applications for this resume
         if (data.resume?.id) {
@@ -1311,6 +1324,61 @@ export default function ResumeAnalysisApp() {
 
 
 
+  // Show landing page if no CV and user hasn't made a choice
+  if (showLanding && !uploadedResume && !showCVBuilder) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <WorkmeLanding
+          onUploadCV={() => {
+            setShowLanding(false);
+            setShowCVBuilder(false);
+          }}
+          onCreateCV={() => {
+            setShowLanding(false);
+            setShowCVBuilder(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Show CV Builder Form
+  if (showCVBuilder && !uploadedResume) {
+    return (
+      <div className="min-h-screen bg-background text-foreground pt-24">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setShowCVBuilder(false);
+              setShowLanding(true);
+            }}
+            className="mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Tillbaka
+          </Button>
+          <CVBuilderForm
+            onComplete={async (cvData) => {
+              // TODO: Generate PDF from CV data and upload it
+              // For now, just show success and go back to upload
+              toast({
+                title: 'CV skapat!',
+                description: 'Ditt CV har skapats. Ladda upp det för att fortsätta.',
+              });
+              setShowCVBuilder(false);
+              setShowLanding(false);
+            }}
+            onCancel={() => {
+              setShowCVBuilder(false);
+              setShowLanding(true);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground pt-24">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
@@ -1320,14 +1388,28 @@ export default function ResumeAnalysisApp() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <Button
-            variant="ghost"
-            onClick={() => setLocation('/public-projects')}
-            className="mb-4"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Community
-          </Button>
+          <div className="flex items-center justify-between mb-4">
+            <Button
+              variant="ghost"
+              onClick={() => setLocation('/public-projects')}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Community
+            </Button>
+            {uploadedResume && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowLanding(true);
+                  setUploadedResume(null);
+                  setAnalysis(null);
+                  setJobMatches([]);
+                }}
+              >
+                Nytt CV
+              </Button>
+            )}
+          </div>
 
           <div className="flex flex-col sm:flex-row items-start gap-4">
             <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20 flex-shrink-0">
@@ -1335,21 +1417,21 @@ export default function ResumeAnalysisApp() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                <h1 className="text-2xl sm:text-3xl font-bold break-words">CV & Jobbsökning Dashboard</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold break-words">Workme</h1>
                 <Badge className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/20 text-purple-700 w-fit">
                   <Brain className="h-3 w-3 mr-1" />
                   AI-Powered
                 </Badge>
               </div>
               <p className="text-sm sm:text-base text-muted-foreground">
-                Hantera dina jobbansökningar, analysera ditt CV och hitta matchade jobb på svenska marknaden.
+                Din AI-drivna karriärcoach. Hitta ditt drömjobb snabbare med automatiserad jobbsökning.
               </p>
             </div>
           </div>
         </motion.div>
 
         {/* Unified Dashboard Section - Enhanced with Quick Actions */}
-        {user && (
+        {false && user && (
           <Card className="mb-6">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -1526,27 +1608,30 @@ export default function ResumeAnalysisApp() {
         )}
 
         {/* CV Builder Section */}
-        <Card className="mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">CV-byggare</CardTitle>
-            <CardDescription className="text-xs">
-              Bygg ditt CV steg för steg med AI-hjälp eller ladda upp ett befintligt CV för analys.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResumeBuilder />
-          </CardContent>
-        </Card>
+        {false && (
+          <Card className="mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">CV-byggare</CardTitle>
+              <CardDescription className="text-xs">
+                Bygg ditt CV steg för steg med AI-hjälp eller ladda upp ett befintligt CV för analys.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResumeBuilder />
+            </CardContent>
+          </Card>
+        )}
 
-        {/* CV Upload & Analysis Section - Compact */}
-        <Card className="mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">CV Analys & Jobb-matchning</CardTitle>
-            <CardDescription className="text-xs">
-              Ladda upp ditt CV för att analysera det med AI och hitta matchade jobb. Stöder PDF, DOCX och LaTeX.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        {/* CV Upload Section - Only show if no CV uploaded */}
+        {!uploadedResume && (
+          <Card className="mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Ladda upp ditt CV</CardTitle>
+              <CardDescription className="text-xs">
+                Ladda upp ditt CV för att analysera det med AI och hitta matchade jobb. Stöder PDF, DOCX och LaTeX.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
@@ -1623,6 +1708,7 @@ export default function ResumeAnalysisApp() {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Analysis Section */}
         {uploadedResume && !analysis && (
