@@ -55,9 +55,14 @@ export function ApplicationDashboard() {
       const response = await apiFetch(`/api/job-applications${params}`);
       const data = await response.json();
       if (data.success) {
+        // Map backend 'status' to frontend 'applicationStatus'
+        const mappedApplications = (data.applications || []).map((app: any) => ({
+          ...app,
+          applicationStatus: app.status || app.applicationStatus || 'applied',
+        }));
         // Remove duplicates based on id
         const uniqueApplications = Array.from(
-          new Map((data.applications || []).map((app: JobApplication) => [app.id, app])).values()
+          new Map(mappedApplications.map((app: JobApplication) => [app.id, app])).values()
         );
         setApplications(uniqueApplications);
       }
