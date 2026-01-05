@@ -248,7 +248,6 @@ export default function ResumeAnalysisApp() {
   const [isGeneratingApplicationPDF, setIsGeneratingApplicationPDF] = useState<Record<string, boolean>>({});
   const [selectedTemplate, setSelectedTemplate] = useState<'modern' | 'classic' | 'minimal' | 'professional'>('modern');
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
-  const [showApplicationsDashboard, setShowApplicationsDashboard] = useState(false);
   const [showOriginalResume, setShowOriginalResume] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1002,9 +1001,8 @@ export default function ResumeAnalysisApp() {
         description: `${jobMatch.jobTitle} har lagts till i din tracker.`,
       });
 
-      // Refresh applications and show dashboard
+      // Refresh applications
       fetchJobApplications();
-      setShowApplicationsDashboard(true);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
       toast({
