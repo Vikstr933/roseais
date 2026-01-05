@@ -57,6 +57,9 @@ import {
 import { TemplatePreviewDialog } from '@/components/TemplatePreviewDialog';
 import { ApplicationDashboard } from '@/components/ApplicationDashboard';
 import { StatisticsDashboard } from '@/components/StatisticsDashboard';
+import { JobFeed } from '@/components/JobFeed';
+import { ResumeBuilder } from '@/components/ResumeBuilder';
+import { AutoApplySettings } from '@/components/AutoApplySettings';
 
 interface ResumeAnalysis {
   id: number;
@@ -1345,7 +1348,7 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
-        {/* Unified Dashboard Section - Minimalist - Moved to top */}
+        {/* Unified Dashboard Section - Enhanced with Quick Actions */}
         {user && (
           <Card className="mb-6">
             <CardHeader className="pb-3">
@@ -1372,30 +1375,76 @@ export default function ResumeAnalysisApp() {
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : jobApplications.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm font-medium">Inga jobbansökningar ännu</p>
-                    <p className="text-xs mt-1">Klicka på "Spåra Ansökan" när du hittar matchande jobb</p>
+                  <div className="space-y-4">
+                    <div className="text-center py-6 text-muted-foreground">
+                      <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm font-medium">Inga jobbansökningar ännu</p>
+                      <p className="text-xs mt-1">Börja med att ladda upp ditt CV och sök matchande jobb</p>
+                    </div>
+                    {/* Quick Actions */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!uploadedResume) {
+                            document.getElementById('file-input')?.click();
+                          } else {
+                            handleFindJobs(false);
+                          }
+                        }}
+                        className="h-9 text-xs"
+                      >
+                        <Search className="h-3.5 w-3.5 mr-1.5" />
+                        {uploadedResume ? 'Sök Jobb' : 'Ladda upp CV'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (uploadedResume && !analysis) {
+                            handleAnalyze();
+                          } else if (uploadedResume) {
+                            handleFindJobs(false);
+                          }
+                        }}
+                        disabled={!uploadedResume}
+                        className="h-9 text-xs"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                        {uploadedResume && !analysis ? 'Analysera CV' : 'Hitta Jobb'}
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    {/* Statistics */}
                     {applicationStats && (
-                      <div className="grid grid-cols-3 gap-3 pb-3 border-b">
+                      <div className="grid grid-cols-4 gap-2 pb-3 border-b">
                         <div className="text-center">
-                          <div className="text-lg font-semibold">{applicationStats.total || 0}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">Totalt</div>
+                          <div className="text-base font-semibold">{applicationStats.total || 0}</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Totalt</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-blue-600">{applicationStats.byStatus?.interview || 0}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">Intervjuer</div>
+                          <div className="text-base font-semibold text-blue-600">{applicationStats.byStatus?.interview || 0}</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Intervjuer</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-green-600">{applicationStats.byStatus?.offer || 0}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">Erbjudanden</div>
+                          <div className="text-base font-semibold text-green-600">{applicationStats.byStatus?.offer || 0}</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Erbjudanden</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-base font-semibold text-purple-600">
+                            {applicationStats.total > 0 
+                              ? Math.round(((applicationStats.byStatus?.interview || 0) / applicationStats.total) * 100)
+                              : 0}%
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Svarsfrekvens</div>
                         </div>
                       </div>
                     )}
-                    <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                    {/* Recent Applications */}
+                    <div className="space-y-2 max-h-[240px] overflow-y-auto">
                       {jobApplications.slice(0, 5).map((app) => (
                         <div
                           key={app.id}
@@ -1435,24 +1484,59 @@ export default function ResumeAnalysisApp() {
                         </div>
                       ))}
                     </div>
-                    {jobApplications.length > 5 && (
-                      <div className="text-center pt-2 border-t">
+                    {/* Quick Actions & View All */}
+                    <div className="space-y-2 pt-2 border-t">
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleFindJobs(false)}
+                          disabled={!uploadedResume || isSearchingJobs}
+                          className="h-8 text-xs"
+                        >
+                          <Search className="h-3.5 w-3.5 mr-1.5" />
+                          {isSearchingJobs ? 'Söker...' : 'Sök Nya Jobb'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowApplicationsDashboard(true)}
+                          className="h-8 text-xs"
+                        >
+                          <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
+                          Full Statistik
+                        </Button>
+                      </div>
+                      {jobApplications.length > 5 && (
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setShowApplicationsDashboard(true)}
-                          className="text-xs h-7"
+                          className="w-full text-xs h-7"
                         >
                           Visa alla {jobApplications.length} ansökningar →
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </CardContent>
             )}
           </Card>
         )}
+
+        {/* CV Builder Section */}
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">CV-byggare</CardTitle>
+            <CardDescription className="text-xs">
+              Bygg ditt CV steg för steg med AI-hjälp eller ladda upp ett befintligt CV för analys.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResumeBuilder />
+          </CardContent>
+        </Card>
 
         {/* CV Upload & Analysis Section - Compact */}
         <Card className="mb-6">
@@ -1856,262 +1940,18 @@ export default function ResumeAnalysisApp() {
             </div>
 
             {/* Right Column: Job Matches and Search (2/3 width on large screens) */}
-            <div className="lg:col-span-2 space-y-4">
-
-            {/* Job Matches - Compact */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg">Matchande Jobb</CardTitle>
-                    <CardDescription className="text-xs">Automatiskt matchade jobb baserat på ditt CV</CardDescription>
-                  </div>
-                  {jobMatches.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleFindJobs(false)}
-                      disabled={isSearchingJobs}
-                      className="h-7 px-2"
-                    >
-                      {isSearchingJobs ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <BarChart3 className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {/* Search Form - always visible but can be toggled */}
-                  <div className="space-y-2 pb-3 border-b">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <Input
-                        id="search-keywords"
-                        name="searchKeywords"
-                        type="text"
-                        placeholder="Sökord..."
-                        value={searchKeywords}
-                        onChange={(e) => setSearchKeywords(e.target.value)}
-                        className="h-9 sm:h-8 text-sm sm:text-xs"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleFindJobs(false);
-                          }
-                        }}
-                      />
-                      <Input
-                        id="search-location"
-                        name="searchLocation"
-                        type="text"
-                        placeholder="Plats..."
-                        value={searchLocation}
-                        onChange={(e) => setSearchLocation(e.target.value)}
-                        className="h-9 sm:h-8 text-sm sm:text-xs"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleFindJobs(false);
-                          }
-                        }}
-                      />
-                    </div>
-                    {!hasAutoSearched && (
-                      <Button
-                        onClick={() => handleFindJobs(false)}
-                        disabled={isSearchingJobs || !uploadedResume}
-                        size="sm"
-                        className="w-full h-7 text-xs"
-                      >
-                        {isSearchingJobs ? (
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        ) : (
-                          <>
-                            <BarChart3 className="h-3 w-3 mr-1" />
-                            Sök Jobb
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-
-                  {isSearchingJobs && (
-                    <div className="text-center py-4 text-muted-foreground">
-                      <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-primary" />
-                      <p className="text-xs">Söker matchande jobb...</p>
-                    </div>
-                  )}
-
-                  {!isSearchingJobs && jobMatches.length === 0 && !hasAutoSearched && uploadedResume && (
-                    <div className="text-center py-4 text-muted-foreground">
-                      <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-xs">
-                        Analysera ditt CV för att automatiskt hitta matchande jobb.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Job Results */}
-                  {jobMatches.length > 0 && (
-                      <div className="space-y-3">
-                        {jobMatches.map((match, index) => {
-                          // Determine match quality color and text based on percentage
-                          const getMatchColor = (percentage: number) => {
-                            // Updated thresholds to match new label thresholds
-                            if (percentage >= 75) return 'border-green-300 bg-green-50/50';
-                            if (percentage >= 55) return 'border-blue-300 bg-blue-50/50';
-                            if (percentage >= 35) return 'border-yellow-300 bg-yellow-50/50';
-                            return 'border-gray-300 bg-gray-50/50';
-                          };
-
-                          const getMatchBadgeColor = (percentage: number) => {
-                            // Updated thresholds to match new label thresholds
-                            if (percentage >= 75) return 'bg-green-600';
-                            if (percentage >= 55) return 'bg-blue-600';
-                            if (percentage >= 35) return 'bg-yellow-600';
-                            return 'bg-gray-600';
-                          };
-
-                          const getMatchLabel = (percentage: number) => {
-                            // Higher threshold for "Stark matchning" to avoid false positives
-                            // Only show "Stark matchning" for truly well-matched jobs
-                            if (percentage >= 75) return 'Stark matchning';
-                            if (percentage >= 55) return 'Bra matchning';
-                            if (percentage >= 35) return 'Normal matchning';
-                            return 'Låg matchning';
-                          };
-
-                          return (
-                            <div
-                              key={index}
-                              className={`p-3 border rounded-md ${getMatchColor(match.matchPercentage)}`}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <h4 className="font-medium">{match.jobTitle}</h4>
-                                  <p className="text-sm text-muted-foreground">
-                                    {match.company} {match.location && `• ${match.location}`}
-                                  </p>
-                                </div>
-                                <Badge className={`${getMatchBadgeColor(match.matchPercentage)} text-white text-xs px-2 py-0`}>
-                                  {getMatchLabel(match.matchPercentage)}
-                                </Badge>
-                              </div>
-                              {match.matchedSkills.length > 0 && (
-                                <div className="mt-3">
-                                  <p className="text-xs text-muted-foreground mb-1">Matchade färdigheter:</p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {match.matchedSkills.slice(0, 4).map((skill, i) => (
-                                      <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
-                                        {skill}
-                                      </Badge>
-                                    ))}
-                                    {match.matchedSkills.length > 4 && (
-                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                        +{match.matchedSkills.length - 4} mer
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                              <div className="flex flex-col sm:flex-row flex-wrap gap-2 mt-3">
-                                {match.jobUrl && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.open(match.jobUrl, '_blank')}
-                                    className="h-9 sm:h-7 text-xs w-full sm:w-auto"
-                                  >
-                                    <ExternalLink className="h-3 w-3 mr-1" />
-                                    Visa Jobb
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleTrackApplication(match)}
-                                  disabled={creatingApplication[match.jobId || ''] || !uploadedResume}
-                                  className="h-9 sm:h-7 text-xs w-full sm:w-auto border-green-300 text-green-700 hover:bg-green-50"
-                                >
-                                  {creatingApplication[match.jobId || ''] ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Sparar...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Briefcase className="h-3 w-3 mr-1" />
-                                      Spåra Ansökan
-                                    </>
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => handleAdaptResume(match)}
-                                  disabled={isAdapting[match.jobId || '']}
-                                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-9 sm:h-7 text-xs w-full sm:w-auto"
-                                >
-                                  {isAdapting[match.jobId || ''] ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Anpassar...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Wand2 className="h-3 w-3 mr-1" />
-                                      Anpassa CV
-                                    </>
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => handleGenerateApplication(match)}
-                                  disabled={generatingApplication[match.jobId || ''] || !uploadedResume}
-                                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 h-9 sm:h-7 text-xs w-full sm:w-auto"
-                                >
-                                  {generatingApplication[match.jobId || ''] ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Genererar...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <FileTextIcon className="h-3 w-3 mr-1" />
-                                      Skapa Ansökan
-                                    </>
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleTrackApplication(match)}
-                                  disabled={creatingApplication[match.jobId || ''] || !uploadedResume}
-                                  className="h-9 sm:h-7 text-xs w-full sm:w-auto border-green-300 text-green-700 hover:bg-green-50"
-                                >
-                                  {creatingApplication[match.jobId || ''] ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      Sparar...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Briefcase className="h-3 w-3 mr-1" />
-                                      Spåra Ansökan
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <div className="lg:col-span-2">
+              <JobFeed
+                jobs={jobMatches}
+                onTrackApplication={handleTrackApplication}
+                onAdaptResume={handleAdaptResume}
+                onGenerateApplication={handleGenerateApplication}
+                isTracking={creatingApplication}
+                isAdapting={isAdapting}
+                isGenerating={generatingApplication}
+                isLoading={isSearchingJobs}
+                uploadedResume={!!uploadedResume}
+              />
             </div>
           </div>
         )}
@@ -2141,6 +1981,10 @@ export default function ResumeAnalysisApp() {
                 <ApplicationDashboard />
               </CardContent>
             </Card>
+            {/* Auto-Apply Settings */}
+            {uploadedResume && (
+              <AutoApplySettings resumeId={uploadedResume.id} />
+            )}
           </div>
         )}
 

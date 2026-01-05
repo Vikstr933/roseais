@@ -62,6 +62,8 @@ import whisperRouter from './routes/whisper';
 import videoRouter from './routes/video';
 import resumesRouter from './routes/resumes';
 import jobApplicationsRouter from './routes/job-applications';
+import savedJobsRouter from './routes/saved-jobs';
+import autoApplyRouter from './routes/auto-apply';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -600,6 +602,12 @@ const initializeApp = async () => {
       
       app.use('/api/job-applications', jobApplicationsRouter); // Job application tracking
       console.log('✅ Job applications router registered at /api/job-applications');
+      
+      app.use('/api/saved-jobs', savedJobsRouter); // Saved jobs
+      console.log('✅ Saved jobs router registered at /api/saved-jobs');
+      
+      app.use('/api/auto-apply', autoApplyRouter); // Auto-apply
+      console.log('✅ Auto-apply router registered at /api/auto-apply');
     } catch (error) {
       console.error('❌ Failed to register resumes router:', error);
     }

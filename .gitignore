@@ -139,6 +139,7 @@ db.sqlite
 
 # Cache
 .cache/
+cache/whisper-models/
 
 # Development server
 .local/

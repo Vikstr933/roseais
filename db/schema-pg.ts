@@ -1143,6 +1143,24 @@ export const jobMatches = pgTable('job_matches', {
   matchedAt: timestamp('matched_at').defaultNow(),
 });
 
+export const savedJobs = pgTable('saved_jobs', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  jobTitle: text('job_title').notNull(),
+  company: text('company'),
+  location: text('location'),
+  jobUrl: text('job_url'),
+  jobId: text('job_id'), // External job ID from JobTech API or other source
+  jobDescription: text('job_description'),
+  matchPercentage: integer('match_percentage'),
+  matchedSkills: jsonb('matched_skills').default([]),
+  notes: text('notes'),
+  savedAt: timestamp('saved_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  uniqueUserJob: unique().on(table.userId, table.jobId),
+}));
+
 export const jobSearchQueries = pgTable('job_search_queries', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -1204,6 +1222,8 @@ export type JobMatch = typeof jobMatches.$inferSelect;
 export type NewJobMatch = typeof jobMatches.$inferInsert;
 export type JobApplication = typeof jobApplications.$inferSelect;
 export type NewJobApplication = typeof jobApplications.$inferInsert;
+export type SavedJob = typeof savedJobs.$inferSelect;
+export type NewSavedJob = typeof savedJobs.$inferInsert;
 export type JobSearchQuery = typeof jobSearchQueries.$inferSelect;
 export type NewJobSearchQuery = typeof jobSearchQueries.$inferInsert;
 export type ResumeCreationSession = typeof resumeCreationSessions.$inferSelect;
