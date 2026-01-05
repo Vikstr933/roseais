@@ -55,6 +55,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TemplatePreviewDialog } from '@/components/TemplatePreviewDialog';
+import { ApplicationDashboard } from '@/components/ApplicationDashboard';
+import { StatisticsDashboard } from '@/components/StatisticsDashboard';
 
 interface ResumeAnalysis {
   id: number;
@@ -169,6 +171,7 @@ export default function ResumeAnalysisApp() {
   const [selectedTemplate, setSelectedTemplate] = useState<'modern' | 'classic' | 'minimal' | 'professional'>('modern');
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
   const [showApplicationsSection, setShowApplicationsSection] = useState(false);
+  const [showApplicationsDashboard, setShowApplicationsDashboard] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -624,6 +627,44 @@ export default function ResumeAnalysisApp() {
   const handleCancelEdit = () => {
     setEditingResume(false);
     setEditedResumeText('');
+  };
+
+  const handleCreateApplication = async (jobMatch: JobMatch) => {
+    // Use existing handleTrackApplication if it exists, otherwise create new
+    if (typeof handleTrackApplication === 'function') {
+      return handleTrackApplication(jobMatch);
+    }
+    
+    try {
+      const response = await apiFetch('/api/job-applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resumeId: uploadedResume?.id,
+          jobTitle: jobMatch.jobTitle,
+          companyName: jobMatch.company,
+          location: jobMatch.location,
+          jobUrl: jobMatch.jobUrl,
+          applicationMethod: 'manual',
+          jobId: jobMatch.jobId || `job-${Date.now()}`,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Application Tracked!',
+          description: `Application for ${jobMatch.jobTitle} at ${jobMatch.company} has been added to your dashboard.`,
+        });
+      }
+    } catch (error) {
+      console.error('Error creating application:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to track application',
+        variant: 'destructive',
+      });
+    }
   };
 
   const [isGeneratingLaTeX, setIsGeneratingLaTeX] = useState(false);
@@ -1307,6 +1348,35 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
+        {/* Quick Access Dashboard Card - Top of Page */}
+        {user && (
+          <Card className="mb-4 border-2 border-blue-200 bg-gradient-to-r from-blue-50/80 to-purple-50/80 shadow-sm">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <BarChart3 className="h-5 w-5 text-blue-700" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">Job Search Dashboard</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Track applications, view statistics, and manage your job search progress
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                  variant={showApplicationsDashboard ? "default" : "outline"}
+                  className={showApplicationsDashboard ? "bg-blue-600 hover:bg-blue-700" : "border-blue-300 text-blue-700 hover:bg-blue-50"}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  {showApplicationsDashboard ? 'Hide' : 'Show'} Dashboard
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Job Applications Dashboard - Always visible, first section */}
         {user && (
           <Card className="mb-6 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
@@ -1323,6 +1393,15 @@ export default function ResumeAnalysisApp() {
                     </CardDescription>
                   </div>
                 </div>
+                <Button
+                  onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                  variant={showApplicationsDashboard ? "default" : "outline"}
+                  size="sm"
+                  className={showApplicationsDashboard ? "bg-blue-600 hover:bg-blue-700" : "border-blue-300 text-blue-700 hover:bg-blue-50"}
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  {showApplicationsDashboard ? 'Dölj' : 'Visa'} Dashboard
+                </Button>
                 {applicationStats && (
                   <div className="flex gap-4 text-sm">
                     <div className="text-center">
@@ -1350,7 +1429,15 @@ export default function ResumeAnalysisApp() {
                 <div className="text-center py-8 text-muted-foreground">
                   <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="text-sm font-medium mb-2">Inga jobbansökningar ännu</p>
-                  <p className="text-xs">Ladda upp ditt CV och hitta matchande jobb för att börja spåra ansökningar</p>
+                  <p className="text-xs mb-4">Ladda upp ditt CV och hitta matchande jobb för att börja spåra ansökningar</p>
+                  <Button
+                    onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                    variant="outline"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    {showApplicationsDashboard ? 'Dölj' : 'Visa'} Fullständig Dashboard
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[400px] overflow-y-auto">
@@ -1407,13 +1494,37 @@ export default function ResumeAnalysisApp() {
                     </div>
                   ))}
                   {jobApplications.length > 10 && (
-                    <div className="text-center pt-2">
+                    <div className="text-center pt-2 space-y-2">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setLocation('/community/job-applications')}
                       >
                         Visa alla {jobApplications.length} ansökningar →
+                      </Button>
+                      <div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                          className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                        >
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          {showApplicationsDashboard ? 'Dölj' : 'Visa'} Fullständig Dashboard
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {jobApplications.length <= 10 && jobApplications.length > 0 && (
+                    <div className="text-center pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        {showApplicationsDashboard ? 'Dölj' : 'Visa'} Fullständig Dashboard med Statistik
                       </Button>
                     </div>
                   )}
@@ -1690,6 +1801,14 @@ export default function ResumeAnalysisApp() {
                         {applicationCount !== null && applicationCount > 0 && (
                           <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
                         )}
+                      </Button>
+                      <Button
+                        onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                        variant="outline"
+                        className="border-blue-300 text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        {showApplicationsDashboard ? 'Dölj' : 'Visa'} Dashboard
                       </Button>
                     </div>
                   )}
@@ -2082,6 +2201,25 @@ export default function ResumeAnalysisApp() {
                                   </Button>
                                 )}
                                 <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleTrackApplication(match)}
+                                  disabled={creatingApplication[match.jobId || ''] || !uploadedResume}
+                                  className="h-9 sm:h-7 text-xs w-full sm:w-auto border-green-300 text-green-700 hover:bg-green-50"
+                                >
+                                  {creatingApplication[match.jobId || ''] ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                      Sparar...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Briefcase className="h-3 w-3 mr-1" />
+                                      Spåra Ansökan
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
                                   variant="default"
                                   size="sm"
                                   onClick={() => handleAdaptResume(match)}
@@ -2148,6 +2286,30 @@ export default function ResumeAnalysisApp() {
               </CardContent>
             </Card>
             </div>
+          </div>
+        )}
+
+        {/* Applications Dashboard - Accessible even without resume if user has applications */}
+        {showApplicationsDashboard && user && (
+          <div className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Your Job Search Statistics</CardTitle>
+                <CardDescription>Track your application progress and success metrics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StatisticsDashboard />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Job Applications</CardTitle>
+                <CardDescription>View and manage all your tracked job applications</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ApplicationDashboard />
+              </CardContent>
+            </Card>
           </div>
         )}
 
