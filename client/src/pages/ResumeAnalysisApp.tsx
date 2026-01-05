@@ -1496,6 +1496,206 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
+        {/* Snabbstart-kort - Visa när CV är uppladdat */}
+        {uploadedResume && (
+          <Card className="mb-6 border-2 border-purple-200 bg-gradient-to-br from-purple-50/50 to-blue-50/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-purple-600" />
+                Snabbstart - Dina Nästa Steg
+              </CardTitle>
+              <CardDescription>
+                Följ dessa steg för att maximera dina chanser att få jobbet
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-3 gap-4">
+                {/* Steg 1: Analysera CV */}
+                <div className={`p-4 rounded-lg border-2 transition-all ${analysis ? 'border-green-300 bg-green-50' : 'border-purple-200 bg-white hover:border-purple-300 cursor-pointer'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold ${analysis ? 'bg-green-500 text-white' : 'bg-purple-100 text-purple-600'}`}>
+                      {analysis ? <CheckCircle className="h-6 w-6" /> : '1'}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-sm mb-1">Analysera CV</h4>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Få detaljerad AI-analys och förbättringsförslag
+                      </p>
+                      {!analysis ? (
+                        <Button
+                          size="sm"
+                          onClick={handleAnalyze}
+                          disabled={isAnalyzing}
+                          className="w-full bg-purple-600 hover:bg-purple-700"
+                        >
+                          {isAnalyzing ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                              Analyserar...
+                            </>
+                          ) : (
+                            <>
+                              <Brain className="h-3 w-3 mr-2" />
+                              Starta Analys
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <Badge className="bg-green-100 text-green-700 border-green-300">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Klar
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Steg 2: Anpassa CV */}
+                <div className={`p-4 rounded-lg border-2 transition-all ${adaptedResumes.length > 0 ? 'border-green-300 bg-green-50' : analysis ? 'border-blue-200 bg-white hover:border-blue-300 cursor-pointer' : 'border-gray-200 bg-gray-50 opacity-50'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold ${adaptedResumes.length > 0 ? 'bg-green-500 text-white' : analysis ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
+                      {adaptedResumes.length > 0 ? <CheckCircle className="h-6 w-6" /> : '2'}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-sm mb-1">Anpassa CV</h4>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Anpassa ditt CV för specifika jobb
+                      </p>
+                      {!analysis ? (
+                        <p className="text-xs text-muted-foreground italic">Analysera CV först</p>
+                      ) : adaptedResumes.length > 0 ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-300">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {adaptedResumes.length} anpassad{adaptedResumes.length > 1 ? 'a' : ''}
+                        </Badge>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Sök jobb och anpassa CV</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Steg 3: Auto-ansök */}
+                <div className={`p-4 rounded-lg border-2 transition-all ${applicationCount && applicationCount > 0 ? 'border-green-300 bg-green-50' : analysis ? 'border-cyan-200 bg-white hover:border-cyan-300 cursor-pointer' : 'border-gray-200 bg-gray-50 opacity-50'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold ${applicationCount && applicationCount > 0 ? 'bg-green-500 text-white' : analysis ? 'bg-cyan-100 text-cyan-600' : 'bg-gray-100 text-gray-400'}`}>
+                      {applicationCount && applicationCount > 0 ? <CheckCircle className="h-6 w-6" /> : '3'}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-sm mb-1">Logga Ansökningar</h4>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Spåra dina ansökningar och följ upp
+                      </p>
+                      {!analysis ? (
+                        <p className="text-xs text-muted-foreground italic">Analysera CV först</p>
+                      ) : applicationCount && applicationCount > 0 ? (
+                        <Badge className="bg-green-100 text-green-700 border-green-300">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {applicationCount} loggad{applicationCount > 1 ? 'a' : ''}
+                        </Badge>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Logga ansökningar när du söker jobb</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ROI-kort - Visa när användare har aktivitet */}
+        {user && (applicationCount !== null && applicationCount > 0 || jobMatches.length > 0) && (
+          <Card className="mb-6 border-2 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                Din Framgång - Live Statistik
+              </CardTitle>
+              <CardDescription>
+                Se hur mycket du har åstadkommit med Workme
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Ansökningar loggade */}
+                <div className="text-center p-4 bg-white rounded-lg border border-green-200">
+                  <div className="text-3xl font-bold text-green-600 mb-1">
+                    {applicationCount ?? jobApplications.length}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Ansökningar loggade</div>
+                  <div className="text-xs text-green-600 mt-1 font-medium">
+                    {applicationCount && applicationCount > 0 ? '✓ Aktiv' : 'Kom igång!'}
+                  </div>
+                </div>
+
+                {/* Matcher >80% */}
+                <div className="text-center p-4 bg-white rounded-lg border border-blue-200">
+                  <div className="text-3xl font-bold text-blue-600 mb-1">
+                    {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Matcher &gt;80%</div>
+                  <div className="text-xs text-blue-600 mt-1 font-medium">
+                    {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length > 0 ? '✓ Höga chanser' : 'Sök fler jobb'}
+                  </div>
+                </div>
+
+                {/* Intervjuer */}
+                <div className="text-center p-4 bg-white rounded-lg border border-purple-200">
+                  <div className="text-3xl font-bold text-purple-600 mb-1">
+                    {applicationStats?.byStatus?.interview || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Intervjuer</div>
+                  <div className="text-xs text-purple-600 mt-1 font-medium">
+                    {applicationStats?.byStatus?.interview > 0 ? '✓ Bra jobbat!' : 'Fortsätt söka'}
+                  </div>
+                </div>
+
+                {/* Erbjudanden */}
+                <div className="text-center p-4 bg-white rounded-lg border border-emerald-200">
+                  <div className="text-3xl font-bold text-emerald-600 mb-1">
+                    {applicationStats?.byStatus?.offer || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Erbjudanden</div>
+                  <div className="text-xs text-emerald-600 mt-1 font-medium">
+                    {applicationStats?.byStatus?.offer > 0 ? '🎉 Grattis!' : 'Du är på rätt väg'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Ytterligare statistik */}
+              {applicationStats && applicationStats.total > 0 && (
+                <div className="mt-4 pt-4 border-t border-green-200">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-lg font-semibold text-gray-700">
+                        {applicationStats.total || 0}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Totalt ansökningar</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-semibold text-blue-600">
+                        {applicationStats.total > 0 
+                          ? Math.round(((applicationStats.byStatus?.interview || 0) / applicationStats.total) * 100)
+                          : 0}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">Svarsfrekvens</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-semibold text-green-600">
+                        {applicationStats.total > 0 
+                          ? Math.round(((applicationStats.byStatus?.offer || 0) / applicationStats.total) * 100)
+                          : 0}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">Erbjudandefrekvens</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Spårade Ansökningar - Quick View */}
         {user && (applicationCount !== null && applicationCount > 0 || jobApplications.length > 0) && (
           <Card className="mb-6 border-primary/20 bg-primary/5">
@@ -1532,26 +1732,51 @@ export default function ResumeAnalysisApp() {
             {!showApplicationsDashboard && (
               <CardContent>
                 <div className="space-y-2">
-                  {jobApplications.slice(0, 3).map((app) => (
-                    <div
-                      key={app.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm truncate">{app.jobTitle}</h4>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {app.companyName} {app.location && `• ${app.location}`}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="ml-2 shrink-0">
-                        {app.applicationStatus === 'applied' ? 'Ansökt' :
-                         app.applicationStatus === 'interview' ? 'Intervju' :
-                         app.applicationStatus === 'offer' ? 'Erbjudande' :
-                         app.applicationStatus === 'rejected' ? 'Avslagen' :
-                         app.applicationStatus || 'Väntar'}
-                      </Badge>
-                    </div>
-                  ))}
+                  {/* Sortera efter datum - senaste först */}
+                  {jobApplications
+                    .sort((a, b) => {
+                      const dateA = new Date(a.appliedAt || a.createdAt || 0).getTime();
+                      const dateB = new Date(b.appliedAt || b.createdAt || 0).getTime();
+                      return dateB - dateA;
+                    })
+                    .slice(0, 3)
+                    .map((app) => {
+                      const appliedDate = app.appliedAt || app.createdAt;
+                      const timeAgo = appliedDate ? (() => {
+                        const diffMs = Date.now() - new Date(appliedDate).getTime();
+                        const diffMins = Math.floor(diffMs / 60000);
+                        const diffHours = Math.floor(diffMs / 3600000);
+                        const diffDays = Math.floor(diffMs / 86400000);
+                        if (diffMins < 1) return 'Just nu';
+                        if (diffMins < 60) return `${diffMins}m sedan`;
+                        if (diffHours < 24) return `${diffHours}h sedan`;
+                        return `${diffDays}d sedan`;
+                      })() : 'Nyligen';
+                      
+                      return (
+                        <div
+                          key={app.id}
+                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-sm truncate">{app.jobTitle}</h4>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {app.companyName} {app.location && `• ${app.location}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {timeAgo}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="ml-2 shrink-0">
+                            {app.applicationStatus === 'applied' ? 'Ansökt' :
+                             app.applicationStatus === 'interview' ? 'Intervju' :
+                             app.applicationStatus === 'offer' ? 'Erbjudande' :
+                             app.applicationStatus === 'rejected' ? 'Avslagen' :
+                             app.applicationStatus || 'Väntar'}
+                          </Badge>
+                        </div>
+                      );
+                    })}
                   {jobApplications.length > 3 && (
                     <Button
                       variant="ghost"

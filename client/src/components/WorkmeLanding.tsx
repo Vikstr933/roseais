@@ -128,6 +128,110 @@ export function WorkmeLanding({ onUploadCV, onCreateCV }: WorkmeLandingProps) {
             <p className="text-sm text-muted-foreground">Ansök automatiskt till matchade jobb</p>
           </div>
         </div>
+
+        {/* How It Works Section */}
+        <div className="mt-16 pt-12 border-t">
+          <h2 className="text-3xl font-bold text-center mb-8">Hur det fungerar</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="text-center p-6 bg-white rounded-lg border-2 border-purple-100">
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">
+                1
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Ladda upp eller skapa CV</h3>
+              <p className="text-sm text-muted-foreground">
+                Börja med att ladda upp ditt befintliga CV eller skapa ett nytt med vår AI-guide. Processen tar bara några minuter.
+              </p>
+            </div>
+            <div className="text-center p-6 bg-white rounded-lg border-2 border-blue-100">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">
+                2
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Få AI-analys och matchningar</h3>
+              <p className="text-sm text-muted-foreground">
+                Vår AI analyserar ditt CV och matchar det automatiskt mot hundratals relevanta jobb. Du får detaljerad feedback och förbättringsförslag.
+              </p>
+            </div>
+            <div className="text-center p-6 bg-white rounded-lg border-2 border-cyan-100">
+              <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">
+                3
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Ansök automatiskt</h3>
+              <p className="text-sm text-muted-foreground">
+                Välj jobb och låt vår AI anpassa ditt CV och skicka ansökningar automatiskt. Du får full kontroll och kan spåra allt i realtid.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Testimonials Section */}
+        <div className="mt-16 pt-12 border-t">
+          <h2 className="text-3xl font-bold text-center mb-8">Vad våra användare säger</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            <Card className="border-2">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-1 mb-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Sparkles key={i} className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground mb-4 italic">
+                  "Workme hjälpte mig att hitta mitt drömjobb på bara 2 veckor! AI-analysen av mitt CV gav mig insikter jag aldrig tänkt på."
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
+                    M
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Maria K.</p>
+                    <p className="text-xs text-muted-foreground">Mjukvaruutvecklare</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-2">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-1 mb-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Sparkles key={i} className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground mb-4 italic">
+                  "Auto-ansökningarna sparade mig timmar varje vecka. Jag fick 5 intervjuer på en månad, vilket är rekord för mig!"
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-semibold">
+                    E
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Erik L.</p>
+                    <p className="text-xs text-muted-foreground">Dataanalytiker</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-2">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-1 mb-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Sparkles key={i} className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground mb-4 italic">
+                  "CV-byggaren är fantastisk! Från noll till professionellt CV på 15 minuter. Rekommenderar starkt till alla som byter karriär."
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
+                    S
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Sara A.</p>
+                    <p className="text-xs text-muted-foreground">UX Designer</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
