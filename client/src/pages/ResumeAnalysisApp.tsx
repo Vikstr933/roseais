@@ -250,6 +250,7 @@ export default function ResumeAnalysisApp() {
   const [selectedTemplate, setSelectedTemplate] = useState<'modern' | 'classic' | 'minimal' | 'professional'>('modern');
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
   const [showApplicationsDashboard, setShowApplicationsDashboard] = useState(false);
+  const [showOriginalResume, setShowOriginalResume] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2034,102 +2035,146 @@ export default function ResumeAnalysisApp() {
           </div>
         )}
 
-        {/* Adapted Resumes - Compact */}
-            {adaptedResumes.length > 0 && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Anpassade CV-versioner</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {adaptedResumes.map((adapted) => {
-                      const isViewing = viewingAdaptedResume?.id === adapted.id;
-                      return (
-                        <div
-                          key={adapted.id}
-                          className={`p-4 border rounded-lg ${isViewing ? 'border-primary bg-primary/5' : ''}`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex-1">
-                              <h4 className="font-medium">{adapted.adaptedForJob.jobTitle}</h4>
-                              {adapted.adaptedForJob.company && (
-                                <p className="text-sm text-muted-foreground">
-                                  {adapted.adaptedForJob.company}
-                                </p>
-                              )}
-                              {adapted.adaptationNotes && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {adapted.adaptationNotes}
-                                </p>
-                              )}
-                            </div>
-                            <Badge variant="outline" className="bg-purple-100 text-purple-700">
-                              Anpassad
-                            </Badge>
-                          </div>
-                          <div className="flex gap-2 mt-3">
-                            <Button
-                              variant={isViewing ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setViewingAdaptedResume(isViewing ? null : adapted)}
-                            >
-                              {isViewing ? (
-                                <>
-                                  <X className="h-4 w-4 mr-2" />
-                                  Stäng
-                                </>
-                              ) : (
-                                <>
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  Visa CV
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                // Use getResumeText which already applies formatting and removes markdown
-                                const formattedText = getResumeText(null, adapted.rawText);
-                                const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = adapted.filename.replace(/\.txt$/, '') + '_formaterad.txt';
-                                a.click();
-                                URL.revokeObjectURL(url);
-                              }}
-                            >
-                              <Download className="h-4 w-4 mr-2" />
-                              Ladda ner TXT
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleGenerateAdaptedPDF(adapted)}
-                              disabled={isGeneratingAdaptedPDF[adapted.id]}
-                              className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
-                            >
-                              {isGeneratingAdaptedPDF[adapted.id] ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Genererar...
-                                </>
-                              ) : (
-                                <>
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  Ladda ner PDF
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
+        {/* Original CV - Quick access */}
+        {uploadedResume && !editingResume && (
+          <Card className="mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Original-CV
+              </CardTitle>
+              <CardDescription>
+                {uploadedResume.filename || 'Uppladdat CV'} • Senast uppdaterad {uploadedResume.updatedAt ? new Date(uploadedResume.updatedAt).toLocaleDateString() : '–'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {uploadedResume.filePath && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(getApiUrl(uploadedResume.filePath), '_blank')}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Ladda ner original
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowOriginalResume(prev => !prev)}
+                >
+                  {showOriginalResume ? 'Dölj text' : 'Visa text'}
+                </Button>
+              </div>
+              {showOriginalResume && (
+                <div className="border rounded-lg p-4 bg-white max-h-72 overflow-y-auto">
+                  <div className="prose prose-sm max-w-none">
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
+                      {getResumeText(uploadedResume, uploadedResume.rawText)}
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Adapted Resumes - Compact */}
+        {adaptedResumes.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Anpassade CV-versioner</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {adaptedResumes.map((adapted) => {
+                  const isViewing = viewingAdaptedResume?.id === adapted.id;
+                  return (
+                    <div
+                      key={adapted.id}
+                      className={`p-4 border rounded-lg ${isViewing ? 'border-primary bg-primary/5' : ''}`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-medium">{adapted.adaptedForJob.jobTitle}</h4>
+                          {adapted.adaptedForJob.company && (
+                            <p className="text-sm text-muted-foreground">
+                              {adapted.adaptedForJob.company}
+                            </p>
+                          )}
+                          {adapted.adaptationNotes && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {adapted.adaptationNotes}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="bg-purple-100 text-purple-700">
+                          Anpassad
+                        </Badge>
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        <Button
+                          variant={isViewing ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setViewingAdaptedResume(isViewing ? null : adapted)}
+                        >
+                          {isViewing ? (
+                            <>
+                              <X className="h-4 w-4 mr-2" />
+                              Stäng
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="h-4 w-4 mr-2" />
+                              Visa CV
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const formattedText = getResumeText(null, adapted.rawText);
+                            const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = adapted.filename.replace(/\.txt$/, '') + '_formaterad.txt';
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Ladda ner TXT
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateAdaptedPDF(adapted)}
+                          disabled={isGeneratingAdaptedPDF[adapted.id]}
+                          className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                        >
+                          {isGeneratingAdaptedPDF[adapted.id] ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Genererar...
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="h-4 w-4 mr-2" />
+                              Ladda ner PDF
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
 
             {/* Viewing Application */}
