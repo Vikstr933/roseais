@@ -1695,103 +1695,6 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
-        {/* Spårade Ansökningar - Quick View */}
-        {user && (applicationCount !== null && applicationCount > 0 || jobApplications.length > 0) && (
-          <Card className="mb-6 border-primary/20 bg-primary/5">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-base">Mina Spårade Ansökningar</CardTitle>
-                  <Badge variant="secondary" className="ml-2">
-                    {applicationCount ?? jobApplications.length}
-                  </Badge>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                    variant={showApplicationsDashboard ? "default" : "outline"}
-                    size="sm"
-                  >
-                    {showApplicationsDashboard ? (
-                      <>
-                        <Eye className="h-4 w-4 mr-2" />
-                        Visa Snabbvy
-                      </>
-                    ) : (
-                      <>
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Hantera Alla Ansökningar
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            {!showApplicationsDashboard && (
-              <CardContent>
-                <div className="space-y-2">
-                  {/* Sortera efter datum - senaste först */}
-                  {jobApplications
-                    .sort((a, b) => {
-                      const dateA = new Date(a.appliedAt || a.createdAt || 0).getTime();
-                      const dateB = new Date(b.appliedAt || b.createdAt || 0).getTime();
-                      return dateB - dateA;
-                    })
-                    .slice(0, 3)
-                    .map((app) => {
-                      const appliedDate = app.appliedAt || app.createdAt;
-                      const timeAgo = appliedDate ? (() => {
-                        const diffMs = Date.now() - new Date(appliedDate).getTime();
-                        const diffMins = Math.floor(diffMs / 60000);
-                        const diffHours = Math.floor(diffMs / 3600000);
-                        const diffDays = Math.floor(diffMs / 86400000);
-                        if (diffMins < 1) return 'Just nu';
-                        if (diffMins < 60) return `${diffMins}m sedan`;
-                        if (diffHours < 24) return `${diffHours}h sedan`;
-                        return `${diffDays}d sedan`;
-                      })() : 'Nyligen';
-                      
-                      return (
-                        <div
-                          key={app.id}
-                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-sm truncate">{app.jobTitle}</h4>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {app.companyName} {app.location && `• ${app.location}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {timeAgo}
-                            </p>
-                          </div>
-                          <Badge variant="outline" className="ml-2 shrink-0">
-                            {app.applicationStatus === 'applied' ? 'Ansökt' :
-                             app.applicationStatus === 'interview' ? 'Intervju' :
-                             app.applicationStatus === 'offer' ? 'Erbjudande' :
-                             app.applicationStatus === 'rejected' ? 'Avslagen' :
-                             app.applicationStatus || 'Väntar'}
-                          </Badge>
-                        </div>
-                      );
-                    })}
-                  {jobApplications.length > 3 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full mt-2"
-                      onClick={() => setShowApplicationsDashboard(true)}
-                    >
-                      Visa alla {jobApplications.length} ansökningar och statistik →
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        )}
-
         {/* CV Builder Section - Hidden */}
         {false && (
           <Card className="mb-6">
@@ -2227,15 +2130,18 @@ export default function ResumeAnalysisApp() {
           </div>
         )}
 
-        {/* Full Dashboard View - Minimalist */}
-        {showApplicationsDashboard && user && (
-          <div className="space-y-4">
+        {/* Alla Ansökningar - Min Ansöknings-Tracker */}
+        {user && (applicationCount !== null && applicationCount > 0 || jobApplications.length > 0) && (
+          <div className="space-y-4 mb-6">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Briefcase className="h-4 w-4" />
                   Alla Ansökningar
                 </CardTitle>
+                <CardDescription>
+                  Här ser du alla jobb du har loggat eller ansökt till
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ApplicationDashboard />
