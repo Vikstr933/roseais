@@ -192,6 +192,12 @@ export default function ResumeAnalysisApp() {
             setUploadedResume(mostRecentResume);
             setShowLanding(false);
             
+            // Load job applications for this resume
+            if (mostRecentResume.id) {
+              fetchApplicationCount(mostRecentResume.id);
+              fetchJobApplications();
+            }
+            
             // Optionally load analysis and job matches if they exist
             if (mostRecentResume.id) {
               try {
@@ -989,12 +995,13 @@ export default function ResumeAnalysisApp() {
       }
 
       toast({
-        title: 'Success',
-        description: 'Jobbansökan sparad i tracker!',
+        title: 'Jobb spårat!',
+        description: `${jobMatch.jobTitle} har lagts till i dina spårade ansökningar.`,
       });
 
-      // Refresh applications
+      // Refresh applications and show dashboard
       fetchJobApplications();
+      setShowApplicationsDashboard(true);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
       toast({
@@ -1484,6 +1491,72 @@ export default function ResumeAnalysisApp() {
             </div>
           </div>
         </motion.div>
+
+        {/* Spårade Ansökningar - Quick View */}
+        {user && (applicationCount !== null && applicationCount > 0 || jobApplications.length > 0) && (
+          <Card className="mb-6 border-primary/20 bg-primary/5">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-base">Mina Spårade Ansökningar</CardTitle>
+                  <Badge variant="secondary" className="ml-2">
+                    {applicationCount ?? jobApplications.length}
+                  </Badge>
+                </div>
+                <Button
+                  onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
+                  variant={showApplicationsDashboard ? "default" : "outline"}
+                  size="sm"
+                >
+                  {showApplicationsDashboard ? (
+                    <>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Dölj
+                    </>
+                  ) : (
+                    <>
+                      <Briefcase className="h-4 w-4 mr-2" />
+                      Visa Alla
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            {!showApplicationsDashboard && (
+              <CardContent>
+                <div className="space-y-2">
+                  {jobApplications.slice(0, 3).map((app) => (
+                    <div
+                      key={app.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-sm truncate">{app.jobTitle}</h4>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {app.companyName} {app.location && `• ${app.location}`}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="ml-2 shrink-0">
+                        {app.applicationStatus || 'pending'}
+                      </Badge>
+                    </div>
+                  ))}
+                  {jobApplications.length > 3 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full mt-2"
+                      onClick={() => setShowApplicationsDashboard(true)}
+                    >
+                      Visa alla {jobApplications.length} ansökningar →
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
 
         {/* Unified Dashboard Section - Enhanced with Quick Actions */}
         {false && user && (
