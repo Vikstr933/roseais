@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { apiFetch } from '../lib/api';
-import { Clock, Building2, MapPin, TrendingUp, CheckCircle2, XCircle, Loader2, Filter, Briefcase, Edit, Calendar, FileText, Save, Eye } from 'lucide-react';
+import { Clock, Building2, MapPin, TrendingUp, CheckCircle2, XCircle, Loader2, Filter, Briefcase, Edit, Calendar, FileText, Save, Eye, Trash2, AlertTriangle } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -41,6 +42,8 @@ export function ApplicationDashboard() {
   const [editInterviewDate, setEditInterviewDate] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingApp, setDeletingApp] = useState<number | null>(null);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     fetchApplications();
@@ -164,6 +167,65 @@ export function ApplicationDashboard() {
     }
   };
 
+  const handleDeleteApplication = async (appId: number) => {
+    setDeletingApp(appId);
+    try {
+      const response = await apiFetch(`/api/job-applications/${appId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete application');
+      }
+
+      toast({
+        title: 'Borttagen!',
+        description: 'Ansökan har tagits bort.',
+      });
+
+      fetchApplications(); // Refresh list
+    } catch (error) {
+      console.error('Error deleting application:', error);
+      toast({
+        title: 'Fel',
+        description: 'Kunde inte ta bort ansökan.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingApp(null);
+    }
+  };
+
+  const handleDeleteAllApplications = async () => {
+    setIsDeletingAll(true);
+    try {
+      // Delete all applications one by one
+      const deletePromises = applications.map(app => 
+        apiFetch(`/api/job-applications/${app.id}`, {
+          method: 'DELETE',
+        })
+      );
+
+      await Promise.all(deletePromises);
+
+      toast({
+        title: 'Rensat!',
+        description: `Alla ${applications.length} ansökningar har tagits bort.`,
+      });
+
+      fetchApplications(); // Refresh list
+    } catch (error) {
+      console.error('Error deleting all applications:', error);
+      toast({
+        title: 'Fel',
+        description: 'Kunde inte ta bort alla ansökningar.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   if (loading && applications.length === 0) {
     return (
       <Card>
@@ -178,7 +240,7 @@ export function ApplicationDashboard() {
 
   return (
     <div className="space-y-4">
-      {/* Header with Filter */}
+      {/* Header with Filter and Actions */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold">Min Ansöknings-Tracker</h3>
@@ -186,21 +248,68 @@ export function ApplicationDashboard() {
             Här ser du alla jobb du har loggat eller ansökt till
           </p>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]">
-            <Filter className="h-3.5 w-3.5 mr-2" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alla</SelectItem>
-            <SelectItem value="pending">Väntar</SelectItem>
-            <SelectItem value="applied">Ansökt</SelectItem>
-            <SelectItem value="waiting">Väntar på svar</SelectItem>
-            <SelectItem value="interview">Intervju</SelectItem>
-            <SelectItem value="offer">Erbjudande</SelectItem>
-            <SelectItem value="rejected">Avslagen</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[160px]">
+              <Filter className="h-3.5 w-3.5 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alla</SelectItem>
+              <SelectItem value="pending">Väntar</SelectItem>
+              <SelectItem value="applied">Ansökt</SelectItem>
+              <SelectItem value="waiting">Väntar på svar</SelectItem>
+              <SelectItem value="interview">Intervju</SelectItem>
+              <SelectItem value="offer">Erbjudande</SelectItem>
+              <SelectItem value="rejected">Avslagen</SelectItem>
+            </SelectContent>
+          </Select>
+          {applications.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={isDeletingAll}
+                  className="h-9"
+                >
+                  {isDeletingAll ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                      Rensar...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      Rensa Alla
+                    </>
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    Rensa alla ansökningar?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Detta kommer att ta bort alla {applications.length} ansökningar permanent. 
+                    Denna åtgärd kan inte ångras.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAllApplications}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Ja, rensa alla
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       {/* Applications List */}
@@ -265,18 +374,19 @@ export function ApplicationDashboard() {
                           Visa jobbannons →
                         </a>
                       )}
-                      <Dialog open={editingApp === app.id} onOpenChange={(open) => !open && setEditingApp(null)}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleEditApplication(app)}
-                          >
-                            <Edit className="h-3 w-3 mr-1" />
-                            Uppdatera Status
-                          </Button>
-                        </DialogTrigger>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Dialog open={editingApp === app.id} onOpenChange={(open) => !open && setEditingApp(null)}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => handleEditApplication(app)}
+                            >
+                              <Edit className="h-3 w-3 mr-1" />
+                              Uppdatera
+                            </Button>
+                          </DialogTrigger>
                         <DialogContent className="sm:max-w-[500px]">
                           <DialogHeader>
                             <DialogTitle>Uppdatera Ansökningsstatus</DialogTitle>
@@ -353,6 +463,50 @@ export function ApplicationDashboard() {
                           </div>
                         </DialogContent>
                       </Dialog>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                            disabled={deletingApp === app.id}
+                          >
+                            {deletingApp === app.id ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Tar bort...
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Ta bort
+                              </>
+                            )}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                              <AlertTriangle className="h-5 w-5 text-destructive" />
+                              Ta bort ansökan?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Är du säker på att du vill ta bort ansökan för <strong>{app.jobTitle}</strong>
+                              {app.companyName && ` vid ${app.companyName}`}? 
+                              Denna åtgärd kan inte ångras.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteApplication(app.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Ja, ta bort
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                     <div className="flex items-center gap-2">
                       {app.interviewDate && (
