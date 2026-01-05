@@ -170,7 +170,6 @@ export default function ResumeAnalysisApp() {
   const [isGeneratingApplicationPDF, setIsGeneratingApplicationPDF] = useState<Record<string, boolean>>({});
   const [selectedTemplate, setSelectedTemplate] = useState<'modern' | 'classic' | 'minimal' | 'professional'>('modern');
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
-  const [showApplicationsSection, setShowApplicationsSection] = useState(false);
   const [showApplicationsDashboard, setShowApplicationsDashboard] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -308,7 +307,6 @@ export default function ResumeAnalysisApp() {
         // Fetch application count and applications for this resume
         if (data.resume?.id) {
           fetchApplicationCount(data.resume.id);
-          setShowApplicationsSection(false); // Reset section visibility
         }
         toast({
           title: 'Resume Uploaded!',
@@ -924,8 +922,7 @@ export default function ResumeAnalysisApp() {
         description: 'Jobbansökan sparad i tracker!',
       });
 
-      // Show applications section and refresh
-      setShowApplicationsSection(true);
+      // Refresh applications
       fetchJobApplications();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
@@ -1348,189 +1345,108 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
-        {/* Quick Access Dashboard Card - Top of Page */}
+        {/* Unified Dashboard Section - Minimalist */}
         {user && (
-          <Card className="mb-4 border-2 border-blue-200 bg-gradient-to-r from-blue-50/80 to-purple-50/80 shadow-sm">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <BarChart3 className="h-5 w-5 text-blue-700" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">Job Search Dashboard</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Track applications, view statistics, and manage your job search progress
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                  variant={showApplicationsDashboard ? "default" : "outline"}
-                  className={showApplicationsDashboard ? "bg-blue-600 hover:bg-blue-700" : "border-blue-300 text-blue-700 hover:bg-blue-50"}
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  {showApplicationsDashboard ? 'Hide' : 'Show'} Dashboard
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Job Applications Dashboard - Always visible, first section */}
-        {user && (
-          <Card className="mb-6 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
+          <Card className="mb-6">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Briefcase className="h-5 w-5 text-green-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Jobbansökningar</CardTitle>
-                    <CardDescription>
-                      Översikt över alla dina jobbansökningar
-                    </CardDescription>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base">Jobbansökningar</CardTitle>
                 </div>
                 <Button
                   onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                  variant={showApplicationsDashboard ? "default" : "outline"}
+                  variant={showApplicationsDashboard ? "default" : "ghost"}
                   size="sm"
-                  className={showApplicationsDashboard ? "bg-blue-600 hover:bg-blue-700" : "border-blue-300 text-blue-700 hover:bg-blue-50"}
                 >
-                  <BarChart3 className="h-4 w-4 mr-2" />
+                  <BarChart3 className="h-4 w-4 mr-1.5" />
                   {showApplicationsDashboard ? 'Dölj' : 'Visa'} Dashboard
                 </Button>
-                {applicationStats && (
-                  <div className="flex gap-4 text-sm">
-                    <div className="text-center">
-                      <div className="font-bold text-lg text-green-700">{applicationStats.total || 0}</div>
-                      <div className="text-xs text-muted-foreground">Totalt</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-lg text-blue-700">{applicationStats.byStatus?.interview || 0}</div>
-                      <div className="text-xs text-muted-foreground">Intervjuer</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-lg text-purple-700">{applicationStats.byStatus?.offer || 0}</div>
-                      <div className="text-xs text-muted-foreground">Erbjudanden</div>
-                    </div>
-                  </div>
-                )}
               </div>
             </CardHeader>
-            <CardContent>
-              {loadingApplications ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-green-600" />
-                </div>
-              ) : jobApplications.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm font-medium mb-2">Inga jobbansökningar ännu</p>
-                  <p className="text-xs mb-4">Ladda upp ditt CV och hitta matchande jobb för att börja spåra ansökningar</p>
-                  <Button
-                    onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                    variant="outline"
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                  >
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                    {showApplicationsDashboard ? 'Dölj' : 'Visa'} Fullständig Dashboard
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {jobApplications.slice(0, 10).map((app) => (
-                    <div
-                      key={app.id}
-                      className="p-4 border rounded-lg bg-white hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="font-semibold">{app.jobTitle}</h4>
-                            <Badge className={`${
-                              app.status === 'applied' ? 'bg-blue-100 text-blue-800' :
-                              app.status === 'interview' ? 'bg-yellow-100 text-yellow-800' :
-                              app.status === 'offer' ? 'bg-green-100 text-green-800' :
-                              app.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                              app.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {app.status === 'applied' ? 'Ansökt' :
-                               app.status === 'interview' ? 'Intervju' :
-                               app.status === 'offer' ? 'Erbjudande' :
-                               app.status === 'rejected' ? 'Avslagen' :
-                               app.status === 'accepted' ? 'Accepterad' :
-                               app.status}
-                            </Badge>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                            {app.companyName && (
-                              <span>{app.companyName}</span>
-                            )}
-                            {app.location && (
-                              <span>{app.location}</span>
-                            )}
-                            <span>
-                              {new Date(app.appliedAt).toLocaleDateString('sv-SE')}
-                            </span>
-                          </div>
-                          {app.notes && (
-                            <p className="text-sm text-muted-foreground mt-2">{app.notes}</p>
-                          )}
+            {!showApplicationsDashboard && (
+              <CardContent className="pt-0">
+                {loadingApplications ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : jobApplications.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Inga jobbansökningar ännu</p>
+                    <p className="text-xs mt-1">Klicka på "Spåra Ansökan" när du hittar matchande jobb</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {applicationStats && (
+                      <div className="flex gap-4 pb-3 border-b">
+                        <div>
+                          <div className="font-semibold">{applicationStats.total || 0}</div>
+                          <div className="text-xs text-muted-foreground">Totalt</div>
                         </div>
-                        {app.jobUrl && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(app.jobUrl, '_blank')}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div>
+                          <div className="font-semibold text-blue-600">{applicationStats.byStatus?.interview || 0}</div>
+                          <div className="text-xs text-muted-foreground">Intervjuer</div>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-green-600">{applicationStats.byStatus?.offer || 0}</div>
+                          <div className="text-xs text-muted-foreground">Erbjudanden</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {jobApplications.length > 10 && (
-                    <div className="text-center pt-2 space-y-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setLocation('/community/job-applications')}
-                      >
-                        Visa alla {jobApplications.length} ansökningar →
-                      </Button>
-                      <div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                          className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                    )}
+                    <div className="space-y-1.5 max-h-[250px] overflow-y-auto">
+                      {jobApplications.slice(0, 5).map((app) => (
+                        <div
+                          key={app.id}
+                          className="p-2.5 border rounded-md hover:bg-accent/50 transition-colors"
                         >
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          {showApplicationsDashboard ? 'Dölj' : 'Visa'} Fullständig Dashboard
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium text-sm truncate">{app.jobTitle}</h4>
+                                <Badge variant="outline" className="text-xs shrink-0">
+                                  {app.status === 'applied' ? 'Ansökt' :
+                                   app.status === 'interview' ? 'Intervju' :
+                                   app.status === 'offer' ? 'Erbjudande' :
+                                   app.status === 'rejected' ? 'Avslagen' :
+                                   app.status}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                {app.companyName && <span className="truncate">{app.companyName}</span>}
+                                {app.location && <span>• {app.location}</span>}
+                              </div>
+                            </div>
+                            {app.jobUrl && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 shrink-0"
+                                onClick={() => window.open(app.jobUrl, '_blank')}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {jobApplications.length > 5 && (
+                      <div className="text-center pt-2 border-t">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowApplicationsDashboard(true)}
+                          className="text-xs"
+                        >
+                          Visa alla {jobApplications.length} ansökningar →
                         </Button>
                       </div>
-                    </div>
-                  )}
-                  {jobApplications.length <= 10 && jobApplications.length > 0 && (
-                    <div className="text-center pt-4 border-t">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                      >
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        {showApplicationsDashboard ? 'Dölj' : 'Visa'} Fullständig Dashboard med Statistik
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            )}
           </Card>
         )}
 
@@ -1785,30 +1701,6 @@ export default function ResumeAnalysisApp() {
                             Ladda ner LaTeX
                           </>
                         )}
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setShowApplicationsSection(!showApplicationsSection);
-                          if (!showApplicationsSection && jobApplications.length === 0) {
-                            fetchJobApplications();
-                          }
-                        }}
-                        variant="outline"
-                        className="border-green-300 text-green-700 hover:bg-green-50 w-full sm:w-auto"
-                      >
-                        <Briefcase className="h-4 w-4 mr-2" />
-                        {showApplicationsSection ? 'Dölj' : 'Visa'} Jobbansökningar
-                        {applicationCount !== null && applicationCount > 0 && (
-                          <Badge className="ml-2 bg-green-600">{applicationCount}</Badge>
-                        )}
-                      </Button>
-                      <Button
-                        onClick={() => setShowApplicationsDashboard(!showApplicationsDashboard)}
-                        variant="outline"
-                        className="border-blue-300 text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
-                      >
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        {showApplicationsDashboard ? 'Dölj' : 'Visa'} Dashboard
                       </Button>
                     </div>
                   )}
@@ -2289,22 +2181,26 @@ export default function ResumeAnalysisApp() {
           </div>
         )}
 
-        {/* Applications Dashboard - Accessible even without resume if user has applications */}
+        {/* Full Dashboard View - Minimalist */}
         {showApplicationsDashboard && user && (
-          <div className="space-y-6 mt-6">
+          <div className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Your Job Search Statistics</CardTitle>
-                <CardDescription>Track your application progress and success metrics</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Statistik
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <StatisticsDashboard />
               </CardContent>
             </Card>
             <Card>
-              <CardHeader>
-                <CardTitle>Job Applications</CardTitle>
-                <CardDescription>View and manage all your tracked job applications</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Briefcase className="h-4 w-4" />
+                  Alla Ansökningar
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <ApplicationDashboard />
