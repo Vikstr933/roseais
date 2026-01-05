@@ -171,13 +171,68 @@ export default function ResumeAnalysisApp() {
   const [showLanding, setShowLanding] = useState<boolean>(false);
   const [showCVBuilder, setShowCVBuilder] = useState<boolean>(false);
 
-  // Check if user has uploaded resume on mount
+  // Load user's resumes on mount
   useEffect(() => {
-    if (!uploadedResume && !showCVBuilder) {
-      // Only show landing if no resume exists
-      setShowLanding(true);
-    }
-  }, []);
+    const loadUserResumes = async () => {
+      if (!user) {
+        setShowLanding(true);
+        return;
+      }
+
+      try {
+        const response = await apiFetch('/api/resumes', {
+          method: 'GET',
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.resumes && data.resumes.length > 0) {
+            // Load the most recent resume
+            const mostRecentResume = data.resumes[0]; // Already sorted by createdAt DESC
+            setUploadedResume(mostRecentResume);
+            setShowLanding(false);
+            
+            // Optionally load analysis and job matches if they exist
+            if (mostRecentResume.id) {
+              try {
+                // Load analysis
+                const analysisResponse = await apiFetch(`/api/resumes/${mostRecentResume.id}/analysis`);
+                if (analysisResponse.ok) {
+                  const analysisData = await analysisResponse.json();
+                  if (analysisData.success && analysisData.analysis) {
+                    setAnalysis(analysisData.analysis);
+                  }
+                }
+                
+                // Load job matches
+                const matchesResponse = await apiFetch(`/api/resumes/${mostRecentResume.id}/job-matches`);
+                if (matchesResponse.ok) {
+                  const matchesData = await matchesResponse.json();
+                  const matches = matchesData.matches || matchesData.jobMatches || (Array.isArray(matchesData) ? matchesData : []);
+                  if (matches && Array.isArray(matches) && matches.length > 0) {
+                    setJobMatches(matches);
+                    setHasAutoSearched(true);
+                  }
+                }
+              } catch (err) {
+                // Analysis or matches might not exist yet, that's okay
+                console.log('No analysis or matches found for resume');
+              }
+            }
+          } else {
+            // No resumes found, show landing page
+            setShowLanding(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user resumes:', error);
+        // On error, show landing page
+        setShowLanding(true);
+      }
+    };
+
+    loadUserResumes();
+  }, [user]);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [uploadStep, setUploadStep] = useState<number>(0);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState<boolean>(false);

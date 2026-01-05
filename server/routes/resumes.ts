@@ -148,10 +148,15 @@ router.get('/', authenticateUser, async (req, res) => {
       .orderBy(desc(resumes.createdAt));
 
     res.json({
+      success: true,
       resumes: userResumes.map(r => ({
         id: r.id,
         filename: r.filename,
         fileType: r.fileType,
+        filePath: r.filePath,
+        fileSize: r.fileSize,
+        rawText: r.rawText,
+        parsedData: r.parsedData,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       })),
