@@ -55,9 +55,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TemplatePreviewDialog } from '@/components/TemplatePreviewDialog';
-import { UpgradeDialog } from '@/components/UpgradeDialog';
+import { UpgradeDialog, UsageIndicator } from '@/components/UpgradeDialog';
 import { checkFeatureAccess, FeatureKey } from '@/lib/featureAccess';
-import { PlanTier, PlanUsage, PlanState } from '@/types/subscription';
+import { PlanTier, PlanUsage, PlanState, PLAN_LIMITS } from '@/types/subscription';
 import { ApplicationDashboard } from '@/components/ApplicationDashboard';
 import { JobFeed } from '@/components/JobFeed';
 import { ResumeBuilder } from '@/components/ResumeBuilder';
@@ -194,6 +194,30 @@ export default function ResumeAnalysisApp() {
     }
     return true;
   };
+
+  // Load subscription plan/usage from backend (soft fallback to free)
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (!user) return;
+      try {
+        const res = await apiFetch('/api/monetization/usage');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.tier) setPlanTier(data.tier as PlanTier);
+        if (data?.usage) {
+          setPlanUsage({
+            analyses: data.usage.analyses ?? 0,
+            adaptations: data.usage.adaptations ?? 0,
+            activeApplications: data.usage.activeApplications ?? 0,
+            jobMatchesToday: data.usage.jobMatchesToday ?? 0,
+          });
+        }
+      } catch (err) {
+        console.warn('Subscription fetch failed, defaulting to free', err);
+      }
+    };
+    fetchSubscription();
+  }, [user]);
 
   // Load user's resumes on mount
   useEffect(() => {
@@ -865,6 +889,7 @@ export default function ResumeAnalysisApp() {
         const data = await response.json();
         setJobApplications(data.applications || []);
         setApplicationCount((data.applications || []).length);
+        setPlanUsage(prev => ({ ...prev, activeApplications: (data.applications || []).length }));
       }
     } catch (error) {
       console.error('Error fetching job applications:', error);
@@ -892,6 +917,7 @@ export default function ResumeAnalysisApp() {
         const data = await response.json();
         setJobApplications(data.applications || []);
         setApplicationCount((data.applications || []).length);
+        setPlanUsage(prev => ({ ...prev, activeApplications: (data.applications || []).length }));
       }
     } catch (error) {
       console.error('Error fetching job applications:', error);
@@ -989,6 +1015,7 @@ export default function ResumeAnalysisApp() {
   };
 
   const handleTrackApplication = async (jobMatch: JobMatch) => {
+    if (!requireAccess('tracker')) return;
     if (!uploadedResume) {
       toast({
         title: 'Error',
@@ -1035,6 +1062,7 @@ export default function ResumeAnalysisApp() {
 
       // Refresh applications
       fetchJobApplications();
+      setPlanUsage(prev => ({ ...prev, activeApplications: prev.activeApplications + 1 }));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to track application';
       toast({
@@ -1506,6 +1534,23 @@ export default function ResumeAnalysisApp() {
             )}
           </div>
 
+          {/* Plan/usage indicator */}
+          <div className="grid gap-3 sm:grid-cols-2 mb-4">
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2 bg-muted/50">
+              <div className="text-sm">
+                <div className="font-semibold">Plan</div>
+                <div className="text-muted-foreground capitalize text-xs">{planTier}</div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => { setUpgradeRequiredTier('basic'); setUpgradeReason('Uppgradera för fler AI-funktioner och auto-apply.'); setUpgradeOpen(true); }}>
+                Uppgradera
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <UsageIndicator current={planUsage.analyses} limit={PLAN_LIMITS[planTier].monthlyAnalyses} type="analyser" />
+              <UsageIndicator current={planUsage.adaptations} limit={PLAN_LIMITS[planTier].monthlyAdaptations} type="anpassningar" />
+            </div>
+          </div>
+
           <div className="flex flex-col sm:flex-row items-start gap-4">
             <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20 flex-shrink-0">
               <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
@@ -1634,95 +1679,109 @@ export default function ResumeAnalysisApp() {
         )}
 
         {/* ROI-kort - Visa när användare har aktivitet */}
-        {user && (applicationCount !== null && applicationCount > 0 || jobMatches.length > 0) && (
-          <Card className="mb-6 border-2 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                Din Framgång - Live Statistik
-              </CardTitle>
-              <CardDescription>
-                Se hur mycket du har åstadkommit med Workme
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* Ansökningar loggade */}
-                <div className="text-center p-4 bg-white rounded-lg border border-green-200">
-                  <div className="text-3xl font-bold text-green-600 mb-1">
-                    {applicationCount ?? jobApplications.length}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Ansökningar loggade</div>
-                  <div className="text-xs text-green-600 mt-1 font-medium">
-                    {applicationCount && applicationCount > 0 ? '✓ Aktiv' : 'Kom igång!'}
-                  </div>
-                </div>
-
-                {/* Matcher >80% */}
-                <div className="text-center p-4 bg-white rounded-lg border border-blue-200">
-                  <div className="text-3xl font-bold text-blue-600 mb-1">
-                    {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Matcher &gt;80%</div>
-                  <div className="text-xs text-blue-600 mt-1 font-medium">
-                    {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length > 0 ? '✓ Höga chanser' : 'Sök fler jobb'}
-                  </div>
-                </div>
-
-                {/* Intervjuer */}
-                <div className="text-center p-4 bg-white rounded-lg border border-purple-200">
-                  <div className="text-3xl font-bold text-purple-600 mb-1">
-                    {applicationStats?.byStatus?.interview || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Intervjuer</div>
-                  <div className="text-xs text-purple-600 mt-1 font-medium">
-                    {applicationStats?.byStatus?.interview > 0 ? '✓ Bra jobbat!' : 'Fortsätt söka'}
-                  </div>
-                </div>
-
-                {/* Erbjudanden */}
-                <div className="text-center p-4 bg-white rounded-lg border border-emerald-200">
-                  <div className="text-3xl font-bold text-emerald-600 mb-1">
-                    {applicationStats?.byStatus?.offer || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Erbjudanden</div>
-                  <div className="text-xs text-emerald-600 mt-1 font-medium">
-                    {applicationStats?.byStatus?.offer > 0 ? '🎉 Grattis!' : 'Du är på rätt väg'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Ytterligare statistik */}
-              {applicationStats && applicationStats.total > 0 && (
-                <div className="mt-4 pt-4 border-t border-green-200">
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <div className="text-lg font-semibold text-gray-700">
-                        {applicationStats.total || 0}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Totalt ansökningar</div>
+        {user && ((applicationCount !== null && applicationCount > 0) || jobMatches.length > 0) && (
+          checkFeatureAccess({ tier: planTier, usage: planUsage }, 'roiStats').allowed ? (
+            <Card className="mb-6 border-2 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-green-600" />
+                  Din Framgång - Live Statistik
+                </CardTitle>
+                <CardDescription>
+                  Se hur mycket du har åstadkommit med Workme
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-4 bg-white rounded-lg border border-green-200">
+                    <div className="text-3xl font-bold text-green-600 mb-1">
+                      {applicationCount ?? jobApplications.length}
                     </div>
-                    <div>
-                      <div className="text-lg font-semibold text-blue-600">
-                        {applicationStats.total > 0 
-                          ? Math.round(((applicationStats.byStatus?.interview || 0) / applicationStats.total) * 100)
-                          : 0}%
-                      </div>
-                      <div className="text-xs text-muted-foreground">Svarsfrekvens</div>
+                    <div className="text-xs text-muted-foreground">Ansökningar loggade</div>
+                    <div className="text-xs text-green-600 mt-1 font-medium">
+                      {applicationCount && applicationCount > 0 ? '✓ Aktiv' : 'Kom igång!'}
                     </div>
-                    <div>
-                      <div className="text-lg font-semibold text-green-600">
-                        {applicationStats.total > 0 
-                          ? Math.round(((applicationStats.byStatus?.offer || 0) / applicationStats.total) * 100)
-                          : 0}%
-                      </div>
-                      <div className="text-xs text-muted-foreground">Erbjudandefrekvens</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-blue-200">
+                    <div className="text-3xl font-bold text-blue-600 mb-1">
+                      {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Matcher &gt;80%</div>
+                    <div className="text-xs text-blue-600 mt-1 font-medium">
+                      {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length > 0 ? '✓ Höga chanser' : 'Sök fler jobb'}
+                    </div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-purple-200">
+                    <div className="text-3xl font-bold text-purple-600 mb-1">
+                      {applicationStats?.byStatus?.interview || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Intervjuer</div>
+                    <div className="text-xs text-purple-600 mt-1 font-medium">
+                      {applicationStats?.byStatus?.interview > 0 ? '✓ Bra jobbat!' : 'Fortsätt söka'}
+                    </div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-emerald-200">
+                    <div className="text-3xl font-bold text-emerald-600 mb-1">
+                      {applicationStats?.byStatus?.offer || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Erbjudanden</div>
+                    <div className="text-xs text-emerald-600 mt-1 font-medium">
+                      {applicationStats?.byStatus?.offer > 0 ? '🎉 Grattis!' : 'Du är på rätt väg'}
                     </div>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+
+                {applicationStats && applicationStats.total > 0 && (
+                  <div className="mt-4 pt-4 border-t border-green-200">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-lg font-semibold text-gray-700">
+                          {applicationStats.total || 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Totalt ansökningar</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-semibold text-blue-600">
+                          {applicationStats.total > 0 
+                            ? Math.round(((applicationStats.byStatus?.interview || 0) / applicationStats.total) * 100)
+                            : 0}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">Svarsfrekvens</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-semibold text-green-600">
+                          {applicationStats.total > 0 
+                            ? Math.round(((applicationStats.byStatus?.offer || 0) / applicationStats.total) * 100)
+                            : 0}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">Erbjudandefrekvens</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="mb-6 border-dashed border-2 border-purple-300 bg-purple-50/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-purple-600" />
+                  Din Framgång - Live Statistik (låst)
+                </CardTitle>
+                <CardDescription>
+                  Full ROI-statistik ingår i Workme Basic. Uppgradera för att se intervjufrekvens, erbjudanden och svarsfrekvens.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center justify-between flex-col sm:flex-row gap-3">
+                <div className="text-sm text-muted-foreground">
+                  Uppgradera för att låsa upp detaljerad statistik.
+                </div>
+                <Button onClick={() => { setUpgradeRequiredTier('basic'); setUpgradeReason('Full ROI-statistik ingår i Workme Basic.'); setUpgradeOpen(true); }}>
+                  Lås upp Basic
+                </Button>
+              </CardContent>
+            </Card>
+          )
         )}
 
         {/* CV Builder Section - Hidden */}
