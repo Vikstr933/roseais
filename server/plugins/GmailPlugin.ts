@@ -693,12 +693,30 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
             body: {
               type: 'string',
               description: 'Email body content'
+            },
+            attachments: {
+              type: 'array',
+              description: 'Email attachments (base64 encoded)',
+              items: {
+                type: 'object',
+                properties: {
+                  filename: { type: 'string' },
+                  content: { type: 'string', description: 'Base64 encoded content' },
+                  contentType: { type: 'string', description: 'MIME type (e.g., application/pdf)' }
+                }
+              }
             }
           },
           required: ['to', 'subject', 'body']
         },
         execute: async (params) => {
-          return this.sendEmail(this.userId!, params.to, params.subject, params.body);
+          return this.sendEmail(
+            this.userId!, 
+            params.to, 
+            params.subject, 
+            params.body,
+            params.attachments
+          );
         }
       },
       {
@@ -798,7 +816,13 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
   ): Promise<any> {
     switch (action) {
       case 'send_email':
-        return this.sendEmail(userId, params.to, params.subject, params.body);
+        return this.sendEmail(
+          userId, 
+          params.to, 
+          params.subject, 
+          params.body,
+          params.attachments
+        );
       case 'schedule_email':
         return this.scheduleEmail(userId, params.to, params.subject, params.body, params.scheduledFor);
       case 'search_emails':
@@ -810,7 +834,13 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
     }
   }
 
-  private async sendEmail(userId: string, to: string, subject: string, body: string): Promise<any> {
+  private async sendEmail(
+    userId: string, 
+    to: string, 
+    subject: string, 
+    body: string,
+    attachments?: Array<{ filename: string; content: string; contentType: string }>
+  ): Promise<any> {
     const gmail = await this.getUserGmail(userId);
 
     // Encode subject for MIME (handles Swedish characters, emojis, etc.)
@@ -820,28 +850,57 @@ Respond in JSON format with keys: summary, actionItems (array), sentiment, prior
     const htmlBody = this.convertToHtml(body);
     
     // Create multipart email with proper UTF-8 encoding
-    const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+    const rootBoundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+    const altBoundary = `----=_Part_Alt_${Date.now()}_${Math.random().toString(36).substring(2)}`;
     
-    const email = [
+    const emailParts: string[] = [
       `MIME-Version: 1.0`,
       `To: ${to}`,
       `Subject: ${encodedSubject}`,
-      `Content-Type: multipart/alternative; boundary="${boundary}"`,
-      '',
-      `--${boundary}`,
-      `Content-Type: text/plain; charset="UTF-8"`,
-      `Content-Transfer-Encoding: quoted-printable`,
-      '',
-      this.encodeQuotedPrintable(body),
-      '',
-      `--${boundary}`,
-      `Content-Type: text/html; charset="UTF-8"`,
-      `Content-Transfer-Encoding: quoted-printable`,
-      '',
-      this.encodeQuotedPrintable(htmlBody),
-      '',
-      `--${boundary}--`
-    ].join('\r\n');
+    ];
+
+    if (attachments && attachments.length > 0) {
+      // Multipart/mixed for attachments
+      emailParts.push(`Content-Type: multipart/mixed; boundary="${rootBoundary}"`);
+      emailParts.push('');
+      emailParts.push(`--${rootBoundary}`);
+    } else {
+      // Multipart/alternative for text/html only
+      emailParts.push(`Content-Type: multipart/alternative; boundary="${rootBoundary}"`);
+    }
+
+    // Add alternative content (text + HTML)
+    emailParts.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+    emailParts.push('');
+    emailParts.push(`--${altBoundary}`);
+    emailParts.push(`Content-Type: text/plain; charset="UTF-8"`);
+    emailParts.push(`Content-Transfer-Encoding: quoted-printable`);
+    emailParts.push('');
+    emailParts.push(this.encodeQuotedPrintable(body));
+    emailParts.push('');
+    emailParts.push(`--${altBoundary}`);
+    emailParts.push(`Content-Type: text/html; charset="UTF-8"`);
+    emailParts.push(`Content-Transfer-Encoding: quoted-printable`);
+    emailParts.push('');
+    emailParts.push(this.encodeQuotedPrintable(htmlBody));
+    emailParts.push('');
+    emailParts.push(`--${altBoundary}--`);
+
+    // Add attachments if any
+    if (attachments && attachments.length > 0) {
+      for (const attachment of attachments) {
+        emailParts.push(`--${rootBoundary}`);
+        emailParts.push(`Content-Type: ${attachment.contentType}`);
+        emailParts.push(`Content-Disposition: attachment; filename="${this.encodeMimeHeader(attachment.filename)}"`);
+        emailParts.push(`Content-Transfer-Encoding: base64`);
+        emailParts.push('');
+        // Base64 content (already encoded)
+        emailParts.push(attachment.content);
+      }
+      emailParts.push(`--${rootBoundary}--`);
+    }
+
+    const email = emailParts.join('\r\n');
 
     const encodedEmail = Buffer.from(email, 'utf-8')
       .toString('base64')

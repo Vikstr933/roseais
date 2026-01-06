@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Zap,
   Settings,
@@ -17,6 +18,10 @@ import {
   MapPin,
   Building2,
   X,
+  Mail,
+  ExternalLink,
+  Info,
+  FileText,
 } from 'lucide-react';
 import {
   Select,
@@ -53,10 +58,27 @@ export function AutoApplySettings({ resumeId, onSettingsChange }: AutoApplySetti
   });
   const [requireConfirmation, setRequireConfirmation] = useState(true);
   const [excludeCompanyInput, setExcludeCompanyInput] = useState('');
+  const [gmailConnected, setGmailConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetchSettings();
+    checkGmailConnection();
   }, []);
+
+  const checkGmailConnection = async () => {
+    try {
+      const response = await apiFetch('/api/plugins/status');
+      if (response.ok) {
+        const data = await response.json();
+        const gmailPlugin = data.plugins?.find((p: any) => p.pluginId === 'gmail');
+        setGmailConnected(gmailPlugin?.status?.authenticated || false);
+      } else {
+        setGmailConnected(false);
+      }
+    } catch (error) {
+      setGmailConnected(false);
+    }
+  };
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -169,6 +191,69 @@ export function AutoApplySettings({ resumeId, onSettingsChange }: AutoApplySetti
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Gmail Connection Warning */}
+        {enabled && gmailConnected === false && (
+          <Alert variant="destructive" className="border-orange-200 bg-orange-50">
+            <Mail className="h-4 w-4" />
+            <AlertTitle>Gmail krävs för auto-ansökningar</AlertTitle>
+            <AlertDescription className="mt-2">
+              <p className="mb-2">
+                För att kunna skicka ansökningar automatiskt via e-post måste du koppla ditt Gmail-konto.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Navigate to plugin settings or open Gmail connection
+                  window.location.href = '/settings?tab=plugins';
+                }}
+                className="mt-2"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Koppla Gmail
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {enabled && gmailConnected === true && (
+          <Alert className="border-green-200 bg-green-50">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertTitle className="text-green-800">Gmail är kopplat</AlertTitle>
+            <AlertDescription className="text-green-700">
+              Ditt Gmail-konto är kopplat. Ansökningar kommer att skickas automatiskt med PDF-bilaga.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Application Methods Info */}
+        {enabled && (
+          <Alert className="border-blue-200 bg-blue-50">
+            <Info className="h-4 w-4 text-blue-600" />
+            <AlertTitle className="text-blue-800">Ansökningsmetoder</AlertTitle>
+            <AlertDescription className="text-blue-700 space-y-2 mt-2">
+              <div className="flex items-start gap-2">
+                <Mail className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <strong>E-post:</strong> Skickas automatiskt med CV som PDF-bilaga när Gmail är kopplat.
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <FileText className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <strong>Formulär/Webbplats:</strong> Ansökningar spåras i systemet. Du behöver ansöka manuellt via jobbannonsens webbplats.
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <ExternalLink className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <strong>LinkedIn:</strong> Ansökningar spåras i systemet. Du behöver ansöka manuellt via LinkedIn.
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {enabled && (
           <>
             {/* Match Criteria */}

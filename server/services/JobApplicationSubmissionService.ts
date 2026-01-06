@@ -2,6 +2,7 @@ import { db } from '../../db';
 import { jobApplications, resumes } from '../../db/schema-pg';
 import { eq, and } from 'drizzle-orm';
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { resumePDFService } from './ResumePDFService';
 import type { ApplicationMethod } from './JobApplicationService';
 
 const logger = new SimpleLogger('JobApplicationSubmissionService');
@@ -105,8 +106,9 @@ export class JobApplicationSubmissionService {
         throw new Error('Gmail plugin not available. Please connect your Gmail account in settings.');
       }
 
-      // Get resume text
+      // Get resume text and generate PDF
       let resumeText = '';
+      let pdfAttachment: Buffer | null = null;
       
       if (options?.resumeId || application.resumeId) {
         const resumeId = options?.resumeId || application.resumeId!;
@@ -118,6 +120,28 @@ export class JobApplicationSubmissionService {
 
         if (resume) {
           resumeText = resume.rawText || '';
+          
+          // Generate PDF attachment
+          try {
+            // Extract structured data from resume text
+            const parsedData = resume.parsedData as any;
+            const structuredData = await resumePDFService.extractStructuredData(
+              resumeText,
+              parsedData,
+              resume.filename
+            );
+            
+            // Generate PDF
+            pdfAttachment = await resumePDFService.generatePDF(structuredData, {
+              template: 'modern',
+              format: 'A4',
+            });
+            
+            logger.info(`Generated PDF attachment for application ${application.id}`);
+          } catch (error) {
+            logger.warn(`Failed to generate PDF for application ${application.id}, sending as text only`, error as Error);
+            // Continue without PDF attachment
+          }
         }
       }
 
@@ -139,17 +163,24 @@ Jag har bifogat mitt CV för er granskning.
 Med vänliga hälsningar`;
       }
 
-      // Add resume text to email body
-      if (resumeText) {
+      // Add resume text to email body only if no PDF attachment
+      if (!pdfAttachment && resumeText) {
         emailBody += '\n\n---\nCV:\n\n' + resumeText;
       }
 
-      // Send email via Gmail plugin
-      // Note: Gmail plugin doesn't support attachments yet, so we include resume in body
+      // Prepare attachments
+      const attachments = pdfAttachment ? [{
+        filename: `CV_${application.jobTitle.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_')}.pdf`,
+        content: pdfAttachment.toString('base64'),
+        contentType: 'application/pdf',
+      }] : undefined;
+
+      // Send email via Gmail plugin with PDF attachment
       const result = await gmailPlugin.executeAction(userId, 'send_email', {
         to: email,
         subject: subject,
         body: emailBody,
+        attachments: attachments,
       });
 
       // Update application in database
@@ -178,7 +209,7 @@ Med vänliga hälsningar`;
 
   /**
    * Submit application via website/form
-   * NOTE: This is a placeholder - full implementation would require web scraping/automation
+   * NOTE: This requires manual action - full automation would require web scraping/automation
    */
   private async submitViaWebsite(
     userId: string,
@@ -187,26 +218,37 @@ Med vänliga hälsningar`;
       jobUrl?: string;
     }
   ): Promise<SubmissionResult> {
-    // For now, we just track that the application should be submitted via website
-    // Full implementation would require:
+    // Website/form submission requires manual action
+    // Full automation would require:
     // - Web scraping to find form fields
     // - Form filling automation (Puppeteer/Playwright)
     // - File upload handling
     // - CAPTCHA solving (if needed)
     
-    logger.info(`Application ${application.id} marked for website submission at ${options?.jobUrl || application.jobUrl}`);
+    const jobUrl = options?.jobUrl || application.jobUrl;
+    logger.info(`Application ${application.id} tracked for website submission at ${jobUrl}`);
+    
+    // Update application to indicate it needs manual submission
+    await db
+      .update(jobApplications)
+      .set({
+        applicationMethod: 'website',
+        notes: jobUrl ? `Ansökan spårad. Besök ${jobUrl} för att ansöka manuellt.` : 'Ansökan spårad. Ansök manuellt via företagets webbplats.',
+      })
+      .where(eq(jobApplications.id, application.id));
     
     return {
-      success: false,
+      success: true,
       method: 'website',
-      message: 'Website submission requires manual action. Please visit the job posting and submit your application.',
-      error: 'Automated website submission not yet implemented. This feature requires web scraping and form automation.',
+      message: jobUrl 
+        ? `Ansökan har sparats. Besök ${jobUrl} för att ansöka manuellt via företagets webbplats.`
+        : 'Ansökan har sparats. Ansök manuellt via företagets webbplats.',
     };
   }
 
   /**
    * Submit application via LinkedIn
-   * NOTE: This is a placeholder - requires LinkedIn API integration
+   * NOTE: This requires manual action - LinkedIn API integration not yet implemented
    */
   private async submitViaLinkedIn(
     userId: string,
@@ -219,13 +261,21 @@ Med vänliga hälsningar`;
     // - Job posting ID from LinkedIn
     // - Profile data mapping
     
-    logger.info(`Application ${application.id} marked for LinkedIn submission`);
+    logger.info(`Application ${application.id} tracked for LinkedIn submission`);
+    
+    // Update application to indicate it needs manual submission
+    await db
+      .update(jobApplications)
+      .set({
+        applicationMethod: 'linkedin',
+        notes: 'Ansökan spårad. Ansök manuellt via LinkedIn.',
+      })
+      .where(eq(jobApplications.id, application.id));
     
     return {
-      success: false,
+      success: true,
       method: 'linkedin',
-      message: 'LinkedIn submission requires manual action or LinkedIn API integration.',
-      error: 'LinkedIn API integration not yet implemented.',
+      message: 'Ansökan har sparats. Ansök manuellt via LinkedIn när du är redo.',
     };
   }
 
