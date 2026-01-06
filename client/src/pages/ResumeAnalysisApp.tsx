@@ -172,6 +172,7 @@ export default function ResumeAnalysisApp() {
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
   const [showLanding, setShowLanding] = useState<boolean>(false);
   const [showCVBuilder, setShowCVBuilder] = useState<boolean>(false);
+  const [isLoadingResumes, setIsLoadingResumes] = useState<boolean>(true);
   // Monetization / plan
   const [planTier, setPlanTier] = useState<PlanTier>('free'); // TODO: load from backend
   const [planUsage, setPlanUsage] = useState<PlanUsage>({
@@ -224,9 +225,13 @@ export default function ResumeAnalysisApp() {
   useEffect(() => {
     const loadUserResumes = async () => {
       if (!user) {
+        setIsLoadingResumes(false);
         setShowLanding(true);
         return;
       }
+
+      setIsLoadingResumes(true);
+      setShowLanding(false); // Don't show landing while loading
 
       try {
         const response = await apiFetch('/api/resumes', {
@@ -239,7 +244,7 @@ export default function ResumeAnalysisApp() {
             // Load the most recent resume
             const mostRecentResume = data.resumes[0]; // Already sorted by createdAt DESC
             setUploadedResume(mostRecentResume);
-            setShowLanding(false);
+            setShowLanding(false); // Explicitly hide landing when CV is found
             
             // Optionally load analysis and job matches if they exist
             if (mostRecentResume.id) {
@@ -272,11 +277,21 @@ export default function ResumeAnalysisApp() {
             // No resumes found, show landing page
             setShowLanding(true);
           }
+        } else {
+          // If API call fails, check if we already have a resume loaded
+          // If not, show landing page
+          if (!uploadedResume) {
+            setShowLanding(true);
+          }
         }
       } catch (error) {
         console.error('Error loading user resumes:', error);
-        // On error, show landing page
-        setShowLanding(true);
+        // On error, only show landing if we don't already have a resume
+        if (!uploadedResume) {
+          setShowLanding(true);
+        }
+      } finally {
+        setIsLoadingResumes(false);
       }
     };
 
@@ -1448,8 +1463,21 @@ export default function ResumeAnalysisApp() {
 
 
 
+  // Show loading state while checking for resumes
+  if (isLoadingResumes && !uploadedResume) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">Laddar ditt CV...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Show landing page if no CV and user hasn't made a choice
-  if (showLanding && !uploadedResume && !showCVBuilder) {
+  // Only show if we're not loading and don't have a resume
+  if (showLanding && !uploadedResume && !showCVBuilder && !isLoadingResumes) {
     return (
       <div className="min-h-screen bg-background text-foreground">
         <WorkmeLanding
@@ -1566,10 +1594,40 @@ export default function ResumeAnalysisApp() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setShowLanding(true);
+                  // Only show landing if user explicitly wants to create a new CV
+                  // Don't automatically show landing - let them choose
+                  setShowLanding(false);
                   setUploadedResume(null);
                   setAnalysis(null);
                   setJobMatches([]);
+                  setShowCVBuilder(false);
+                  // Reload resumes to check if there are other CVs
+                  setIsLoadingResumes(true);
+                  apiFetch('/api/resumes', { method: 'GET' })
+                    .then(response => {
+                      if (response.ok) {
+                        return response.json();
+                      }
+                      return { success: false, resumes: [] };
+                    })
+                    .then(data => {
+                      if (data.success && data.resumes && data.resumes.length > 0) {
+                        // User has other CVs, load the most recent one
+                        const mostRecentResume = data.resumes[0];
+                        setUploadedResume(mostRecentResume);
+                        setShowLanding(false);
+                      } else {
+                        // No other CVs, show landing to create/upload new one
+                        setShowLanding(true);
+                      }
+                    })
+                    .catch(() => {
+                      // On error, show landing to allow upload/create
+                      setShowLanding(true);
+                    })
+                    .finally(() => {
+                      setIsLoadingResumes(false);
+                    });
                 }}
               >
                 Nytt CV
