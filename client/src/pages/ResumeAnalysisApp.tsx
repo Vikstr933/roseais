@@ -224,12 +224,14 @@ export default function ResumeAnalysisApp() {
   // Load user's resumes on mount
   useEffect(() => {
     const loadUserResumes = async () => {
-      if (!user) {
+      if (!user || !sessionToken) {
+        console.log('[ResumeLoad] No user or sessionToken, showing landing page', { user: !!user, sessionToken: !!sessionToken });
         setIsLoadingResumes(false);
         setShowLanding(true);
         return;
       }
 
+      console.log('[ResumeLoad] Loading resumes for user:', user.id, 'sessionToken:', sessionToken ? 'present' : 'missing');
       setIsLoadingResumes(true);
       setShowLanding(false); // Don't show landing while loading
 
@@ -238,11 +240,20 @@ export default function ResumeAnalysisApp() {
           method: 'GET',
         });
 
+        console.log('[ResumeLoad] API response status:', response.status, response.ok);
+
         if (response.ok) {
           const data = await response.json();
+          console.log('[ResumeLoad] API response data:', { 
+            success: data.success, 
+            resumeCount: data.resumes?.length || 0,
+            resumes: data.resumes 
+          });
+
           if (data.success && data.resumes && data.resumes.length > 0) {
             // Load the most recent resume
             const mostRecentResume = data.resumes[0]; // Already sorted by createdAt DESC
+            console.log('[ResumeLoad] Setting uploaded resume:', mostRecentResume.id, mostRecentResume.filename);
             setUploadedResume(mostRecentResume);
             setShowLanding(false); // Explicitly hide landing when CV is found
             
@@ -254,8 +265,11 @@ export default function ResumeAnalysisApp() {
                 if (analysisResponse.ok) {
                   const analysisData = await analysisResponse.json();
                   if (analysisData.success && analysisData.analysis) {
+                    console.log('[ResumeLoad] Loaded analysis for resume');
                     setAnalysis(analysisData.analysis);
                   }
+                } else if (analysisResponse.status === 404) {
+                  console.log('[ResumeLoad] No analysis found for resume (404)');
                 }
                 
                 // Load job matches
@@ -264,20 +278,38 @@ export default function ResumeAnalysisApp() {
                   const matchesData = await matchesResponse.json();
                   const matches = matchesData.matches || matchesData.jobMatches || (Array.isArray(matchesData) ? matchesData : []);
                   if (matches && Array.isArray(matches) && matches.length > 0) {
+                    console.log('[ResumeLoad] Loaded job matches:', matches.length);
                     setJobMatches(matches);
                     setHasAutoSearched(true);
                   }
+                } else if (matchesResponse.status === 404) {
+                  console.log('[ResumeLoad] No job matches found for resume (404)');
                 }
               } catch (err) {
                 // Analysis or matches might not exist yet, that's okay
-                console.log('No analysis or matches found for resume');
+                console.log('[ResumeLoad] Error loading analysis/matches (non-critical):', err);
               }
             }
           } else {
             // No resumes found, show landing page
+            console.log('[ResumeLoad] No resumes found, showing landing page');
             setShowLanding(true);
           }
         } else {
+          // If API call fails, log the error
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('[ResumeLoad] API call failed:', response.status, errorData);
+          
+          // If unauthorized, user might need to re-login
+          if (response.status === 401) {
+            console.warn('[ResumeLoad] Unauthorized - user might need to re-login');
+            toast({
+              title: 'Autentisering krävs',
+              description: 'Du behöver logga in igen för att se ditt CV.',
+              variant: 'destructive',
+            });
+          }
+          
           // If API call fails, check if we already have a resume loaded
           // If not, show landing page
           if (!uploadedResume) {
@@ -285,18 +317,24 @@ export default function ResumeAnalysisApp() {
           }
         }
       } catch (error) {
-        console.error('Error loading user resumes:', error);
+        console.error('[ResumeLoad] Error loading user resumes:', error);
+        toast({
+          title: 'Fel vid laddning',
+          description: 'Kunde inte ladda ditt CV. Försök ladda om sidan.',
+          variant: 'destructive',
+        });
         // On error, only show landing if we don't already have a resume
         if (!uploadedResume) {
           setShowLanding(true);
         }
       } finally {
         setIsLoadingResumes(false);
+        console.log('[ResumeLoad] Finished loading resumes');
       }
     };
 
     loadUserResumes();
-  }, [user]);
+  }, [user, sessionToken]);
 
   // Load job applications when resume is loaded
   useEffect(() => {
