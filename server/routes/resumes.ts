@@ -457,14 +457,21 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       );
     }
 
-    // Search for jobs (JobTech API allows up to 100 results per request)
-    console.log(`[JobMatches] Searching jobs with keywords: "${searchKeywords}", location: "${location || 'none'}"`);
+    // Determine which sources to search (default: jobtech, optionally linkedin)
+    const sourcesParam = req.query.sources as string | undefined;
+    const sources = sourcesParam 
+      ? sourcesParam.split(',').filter(s => ['jobtech', 'linkedin'].includes(s))
+      : ['jobtech']; // Default to JobTech only
+    
+    // Search for jobs from multiple sources (JobTech + optionally LinkedIn)
+    console.log(`[JobMatches] Searching jobs with keywords: "${searchKeywords}", location: "${location || 'none'}", sources: ${sources.join(', ')}`);
     const jobs = await jobMatchingService.searchJobs(
       searchKeywords,
       location as string | undefined,
-      100 // Max allowed by JobTech API
+      100, // Max allowed by JobTech API
+      sources // Search from specified sources
     );
-    console.log(`[JobMatches] JobTech API returned ${jobs.length} jobs`);
+    console.log(`[JobMatches] Found ${jobs.length} jobs from ${sources.join(' + ')}`);
 
     // Extract location from resume for proximity matching
     const resumeLocation = resumeKeywordExtractor.extractLocation(

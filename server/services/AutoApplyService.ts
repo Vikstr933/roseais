@@ -53,12 +53,21 @@ export class AutoApplyService {
         throw new Error('Resume not found');
       }
 
-      // Search for jobs
+      // Search for jobs from multiple sources
       const keywords = this.extractKeywordsFromResume(resume.rawText || '');
+      
+      // Determine which sources to search
+      const sources = ['jobtech']; // Always search JobTech
+      // LinkedIn integration is temporarily disabled
+      // if (process.env.ENABLE_LINKEDIN_JOBS === 'true') {
+      //   sources.push('linkedin');
+      // }
+      
       const jobs = await jobMatchingService.searchJobs(
         keywords,
         criteria.location,
-        100 // Get more jobs to filter
+        100, // Get more jobs to filter
+        sources // Search from both JobTech and LinkedIn if enabled
       );
 
       // Match resume to jobs

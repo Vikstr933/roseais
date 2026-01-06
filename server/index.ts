@@ -64,6 +64,7 @@ import resumesRouter from './routes/resumes';
 import jobApplicationsRouter from './routes/job-applications';
 import savedJobsRouter from './routes/saved-jobs';
 import autoApplyRouter from './routes/auto-apply';
+import linkedInAWRouter from './routes/linkedin-awli';
 import { lockCleanupService } from './utils/lockCleanup';
 import { webSocketService } from './services/WebSocketService';
 import { chatCleanupService } from './services/ChatCleanupService';
@@ -608,6 +609,10 @@ const initializeApp = async () => {
       
       app.use('/api/auto-apply', autoApplyRouter); // Auto-apply
       console.log('✅ Auto-apply router registered at /api/auto-apply');
+      
+      // Register LinkedIn AWLI routes
+      app.use('/api/linkedin/awli', linkedInAWRouter);
+      console.log('✅ LinkedIn AWLI router registered at /api/linkedin/awli');
     } catch (error) {
       console.error('❌ Failed to register resumes router:', error);
     }

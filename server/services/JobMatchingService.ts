@@ -48,22 +48,81 @@ export interface JobMatch {
 
 export class JobMatchingService {
   private jobTechBaseUrl = 'https://jobsearch.api.jobtechdev.se/search';
+  private useLinkedIn: boolean;
 
   constructor() {
     // JobTech API requires no API key for basic searches
+    // LinkedIn integration is temporarily disabled
+    this.useLinkedIn = false; // Disabled: process.env.ENABLE_LINKEDIN_JOBS === 'true';
+  }
+
+  /**
+   * Search for jobs from multiple sources (JobTech and optionally LinkedIn)
+   * API Documentation: https://jobtechdev.se/
+   */
+  async searchJobs(keywords: string, location?: string, limit: number = 100, sources?: string[]): Promise<JobListing[]> {
+    try {
+      const allJobs: JobListing[] = [];
+      const searchSources = sources || ['jobtech']; // Default to JobTech only
+
+      // Search JobTech (Swedish jobs)
+      if (searchSources.includes('jobtech')) {
+        const jobTechJobs = await this.searchJobsFromJobTech(keywords, location, limit);
+        allJobs.push(...jobTechJobs);
+        logger.info(`[JobMatchingService] JobTech returned ${jobTechJobs.length} jobs`);
+      }
+
+      // Search LinkedIn (if enabled and configured)
+      if (searchSources.includes('linkedin') && this.useLinkedIn) {
+        try {
+          const { linkedInJobService } = await import('./LinkedInJobService');
+          if (linkedInJobService.isConfigured()) {
+            const linkedInJobs = await linkedInJobService.searchJobs({
+              keywords,
+              location,
+              limit: Math.min(limit, 25), // LinkedIn typically limits to 25
+            });
+            allJobs.push(...linkedInJobs);
+            logger.info(`[JobMatchingService] LinkedIn returned ${linkedInJobs.length} jobs`);
+          } else {
+            logger.warn('[JobMatchingService] LinkedIn not configured. Set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET.');
+          }
+        } catch (error) {
+          logger.error('[JobMatchingService] LinkedIn search failed', error as Error);
+          // Continue with JobTech results even if LinkedIn fails
+        }
+      }
+
+      // Remove duplicates based on job title + company
+      const uniqueJobs = this.removeDuplicateJobs(allJobs);
+      
+      // Sort by relevance (could be improved with better ranking)
+      uniqueJobs.sort((a, b) => {
+        // Prioritize jobs with application methods
+        if (a.applicationMethod && !b.applicationMethod) return -1;
+        if (!a.applicationMethod && b.applicationMethod) return 1;
+        return 0;
+      });
+
+      // Limit results
+      return uniqueJobs.slice(0, limit);
+    } catch (error) {
+      logger.error('Failed to search jobs', error as Error);
+      return [];
+    }
   }
 
   /**
    * Search for Swedish jobs using JobTech API
    * API Documentation: https://jobtechdev.se/
    */
-  async searchJobs(keywords: string, location?: string, limit: number = 100): Promise<JobListing[]> {
+  private async searchJobsFromJobTech(keywords: string, location?: string, limit: number = 100): Promise<JobListing[]> {
     try {
       // Simplify keywords - take first 2-3 keywords to avoid too specific searches
       const keywordArray = keywords.split(/\s+/).filter(k => k.length > 2);
       const simplifiedKeywords = keywordArray.slice(0, 3).join(' ');
       
-      logger.info(`[JobMatchingService] Searching with keywords: "${simplifiedKeywords}" (original: "${keywords}")`);
+      logger.info(`[JobMatchingService] Searching JobTech with keywords: "${simplifiedKeywords}" (original: "${keywords}")`);
       
       // JobTech API params
       const params: any = {
@@ -123,9 +182,27 @@ export class JobMatchingService {
 
       return jobs;
     } catch (error) {
-      logger.error('Failed to search jobs', error as Error);
+      logger.error('Failed to search JobTech jobs', error as Error);
       return [];
     }
+  }
+
+  /**
+   * Remove duplicate jobs based on title + company
+   */
+  private removeDuplicateJobs(jobs: JobListing[]): JobListing[] {
+    const seen = new Set<string>();
+    const unique: JobListing[] = [];
+
+    for (const job of jobs) {
+      const key = `${job.title.toLowerCase()}_${job.company?.toLowerCase() || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(job);
+      }
+    }
+
+    return unique;
   }
 
   /**
