@@ -501,6 +501,7 @@ export default function ResumeAnalysisApp() {
 
     // Don't auto-search if already searched
     if (isAutoSearch && hasAutoSearched) return;
+    if (!requireAccess('jobMatches')) return;
 
     setIsSearchingJobs(true);
     setProgress('Söker matchande jobb baserat på ditt CV...');
@@ -543,6 +544,7 @@ export default function ResumeAnalysisApp() {
       if (matches && Array.isArray(matches) && matches.length > 0) {
         console.log('[JobMatches] ✅ Setting matches:', matches.length);
         setJobMatches(matches);
+        setPlanUsage(prev => ({ ...prev, jobMatchesToday: prev.jobMatchesToday + matches.length }));
         setHasAutoSearched(isAutoSearch);
         setProgress('');
         if (!isAutoSearch) {
@@ -2177,14 +2179,33 @@ export default function ResumeAnalysisApp() {
             </Card>
             {/* Auto-Apply Settings */}
             {uploadedResume && (
-              <AutoApplySettings resumeId={uploadedResume.id} />
+              checkFeatureAccess({ tier: planTier, usage: planUsage }, 'autoApply').allowed ? (
+                <AutoApplySettings resumeId={uploadedResume.id} />
+              ) : (
+                <Card className="border-dashed border-2 border-primary/30 bg-muted/40">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Briefcase className="h-4 w-4" />
+                      Auto-Apply (låst)
+                    </CardTitle>
+                    <CardDescription>
+                      Auto-Apply ingår i Workme Pro. Uppgradera för att aktivera automatiska ansökningar.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button variant="default" onClick={() => { setUpgradeRequiredTier('pro'); setUpgradeReason('Auto-Apply ingår i Workme Pro.'); setUpgradeOpen(true); }}>
+                      Lås upp Pro
+                    </Button>
+                  </CardContent>
+                </Card>
+              )
             )}
           </div>
         )}
 
         {/* Kompakt CV-ruta - Visas alltid när CV finns */}
         {uploadedResume && !editingResume && (
-          <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+                    <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
