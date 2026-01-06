@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { db } from '../../db';
 import { jobApplications, resumes } from '../../db/schema-pg';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { SimpleLogger } from '../utils/SimpleLogger';

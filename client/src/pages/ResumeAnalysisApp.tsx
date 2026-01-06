@@ -257,6 +257,16 @@ export default function ResumeAnalysisApp() {
             setUploadedResume(mostRecentResume);
             setShowLanding(false); // Explicitly hide landing when CV is found
             
+            // Load job applications for this resume
+            if (mostRecentResume.id) {
+              try {
+                fetchApplicationCount(mostRecentResume.id);
+                fetchJobApplications();
+              } catch (err) {
+                console.log('[ResumeLoad] Error loading job applications (non-critical):', err);
+              }
+            }
+            
             // Optionally load analysis and job matches if they exist
             if (mostRecentResume.id) {
               try {
@@ -336,13 +346,20 @@ export default function ResumeAnalysisApp() {
     loadUserResumes();
   }, [user, sessionToken]);
 
-  // Load job applications when resume is loaded
+  // Load job applications when user or resume is loaded
   useEffect(() => {
-    if (uploadedResume?.id) {
-      fetchApplicationCount(uploadedResume.id);
-      fetchJobApplications();
+    if (user) {
+      // Always fetch all applications when user is available
+      // This ensures applications are loaded even if no resume exists
+      fetchAllJobApplications();
+      
+      // If we have a resume, also fetch resume-specific applications
+      if (uploadedResume?.id) {
+        fetchApplicationCount(uploadedResume.id);
+        fetchJobApplications();
+      }
     }
-  }, [uploadedResume?.id]);
+  }, [user, uploadedResume?.id]);
 
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [uploadStep, setUploadStep] = useState<number>(0);
@@ -926,32 +943,38 @@ export default function ResumeAnalysisApp() {
         const apps = data.applications || [];
         setApplicationCount(apps.length);
         setJobApplications(apps);
+        setPlanUsage(prev => ({ ...prev, activeApplications: apps.length }));
+        console.log('[ApplicationCount] Loaded', apps.length, 'applications for resume', resumeId);
       }
     } catch (error) {
       // Silently fail - not critical
-      console.error('Error fetching application count:', error);
+      console.error('[ApplicationCount] Error fetching application count:', error);
     }
   };
 
   const fetchAllJobApplications = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('[FetchAllApplications] No user, skipping');
+      return;
+    }
     
     try {
+      console.log('[FetchAllApplications] Fetching all applications for user:', user.id);
       setLoadingApplications(true);
       const response = await apiFetch('/api/job-applications');
       if (response.ok) {
         const data = await response.json();
-        setJobApplications(data.applications || []);
-        setApplicationCount((data.applications || []).length);
-        setPlanUsage(prev => ({ ...prev, activeApplications: (data.applications || []).length }));
+        const apps = data.applications || [];
+        console.log('[FetchAllApplications] Loaded', apps.length, 'applications');
+        setJobApplications(apps);
+        setApplicationCount(apps.length);
+        setPlanUsage(prev => ({ ...prev, activeApplications: apps.length }));
+      } else {
+        console.error('[FetchAllApplications] API call failed:', response.status);
       }
     } catch (error) {
-      console.error('Error fetching job applications:', error);
-      toast({
-        title: 'Error',
-        description: 'Kunde inte hämta jobbansökningar',
-        variant: 'destructive',
-      });
+      console.error('[FetchAllApplications] Error fetching job applications:', error);
+      // Don't show toast for this - it's called on every page load
     } finally {
       setLoadingApplications(false);
     }
@@ -1002,10 +1025,10 @@ export default function ResumeAnalysisApp() {
     }
   };
 
-  // Fetch job applications and stats when user is available
+  // Fetch application stats when user is available
+  // Note: fetchAllJobApplications is now called in the useEffect above that handles user/resume loading
   useEffect(() => {
     if (user) {
-      fetchAllJobApplications();
       fetchApplicationStats();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1104,18 +1127,21 @@ export default function ResumeAnalysisApp() {
         throw new Error(errorData.error || 'Failed to create application');
       }
 
-      // Update application count
+      // Update application count and refresh lists
       if (uploadedResume) {
         fetchApplicationCount(uploadedResume.id);
+        fetchJobApplications();
       }
+      
+      // Also refresh the full applications list to ensure consistency
+      fetchAllJobApplications();
 
       toast({
         title: 'Ansökan loggad!',
         description: `${jobMatch.jobTitle} har lagts till i din tracker.`,
       });
 
-      // Refresh applications
-      fetchJobApplications();
+      // Update plan usage
       setPlanUsage(prev => ({ ...prev, activeApplications: prev.activeApplications + 1 }));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to track application';

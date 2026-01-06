@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { db } from '../../db';
 import { savedJobs, type SavedJob } from '../../db/schema-pg';
 import { eq, and, desc } from 'drizzle-orm';
 import { SimpleLogger } from '../utils/SimpleLogger';
