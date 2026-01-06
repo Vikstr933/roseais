@@ -183,6 +183,7 @@ export default function ResumeAnalysisApp() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<string | undefined>();
   const [upgradeRequiredTier, setUpgradeRequiredTier] = useState<PlanTier>('basic');
+  const [snabbstartMinimized, setSnabbstartMinimized] = useState(false);
 
   const requireAccess = (feature: FeatureKey) => {
     const result = checkFeatureAccess({ tier: planTier, usage: planUsage }, feature);
@@ -1483,14 +1484,56 @@ export default function ResumeAnalysisApp() {
           </Button>
           <CVBuilderForm
             onComplete={async (cvData) => {
-              // TODO: Generate PDF from CV data and upload it
-              // For now, just show success and go back to upload
-              toast({
-                title: 'CV skapat!',
-                description: 'Ditt CV har skapats. Ladda upp det för att fortsätta.',
-              });
-              setShowCVBuilder(false);
-              setShowLanding(false);
+              try {
+                setIsUploading(true);
+                setProgress('Sparar ditt CV...');
+
+                const response = await apiFetch('/api/resumes/create', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(cvData),
+                });
+
+                if (!response.ok) {
+                  const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                  throw new Error(errorData.error || `Failed to create resume (${response.status})`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.resume) {
+                  setProgress('');
+                  setUploadedResume(data.resume);
+                  setShowCVBuilder(false);
+                  setShowLanding(false);
+                  
+                  // Fetch application count and applications for this resume
+                  if (data.resume?.id) {
+                    fetchApplicationCount(data.resume.id);
+                  }
+                  
+                  toast({
+                    title: 'CV skapat!',
+                    description: 'Ditt CV har skapats och sparats. Du kan nu analysera det eller söka jobb.',
+                  });
+                } else {
+                  throw new Error(data.error || 'Failed to create resume');
+                }
+              } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'Failed to create resume';
+                setError(errorMessage);
+                setProgress('');
+                toast({
+                  title: 'Fel',
+                  description: errorMessage,
+                  variant: 'destructive',
+                });
+              } finally {
+                setIsUploading(false);
+                setProgress('');
+              }
             }}
             onCancel={() => {
               setShowCVBuilder(false);
@@ -1512,13 +1555,13 @@ export default function ResumeAnalysisApp() {
           className="mb-8"
         >
           <div className="flex items-center justify-between mb-4">
-            <Button
-              variant="ghost"
-              onClick={() => setLocation('/public-projects')}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Community
-            </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setLocation('/public-projects')}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Community
+          </Button>
             {uploadedResume && (
               <Button
                 variant="outline"
@@ -1551,6 +1594,112 @@ export default function ResumeAnalysisApp() {
             </div>
           </div>
 
+          {/* Min framgång - ROI-kort - Högst upp efter plan/usage */}
+          {user && ((applicationCount !== null && applicationCount > 0) || jobMatches.length > 0) && (
+            checkFeatureAccess({ tier: planTier, usage: planUsage }, 'roiStats').allowed ? (
+              <Card className="mb-6 border-2 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                    Min Framgång - Live Statistik
+                  </CardTitle>
+                  <CardDescription>
+                    Se hur mycket du har åstadkommit med Workme
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-4 bg-white rounded-lg border border-green-200">
+                      <div className="text-3xl font-bold text-green-600 mb-1">
+                        {applicationCount ?? jobApplications.length}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Ansökningar loggade</div>
+                      <div className="text-xs text-green-600 mt-1 font-medium">
+                        {applicationCount && applicationCount > 0 ? '✓ Aktiv' : 'Kom igång!'}
+                      </div>
+                    </div>
+                    <div className="text-center p-4 bg-white rounded-lg border border-blue-200">
+                      <div className="text-3xl font-bold text-blue-600 mb-1">
+                        {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Matcher &gt;80%</div>
+                      <div className="text-xs text-blue-600 mt-1 font-medium">
+                        {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length > 0 ? '✓ Höga chanser' : 'Sök fler jobb'}
+                      </div>
+                    </div>
+                    <div className="text-center p-4 bg-white rounded-lg border border-purple-200">
+                      <div className="text-3xl font-bold text-purple-600 mb-1">
+                        {applicationStats?.byStatus?.interview || 0}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Intervjuer</div>
+                      <div className="text-xs text-purple-600 mt-1 font-medium">
+                        {applicationStats?.byStatus?.interview > 0 ? '✓ Bra jobbat!' : 'Fortsätt söka'}
+                      </div>
+                    </div>
+                    <div className="text-center p-4 bg-white rounded-lg border border-emerald-200">
+                      <div className="text-3xl font-bold text-emerald-600 mb-1">
+                        {applicationStats?.byStatus?.offer || 0}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Erbjudanden</div>
+                      <div className="text-xs text-emerald-600 mt-1 font-medium">
+                        {applicationStats?.byStatus?.offer > 0 ? '🎉 Grattis!' : 'Du är på rätt väg'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {applicationStats && applicationStats.total > 0 && (
+                    <div className="mt-4 pt-4 border-t border-green-200">
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-lg font-semibold text-gray-700">
+                            {applicationStats.total || 0}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Totalt ansökningar</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-semibold text-blue-600">
+                            {applicationStats.total > 0 
+                              ? Math.round(((applicationStats.byStatus?.interview || 0) / applicationStats.total) * 100)
+                              : 0}%
+                          </div>
+                          <div className="text-xs text-muted-foreground">Svarsfrekvens</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-semibold text-green-600">
+                            {applicationStats.total > 0 
+                              ? Math.round(((applicationStats.byStatus?.offer || 0) / applicationStats.total) * 100)
+                              : 0}%
+                          </div>
+                          <div className="text-xs text-muted-foreground">Erbjudandefrekvens</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="mb-6 border-dashed border-2 border-purple-300 bg-purple-50/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-purple-600" />
+                    Min Framgång - Live Statistik (låst)
+                  </CardTitle>
+                  <CardDescription>
+                    Full ROI-statistik ingår i Workme Basic. Uppgradera för att se intervjufrekvens, erbjudanden och svarsfrekvens.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between flex-col sm:flex-row gap-3">
+                  <div className="text-sm text-muted-foreground">
+                    Uppgradera för att låsa upp detaljerad statistik.
+                  </div>
+                  <Button onClick={() => { setUpgradeRequiredTier('basic'); setUpgradeReason('Full ROI-statistik ingår i Workme Basic.'); setUpgradeOpen(true); }}>
+                    Lås upp Basic
+                  </Button>
+                </CardContent>
+              </Card>
+            )
+          )}
+
           <div className="flex flex-col sm:flex-row items-start gap-4">
             <div className="p-3 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20 flex-shrink-0">
               <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
@@ -1570,18 +1719,37 @@ export default function ResumeAnalysisApp() {
           </div>
         </motion.div>
 
-        {/* Snabbstart-kort - Visa när CV är uppladdat */}
+        {/* Snabbstart-kort - Visa när CV är uppladdat - Minimerbart */}
         {uploadedResume && (
           <Card className="mb-6 border-2 border-purple-200 bg-gradient-to-br from-purple-50/50 to-blue-50/50">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-purple-600" />
-                Snabbstart - Dina Nästa Steg
-              </CardTitle>
-              <CardDescription>
-                Följ dessa steg för att maximera dina chanser att få jobbet
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                  <CardTitle className="text-lg">
+                    Snabbstart - Dina Nästa Steg
+                  </CardTitle>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSnabbstartMinimized(!snabbstartMinimized)}
+                  className="h-8 w-8 p-0"
+                >
+                  {snabbstartMinimized ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronUp className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {!snabbstartMinimized && (
+                <CardDescription>
+                  Följ dessa steg för att maximera dina chanser att få jobbet
+                </CardDescription>
+              )}
             </CardHeader>
+            {!snabbstartMinimized && (
             <CardContent>
               <div className="grid md:grid-cols-3 gap-4">
                 {/* Steg 1: Analysera CV */}
@@ -1589,15 +1757,15 @@ export default function ResumeAnalysisApp() {
                   <div className="flex items-start gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold ${analysis ? 'bg-green-500 text-white' : 'bg-purple-100 text-purple-600'}`}>
                       {analysis ? <CheckCircle className="h-6 w-6" /> : '1'}
-                    </div>
-                    <div className="flex-1">
+                </div>
+                        <div className="flex-1">
                       <h4 className="font-semibold text-sm mb-1">Analysera CV</h4>
                       <p className="text-xs text-muted-foreground mb-3">
                         Få detaljerad AI-analys och förbättringsförslag
                       </p>
                       {!analysis ? (
-                        <Button
-                          size="sm"
+                    <Button
+                      size="sm"
                           onClick={handleAnalyze}
                           disabled={isAnalyzing}
                           className="w-full bg-purple-600 hover:bg-purple-700"
@@ -1606,30 +1774,30 @@ export default function ResumeAnalysisApp() {
                             <>
                               <Loader2 className="h-3 w-3 mr-2 animate-spin" />
                               Analyserar...
-                            </>
-                          ) : (
-                            <>
+                          </>
+                        ) : (
+                          <>
                               <Brain className="h-3 w-3 mr-2" />
                               Starta Analys
-                            </>
-                          )}
-                        </Button>
+                          </>
+                        )}
+                      </Button>
                       ) : (
                         <Badge className="bg-green-100 text-green-700 border-green-300">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Klar
                         </Badge>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
+                  </div>
+                  </div>
 
                 {/* Steg 2: Anpassa CV */}
                 <div className={`p-4 rounded-lg border-2 transition-all ${adaptedResumes.length > 0 ? 'border-green-300 bg-green-50' : analysis ? 'border-blue-200 bg-white hover:border-blue-300 cursor-pointer' : 'border-gray-200 bg-gray-50 opacity-50'}`}>
                   <div className="flex items-start gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold ${adaptedResumes.length > 0 ? 'bg-green-500 text-white' : analysis ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
                       {adaptedResumes.length > 0 ? <CheckCircle className="h-6 w-6" /> : '2'}
-                    </div>
+                </div>
                     <div className="flex-1">
                       <h4 className="font-semibold text-sm mb-1">Anpassa CV</h4>
                       <p className="text-xs text-muted-foreground mb-3">
@@ -1644,17 +1812,17 @@ export default function ResumeAnalysisApp() {
                         </Badge>
                       ) : (
                         <p className="text-xs text-muted-foreground italic">Sök jobb och anpassa CV</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              )}
+            </div>
+            </div>
+              </div>
 
                 {/* Steg 3: Auto-ansök */}
                 <div className={`p-4 rounded-lg border-2 transition-all ${applicationCount && applicationCount > 0 ? 'border-green-300 bg-green-50' : analysis ? 'border-cyan-200 bg-white hover:border-cyan-300 cursor-pointer' : 'border-gray-200 bg-gray-50 opacity-50'}`}>
                   <div className="flex items-start gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold ${applicationCount && applicationCount > 0 ? 'bg-green-500 text-white' : analysis ? 'bg-cyan-100 text-cyan-600' : 'bg-gray-100 text-gray-400'}`}>
                       {applicationCount && applicationCount > 0 ? <CheckCircle className="h-6 w-6" /> : '3'}
-                    </div>
+              </div>
                     <div className="flex-1">
                       <h4 className="font-semibold text-sm mb-1">Logga Ansökningar</h4>
                       <p className="text-xs text-muted-foreground mb-3">
@@ -1675,6 +1843,7 @@ export default function ResumeAnalysisApp() {
                 </div>
               </div>
             </CardContent>
+            )}
           </Card>
         )}
 
@@ -1686,7 +1855,7 @@ export default function ResumeAnalysisApp() {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
                     <FileText className="h-6 w-6 text-white" />
-                  </div>
+                </div>
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       Ditt CV
@@ -1700,19 +1869,19 @@ export default function ResumeAnalysisApp() {
                     </CardDescription>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                   {(uploadedResume as any).filePath && (
-                    <Button
-                      variant="outline"
-                      size="sm"
+                        <Button
+                          variant="outline"
+                          size="sm"
                       onClick={() => window.open(getApiUrl((uploadedResume as any).filePath), '_blank')}
                       className="h-8"
-                    >
+                        >
                       <Download className="h-3.5 w-3.5 mr-1.5" />
                       Ladda ner
-                    </Button>
-                  )}
-                  <Button
+                        </Button>
+                    )}
+                      <Button
                     variant="default"
                     size="sm"
                     onClick={handleEditResume}
@@ -1720,13 +1889,13 @@ export default function ResumeAnalysisApp() {
                   >
                     <Edit className="h-3.5 w-3.5 mr-1.5" />
                     Redigera
-                  </Button>
+                      </Button>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Button
+                      <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowOriginalResume(prev => !prev)}
@@ -1734,20 +1903,20 @@ export default function ResumeAnalysisApp() {
                 >
                   <Eye className="h-3.5 w-3.5 mr-1.5" />
                   {showOriginalResume ? 'Dölj CV-text' : 'Visa CV-text'}
-                </Button>
+                      </Button>
                 {uploadedResume.rawText && (
                   <span className="text-muted-foreground/70">
                     • {uploadedResume.rawText.length} tecken
                   </span>
                 )}
-              </div>
+                    </div>
               {showOriginalResume && (
                 <div className="mt-3 border rounded-lg p-4 bg-white/80 backdrop-blur-sm max-h-64 overflow-y-auto shadow-sm">
                   <div className="prose prose-sm max-w-none">
                     <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
                       {getResumeText(uploadedResume, uploadedResume.rawText)}
-                    </div>
-                  </div>
+                </div>
+              </div>
                 </div>
               )}
             </CardContent>
@@ -1935,115 +2104,10 @@ export default function ResumeAnalysisApp() {
                 isLoading={isSearchingJobs}
                 uploadedResume={!!uploadedResume}
               />
-            </div>
-          </div>
-        )}
-
-        {/* ROI-kort - Visa när användare har aktivitet */}
-        {user && ((applicationCount !== null && applicationCount > 0) || jobMatches.length > 0) && (
-          checkFeatureAccess({ tier: planTier, usage: planUsage }, 'roiStats').allowed ? (
-            <Card className="mb-6 border-2 border-green-200 bg-gradient-to-br from-green-50/50 to-emerald-50/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                  Din Framgång - Live Statistik
-                </CardTitle>
-                <CardDescription>
-                  Se hur mycket du har åstadkommit med Workme
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center p-4 bg-white rounded-lg border border-green-200">
-                    <div className="text-3xl font-bold text-green-600 mb-1">
-                      {applicationCount ?? jobApplications.length}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Ansökningar loggade</div>
-                    <div className="text-xs text-green-600 mt-1 font-medium">
-                      {applicationCount && applicationCount > 0 ? '✓ Aktiv' : 'Kom igång!'}
-                    </div>
-                  </div>
-                  <div className="text-center p-4 bg-white rounded-lg border border-blue-200">
-                    <div className="text-3xl font-bold text-blue-600 mb-1">
-                      {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Matcher &gt;80%</div>
-                    <div className="text-xs text-blue-600 mt-1 font-medium">
-                      {jobMatches.filter(m => (m.matchPercentage || 0) >= 80).length > 0 ? '✓ Höga chanser' : 'Sök fler jobb'}
-                    </div>
-                  </div>
-                  <div className="text-center p-4 bg-white rounded-lg border border-purple-200">
-                    <div className="text-3xl font-bold text-purple-600 mb-1">
-                      {applicationStats?.byStatus?.interview || 0}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Intervjuer</div>
-                    <div className="text-xs text-purple-600 mt-1 font-medium">
-                      {applicationStats?.byStatus?.interview > 0 ? '✓ Bra jobbat!' : 'Fortsätt söka'}
-                    </div>
-                  </div>
-                  <div className="text-center p-4 bg-white rounded-lg border border-emerald-200">
-                    <div className="text-3xl font-bold text-emerald-600 mb-1">
-                      {applicationStats?.byStatus?.offer || 0}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Erbjudanden</div>
-                    <div className="text-xs text-emerald-600 mt-1 font-medium">
-                      {applicationStats?.byStatus?.offer > 0 ? '🎉 Grattis!' : 'Du är på rätt väg'}
-                    </div>
                   </div>
                 </div>
-
-                {applicationStats && applicationStats.total > 0 && (
-                  <div className="mt-4 pt-4 border-t border-green-200">
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <div className="text-lg font-semibold text-gray-700">
-                          {applicationStats.total || 0}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Totalt ansökningar</div>
-                      </div>
-                      <div>
-                        <div className="text-lg font-semibold text-blue-600">
-                          {applicationStats.total > 0 
-                            ? Math.round(((applicationStats.byStatus?.interview || 0) / applicationStats.total) * 100)
-                            : 0}%
-                        </div>
-                        <div className="text-xs text-muted-foreground">Svarsfrekvens</div>
-                      </div>
-                      <div>
-                        <div className="text-lg font-semibold text-green-600">
-                          {applicationStats.total > 0 
-                            ? Math.round(((applicationStats.byStatus?.offer || 0) / applicationStats.total) * 100)
-                            : 0}%
-                        </div>
-                        <div className="text-xs text-muted-foreground">Erbjudandefrekvens</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="mb-6 border-dashed border-2 border-purple-300 bg-purple-50/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-purple-600" />
-                  Din Framgång - Live Statistik (låst)
-                </CardTitle>
-                <CardDescription>
-                  Full ROI-statistik ingår i Workme Basic. Uppgradera för att se intervjufrekvens, erbjudanden och svarsfrekvens.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex items-center justify-between flex-col sm:flex-row gap-3">
-                <div className="text-sm text-muted-foreground">
-                  Uppgradera för att låsa upp detaljerad statistik.
-                </div>
-                <Button onClick={() => { setUpgradeRequiredTier('basic'); setUpgradeReason('Full ROI-statistik ingår i Workme Basic.'); setUpgradeOpen(true); }}>
-                  Lås upp Basic
-                </Button>
-              </CardContent>
-            </Card>
-          )
         )}
+
 
         {/* CV Builder Section - Hidden */}
         {false && (
@@ -2083,9 +2147,9 @@ export default function ResumeAnalysisApp() {
                       <p className="font-medium text-sm">{selectedFile.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {(selectedFile.size / 1024).toFixed(0)} KB
-                      </p>
-                    </div>
-                  </div>
+                                  </p>
+                                </div>
+                              </div>
                   <div className="flex items-center gap-2">
                     {!uploadedResume && !isUploading && (
                       <Button
@@ -2100,11 +2164,11 @@ export default function ResumeAnalysisApp() {
                       <div className="flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         <span className="text-xs text-muted-foreground">Laddar upp...</span>
-                      </div>
-                    )}
-                    <Button
+                                </div>
+                              )}
+                                  <Button
                       variant="ghost"
-                      size="sm"
+                                    size="sm"
                       className="h-8 w-8 p-0"
                       onClick={() => {
                         setSelectedFile(null);
@@ -2113,7 +2177,7 @@ export default function ResumeAnalysisApp() {
                       }}
                     >
                       <X className="h-4 w-4" />
-                    </Button>
+                                  </Button>
                   </div>
                 </div>
               ) : (
@@ -2161,7 +2225,7 @@ export default function ResumeAnalysisApp() {
                 </div>
                 <div className="flex flex-col gap-3">
                   <div className="flex gap-2">
-                    <Button
+                                <Button
                       onClick={handleAnalyze}
                       disabled={isAnalyzing}
                       className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
@@ -2170,14 +2234,14 @@ export default function ResumeAnalysisApp() {
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                           Analyzing...
-                        </>
-                      ) : (
-                        <>
+                                    </>
+                                  ) : (
+                                    <>
                           <Sparkles className="h-4 w-4 mr-2" />
                           Analyze Resume
-                        </>
-                      )}
-                    </Button>
+                                    </>
+                                  )}
+                                </Button>
                     {uploadedResume && (
                       <div className="flex items-center gap-2">
                         <Label htmlFor="template-select" className="text-sm text-muted-foreground whitespace-nowrap">
@@ -2194,10 +2258,10 @@ export default function ResumeAnalysisApp() {
                             <SelectItem value="professional">Professionell</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button
+                                <Button
                           type="button"
                           variant="outline"
-                          size="sm"
+                                  size="sm"
                           onClick={() => setShowTemplatePreview(true)}
                           className="flex items-center gap-1"
                         >
@@ -2218,37 +2282,37 @@ export default function ResumeAnalysisApp() {
                         {isGeneratingPDF ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Genererar...
-                          </>
-                        ) : (
-                          <>
+                                      Genererar...
+                                    </>
+                                  ) : (
+                                    <>
                             <FileText className="h-4 w-4 mr-2" />
                             Ladda ner PDF
-                          </>
-                        )}
-                      </Button>
-                      <Button
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
                         onClick={handleGenerateLaTeX}
                         disabled={isGeneratingPDF || isGeneratingLaTeX}
-                        variant="outline"
+                                  variant="outline"
                         className="border-blue-300 text-blue-700 hover:bg-blue-50 w-full sm:w-auto"
-                      >
+                                >
                         {isGeneratingLaTeX ? (
-                          <>
+                                    <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                             Genererar...
-                          </>
-                        ) : (
-                          <>
+                                    </>
+                                  ) : (
+                                    <>
                             <FileCode className="h-4 w-4 mr-2" />
                             Ladda ner LaTeX
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                   )}
-                </div>
-              </div>
+                            </div>
+                      </div>
             </CardContent>
           </Card>
         )}
@@ -2291,8 +2355,8 @@ export default function ResumeAnalysisApp() {
                 className="w-full min-h-[400px] p-4 border rounded-lg font-mono text-sm resize-y"
                 placeholder="Klistra in eller redigera CV-text här..."
               />
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
         )}
 
 
@@ -2341,100 +2405,100 @@ export default function ResumeAnalysisApp() {
 
 
         {/* Adapted Resumes - Compact */}
-        {adaptedResumes.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Anpassade CV-versioner</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {adaptedResumes.map((adapted) => {
-                  const isViewing = viewingAdaptedResume?.id === adapted.id;
-                  return (
-                    <div
-                      key={adapted.id}
-                      className={`p-4 border rounded-lg ${isViewing ? 'border-primary bg-primary/5' : ''}`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-medium">{adapted.adaptedForJob.jobTitle}</h4>
-                          {adapted.adaptedForJob.company && (
-                            <p className="text-sm text-muted-foreground">
-                              {adapted.adaptedForJob.company}
-                            </p>
-                          )}
-                          {adapted.adaptationNotes && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {adapted.adaptationNotes}
-                            </p>
-                          )}
+            {adaptedResumes.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Anpassade CV-versioner</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {adaptedResumes.map((adapted) => {
+                      const isViewing = viewingAdaptedResume?.id === adapted.id;
+                      return (
+                        <div
+                          key={adapted.id}
+                          className={`p-4 border rounded-lg ${isViewing ? 'border-primary bg-primary/5' : ''}`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h4 className="font-medium">{adapted.adaptedForJob.jobTitle}</h4>
+                              {adapted.adaptedForJob.company && (
+                                <p className="text-sm text-muted-foreground">
+                                  {adapted.adaptedForJob.company}
+                                </p>
+                              )}
+                              {adapted.adaptationNotes && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {adapted.adaptationNotes}
+                                </p>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="bg-purple-100 text-purple-700">
+                              Anpassad
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <Button
+                              variant={isViewing ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setViewingAdaptedResume(isViewing ? null : adapted)}
+                            >
+                              {isViewing ? (
+                                <>
+                                  <X className="h-4 w-4 mr-2" />
+                                  Stäng
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Visa CV
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const formattedText = getResumeText(null, adapted.rawText);
+                                const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = adapted.filename.replace(/\.txt$/, '') + '_formaterad.txt';
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Ladda ner TXT
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleGenerateAdaptedPDF(adapted)}
+                              disabled={isGeneratingAdaptedPDF[adapted.id]}
+                              className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                            >
+                              {isGeneratingAdaptedPDF[adapted.id] ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Genererar...
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Ladda ner PDF
+                                </>
+                              )}
+                            </Button>
+                          </div>
                         </div>
-                        <Badge variant="outline" className="bg-purple-100 text-purple-700">
-                          Anpassad
-                        </Badge>
-                      </div>
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          variant={isViewing ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setViewingAdaptedResume(isViewing ? null : adapted)}
-                        >
-                          {isViewing ? (
-                            <>
-                              <X className="h-4 w-4 mr-2" />
-                              Stäng
-                            </>
-                          ) : (
-                            <>
-                              <FileText className="h-4 w-4 mr-2" />
-                              Visa CV
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const formattedText = getResumeText(null, adapted.rawText);
-                            const blob = new Blob([formattedText], { type: 'text/plain;charset=utf-8' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = adapted.filename.replace(/\.txt$/, '') + '_formaterad.txt';
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          }}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Ladda ner TXT
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateAdaptedPDF(adapted)}
-                          disabled={isGeneratingAdaptedPDF[adapted.id]}
-                          className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
-                        >
-                          {isGeneratingAdaptedPDF[adapted.id] ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Genererar...
-                            </>
-                          ) : (
-                            <>
-                              <FileText className="h-4 w-4 mr-2" />
-                              Ladda ner PDF
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
 
             {/* Viewing Application */}

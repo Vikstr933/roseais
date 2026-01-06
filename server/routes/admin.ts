@@ -317,25 +317,68 @@ router.put('/users/:userId/role', async (req, res) => {
 
 /**
  * PUT /api/admin/users/:userId/tier
- * Update a user's tier
+ * Update a user's tier (admin only, requires subscriptionId for paid tiers)
  */
 router.put('/users/:userId/tier', async (req, res) => {
   try {
     const { userId } = req.params;
-    const { tier } = req.body;
+    const { tier, subscriptionId, reason } = req.body;
+    const adminUserId = (req as any).user?.id;
 
-    if (!['free', 'pro', 'enterprise'].includes(tier)) {
+    if (!['free', 'pro', 'enterprise', 'basic'].includes(tier)) {
       return res.status(400).json({
         error: 'Invalid tier',
-        validTiers: ['free', 'pro', 'enterprise']
+        validTiers: ['free', 'basic', 'pro', 'enterprise']
       });
     }
 
-    logger.info(`Updating user ${userId} tier to ${tier}`);
+    // For paid tiers (basic, pro, enterprise), require subscriptionId or explicit reason
+    if (tier !== 'free' && !subscriptionId && !reason) {
+      return res.status(400).json({
+        error: 'Subscription required',
+        message: `Upgrading to ${tier} tier requires a subscriptionId or a reason for manual override.`,
+        required: ['subscriptionId (for Stripe subscription) OR reason (for manual admin override)']
+      });
+    }
+
+    // Get current user data
+    const currentUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (currentUser.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = currentUser[0];
+
+    // Log the tier change with admin info and reason
+    logger.info(`[ADMIN TIER CHANGE] Admin ${adminUserId} updating user ${userId} tier from ${user.tier} to ${tier}`, {
+      adminId: adminUserId,
+      userId,
+      oldTier: user.tier,
+      newTier: tier,
+      subscriptionId: subscriptionId || null,
+      reason: reason || 'No reason provided',
+      timestamp: new Date().toISOString()
+    });
+
+    // Update user tier
+    const updateData: any = {
+      tier,
+      subscriptionStatus: tier === 'free' ? 'inactive' : 'active',
+    };
+
+    // Only update subscriptionId if provided (don't clear it if not provided)
+    if (subscriptionId) {
+      updateData.subscriptionId = subscriptionId;
+    }
 
     const updated = await db
       .update(users)
-      .set({ tier })
+      .set(updateData)
       .where(eq(users.id, userId))
       .returning();
 
@@ -343,8 +386,12 @@ router.put('/users/:userId/tier', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    logger.info(`Updated user ${userId} tier to ${tier}`);
-    res.json({ success: true, user: updated[0] });
+    logger.info(`Successfully updated user ${userId} tier to ${tier}`);
+    res.json({ 
+      success: true, 
+      user: updated[0],
+      message: `User tier updated to ${tier}${subscriptionId ? ' with subscription' : ' (manual override)'}`
+    });
   } catch (error) {
     logger.error('Error updating user tier', error as Error);
     res.status(500).json({ error: 'Failed to update user tier' });

@@ -96,12 +96,19 @@ router.post('/upload', authenticateUser, upload.single('resume'), async (req, re
 
     console.log('[ResumeUpload] Resume saved successfully, ID:', resume.id);
     
+    // Return full resume data so frontend can display it immediately
     res.json({
       success: true,
       resume: {
         id: resume.id,
         filename: resume.filename,
+        fileType: resume.fileType,
+        filePath: resume.filePath,
+        fileSize: resume.fileSize,
+        rawText: resume.rawText,
+        parsedData: resume.parsedData,
         createdAt: resume.createdAt,
+        updatedAt: resume.updatedAt,
       },
     });
   } catch (error: any) {
@@ -164,6 +171,141 @@ router.get('/', authenticateUser, async (req, res) => {
   } catch (error) {
     console.error('Error fetching resumes:', error);
     res.status(500).json({ error: 'Failed to fetch resumes' });
+  }
+});
+
+// POST /api/resumes/create - Create resume from form data
+router.post('/create', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const cvData = req.body;
+
+    if (!cvData || !cvData.personal) {
+      return res.status(400).json({ error: 'Invalid CV data. Personal information is required.' });
+    }
+
+    // Convert form data to text format
+    let rawText = '';
+    
+    // Personal Information
+    if (cvData.personal.fullName) rawText += `Namn: ${cvData.personal.fullName}\n`;
+    if (cvData.personal.email) rawText += `E-post: ${cvData.personal.email}\n`;
+    if (cvData.personal.phone) rawText += `Telefon: ${cvData.personal.phone}\n`;
+    if (cvData.personal.location) rawText += `Plats: ${cvData.personal.location}\n`;
+    if (cvData.personal.linkedin) rawText += `LinkedIn: ${cvData.personal.linkedin}\n`;
+    if (cvData.personal.website) rawText += `Webbplats: ${cvData.personal.website}\n`;
+    rawText += '\n';
+
+    // Professional Summary
+    if (cvData.summary?.professionalSummary) {
+      rawText += `PROFESSIONELL SAMMANFATTNING\n${cvData.summary.professionalSummary}\n\n`;
+    }
+
+    // Experience
+    if (cvData.experience && cvData.experience.length > 0) {
+      rawText += 'ERFARENHET\n';
+      cvData.experience.forEach((exp: any) => {
+        rawText += `${exp.position || 'Position'} - ${exp.company || 'Företag'}\n`;
+        if (exp.startDate || exp.endDate) {
+          rawText += `${exp.startDate || ''} - ${exp.current ? 'Nuvarande' : exp.endDate || ''}\n`;
+        }
+        if (exp.description) rawText += `${exp.description}\n`;
+        rawText += '\n';
+      });
+    }
+
+    // Education
+    if (cvData.education && cvData.education.length > 0) {
+      rawText += 'UTBILDNING\n';
+      cvData.education.forEach((edu: any) => {
+        rawText += `${edu.degree || 'Examen'} - ${edu.institution || 'Institution'}\n`;
+        if (edu.field) rawText += `${edu.field}\n`;
+        if (edu.startDate || edu.endDate) {
+          rawText += `${edu.startDate || ''} - ${edu.endDate || ''}\n`;
+        }
+        rawText += '\n';
+      });
+    }
+
+    // Skills
+    if (cvData.skills && cvData.skills.length > 0) {
+      rawText += 'FÄRDIGHETER\n';
+      rawText += cvData.skills.join(', ') + '\n\n';
+    }
+
+    // Parse the text to create structured data
+    const parsedData = {
+      formattedText: rawText,
+      contactInfo: {
+        name: cvData.personal.fullName || '',
+        email: cvData.personal.email || '',
+        phone: cvData.personal.phone || '',
+        location: cvData.personal.location || '',
+        linkedin: cvData.personal.linkedin || '',
+        website: cvData.personal.website || '',
+      },
+      sections: {
+        summary: cvData.summary?.professionalSummary || '',
+        experience: cvData.experience || [],
+        education: cvData.education || [],
+        skills: cvData.skills || [],
+      },
+      metadata: {
+        source: 'form',
+        template: cvData.template || 'modern',
+        createdAt: new Date().toISOString(),
+      },
+    };
+
+    // Generate unique filename
+    const resumeId = uuidv4();
+    const filename = `CV_${(cvData.personal.fullName || 'Resume').replace(/\s+/g, '_')}_${Date.now()}.txt`;
+    const filePath = `resumes/${userId}/${resumeId}.txt`;
+
+    // Save to local storage
+    const uploadDir = path.join(process.cwd(), 'uploads', 'resumes', userId);
+    await fs.mkdir(uploadDir, { recursive: true });
+    const localPath = path.join(uploadDir, `${resumeId}.txt`);
+    await fs.writeFile(localPath, rawText, 'utf-8');
+    const storageUrl = `/uploads/resumes/${userId}/${resumeId}.txt`;
+
+    // Save to database
+    const [resume] = await db
+      .insert(resumes)
+      .values({
+        userId,
+        filename: filename,
+        filePath: storageUrl,
+        fileSize: Buffer.byteLength(rawText, 'utf-8'),
+        fileType: 'txt',
+        parsedData: parsedData as any,
+        rawText: rawText,
+      })
+      .returning();
+
+    console.log('[ResumeCreate] Resume created successfully, ID:', resume.id);
+
+    // Return full resume data
+    res.json({
+      success: true,
+      resume: {
+        id: resume.id,
+        filename: resume.filename,
+        fileType: resume.fileType,
+        filePath: resume.filePath,
+        fileSize: resume.fileSize,
+        rawText: resume.rawText,
+        parsedData: resume.parsedData,
+        createdAt: resume.createdAt,
+        updatedAt: resume.updatedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ResumeCreate] Error:', error);
+    res.status(500).json({
+      error: 'Failed to create resume',
+      message: error?.message || String(error),
+    });
   }
 });
 
