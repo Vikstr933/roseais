@@ -1678,6 +1678,267 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
+        {/* Kompakt CV-ruta - Visas alltid när CV finns - FLYTTAD HÖGRE UPP */}
+        {uploadedResume && !editingResume && (
+          <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
+                    <FileText className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      Ditt CV
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      {uploadedResume.filename || 'Uppladdat CV'} • 
+                      Uppladdat {uploadedResume.createdAt ? new Date(uploadedResume.createdAt).toLocaleDateString('sv-SE') : '–'}
+                      {(uploadedResume as any).updatedAt && (uploadedResume as any).updatedAt !== uploadedResume.createdAt && (
+                        <> • Uppdaterat {new Date((uploadedResume as any).updatedAt).toLocaleDateString('sv-SE')}</>
+                      )}
+                    </CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(uploadedResume as any).filePath && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(getApiUrl((uploadedResume as any).filePath), '_blank')}
+                      className="h-8"
+                    >
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      Ladda ner
+                    </Button>
+                  )}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleEditResume}
+                    className="h-8"
+                  >
+                    <Edit className="h-3.5 w-3.5 mr-1.5" />
+                    Redigera
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowOriginalResume(prev => !prev)}
+                  className="h-7 text-xs"
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  {showOriginalResume ? 'Dölj CV-text' : 'Visa CV-text'}
+                </Button>
+                {uploadedResume.rawText && (
+                  <span className="text-muted-foreground/70">
+                    • {uploadedResume.rawText.length} tecken
+                  </span>
+                )}
+              </div>
+              {showOriginalResume && (
+                <div className="mt-3 border rounded-lg p-4 bg-white/80 backdrop-blur-sm max-h-64 overflow-y-auto shadow-sm">
+                  <div className="prose prose-sm max-w-none">
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
+                      {getResumeText(uploadedResume, uploadedResume.rawText)}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Analysis Results - Compact 2-Column Layout - FLYTTAD HÖGRE UPP */}
+        {analysis && !editingResume && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            {/* Left Column: Scores (1/3 width on large screens) */}
+            <div className="lg:col-span-1 space-y-3">
+              {/* ATS Info Box - More Compact */}
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="pt-3 pb-3">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-blue-900 mb-1 text-sm">Vad är ATS?</h4>
+                      <p className="text-xs text-blue-800">
+                        System som automatiskt sorterar CV:n. Ett ATS-vänligt CV ökar dina chanser att nå rekryterare.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Overall Score - More Compact */}
+              <Card>
+                <CardHeader className="pb-2 pt-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">CV Poäng</CardTitle>
+                    {uploadedResume && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleEditResume}
+                        className="h-6 px-2"
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="pb-3">
+                  <div className="flex items-center justify-center py-1">
+                    <div className={`relative w-24 h-24 rounded-full ${getScoreBgColor(analysis?.overallScore ?? 0)} flex items-center justify-center`}>
+                      <div className="text-center">
+                        <div className={`text-3xl font-bold ${getScoreColor(analysis?.overallScore ?? 0)}`}>
+                          {analysis?.overallScore ?? 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground">/100</div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Category Scores - More Compact, Expandable */}
+              <div className="space-y-2">
+                {[
+                  { key: 'ats', label: 'ATS-vänlighet', score: analysis?.atsScore ?? 0, maxScore: 25, description: 'Hur väl ditt CV kan läsas av automatiska system.' },
+                  { key: 'content', label: 'Innehållskvalitet', score: analysis?.contentScore ?? 0, maxScore: 30, description: 'Hur väl du kommunicerar prestationer.' },
+                  { key: 'keywords', label: 'Nyckelord', score: analysis?.keywordScore ?? 0, maxScore: 20, description: 'Matchning mot relevanta kompetenser.' },
+                  { key: 'presentation', label: 'Presentation', score: analysis?.presentationScore ?? analysis?.completenessScore ?? 0, maxScore: 15, description: 'Formatering och visuell hierarki.' },
+                  { key: 'completeness', label: 'Kompletthet', score: analysis?.completenessScore ?? 0, maxScore: 10, description: 'Verifierar att inget saknas.' },
+                ].map((category) => {
+                const isExpanded = expandedCategories[category.key] || false;
+                const categoryFeedback = analysis?.detailedFeedback?.[category.key as keyof typeof analysis.detailedFeedback];
+                const percentage = category.score;
+                const getCategoryColor = (pct: number) => {
+                  if (pct >= 70) return 'text-green-600';
+                  if (pct >= 50) return 'text-blue-600';
+                  if (pct >= 30) return 'text-yellow-600';
+                  return 'text-red-600';
+                };
+                const getCategoryBgColor = (pct: number) => {
+                  if (pct >= 70) return 'bg-green-50 border-green-200';
+                  if (pct >= 50) return 'bg-blue-50 border-blue-200';
+                  if (pct >= 30) return 'bg-yellow-50 border-yellow-200';
+                  return 'bg-red-50 border-red-200';
+                };
+
+                return (
+                  <Card key={category.key} className={isExpanded ? getCategoryBgColor(percentage) : ''}>
+                    <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedCategories(prev => ({ ...prev, [category.key]: !prev[category.key] }))}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <CardTitle className="text-base">{category.label}</CardTitle>
+                            <span className={`text-sm font-semibold ${getCategoryColor(percentage)}`}>
+                              {category.score}/100
+                            </span>
+                          </div>
+                          <Progress value={category.score} className="h-2" />
+                        </div>
+                        <Button variant="ghost" size="sm" className="ml-2 h-6 w-6 p-0">
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </CardHeader>
+                      {isExpanded && (
+                        <CardContent className="pt-2 pb-2">
+                          <div className="space-y-2">
+                            {/* Why it matters */}
+                            <div className="bg-white/60 rounded p-2">
+                              <div className="flex items-start gap-1.5 mb-1">
+                                <Info className="h-3 w-3 text-blue-600 mt-0.5" />
+                                <h5 className="font-semibold text-xs">Varför viktigt?</h5>
+                              </div>
+                              <p className="text-xs text-gray-700">{category.description}</p>
+                            </div>
+
+                            {/* Positives */}
+                            {categoryFeedback?.feedback.positives && categoryFeedback.feedback.positives.length > 0 && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <CheckCircle className="h-3 w-3 text-green-600" />
+                                  <h5 className="font-semibold text-xs text-green-700">Bra jobbat!</h5>
+                                </div>
+                                <ul className="space-y-0.5">
+                                  {categoryFeedback.feedback.positives.slice(0, 3).map((positive, idx) => (
+                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
+                                      <span className="text-green-600 mt-0.5">•</span>
+                                      <span>{positive}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Negatives / Areas for improvement */}
+                            {categoryFeedback?.feedback.negatives && categoryFeedback.feedback.negatives.length > 0 && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <AlertCircle className="h-3 w-3 text-orange-600" />
+                                  <h5 className="font-semibold text-xs text-orange-700">Förbättringsområden</h5>
+                                </div>
+                                <ul className="space-y-0.5">
+                                  {categoryFeedback.feedback.negatives.slice(0, 3).map((negative, idx) => (
+                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
+                                      <span className="text-orange-600 mt-0.5">•</span>
+                                      <span>{negative}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Actionable Tips */}
+                            {categoryFeedback?.feedback.tips && categoryFeedback.feedback.tips.length > 0 && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Lightbulb className="h-3 w-3 text-yellow-600" />
+                                  <h5 className="font-semibold text-xs text-yellow-700">Tips</h5>
+                                </div>
+                                <ul className="space-y-0.5">
+                                  {categoryFeedback.feedback.tips.slice(0, 2).map((tip, idx) => (
+                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
+                                      <span className="text-yellow-600 mt-0.5">💡</span>
+                                      <span>{tip}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right Column: Job Matches and Search (2/3 width on large screens) */}
+            <div className="lg:col-span-2">
+              <JobFeed
+                jobs={jobMatches}
+                onTrackApplication={handleTrackApplication}
+                onAdaptResume={handleAdaptResume}
+                onGenerateApplication={handleGenerateApplication}
+                isTracking={creatingApplication}
+                isAdapting={isAdapting}
+                isGenerating={generatingApplication}
+                isLoading={isSearchingJobs}
+                uploadedResume={!!uploadedResume}
+              />
+            </div>
+          </div>
+        )}
+
         {/* ROI-kort - Visa när användare har aktivitet */}
         {user && ((applicationCount !== null && applicationCount > 0) || jobMatches.length > 0) && (
           checkFeatureAccess({ tier: planTier, usage: planUsage }, 'roiStats').allowed ? (
@@ -2034,190 +2295,6 @@ export default function ResumeAnalysisApp() {
           </Card>
         )}
 
-        {/* Analysis Results - Compact 2-Column Layout */}
-        {analysis && !editingResume && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Left Column: Scores (1/3 width on large screens) */}
-            <div className="lg:col-span-1 space-y-3">
-              {/* ATS Info Box - More Compact */}
-              <Card className="bg-blue-50 border-blue-200">
-                <CardContent className="pt-3 pb-3">
-                  <div className="flex items-start gap-2">
-                    <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-blue-900 mb-1 text-sm">Vad är ATS?</h4>
-                      <p className="text-xs text-blue-800">
-                        System som automatiskt sorterar CV:n. Ett ATS-vänligt CV ökar dina chanser att nå rekryterare.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Overall Score - More Compact */}
-              <Card>
-                <CardHeader className="pb-2 pt-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">CV Poäng</CardTitle>
-                    {uploadedResume && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleEditResume}
-                        className="h-6 px-2"
-                      >
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="pb-3">
-                  <div className="flex items-center justify-center py-1">
-                    <div className={`relative w-24 h-24 rounded-full ${getScoreBgColor(analysis?.overallScore ?? 0)} flex items-center justify-center`}>
-                      <div className="text-center">
-                        <div className={`text-3xl font-bold ${getScoreColor(analysis?.overallScore ?? 0)}`}>
-                          {analysis?.overallScore ?? 0}
-                        </div>
-                        <div className="text-xs text-muted-foreground">/100</div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Category Scores - More Compact, Expandable */}
-              <div className="space-y-2">
-                {[
-                  { key: 'ats', label: 'ATS-vänlighet', score: analysis?.atsScore ?? 0, maxScore: 25, description: 'Hur väl ditt CV kan läsas av automatiska system.' },
-                  { key: 'content', label: 'Innehållskvalitet', score: analysis?.contentScore ?? 0, maxScore: 30, description: 'Hur väl du kommunicerar prestationer.' },
-                  { key: 'keywords', label: 'Nyckelord', score: analysis?.keywordScore ?? 0, maxScore: 20, description: 'Matchning mot relevanta kompetenser.' },
-                  { key: 'presentation', label: 'Presentation', score: analysis?.presentationScore ?? analysis?.completenessScore ?? 0, maxScore: 15, description: 'Formatering och visuell hierarki.' },
-                  { key: 'completeness', label: 'Kompletthet', score: analysis?.completenessScore ?? 0, maxScore: 10, description: 'Verifierar att inget saknas.' },
-                ].map((category) => {
-                const isExpanded = expandedCategories[category.key] || false;
-                const categoryFeedback = analysis?.detailedFeedback?.[category.key as keyof typeof analysis.detailedFeedback];
-                const percentage = category.score;
-                const getCategoryColor = (pct: number) => {
-                  if (pct >= 70) return 'text-green-600';
-                  if (pct >= 50) return 'text-blue-600';
-                  if (pct >= 30) return 'text-yellow-600';
-                  return 'text-red-600';
-                };
-                const getCategoryBgColor = (pct: number) => {
-                  if (pct >= 70) return 'bg-green-50 border-green-200';
-                  if (pct >= 50) return 'bg-blue-50 border-blue-200';
-                  if (pct >= 30) return 'bg-yellow-50 border-yellow-200';
-                  return 'bg-red-50 border-red-200';
-                };
-
-                return (
-                  <Card key={category.key} className={isExpanded ? getCategoryBgColor(percentage) : ''}>
-                    <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedCategories(prev => ({ ...prev, [category.key]: !prev[category.key] }))}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <CardTitle className="text-base">{category.label}</CardTitle>
-                            <span className={`text-sm font-semibold ${getCategoryColor(percentage)}`}>
-                              {category.score}/100
-                            </span>
-                          </div>
-                          <Progress value={category.score} className="h-2" />
-                        </div>
-                        <Button variant="ghost" size="sm" className="ml-2 h-6 w-6 p-0">
-                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </CardHeader>
-                      {isExpanded && (
-                        <CardContent className="pt-2 pb-2">
-                          <div className="space-y-2">
-                            {/* Why it matters */}
-                            <div className="bg-white/60 rounded p-2">
-                              <div className="flex items-start gap-1.5 mb-1">
-                                <Info className="h-3 w-3 text-blue-600 mt-0.5" />
-                                <h5 className="font-semibold text-xs">Varför viktigt?</h5>
-                              </div>
-                              <p className="text-xs text-gray-700">{category.description}</p>
-                            </div>
-
-                            {/* Positives */}
-                            {categoryFeedback?.feedback.positives && categoryFeedback.feedback.positives.length > 0 && (
-                              <div>
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <CheckCircle className="h-3 w-3 text-green-600" />
-                                  <h5 className="font-semibold text-xs text-green-700">Bra jobbat!</h5>
-                                </div>
-                                <ul className="space-y-0.5">
-                                  {categoryFeedback.feedback.positives.slice(0, 3).map((positive, idx) => (
-                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
-                                      <span className="text-green-600 mt-0.5">•</span>
-                                      <span>{positive}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {/* Negatives / Areas for improvement */}
-                            {categoryFeedback?.feedback.negatives && categoryFeedback.feedback.negatives.length > 0 && (
-                              <div>
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <AlertCircle className="h-3 w-3 text-orange-600" />
-                                  <h5 className="font-semibold text-xs text-orange-700">Förbättringsområden</h5>
-                                </div>
-                                <ul className="space-y-0.5">
-                                  {categoryFeedback.feedback.negatives.slice(0, 3).map((negative, idx) => (
-                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
-                                      <span className="text-orange-600 mt-0.5">•</span>
-                                      <span>{negative}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {/* Actionable Tips */}
-                            {categoryFeedback?.feedback.tips && categoryFeedback.feedback.tips.length > 0 && (
-                              <div>
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <Lightbulb className="h-3 w-3 text-yellow-600" />
-                                  <h5 className="font-semibold text-xs text-yellow-700">Tips</h5>
-                                </div>
-                                <ul className="space-y-0.5">
-                                  {categoryFeedback.feedback.tips.slice(0, 2).map((tip, idx) => (
-                                    <li key={idx} className="text-xs text-gray-700 flex items-start gap-1.5">
-                                      <span className="text-yellow-600 mt-0.5">💡</span>
-                                      <span>{tip}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Column: Job Matches and Search (2/3 width on large screens) */}
-            <div className="lg:col-span-2">
-              <JobFeed
-                jobs={jobMatches}
-                onTrackApplication={handleTrackApplication}
-                onAdaptResume={handleAdaptResume}
-                onGenerateApplication={handleGenerateApplication}
-                isTracking={creatingApplication}
-                isAdapting={isAdapting}
-                isGenerating={generatingApplication}
-                isLoading={isSearchingJobs}
-                uploadedResume={!!uploadedResume}
-              />
-            </div>
-          </div>
-        )}
 
         {/* Alla Ansökningar - Min Ansöknings-Tracker */}
         {user && (applicationCount !== null && applicationCount > 0 || jobApplications.length > 0) && (
@@ -2262,81 +2339,6 @@ export default function ResumeAnalysisApp() {
           </div>
         )}
 
-        {/* Kompakt CV-ruta - Visas alltid när CV finns */}
-        {uploadedResume && !editingResume && (
-                    <Card className="mb-6 border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
-                    <FileText className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      Ditt CV
-                    </CardTitle>
-                    <CardDescription className="text-xs mt-0.5">
-                      {uploadedResume.filename || 'Uppladdat CV'} • 
-                      Uppladdat {uploadedResume.createdAt ? new Date(uploadedResume.createdAt).toLocaleDateString('sv-SE') : '–'}
-                      {(uploadedResume as any).updatedAt && (uploadedResume as any).updatedAt !== uploadedResume.createdAt && (
-                        <> • Uppdaterat {new Date((uploadedResume as any).updatedAt).toLocaleDateString('sv-SE')}</>
-                      )}
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {(uploadedResume as any).filePath && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(getApiUrl((uploadedResume as any).filePath), '_blank')}
-                      className="h-8"
-                    >
-                      <Download className="h-3.5 w-3.5 mr-1.5" />
-                      Ladda ner
-                    </Button>
-                  )}
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleEditResume}
-                    className="h-8"
-                  >
-                    <Edit className="h-3.5 w-3.5 mr-1.5" />
-                    Redigera
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowOriginalResume(prev => !prev)}
-                  className="h-7 text-xs"
-                >
-                  <Eye className="h-3.5 w-3.5 mr-1.5" />
-                  {showOriginalResume ? 'Dölj CV-text' : 'Visa CV-text'}
-                </Button>
-                {uploadedResume.rawText && (
-                  <span className="text-muted-foreground/70">
-                    • {uploadedResume.rawText.length} tecken
-                  </span>
-                )}
-              </div>
-              {showOriginalResume && (
-                <div className="mt-3 border rounded-lg p-4 bg-white/80 backdrop-blur-sm max-h-64 overflow-y-auto shadow-sm">
-                  <div className="prose prose-sm max-w-none">
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed font-sans text-gray-800">
-                      {getResumeText(uploadedResume, uploadedResume.rawText)}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Adapted Resumes - Compact */}
         {adaptedResumes.length > 0 && (
