@@ -59,14 +59,14 @@ export function ApplicationDashboard() {
       const data = await response.json();
       if (data.success) {
         // Map backend 'status' to frontend 'applicationStatus'
-        const mappedApplications = (data.applications || []).map((app: any) => ({
+        const mappedApplications: JobApplication[] = (data.applications || []).map((app: any) => ({
           ...app,
           applicationStatus: app.status || app.applicationStatus || 'applied',
-        }));
+        })) as JobApplication[];
         // Remove duplicates based on id
-        const uniqueApplications = Array.from(
+        const uniqueApplications: JobApplication[] = Array.from(
           new Map(mappedApplications.map((app: JobApplication) => [app.id, app])).values()
-        );
+        ) as JobApplication[];
         setApplications(uniqueApplications);
       }
     } catch (error) {
@@ -507,6 +507,7 @@ export function ApplicationDashboard() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                    </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {app.interviewDate && (
