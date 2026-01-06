@@ -87,9 +87,19 @@ export function JobFeed({
           );
           setSavedJobs(savedJobIds);
         }
+      } else if (response.status === 404) {
+        // Endpoint might not be available yet, silently ignore
+        console.log('[JobFeed] Saved jobs endpoint not available (404)');
+      } else if (response.status === 401) {
+        // User not authenticated, silently ignore
+        console.log('[JobFeed] User not authenticated for saved jobs');
       }
     } catch (error) {
-      console.error('Error fetching saved jobs:', error);
+      // Silently handle errors - saved jobs is an optional feature
+      // Only log if it's not a network/404 error
+      if (error instanceof Error && !error.message.includes('404') && !error.message.includes('Failed to fetch')) {
+        console.warn('[JobFeed] Error fetching saved jobs:', error);
+      }
     }
   };
 
@@ -162,15 +172,27 @@ export function JobFeed({
             title: 'Jobb sparat',
             description: 'Jobbet har sparats till dina sparade jobb',
           });
+        } else if (response.status === 404) {
+          // Endpoint not available, silently fail
+          console.log('[JobFeed] Saved jobs endpoint not available (404)');
+        } else if (response.status === 401) {
+          toast({
+            title: 'Autentisering krävs',
+            description: 'Du behöver logga in för att spara jobb',
+            variant: 'destructive',
+          });
         }
       }
     } catch (error) {
-      console.error('Error toggling saved job:', error);
-      toast({
-        title: 'Fel',
-        description: 'Kunde inte spara/ta bort jobbet',
-        variant: 'destructive',
-      });
+      // Only show error if it's not a 404 (endpoint not available)
+      if (error instanceof Error && !error.message.includes('404') && !error.message.includes('Failed to fetch')) {
+        console.error('Error toggling saved job:', error);
+        toast({
+          title: 'Fel',
+          description: 'Kunde inte spara/ta bort jobbet',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setSavingJob(prev => ({ ...prev, [jobId]: false }));
     }
