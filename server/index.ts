@@ -811,6 +811,11 @@ const initializeApp = async () => {
             console.log('Email scheduler service started');
           }
 
+          // Initialize auto-apply scheduler service
+          const { autoApplySchedulerService } = await import('./services/AutoApplySchedulerService');
+          autoApplySchedulerService.start();
+          console.log('Auto-apply scheduler service started');
+
           // Verify and pre-install dependencies at startup (non-blocking)
           (async () => {
             try {
@@ -912,19 +917,23 @@ const initializeApp = async () => {
 initializeApp();
 
 // Graceful shutdown handling
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('Received SIGINT, shutting down gracefully...');
   lockCleanupService.stop();
   chatCleanupService.stop();
   emailSchedulerService.stop();
+  const { autoApplySchedulerService } = await import('./services/AutoApplySchedulerService');
+  autoApplySchedulerService.stop();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('Received SIGTERM, shutting down gracefully...');
   lockCleanupService.stop();
   chatCleanupService.stop();
   emailSchedulerService.stop();
+  const { autoApplySchedulerService } = await import('./services/AutoApplySchedulerService');
+  autoApplySchedulerService.stop();
   process.exit(0);
 });
 

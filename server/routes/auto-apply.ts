@@ -13,18 +13,28 @@ router.get('/settings', authenticateUser, async (req: Request, res: Response) =>
   try {
     const userId = (req as any).user!.id;
     
-    // TODO: Store settings in database
-    // For now, return default settings
-    res.json({
-      success: true,
-      settings: {
-        enabled: false,
-        criteria: {
-          minMatchPercentage: 80,
+    const settings = await autoApplyService.getSettings(userId);
+    
+    if (!settings) {
+      // Return default settings if none exist
+      res.json({
+        success: true,
+        settings: {
+          enabled: false,
+          criteria: {
+            minMatchPercentage: 80,
+            maxApplicationsPerDay: 10,
+            maxApplicationsPerWeek: 50,
+          },
+          requireConfirmation: true,
         },
-        requireConfirmation: true,
-      },
-    });
+      });
+    } else {
+      res.json({
+        success: true,
+        settings,
+      });
+    }
   } catch (error) {
     console.error('Error fetching auto-apply settings:', error);
     res.status(500).json({
@@ -42,15 +52,25 @@ router.get('/settings', authenticateUser, async (req: Request, res: Response) =>
 router.post('/settings', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user!.id;
-    const settings: AutoApplySettings = req.body;
+    const { enabled, criteria, requireConfirmation, resumeId, coverLetterTemplate } = req.body;
 
-    // TODO: Save settings to database
-    // For now, just validate and return
+    const settings: AutoApplySettings = {
+      userId,
+      enabled: enabled || false,
+      criteria: criteria || { minMatchPercentage: 80 },
+      requireConfirmation: requireConfirmation !== false,
+      resumeId: resumeId || undefined,
+      coverLetterTemplate: coverLetterTemplate || undefined,
+      maxApplicationsPerDay: criteria?.maxApplicationsPerDay || 10,
+      maxApplicationsPerWeek: criteria?.maxApplicationsPerWeek || 50,
+    };
+
+    const saved = await autoApplyService.saveSettings(settings);
 
     res.json({
       success: true,
       message: 'Auto-apply settings saved',
-      settings,
+      settings: saved,
     });
   } catch (error) {
     console.error('Error saving auto-apply settings:', error);

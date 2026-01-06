@@ -1161,6 +1161,22 @@ export const savedJobs = pgTable('saved_jobs', {
   uniqueUserJob: unique().on(table.userId, table.jobId),
 }));
 
+export const autoApplySettings = pgTable('auto_apply_settings', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  resumeId: integer('resume_id').references(() => resumes.id, { onDelete: 'set null' }),
+  enabled: boolean('enabled').notNull().default(false),
+  criteria: jsonb('criteria').notNull().default({}), // AutoApplyCriteria as JSON
+  requireConfirmation: boolean('require_confirmation').notNull().default(true),
+  coverLetterTemplate: text('cover_letter_template'),
+  lastRunAt: timestamp('last_run_at'),
+  nextRunAt: timestamp('next_run_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  uniqueUser: unique().on(table.userId), // One setting per user
+}));
+
 export const jobSearchQueries = pgTable('job_search_queries', {
   id: serial('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
