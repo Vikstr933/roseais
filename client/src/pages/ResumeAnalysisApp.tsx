@@ -55,6 +55,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TemplatePreviewDialog } from '@/components/TemplatePreviewDialog';
+import { UpgradeDialog } from '@/components/UpgradeDialog';
+import { checkFeatureAccess, FeatureKey } from '@/lib/featureAccess';
+import { PlanTier, PlanUsage, PlanState } from '@/types/subscription';
 import { ApplicationDashboard } from '@/components/ApplicationDashboard';
 import { JobFeed } from '@/components/JobFeed';
 import { ResumeBuilder } from '@/components/ResumeBuilder';
@@ -169,6 +172,28 @@ export default function ResumeAnalysisApp() {
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
   const [showLanding, setShowLanding] = useState<boolean>(false);
   const [showCVBuilder, setShowCVBuilder] = useState<boolean>(false);
+  // Monetization / plan
+  const [planTier, setPlanTier] = useState<PlanTier>('free'); // TODO: load from backend
+  const [planUsage, setPlanUsage] = useState<PlanUsage>({
+    analyses: 0,
+    adaptations: 0,
+    activeApplications: 0,
+    jobMatchesToday: 0,
+  });
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<string | undefined>();
+  const [upgradeRequiredTier, setUpgradeRequiredTier] = useState<PlanTier>('basic');
+
+  const requireAccess = (feature: FeatureKey) => {
+    const result = checkFeatureAccess({ tier: planTier, usage: planUsage }, feature);
+    if (!result.allowed) {
+      setUpgradeRequiredTier(result.requiredTier || 'basic');
+      setUpgradeReason(result.reason);
+      setUpgradeOpen(true);
+      return false;
+    }
+    return true;
+  };
 
   // Load user's resumes on mount
   useEffect(() => {
@@ -411,6 +436,8 @@ export default function ResumeAnalysisApp() {
   };
 
   const handleAnalyze = async () => {
+    if (!requireAccess('analyze')) return;
+
     if (!uploadedResume) {
       toast({
         title: 'Error',
@@ -438,6 +465,7 @@ export default function ResumeAnalysisApp() {
 
       if (data.success && data.analysis) {
         setAnalysis(data.analysis);
+        setPlanUsage(prev => ({ ...prev, analyses: prev.analyses + 1 }));
         setProgress('');
         setHasAutoSearched(false); // Reset auto-search flag
         toast({
@@ -553,6 +581,7 @@ export default function ResumeAnalysisApp() {
   };
 
   const handleAdaptResume = async (jobMatch: JobMatch) => {
+    if (!requireAccess('adapt')) return;
     if (!uploadedResume || !jobMatch.jobId) return;
 
     // Prevent multiple simultaneous adaptation requests
@@ -607,6 +636,7 @@ export default function ResumeAnalysisApp() {
           const filtered = prev.filter(a => a.adaptedForJob.jobId !== jobMatch.jobId);
           return [...filtered, newAdaptedResume];
         });
+        setPlanUsage(prev => ({ ...prev, adaptations: prev.adaptations + 1 }));
 
         setProgress('');
         setViewingAdaptedResume(newAdaptedResume);
@@ -2564,6 +2594,20 @@ export default function ResumeAnalysisApp() {
               </Card>
             )}
       </div>
+
+      <UpgradeDialog
+        isOpen={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        currentTier={planTier}
+        feature="denna funktion"
+        reason={upgradeReason}
+        requiredTier={upgradeRequiredTier === 'free' ? 'basic' : (upgradeRequiredTier as 'basic' | 'pro')}
+        offerCredits={planTier !== 'free'}
+        onSelectPlan={(plan) => {
+          setPlanTier(plan);
+          setUpgradeOpen(false);
+        }}
+      />
 
       <AuthDialog open={showAuthDialog} onOpenChange={setShowAuthDialog} />
       <TemplatePreviewDialog
