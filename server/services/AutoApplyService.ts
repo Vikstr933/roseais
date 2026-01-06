@@ -137,7 +137,35 @@ export class AutoApplyService {
         jobUrl: job.url,
         applicationMethod: (job.applicationMethod as any) || 'manual',
         jobId: parseInt(job.id) || undefined,
+        recruiterEmail: job.applicationEmail,
       });
+
+      // Actually submit the application if method is email
+      const applicationMethod = (job.applicationMethod as any) || 'manual';
+      if (applicationMethod === 'email' && job.applicationEmail) {
+        try {
+          const { jobApplicationSubmissionService } = await import('./JobApplicationSubmissionService');
+          const submissionResult = await jobApplicationSubmissionService.submitApplication(
+            userId,
+            application.id,
+            'email',
+            {
+              resumeId,
+              coverLetter,
+              recruiterEmail: job.applicationEmail,
+            }
+          );
+
+          if (submissionResult.success) {
+            logger.info(`Application ${application.id} successfully submitted via email`);
+          } else {
+            logger.warn(`Failed to submit application ${application.id} via email: ${submissionResult.error}`);
+          }
+        } catch (error) {
+          logger.error(`Error submitting application ${application.id} via email`, error as Error);
+          // Don't throw - application is still tracked in database
+        }
+      }
 
       logger.info(`Auto-applied to job ${job.id} for user ${userId}`);
       return application;
