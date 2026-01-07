@@ -40,6 +40,7 @@ import {
   Lightbulb,
   Briefcase,
   Eye,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/api';
@@ -831,6 +832,81 @@ export default function ResumeAnalysisApp() {
   const handleCancelEdit = () => {
     setEditingResume(false);
     setEditedResumeText('');
+  };
+
+  const handleDeleteResume = async () => {
+    if (!uploadedResume) return;
+
+    // Confirm deletion
+    if (!window.confirm('Är du säker på att du vill ta bort detta CV? Detta kan inte ångras.')) {
+      return;
+    }
+
+    try {
+      const response = await apiFetch(`/api/resumes/${uploadedResume.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to delete resume');
+      }
+
+      // Clear all state
+      setUploadedResume(null);
+      setAnalysis(null);
+      setJobMatches([]);
+      setAdaptedResumes([]);
+      setViewingAdaptedResume(null);
+      setViewingApplication(null);
+      setSelectedFile(null);
+      setEditingResume(false);
+      setEditedResumeText('');
+      setShowCVBuilder(false);
+      setShowLanding(true); // Show landing page
+
+      toast({
+        title: 'CV borttaget',
+        description: 'Ditt CV har tagits bort.',
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete resume';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleNewCV = async () => {
+    // If there's a current CV, delete it first
+    if (uploadedResume) {
+      try {
+        const response = await apiFetch(`/api/resumes/${uploadedResume.id}`, {
+          method: 'DELETE',
+        });
+        // Don't show error if deletion fails - just continue with clearing state
+        if (response.ok) {
+          console.log('[NewCV] Deleted current resume');
+        }
+      } catch (err) {
+        console.error('[NewCV] Error deleting resume (non-critical):', err);
+      }
+    }
+
+    // Clear all state
+    setUploadedResume(null);
+    setAnalysis(null);
+    setJobMatches([]);
+    setAdaptedResumes([]);
+    setViewingAdaptedResume(null);
+    setViewingApplication(null);
+    setSelectedFile(null);
+    setEditingResume(false);
+    setEditedResumeText('');
+    setShowCVBuilder(false);
+    setShowLanding(true); // Show landing page to upload/create new CV
   };
 
   const handleCreateApplication = async (jobMatch: JobMatch) => {
@@ -1657,42 +1733,7 @@ export default function ResumeAnalysisApp() {
             {uploadedResume && (
               <Button
                 variant="outline"
-                onClick={() => {
-                  // Only show landing if user explicitly wants to create a new CV
-                  // Don't automatically show landing - let them choose
-                  setShowLanding(false);
-                  setUploadedResume(null);
-                  setAnalysis(null);
-                  setJobMatches([]);
-                  setShowCVBuilder(false);
-                  // Reload resumes to check if there are other CVs
-                  setIsLoadingResumes(true);
-                  apiFetch('/api/resumes', { method: 'GET' })
-                    .then(response => {
-                      if (response.ok) {
-                        return response.json();
-                      }
-                      return { success: false, resumes: [] };
-                    })
-                    .then(data => {
-                      if (data.success && data.resumes && data.resumes.length > 0) {
-                        // User has other CVs, load the most recent one
-                        const mostRecentResume = data.resumes[0];
-                        setUploadedResume(mostRecentResume);
-                        setShowLanding(false);
-                      } else {
-                        // No other CVs, show landing to create/upload new one
-                        setShowLanding(true);
-                      }
-                    })
-                    .catch(() => {
-                      // On error, show landing to allow upload/create
-                      setShowLanding(true);
-                    })
-                    .finally(() => {
-                      setIsLoadingResumes(false);
-                    });
-                }}
+                onClick={handleNewCV}
               >
                 Nytt CV
               </Button>
@@ -2011,6 +2052,15 @@ export default function ResumeAnalysisApp() {
                   >
                     <Edit className="h-3.5 w-3.5 mr-1.5" />
                     Redigera
+                      </Button>
+                      <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDeleteResume}
+                    className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    Ta bort
                       </Button>
                 </div>
               </div>
