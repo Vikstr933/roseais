@@ -69,13 +69,27 @@ GET /api/resumes/:id/job-matches?sources=reed
 
 **Standard**: JobTech och Adzuna används tillsammans som standard. För att inkludera Reed, lägg till `?sources=jobtech,adzuna,reed`.
 
-## 6. Rate Limits
+## 6. API Parametrar
+
+Reed API stödjer flera sökparametrar:
+- `keywords` - Sökord
+- `locationName` - Plats
+- `distanceFromLocation` - Avstånd från plats i miles (standard: 10)
+- `permanent`, `contract`, `temp` - Anställningstyp
+- `partTime`, `fullTime` - Arbetstid
+- `minimumSalary`, `maximumSalary` - Lön
+- `resultsToTake` - Max antal resultat (max 100)
+- `resultsToSkip` - För paginering
+
+Se Reed API dokumentation för alla parametrar: https://www.reed.co.uk/developers
+
+## 7. Rate Limits
 
 Kontrollera Reed API dokumentation för aktuella rate limits: https://www.reed.co.uk/developers
 
 Om du får ett 429-fel (rate limit exceeded), har du överskridit den månatliga gränsen.
 
-## 7. Felsökning
+## 8. Felsökning
 
 ### Problem: "Reed not configured"
 **Lösning**: Kontrollera att båda miljövariablerna är satta i `.env` filen.
@@ -91,13 +105,13 @@ Om du får ett 429-fel (rate limit exceeded), har du överskridit den månatliga
 
 Kontrollera serverloggarna för mer information.
 
-## 8. Ytterligare information
+## 9. Ytterligare information
 
 - **Reed Developer Portal**: https://www.reed.co.uk/developers
 - **API Dokumentation**: https://www.reed.co.uk/developers/jobseeker
 - **Jobb-API Integrations Guide**: Se `JOB_API_INTEGRATIONS.md`
 
-## 9. Nästa steg
+## 10. Nästa steg
 
 Efter att Reed är konfigurerat och fungerar, kan du:
 1. Testa jobbsökningar med alla tre källor (JobTech, Adzuna, Reed)

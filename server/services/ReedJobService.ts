@@ -12,7 +12,7 @@ export interface ReedJobSearchOptions {
 
 export class ReedJobService {
   private apiKey?: string;
-  private baseUrl = 'https://www.reed.co.uk/api/1.0/search';
+  private baseUrl = 'https://www.reed.co.uk/api/1.0';
   private enabled: boolean;
 
   constructor() {
@@ -36,6 +36,7 @@ export class ReedJobService {
   /**
    * Search for jobs using Reed API
    * Documentation: https://www.reed.co.uk/developers
+   * API Reference: https://www.reed.co.uk/api/jobseeker/search
    */
   async searchJobs(options: ReedJobSearchOptions): Promise<JobListing[]> {
     if (!this.isConfigured()) {
@@ -51,10 +52,12 @@ export class ReedJobService {
 
       if (options.location) {
         params.locationName = options.location;
+        // Optional: Set distance from location (default is 10 miles)
+        // params.distanceFromLocation = 10;
       }
 
       // Reed API uses Basic Auth with API key as username and empty password
-      const response = await axios.get(this.baseUrl, {
+      const response = await axios.get(`${this.baseUrl}/search`, {
         params,
         auth: {
           username: this.apiKey!,
@@ -78,33 +81,58 @@ export class ReedJobService {
         logger.warn('Reed API rate limit exceeded.');
       } else {
         logger.error('Failed to search Reed jobs', error as Error);
+        if (error.response?.data) {
+          logger.error('Reed API error response:', error.response.data);
+        }
       }
       return [];
     }
   }
 
   /**
-   * Transform Reed API job data to JobListing format
+   * Get job details by job ID
+   * Documentation: https://www.reed.co.uk/developers
+   */
+  async getJobDetails(jobId: string): Promise<JobListing | null> {
+    if (!this.isConfigured()) {
+      return null;
+    }
+
+    try {
+      const response = await axios.get(`${this.baseUrl}/jobs/${jobId}`, {
+        auth: {
+          username: this.apiKey!,
+          password: '',
+        },
+        headers: {
+          'Accept': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      return this.transformReedJobDetail(response.data);
+    } catch (error: any) {
+      logger.error(`Failed to get Reed job details for ID ${jobId}`, error as Error);
+      return null;
+    }
+  }
+
+  /**
+   * Transform Reed API search response to JobListing format
+   * Response structure: Array of jobs with: jobId, employerId, employerName, jobTitle, description, locationName, minimumSalary, maximumSalary
    */
   private transformReedJobs(data: any): JobListing[] {
-    if (!data.results || !Array.isArray(data.results)) {
+    // Reed API returns an array directly, not wrapped in a results object
+    if (!Array.isArray(data)) {
       return [];
     }
 
-    return data.results.map((job: any) => {
+    return data.map((job: any) => {
       // Extract location
-      let location = '';
-      if (job.locationName) {
-        location = job.locationName;
-      }
+      const location = job.locationName || '';
 
       // Extract description
-      let description = '';
-      if (job.jobDescription) {
-        description = typeof job.jobDescription === 'string' 
-          ? job.jobDescription 
-          : '';
-      }
+      const description = job.description || '';
 
       // Extract required skills from description (Reed doesn't provide structured skills)
       const requiredSkills: string[] = [];
@@ -124,8 +152,8 @@ export class ReedJobService {
         });
       }
 
-      // Build application URL
-      const applicationUrl = job.jobUrl || `https://www.reed.co.uk/jobs/${job.jobId}`;
+      // Build application URL - Reed jobs are accessed via reed.co.uk
+      const applicationUrl = `https://www.reed.co.uk/jobs/${job.jobId}`;
 
       return {
         id: job.jobId?.toString() || '',
@@ -137,9 +165,53 @@ export class ReedJobService {
         applicationUrl: applicationUrl,
         applicationMethod: 'url',
         requiredSkills: [...new Set(requiredSkills)], // Remove duplicates
-        publicationDate: job.date ? new Date(job.date).toISOString() : undefined,
+        // Note: Reed API doesn't provide publication date in search results
       } as JobListing;
     });
+  }
+
+  /**
+   * Transform Reed API job detail response to JobListing format
+   * Response structure: Single job object with detailed information
+   */
+  private transformReedJobDetail(job: any): JobListing | null {
+    if (!job || !job.jobId) {
+      return null;
+    }
+
+    const description = job.jobDescription || '';
+
+    // Extract required skills from description
+    const requiredSkills: string[] = [];
+    if (description) {
+      const commonSkills = [
+        'JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Java', 'C#', '.NET',
+        'PHP', 'Ruby', 'Rust', 'Swift', 'Kotlin', 'Dart', 'Flutter', 'Vue.js', 'Angular',
+        'SQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'Git', 'Docker', 'AWS', 'Azure',
+      ];
+      
+      const descLower = description.toLowerCase();
+      commonSkills.forEach(skill => {
+        if (descLower.includes(skill.toLowerCase())) {
+          requiredSkills.push(skill);
+        }
+      });
+    }
+
+    const applicationUrl = job.externalUrl || job.url || `https://www.reed.co.uk/jobs/${job.jobId}`;
+
+    return {
+      id: job.jobId?.toString() || '',
+      title: job.jobTitle || '',
+      company: job.employerName || '',
+      location: job.locationName || undefined,
+      description: description,
+      url: applicationUrl,
+      applicationUrl: applicationUrl,
+      applicationMethod: job.externalUrl ? 'url' : 'url',
+      requiredSkills: [...new Set(requiredSkills)],
+      publicationDate: job.expirationDate ? new Date(job.expirationDate).toISOString() : undefined,
+    } as JobListing;
   }
 }
 
