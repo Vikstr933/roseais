@@ -57,13 +57,17 @@ export class JobMatchingService {
   }
 
   /**
-   * Search for jobs from multiple sources (JobTech and optionally LinkedIn)
-   * API Documentation: https://jobtechdev.se/
+   * Search for jobs from multiple sources (JobTech, Adzuna, Reed, and optionally LinkedIn)
+   * API Documentation: 
+   * - JobTech: https://jobtechdev.se/
+   * - Adzuna: https://developer.adzuna.com/
+   * - Reed: https://www.reed.co.uk/developers
    */
   async searchJobs(keywords: string, location?: string, limit: number = 100, sources?: string[]): Promise<JobListing[]> {
     try {
       const allJobs: JobListing[] = [];
-      const searchSources = sources || ['jobtech']; // Default to JobTech only
+      // Default to JobTech and Adzuna together
+      const searchSources = sources || ['jobtech', 'adzuna'];
 
       // Search JobTech (Swedish jobs)
       if (searchSources.includes('jobtech')) {
@@ -90,6 +94,49 @@ export class JobMatchingService {
         } catch (error) {
           logger.error('[JobMatchingService] LinkedIn search failed', error as Error);
           // Continue with JobTech results even if LinkedIn fails
+        }
+      }
+
+      // Search Adzuna (if enabled and configured)
+      if (searchSources.includes('adzuna')) {
+        try {
+          const { adzunaJobService } = await import('./AdzunaJobService');
+          if (adzunaJobService.isConfigured()) {
+            const adzunaJobs = await adzunaJobService.searchJobs({
+              keywords,
+              location,
+              limit: Math.min(limit, 50), // Adzuna typically limits to 50 per page
+              country: 'se', // Sweden
+            });
+            allJobs.push(...adzunaJobs);
+            logger.info(`[JobMatchingService] Adzuna returned ${adzunaJobs.length} jobs`);
+          } else {
+            logger.warn('[JobMatchingService] Adzuna not configured. Set ADZUNA_APP_ID, ADZUNA_APP_KEY, and ENABLE_ADZUNA=true.');
+          }
+        } catch (error) {
+          logger.error('[JobMatchingService] Adzuna search failed', error as Error);
+          // Continue with other results even if Adzuna fails
+        }
+      }
+
+      // Search Reed (if enabled and configured)
+      if (searchSources.includes('reed')) {
+        try {
+          const { reedJobService } = await import('./ReedJobService');
+          if (reedJobService.isConfigured()) {
+            const reedJobs = await reedJobService.searchJobs({
+              keywords,
+              location,
+              limit: Math.min(limit, 100), // Reed typically limits to 100 per request
+            });
+            allJobs.push(...reedJobs);
+            logger.info(`[JobMatchingService] Reed returned ${reedJobs.length} jobs`);
+          } else {
+            logger.warn('[JobMatchingService] Reed not configured. Set REED_API_KEY and ENABLE_REED=true.');
+          }
+        } catch (error) {
+          logger.error('[JobMatchingService] Reed search failed', error as Error);
+          // Continue with other results even if Reed fails
         }
       }
 
