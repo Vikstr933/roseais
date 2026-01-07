@@ -117,4 +117,3 @@ Efter att Reed är konfigurerat och fungerar, kan du:
 1. Testa jobbsökningar med alla tre källor (JobTech, Adzuna, Reed)
 2. Verifiera att deduplicering fungerar (samma jobb från flera källor ska bara visas en gång)
 3. Observera att Reed primärt returnerar UK/EU jobb, vilket kan vara användbart för internationella sökningar
-

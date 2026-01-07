@@ -100,6 +100,7 @@ export function PasteTextCVBuilder({ onComplete, onCancel }: PasteTextCVBuilderP
   };
 
   if (showForm && parsedData) {
+    console.log('[PasteTextCVBuilder] Rendering CVBuilderForm with parsedData:', parsedData);
     return (
       <CVBuilderForm
         onComplete={handleFormComplete}

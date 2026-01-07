@@ -68,9 +68,17 @@ export function CVBuilderForm({ onComplete, onCancel, initialData }: CVBuilderFo
 
   // Update formData when initialData changes (for paste/parse functionality)
   useEffect(() => {
+    console.log('[CVBuilderForm] useEffect triggered, initialData:', initialData);
     if (initialData) {
-      console.log('[CVBuilderForm] Updating formData from initialData:', initialData);
-      setFormData({
+      console.log('[CVBuilderForm] Updating formData from initialData:', {
+        personal: initialData.personal,
+        summary: initialData.summary,
+        experience: initialData.experience,
+        education: initialData.education,
+        skills: initialData.skills,
+      });
+      
+      const newFormData = {
         personal: {
           fullName: initialData.personal?.fullName || '',
           email: initialData.personal?.email || '',
@@ -84,11 +92,16 @@ export function CVBuilderForm({ onComplete, onCancel, initialData }: CVBuilderFo
           yearsOfExperience: initialData.summary?.yearsOfExperience || '',
           currentRole: initialData.summary?.currentRole || '',
         },
-        experience: initialData.experience || [],
-        education: initialData.education || [],
-        skills: initialData.skills || [],
+        experience: Array.isArray(initialData.experience) ? initialData.experience : [],
+        education: Array.isArray(initialData.education) ? initialData.education : [],
+        skills: Array.isArray(initialData.skills) ? initialData.skills : [],
         template: initialData.template || 'modern',
-      });
+      };
+      
+      console.log('[CVBuilderForm] Setting new formData:', newFormData);
+      setFormData(newFormData);
+    } else {
+      console.log('[CVBuilderForm] No initialData provided');
     }
   }, [initialData]);
 
