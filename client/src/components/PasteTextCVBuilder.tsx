@@ -38,16 +38,53 @@ export function PasteTextCVBuilder({ onComplete, onCancel }: PasteTextCVBuilderP
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Kunde inte parsa texten');
+        // Try to parse error as JSON, but handle HTML responses
+        let errorMessage = 'Kunde inte parsa texten';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            // If it's HTML (like a 404 page), get the status text
+            const text = await response.text();
+            if (response.status === 401) {
+              errorMessage = 'Du behöver vara inloggad för att använda denna funktion';
+            } else if (response.status === 404) {
+              errorMessage = 'API-endpoint hittades inte. Kontrollera att servern är igång.';
+            } else {
+              errorMessage = `Serverfel (${response.status}): ${response.statusText}`;
+            }
+          }
+        } catch (parseError) {
+          // If we can't parse the error, use status
+          errorMessage = `Serverfel (${response.status}): ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Parse response as JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returnerade inte JSON. Kontrollera att servern är igång.');
       }
 
       const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || data.error || 'Kunde inte parsa texten');
+      }
+      
+      if (!data.cvData) {
+        throw new Error('Ingen CV-data returnerades från servern');
+      }
+      
       setParsedData(data.cvData);
       setShowForm(true);
     } catch (err: any) {
       console.error('Error parsing text:', err);
-      setError(err.message || 'Ett fel uppstod vid parsning av texten');
+      const errorMessage = err.message || 'Ett fel uppstod vid parsning av texten';
+      setError(errorMessage);
     } finally {
       setIsParsing(false);
     }

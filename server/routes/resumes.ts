@@ -177,14 +177,28 @@ router.get('/', authenticateUser, async (req, res) => {
 // POST /api/resumes/parse-text - Parse unstructured text to CV structure
 router.post('/parse-text', authenticateUser, async (req, res) => {
   try {
-    const userId = (req as any).user!.id;
+    const userId = (req as any).user?.id;
+    
+    if (!userId) {
+      console.error('[ParseText] No user ID found in request');
+      return res.status(401).json({ 
+        success: false,
+        error: 'Authentication required',
+        message: 'Du behöver vara inloggad för att använda denna funktion'
+      });
+    }
+
     const { text } = req.body;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      return res.status(400).json({ error: 'Text is required' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Text is required',
+        message: 'Vänligen klistra in text att parsa'
+      });
     }
 
-    console.log('[ParseText] Parsing text, length:', text.length);
+    console.log('[ParseText] Parsing text for user:', userId, 'length:', text.length);
 
     // Use the new parseText method for pasted text
     const parsedData = await resumeParserService.parseText(text);
@@ -239,9 +253,11 @@ router.post('/parse-text', authenticateUser, async (req, res) => {
     });
   } catch (error: any) {
     console.error('[ParseText] Error:', error);
+    // Always return JSON, never HTML
     res.status(500).json({
+      success: false,
       error: 'Failed to parse text',
-      message: error?.message || String(error),
+      message: error?.message || String(error) || 'Ett oväntat fel uppstod vid parsning av texten',
     });
   }
 });
