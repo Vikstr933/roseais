@@ -820,10 +820,8 @@ export class JobMatchingService {
     const titleBonus = jobTitleMatch * 20;
     baseMatch += titleBonus;
 
-    // Check if this is an entry-level job
-    const isEntryLevel = this.isEntryLevelJob(job.title, job.description);
-    
     // Apply profession match as a STRICT multiplier
+    // Note: isEntryLevel is already declared earlier in the function
     // If profession match is perfect (1.0), ensure high score regardless of other factors
     if (professionMatch >= 1.0) {
       // Perfect profession match - ensure minimum 70% match for same profession
