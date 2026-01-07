@@ -364,8 +364,36 @@ Returnera den formaterade texten direkt utan kommentarer.`;
       // Pre-process text with rule-based formatting
       const preprocessedText = this.preprocessTextWithRules(cleanText);
       
-      // Extract structured data (try rule-based first, enhance with AI if needed)
-      const parsedData = await this.extractStructuredDataHybrid(preprocessedText);
+      // For pasted text, always try AI first for better results
+      // Rule-based extraction is often insufficient for unstructured pasted text
+      let parsedData: Omit<ParsedResumeData, 'rawText' | 'formattedText' | 'metadata'> & { metadata?: { aiStructured?: boolean } };
+      
+      try {
+        logger.info('Using AI to extract structured data from pasted text');
+        const aiData = await this.extractStructuredDataWithAI(preprocessedText);
+        
+        // Also try rule-based to fill in any gaps
+        const ruleBasedData = this.extractStructuredData(preprocessedText);
+        
+        // Merge: AI takes precedence, but use rule-based for missing fields
+        parsedData = {
+          contactInfo: {
+            ...ruleBasedData.contactInfo,
+            ...aiData.contactInfo,
+          },
+          sections: {
+            summary: aiData.sections?.summary || ruleBasedData.sections.summary || '',
+            experience: aiData.sections?.experience || ruleBasedData.sections.experience || [],
+            education: aiData.sections?.education || ruleBasedData.sections.education || [],
+            skills: aiData.sections?.skills || ruleBasedData.sections.skills || [],
+          },
+          metadata: { aiStructured: true },
+        };
+      } catch (aiError) {
+        logger.warn('AI extraction failed for pasted text, falling back to rule-based + hybrid', aiError as Error);
+        // Fallback to hybrid approach if AI fails
+        parsedData = await this.extractStructuredDataHybrid(preprocessedText);
+      }
       
       // Format text with AI for better readability
       let formattedText: string | undefined;
@@ -406,18 +434,38 @@ Returnera den formaterade texten direkt utan kommentarer.`;
     const hasExperience = ruleBasedData.sections.experience && ruleBasedData.sections.experience.length > 0;
     const hasEducation = ruleBasedData.sections.education && ruleBasedData.sections.education.length > 0;
     const hasSkills = ruleBasedData.sections.skills && ruleBasedData.sections.skills.length > 0;
+    const hasSummary = !!ruleBasedData.sections.summary;
+    const hasContactInfo = !!ruleBasedData.contactInfo?.email || !!ruleBasedData.contactInfo?.phone;
 
-    // If we have good structured data, return it
-    if (hasExperience || (hasEducation && hasSkills)) {
+    // If we have good structured data (experience OR education with skills OR contact info with summary), return it
+    if (hasExperience || (hasEducation && hasSkills) || (hasContactInfo && hasSummary && (hasSkills || hasEducation))) {
+      logger.info('Rule-based extraction found sufficient data, using it');
       return ruleBasedData;
     }
 
-    // Otherwise, try AI enhancement (optional, can be expensive)
+    // Otherwise, try AI enhancement (for pasted text, we should always try AI if rule-based is insufficient)
     try {
-      logger.info('Rule-based extraction insufficient, trying AI enhancement');
+      logger.info('Rule-based extraction insufficient, trying AI enhancement', {
+        hasExperience,
+        hasEducation,
+        hasSkills,
+        hasSummary,
+        hasContactInfo,
+      });
       const aiEnhanced = await this.extractStructuredDataWithAI(text);
+      
+      // Merge AI data with rule-based data (AI takes precedence, but keep rule-based if AI is missing something)
       return {
-        ...aiEnhanced,
+        contactInfo: {
+          ...ruleBasedData.contactInfo,
+          ...aiEnhanced.contactInfo,
+        },
+        sections: {
+          summary: aiEnhanced.sections?.summary || ruleBasedData.sections.summary,
+          experience: aiEnhanced.sections?.experience || ruleBasedData.sections.experience || [],
+          education: aiEnhanced.sections?.education || ruleBasedData.sections.education || [],
+          skills: aiEnhanced.sections?.skills || ruleBasedData.sections.skills || [],
+        },
         metadata: { aiStructured: true },
       };
     } catch (error) {
@@ -430,15 +478,17 @@ Returnera den formaterade texten direkt utan kommentarer.`;
    * Extract structured data using AI
    */
   private async extractStructuredDataWithAI(text: string): Promise<Omit<ParsedResumeData, 'rawText' | 'formattedText' | 'metadata'>> {
-    const prompt = `Extrahera strukturerad information från detta CV. Returnera ENDAST valid JSON utan markdown-formatering.
+    const prompt = `Extrahera ALL strukturerad information från detta CV. Returnera ENDAST valid JSON utan markdown-formatering eller förklaringar.
 
-Följ exakt denna struktur:
+Följ exakt denna struktur (fyll i alla fält som finns i texten):
 {
   "contactInfo": {
+    "name": "",
     "email": "",
     "phone": "",
     "location": "",
-    "linkedin": ""
+    "linkedin": "",
+    "website": ""
   },
   "sections": {
     "summary": "",
@@ -461,8 +511,18 @@ Följ exakt denna struktur:
   }
 }
 
+VIKTIGT:
+- Extrahera ALL information som finns i texten
+- Om namn finns i början av texten, lägg det i contactInfo.name
+- Om plats/ort finns, lägg det i contactInfo.location
+- Extrahera ALLA jobb/erfarenheter, inte bara det första
+- Extrahera ALLA utbildningar
+- Extrahera ALLA färdigheter (separera med kommatecken om de är i en lista)
+- Om datum finns i format "2020-2023" eller "2020 - 2023", behåll formatet i dates-fältet
+- Om jobbet är "nuvarande" eller "present", inkludera det i dates
+
 CV-text:
-${text.substring(0, 6000)}${text.length > 6000 ? '\n\n[... texten är trunkerad ...]' : ''}`;
+${text.substring(0, 8000)}${text.length > 8000 ? '\n\n[... texten är trunkerad ...]' : ''}`;
 
     try {
       const response = await multiModelAI.generate({
@@ -487,8 +547,20 @@ ${text.substring(0, 6000)}${text.length > 6000 ? '\n\n[... texten är trunkerad 
       const structured = JSON.parse(jsonText);
       
       return {
-        contactInfo: structured.contactInfo || {},
-        sections: structured.sections || {},
+        contactInfo: {
+          name: structured.contactInfo?.name || '',
+          email: structured.contactInfo?.email || '',
+          phone: structured.contactInfo?.phone || '',
+          location: structured.contactInfo?.location || '',
+          linkedin: structured.contactInfo?.linkedin || '',
+          website: structured.contactInfo?.website || '',
+        },
+        sections: {
+          summary: structured.sections?.summary || '',
+          experience: Array.isArray(structured.sections?.experience) ? structured.sections.experience : [],
+          education: Array.isArray(structured.sections?.education) ? structured.sections.education : [],
+          skills: Array.isArray(structured.sections?.skills) ? structured.sections.skills : [],
+        },
       };
     } catch (error) {
       logger.error('Failed to extract structured data with AI', error as Error);
@@ -530,7 +602,7 @@ ${text.substring(0, 6000)}${text.length > 6000 ? '\n\n[... texten är trunkerad 
     const sections: ParsedResumeData['sections'] = {};
 
     // Extract skills (common patterns)
-    const skillsRegex = /(?:Skills|Kompetenser|Färdigheter):\s*(.+?)(?:\n\n|\n[A-Z])/i;
+    const skillsRegex = /(?:Skills|Kompetenser|Färdigheter|Färdighet):\s*(.+?)(?:\n\n|\n(?:[A-ZÅÄÖ]|$))/is;
     const skillsMatch = text.match(skillsRegex);
     if (skillsMatch) {
       sections.skills = skillsMatch[1]
@@ -540,10 +612,133 @@ ${text.substring(0, 6000)}${text.length > 6000 ? '\n\n[... texten är trunkerad 
     }
 
     // Extract summary
-    const summaryRegex = /(?:Summary|Sammanfattning|Profil):\s*(.+?)(?:\n\n|\n(?:Experience|Erfarenhet|Education|Utbildning))/i;
+    const summaryRegex = /(?:Summary|Sammanfattning|Profil|Om\s+mig|Personligt\s+brev):\s*(.+?)(?:\n\n|\n(?:Experience|Erfarenhet|Education|Utbildning|Arbetserfarenhet|Arbeten))/is;
     const summaryMatch = text.match(summaryRegex);
     if (summaryMatch) {
       sections.summary = summaryMatch[1].trim();
+    }
+
+    // Extract experience (multiple patterns)
+    const experience: any[] = [];
+    
+    // Pattern 1: Section header followed by entries
+    const expSectionRegex = /(?:Experience|Erfarenhet|Arbetserfarenhet|Arbeten|Jobb|Anställningar?):\s*(.+?)(?:\n\n(?:Education|Utbildning|Skills|Kompetenser)|$)/is;
+    const expSectionMatch = text.match(expSectionRegex);
+    
+    if (expSectionMatch) {
+      const expText = expSectionMatch[1];
+      // Split by common separators (double newline, bullet points, or company patterns)
+      const expEntries = expText.split(/\n\n+|(?=\d{4}\s*[-–—])|(?=[A-ZÅÄÖ][a-zåäö]+\s+[-–—])/);
+      
+      for (const entry of expEntries) {
+        if (!entry.trim()) continue;
+        
+        // Try to extract: Title - Company (Date - Date)
+        const titleCompanyRegex = /([^-–—\n]+?)\s*[-–—]\s*([^-–—\n]+?)(?:\s*\(([^)]+)\))?/;
+        const titleCompanyMatch = entry.match(titleCompanyRegex);
+        
+        if (titleCompanyMatch) {
+          const title = titleCompanyMatch[1].trim();
+          const company = titleCompanyMatch[2].trim();
+          const dates = titleCompanyMatch[3]?.trim() || '';
+          
+          // Extract dates from text if not in parentheses
+          const dateRegex = /(\d{4})\s*[-–—]\s*(\d{4}|present|nuvarande|pågående)/i;
+          const dateMatch = entry.match(dateRegex) || dates.match(dateRegex);
+          
+          experience.push({
+            title: title,
+            company: company,
+            dates: dateMatch ? `${dateMatch[1]} - ${dateMatch[2]}` : dates,
+            description: entry.replace(titleCompanyRegex, '').trim(),
+          });
+        } else {
+          // Fallback: try to extract just title and company
+          const lines = entry.split('\n').filter(l => l.trim());
+          if (lines.length >= 1) {
+            const firstLine = lines[0].trim();
+            const secondLine = lines[1]?.trim() || '';
+            const dateMatch = entry.match(/(\d{4})\s*[-–—]\s*(\d{4}|present|nuvarande)/i);
+            
+            experience.push({
+              title: firstLine.includes(' - ') ? firstLine.split(' - ')[0].trim() : firstLine,
+              company: firstLine.includes(' - ') ? firstLine.split(' - ')[1].trim() : secondLine,
+              dates: dateMatch ? `${dateMatch[1]} - ${dateMatch[2]}` : '',
+              description: lines.slice(2).join('\n').trim(),
+            });
+          }
+        }
+      }
+    }
+    
+    // Pattern 2: Look for job entries with dates
+    if (experience.length === 0) {
+      const jobPattern = /([A-ZÅÄÖ][^\n]+?)\s+[-–—]\s+([A-ZÅÄÖ][^\n]+?)\s*\(?(\d{4})\s*[-–—]\s*(\d{4}|present|nuvarande)/gi;
+      let match;
+      while ((match = jobPattern.exec(text)) !== null) {
+        experience.push({
+          title: match[1].trim(),
+          company: match[2].trim(),
+          dates: `${match[3]} - ${match[4]}`,
+          description: '',
+        });
+      }
+    }
+    
+    if (experience.length > 0) {
+      sections.experience = experience;
+    }
+
+    // Extract education
+    const education: any[] = [];
+    
+    const eduSectionRegex = /(?:Education|Utbildning|Skola|Studier):\s*(.+?)(?:\n\n(?:Experience|Erfarenhet|Skills|Kompetenser)|$)/is;
+    const eduSectionMatch = text.match(eduSectionRegex);
+    
+    if (eduSectionMatch) {
+      const eduText = eduSectionMatch[1];
+      const eduEntries = eduText.split(/\n\n+|(?=\d{4}\s*[-–—])/);
+      
+      for (const entry of eduEntries) {
+        if (!entry.trim()) continue;
+        
+        // Try to extract: Degree - Institution (Date - Date)
+        const degreeInstitutionRegex = /([^-–—\n]+?)\s*[-–—]\s*([^-–—\n]+?)(?:\s*\(([^)]+)\))?/;
+        const degreeInstitutionMatch = entry.match(degreeInstitutionRegex);
+        
+        if (degreeInstitutionMatch) {
+          const degree = degreeInstitutionMatch[1].trim();
+          const institution = degreeInstitutionMatch[2].trim();
+          const dates = degreeInstitutionMatch[3]?.trim() || '';
+          
+          const dateRegex = /(\d{4})\s*[-–—]\s*(\d{4}|present|nuvarande)/i;
+          const dateMatch = entry.match(dateRegex) || dates.match(dateRegex);
+          
+          education.push({
+            degree: degree,
+            school: institution,
+            dates: dateMatch ? `${dateMatch[1]} - ${dateMatch[2]}` : dates,
+          });
+        } else {
+          // Fallback: split by lines
+          const lines = entry.split('\n').filter(l => l.trim());
+          if (lines.length >= 1) {
+            const firstLine = lines[0].trim();
+            const secondLine = lines[1]?.trim() || '';
+            const dateMatch = entry.match(/(\d{4})\s*[-–—]\s*(\d{4}|present|nuvarande)/i);
+            
+            education.push({
+              degree: firstLine.includes(' - ') ? firstLine.split(' - ')[0].trim() : firstLine,
+              school: firstLine.includes(' - ') ? firstLine.split(' - ')[1].trim() : secondLine,
+              dates: dateMatch ? `${dateMatch[1]} - ${dateMatch[2]}` : '',
+            });
+          }
+        }
+      }
+    }
+    
+    if (education.length > 0) {
+      sections.education = education;
     }
 
     return sections;
