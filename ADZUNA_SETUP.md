@@ -69,7 +69,7 @@ GET /api/resumes/:id/job-matches?sources=adzuna
 
 ### Standardbeteende
 
-**Standard**: JobTech och Adzuna används tillsammans som standard när inga källor anges.
+**Standard**: JobTech, Adzuna och Reed används tillsammans som standard när inga källor anges.
 
 Om du vill använda endast JobTech:
 ```

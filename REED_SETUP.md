@@ -67,7 +67,7 @@ GET /api/resumes/:id/job-matches?sources=reed
 
 ### Standardbeteende
 
-**Standard**: JobTech och Adzuna används tillsammans som standard. För att inkludera Reed, lägg till `?sources=jobtech,adzuna,reed`.
+**Standard**: JobTech, Adzuna och Reed används tillsammans som standard när inga källor anges.
 
 ## 6. API Parametrar
 

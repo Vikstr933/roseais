@@ -457,11 +457,11 @@ router.get('/:id/job-matches', authenticateUser, async (req, res) => {
       );
     }
 
-    // Determine which sources to search (default: jobtech, adzuna, optionally reed, linkedin)
+    // Determine which sources to search (default: jobtech, adzuna, reed, optionally linkedin)
     const sourcesParam = req.query.sources as string | undefined;
     const sources = sourcesParam 
       ? sourcesParam.split(',').filter(s => ['jobtech', 'adzuna', 'reed', 'linkedin'].includes(s))
-      : ['jobtech', 'adzuna']; // Default to JobTech and Adzuna together
+      : ['jobtech', 'adzuna', 'reed']; // Default to JobTech, Adzuna, and Reed together
     
     // Search for jobs from multiple sources (JobTech + optionally Adzuna, LinkedIn)
     console.log(`[JobMatches] Searching jobs with keywords: "${searchKeywords}", location: "${location || 'none'}", sources: ${sources.join(', ')}`);

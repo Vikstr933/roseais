@@ -356,7 +356,7 @@ ENABLE_LINKEDIN_JOBS=false
 1. ✅ **Adzuna API implementerad** - Konfigurera med API-nycklar
 2. ✅ **Reed API implementerad** - Konfigurera med API-nyckel
 3. ✅ **Deduplicering implementerad** - Automatisk borttagning av dubbletter
-4. ✅ **Standardbeteende uppdaterat** - JobTech och Adzuna används tillsammans som standard
+4. ✅ **Standardbeteende uppdaterat** - JobTech, Adzuna och Reed används tillsammans som standard
 5. **Kontakta Arbetsförmedlingen** för API-åtkomst (valfritt)
 6. **Överväg fler källor** (Indeed, StepStone) om behov finns
 

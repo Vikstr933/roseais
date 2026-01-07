@@ -66,8 +66,8 @@ export class JobMatchingService {
   async searchJobs(keywords: string, location?: string, limit: number = 100, sources?: string[]): Promise<JobListing[]> {
     try {
       const allJobs: JobListing[] = [];
-      // Default to JobTech and Adzuna together
-      const searchSources = sources || ['jobtech', 'adzuna'];
+      // Default to JobTech, Adzuna, and Reed together
+      const searchSources = sources || ['jobtech', 'adzuna', 'reed'];
 
       // Search JobTech (Swedish jobs)
       if (searchSources.includes('jobtech')) {
