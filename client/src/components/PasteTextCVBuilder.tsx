@@ -79,6 +79,11 @@ export function PasteTextCVBuilder({ onComplete, onCancel }: PasteTextCVBuilderP
         throw new Error('Ingen CV-data returnerades från servern');
       }
       
+      console.log('[PasteTextCVBuilder] Parsed CV data received:', data.cvData);
+      console.log('[PasteTextCVBuilder] Experience items:', data.cvData.experience?.length || 0);
+      console.log('[PasteTextCVBuilder] Education items:', data.cvData.education?.length || 0);
+      console.log('[PasteTextCVBuilder] Skills:', data.cvData.skills?.length || 0);
+      
       setParsedData(data.cvData);
       setShowForm(true);
     } catch (err: any) {

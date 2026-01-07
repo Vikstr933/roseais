@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +65,32 @@ export function CVBuilderForm({ onComplete, onCancel, initialData }: CVBuilderFo
     skills: initialData?.skills || [] as string[],
     template: initialData?.template || 'modern' as 'modern' | 'classic' | 'minimal' | 'professional',
   });
+
+  // Update formData when initialData changes (for paste/parse functionality)
+  useEffect(() => {
+    if (initialData) {
+      console.log('[CVBuilderForm] Updating formData from initialData:', initialData);
+      setFormData({
+        personal: {
+          fullName: initialData.personal?.fullName || '',
+          email: initialData.personal?.email || '',
+          phone: initialData.personal?.phone || '',
+          location: initialData.personal?.location || '',
+          linkedin: initialData.personal?.linkedin || '',
+          website: initialData.personal?.website || '',
+        },
+        summary: {
+          professionalSummary: initialData.summary?.professionalSummary || '',
+          yearsOfExperience: initialData.summary?.yearsOfExperience || '',
+          currentRole: initialData.summary?.currentRole || '',
+        },
+        experience: initialData.experience || [],
+        education: initialData.education || [],
+        skills: initialData.skills || [],
+        template: initialData.template || 'modern',
+      });
+    }
+  }, [initialData]);
 
   const progress = (currentStep / STEPS.length) * 100;
 
