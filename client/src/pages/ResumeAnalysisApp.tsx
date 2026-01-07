@@ -256,6 +256,14 @@ export default function ResumeAnalysisApp() {
           if (data.success && data.resumes && data.resumes.length > 0) {
             // Load the most recent resume
             const mostRecentResume = data.resumes[0]; // Already sorted by createdAt DESC
+            
+            // Verify that the resume actually exists by checking if it has required fields
+            if (!mostRecentResume.id || !mostRecentResume.filename) {
+              console.warn('[ResumeLoad] Resume data incomplete, skipping:', mostRecentResume);
+              setShowLanding(true);
+              return;
+            }
+            
             console.log('[ResumeLoad] Setting uploaded resume:', mostRecentResume.id, mostRecentResume.filename);
             setUploadedResume(mostRecentResume);
             setShowLanding(false); // Explicitly hide landing when CV is found
@@ -844,13 +852,55 @@ export default function ResumeAnalysisApp() {
       return;
     }
 
+    const resumeIdToDelete = uploadedResume.id; // Store ID before clearing state
+
     try {
-      const response = await apiFetch(`/api/resumes/${uploadedResume.id}`, {
+      const response = await apiFetch(`/api/resumes/${resumeIdToDelete}`, {
         method: 'DELETE',
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        
+        // If resume not found (404), it's already deleted - just clear state
+        if (response.status === 404) {
+          console.log('[DeleteResume] Resume already deleted (404), clearing state');
+          // Clear all state anyway
+          setUploadedResume(null);
+          setAnalysis(null);
+          setJobMatches([]);
+          setAdaptedResumes([]);
+          setViewingAdaptedResume(null);
+          setViewingApplication(null);
+          setSelectedFile(null);
+          setEditingResume(false);
+          setEditedResumeText('');
+          setShowCVBuilder(false);
+          setShowLanding(true);
+          
+          // Reload resumes to ensure state is correct
+          setIsLoadingResumes(true);
+          const reloadResponse = await apiFetch('/api/resumes');
+          if (reloadResponse.ok) {
+            const reloadData = await reloadResponse.json();
+            if (reloadData.success && reloadData.resumes && reloadData.resumes.length > 0) {
+              setUploadedResume(reloadData.resumes[0]);
+              setShowLanding(false);
+            } else {
+              setShowLanding(true);
+            }
+          } else {
+            setShowLanding(true);
+          }
+          setIsLoadingResumes(false);
+          
+          toast({
+            title: 'CV borttaget',
+            description: 'Ditt CV har tagits bort.',
+          });
+          return;
+        }
+        
         throw new Error(errorData.error || 'Failed to delete resume');
       }
 
@@ -866,6 +916,30 @@ export default function ResumeAnalysisApp() {
       setEditedResumeText('');
       setShowCVBuilder(false);
       setShowLanding(true); // Show landing page
+      
+      // Reload resumes to ensure state is correct
+      setIsLoadingResumes(true);
+      try {
+        const reloadResponse = await apiFetch('/api/resumes');
+        if (reloadResponse.ok) {
+          const reloadData = await reloadResponse.json();
+          if (reloadData.success && reloadData.resumes && reloadData.resumes.length > 0) {
+            // Another resume exists, load it
+            setUploadedResume(reloadData.resumes[0]);
+            setShowLanding(false);
+          } else {
+            // No resumes left
+            setShowLanding(true);
+          }
+        } else {
+          setShowLanding(true);
+        }
+      } catch (reloadErr) {
+        console.error('[DeleteResume] Error reloading resumes:', reloadErr);
+        setShowLanding(true);
+      } finally {
+        setIsLoadingResumes(false);
+      }
 
       toast({
         title: 'CV borttaget',

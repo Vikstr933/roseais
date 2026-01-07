@@ -690,15 +690,24 @@ export class JobMatchingService {
     // CRITICAL: Check profession/field mismatch first - this prevents cross-field matches
     const professionMatch = this.calculateProfessionMatch(resumeText, resumeParsedData, job.title, job.description);
     
+    // Check if this is an entry-level job (should be visible to everyone)
+    const isEntryLevel = this.isEntryLevelJob(job.title, job.description);
+    
     // If profession mismatch is severe (score < 0.5), heavily penalize the match
-    // This prevents cross-field matches (e.g., ställverksmontör matching ekonomi jobs)
-    if (professionMatch < 0.5) {
+    // EXCEPTION: Entry-level jobs should still be shown even with low profession match
+    if (professionMatch < 0.5 && !isEntryLevel) {
       // Maximum 35% match if professions don't align - this prevents "Stark matchning" (75%+) for wrong field
       return {
         matchPercentage: Math.min(35, Math.round(professionMatch * 100)),
         matchedSkills: this.filterRelevantSkills([], jobSkills), // Filter out languages and generic skills
         missingSkills: jobSkills,
       };
+    }
+    
+    // For entry-level jobs, ensure minimum match score even with minimal CV
+    if (isEntryLevel && professionMatch >= 0.6) {
+      // Entry-level jobs get a boost - ensure they're visible
+      // We'll apply this boost later in the calculation
     }
 
     // Calculate skill match (base score)
@@ -811,6 +820,9 @@ export class JobMatchingService {
     const titleBonus = jobTitleMatch * 20;
     baseMatch += titleBonus;
 
+    // Check if this is an entry-level job
+    const isEntryLevel = this.isEntryLevelJob(job.title, job.description);
+    
     // Apply profession match as a STRICT multiplier
     // If profession match is perfect (1.0), ensure high score regardless of other factors
     if (professionMatch >= 1.0) {
@@ -822,10 +834,22 @@ export class JobMatchingService {
       baseMatch = baseMatch * (0.7 + professionMatch * 0.3); // Scale to 0.7-1.0 range
     } else if (professionMatch < 0.5) {
       // For different or uncertain fields, cap at 40% maximum to prevent "Stark matchning"
-      baseMatch = Math.min(40, baseMatch * professionMatch);
+      // EXCEPTION: Entry-level jobs should still be shown
+      if (isEntryLevel) {
+        // Entry-level jobs get minimum 50% match even with low profession match
+        baseMatch = Math.max(50, baseMatch * (0.7 + professionMatch * 0.3));
+      } else {
+        baseMatch = Math.min(40, baseMatch * professionMatch);
+      }
     } else {
       // For same field but different professions, apply moderate multiplier
       baseMatch = baseMatch * (0.5 + professionMatch * 0.3); // Scale to 0.5-0.8 range
+    }
+    
+    // Special boost for entry-level jobs to ensure they're visible
+    if (isEntryLevel && baseMatch < 50) {
+      // Ensure entry-level jobs have at least 50% match so they're visible
+      baseMatch = Math.max(50, baseMatch);
     }
 
     // Normalize to 0-100 range
@@ -1139,6 +1163,99 @@ export class JobMatchingService {
   }
 
   /**
+   * Check if a job is entry-level (doesn't require higher education)
+   * Jobs like warehouse, retail, basic service jobs that anyone can apply to
+   */
+  private isEntryLevelJob(jobTitle: string, jobDescription: string): boolean {
+    const lowerTitle = jobTitle.toLowerCase();
+    const lowerDesc = jobDescription.toLowerCase();
+    const combined = `${lowerTitle} ${lowerDesc}`;
+    
+    // Entry-level job keywords (jobs that typically don't require higher education)
+    const entryLevelKeywords = [
+      'lager', 'warehouse', 'lagerarbetare', 'lagerpersonal', 'lageranställd',
+      'butik', 'retail', 'butiksbiträde', 'butikspersonal', 'kassör', 'kassörska',
+      'kundtjänst', 'customer service', 'kundservice',
+      'städare', 'cleaner', 'städpersonal',
+      'vaktmästare', 'caretaker', 'fastighetsskötare',
+      'brevbärare', 'postman', 'post',
+      'chaufför', 'driver', 'förare',
+      'produktion', 'production', 'produktionsarbetare',
+      'pack', 'packning', 'packare',
+      'plock', 'plockare', 'orderplockare',
+      'inpackning', 'inpackare',
+      'expedition', 'expeditör',
+      'servitör', 'waiter', 'servering',
+      'kök', 'kitchen', 'kock', 'chef',
+      'receptionist', 'reception',
+      'vakt', 'security', 'säkerhetsvakt',
+      'grundskola', 'gymnasium', // Education level requirements
+    ];
+    
+    // Higher education requirement keywords (these jobs should be filtered out if no education)
+    const higherEducationKeywords = [
+      'universitet', 'university', 'högskola', 'college',
+      'kandidatexamen', 'bachelor', 'master', 'magister',
+      'doktor', 'phd', 'ph.d',
+      'civilingenjör', 'civil engineer',
+      'läkare', 'doctor', 'medicine',
+      'jurist', 'lawyer', 'advokat',
+      'revisor', 'auditor', 'cpa',
+      'arkitekt', 'architect',
+      'ingenjör', 'engineer', // But not "produktionsingenjör" which might be entry-level
+    ];
+    
+    // Check if job requires higher education
+    const requiresHigherEducation = higherEducationKeywords.some(keyword => 
+      combined.includes(keyword) && !combined.includes('produktionsingenjör')
+    );
+    
+    if (requiresHigherEducation) {
+      return false; // This job requires higher education
+    }
+    
+    // Check if it's an entry-level job
+    return entryLevelKeywords.some(keyword => combined.includes(keyword));
+  }
+
+  /**
+   * Check if resume has higher education
+   */
+  private hasHigherEducation(resumeText: string, parsedData: any): boolean {
+    const lowerText = resumeText.toLowerCase();
+    
+    // Check education section
+    if (parsedData?.sections?.education && Array.isArray(parsedData.sections.education)) {
+      const education = parsedData.sections.education;
+      if (education.length > 0) {
+        // Check if any education mentions university/higher education
+        const higherEdKeywords = [
+          'universitet', 'university', 'högskola', 'college',
+          'kandidatexamen', 'bachelor', 'master', 'magister',
+          'doktor', 'phd',
+          'civilingenjör', 'civil engineer',
+        ];
+        
+        for (const edu of education) {
+          const eduText = `${edu.degree || ''} ${edu.school || ''} ${edu.field || ''}`.toLowerCase();
+          if (higherEdKeywords.some(keyword => eduText.includes(keyword))) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    // Check text for higher education mentions
+    const higherEdPatterns = [
+      /universitet|university|högskola|college/i,
+      /kandidatexamen|bachelor|master|magister/i,
+      /civilingenjör|civil engineer/i,
+    ];
+    
+    return higherEdPatterns.some(pattern => pattern.test(resumeText));
+  }
+
+  /**
    * Calculate profession/field match between resume and job
    * Returns a score between 0 and 1, where 0 = completely different fields, 1 = same field
    * This prevents cross-field matches (e.g., ställverksmontör matching ekonomiassistent jobs)
@@ -1153,6 +1270,41 @@ export class JobMatchingService {
     
     // Extract profession from job
     const jobProfessions = this.extractProfessionsFromJob(jobTitle, jobDescription);
+
+    // SPECIAL CASE: Entry-level jobs should be visible to everyone
+    // If job is entry-level (lager, butik, etc.), give it a good match score even with minimal CV
+    const isEntryLevel = this.isEntryLevelJob(jobTitle, jobDescription);
+    const hasHigherEd = this.hasHigherEducation(resumeText, parsedData);
+    
+    if (isEntryLevel) {
+      // Entry-level jobs are accessible to everyone
+      // If CV has minimal info but job is entry-level, still show it
+      if (resumeProfessions.length === 0 && !hasHigherEd) {
+        // Minimal CV + entry-level job = good match (these jobs are for everyone)
+        return 0.7; // Good match for entry-level jobs
+      }
+      // If CV has some info, check if it matches
+      if (resumeProfessions.length > 0) {
+        // Check if resume professions match entry-level job
+        const entryLevelProfessions = ['lager', 'butik', 'kundtjänst', 'produktion', 'servitör', 'kock', 'receptionist'];
+        const matchesEntryLevel = resumeProfessions.some(prof => 
+          entryLevelProfessions.some(entryProf => prof.includes(entryProf) || entryProf.includes(prof))
+        );
+        if (matchesEntryLevel) {
+          return 0.9; // Very good match
+        }
+      }
+      // Entry-level job but CV has some profession info - still show it but with moderate score
+      return 0.6;
+    }
+    
+    // If job requires higher education but CV doesn't have it, heavily penalize
+    if (!hasHigherEd) {
+      const requiresHigherEd = /universitet|university|högskola|college|kandidatexamen|bachelor|master|magister|doktor|phd|civilingenjör/i.test(jobDescription);
+      if (requiresHigherEd) {
+        return 0.1; // Very low match - job requires education that CV doesn't have
+      }
+    }
 
     // If we can't determine professions, be very conservative
     if (resumeProfessions.length === 0 || jobProfessions.length === 0) {
