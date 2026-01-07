@@ -174,6 +174,78 @@ router.get('/', authenticateUser, async (req, res) => {
   }
 });
 
+// POST /api/resumes/parse-text - Parse unstructured text to CV structure
+router.post('/parse-text', authenticateUser, async (req, res) => {
+  try {
+    const userId = (req as any).user!.id;
+    const { text } = req.body;
+
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Text is required' });
+    }
+
+    console.log('[ParseText] Parsing text, length:', text.length);
+
+    // Use the new parseText method for pasted text
+    const parsedData = await resumeParserService.parseText(text);
+
+    console.log('[ParseText] Parsed data extracted:', {
+      hasContactInfo: !!parsedData.contactInfo,
+      hasExperience: !!parsedData.sections?.experience?.length,
+      hasEducation: !!parsedData.sections?.education?.length,
+      hasSkills: !!parsedData.sections?.skills?.length,
+      hasSummary: !!parsedData.sections?.summary,
+    });
+
+    // Transform parsed data to CVBuilderForm format
+    const cvData = {
+      personal: {
+        fullName: parsedData.contactInfo?.name || parsedData.contactInfo?.email?.split('@')[0] || '',
+        email: parsedData.contactInfo?.email || '',
+        phone: parsedData.contactInfo?.phone || '',
+        location: parsedData.contactInfo?.location || '',
+        linkedin: parsedData.contactInfo?.linkedin || '',
+        website: parsedData.contactInfo?.website || '',
+      },
+      summary: {
+        professionalSummary: parsedData.sections?.summary || '',
+        yearsOfExperience: '', // Will need to extract from text
+        currentRole: parsedData.sections?.experience?.[0]?.title || '',
+      },
+      experience: (parsedData.sections?.experience || []).map((exp: any) => ({
+        company: exp.company || '',
+        position: exp.title || '',
+        startDate: exp.dates ? exp.dates.split('-')[0]?.trim() : '',
+        endDate: exp.dates ? exp.dates.split('-')[1]?.trim() : '',
+        current: exp.dates?.toLowerCase().includes('present') || exp.dates?.toLowerCase().includes('nuvarande'),
+        description: exp.description || '',
+      })),
+      education: (parsedData.sections?.education || []).map((edu: any) => ({
+        institution: edu.school || '',
+        degree: edu.degree || '',
+        field: '',
+        startDate: edu.dates ? edu.dates.split('-')[0]?.trim() : '',
+        endDate: edu.dates ? edu.dates.split('-')[1]?.trim() : '',
+      })),
+      skills: parsedData.sections?.skills || [],
+      template: 'modern' as const,
+    };
+
+    res.json({
+      success: true,
+      cvData,
+      rawText: parsedData.rawText,
+      formattedText: parsedData.formattedText,
+    });
+  } catch (error: any) {
+    console.error('[ParseText] Error:', error);
+    res.status(500).json({
+      error: 'Failed to parse text',
+      message: error?.message || String(error),
+    });
+  }
+});
+
 // POST /api/resumes/create - Create resume from form data
 router.post('/create', authenticateUser, async (req, res) => {
   try {

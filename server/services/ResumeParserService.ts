@@ -354,6 +354,48 @@ Returnera den formaterade texten direkt utan kommentarer.`;
   }
 
   /**
+   * Parse text directly (for pasted text, not file uploads)
+   */
+  async parseText(text: string): Promise<ParsedResumeData> {
+    try {
+      // Ensure no null bytes
+      const cleanText = text.replace(/\0/g, '').trim();
+      
+      // Pre-process text with rule-based formatting
+      const preprocessedText = this.preprocessTextWithRules(cleanText);
+      
+      // Extract structured data (try rule-based first, enhance with AI if needed)
+      const parsedData = await this.extractStructuredDataHybrid(preprocessedText);
+      
+      // Format text with AI for better readability
+      let formattedText: string | undefined;
+      let aiFormatted = false;
+      try {
+        formattedText = await this.formatTextWithAI(preprocessedText);
+        aiFormatted = true;
+        logger.info('Successfully AI-formatted pasted text');
+      } catch (error) {
+        logger.warn('AI formatting failed for pasted text, using rule-based formatting', error as Error);
+        formattedText = preprocessedText;
+      }
+
+      return {
+        rawText: cleanText,
+        formattedText,
+        ...parsedData,
+        metadata: {
+          aiFormatted,
+          aiStructured: parsedData.metadata?.aiStructured || false,
+          source: 'pasted_text',
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to parse text', error as Error);
+      throw new Error(`Failed to parse text: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * Hybrid approach: Try rule-based first, enhance with AI if needed
    */
   private async extractStructuredDataHybrid(text: string): Promise<Omit<ParsedResumeData, 'rawText' | 'formattedText' | 'metadata'> & { metadata?: { aiStructured?: boolean } }> {

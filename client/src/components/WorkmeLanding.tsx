@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Sparkles, Upload, Wand2, ArrowRight } from 'lucide-react';
+import { FileText, Sparkles, Upload, Wand2, ArrowRight, ClipboardPaste } from 'lucide-react';
 
 interface WorkmeLandingProps {
   onUploadCV: () => void;
   onCreateCV: () => void;
+  onPasteText?: () => void;
 }
 
-export function WorkmeLanding({ onUploadCV, onCreateCV }: WorkmeLandingProps) {
+export function WorkmeLanding({ onUploadCV, onCreateCV, onPasteText }: WorkmeLandingProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-purple-50 via-white to-blue-50">
       <div className="max-w-4xl w-full space-y-8">
@@ -28,7 +29,7 @@ export function WorkmeLanding({ onUploadCV, onCreateCV }: WorkmeLandingProps) {
         </div>
 
         {/* Main Choice Cards */}
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
           {/* Option 1: Har CV */}
           <Card className="border-2 hover:border-purple-300 transition-all hover:shadow-lg cursor-pointer group" onClick={onUploadCV}>
             <CardHeader className="pb-4">
@@ -102,6 +103,45 @@ export function WorkmeLanding({ onUploadCV, onCreateCV }: WorkmeLandingProps) {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Option 3: Klistra in text */}
+          {onPasteText && (
+            <Card className="border-2 hover:border-green-300 transition-all hover:shadow-lg cursor-pointer group" onClick={onPasteText}>
+              <CardHeader className="pb-4">
+                <div className="w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-200 transition-colors">
+                  <ClipboardPaste className="h-8 w-8 text-green-600" />
+                </div>
+                <CardTitle className="text-2xl mb-2">Klistra in text</CardTitle>
+                <CardDescription className="text-base">
+                  Klistra in text från LinkedIn, gammalt CV eller skriv fritt. AI:n skapar ett strukturerat CV-draft åt dig.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm text-muted-foreground mb-6">
+                  <li className="flex items-center gap-2">
+                    <ArrowRight className="h-4 w-4 text-green-600" />
+                    Klistra in ostrukturerad text
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <ArrowRight className="h-4 w-4 text-green-600" />
+                    AI genererar CV-draft automatiskt
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <ArrowRight className="h-4 w-4 text-green-600" />
+                    Redigera och förfina enkelt
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <ArrowRight className="h-4 w-4 text-green-600" />
+                    Perfekt för LinkedIn-kopiering
+                  </li>
+                </ul>
+                <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700" size="lg">
+                  <ClipboardPaste className="h-5 w-5 mr-2" />
+                  Klistra in text
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Features */}

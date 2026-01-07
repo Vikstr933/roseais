@@ -65,6 +65,7 @@ import { ResumeBuilder } from '@/components/ResumeBuilder';
 import { AutoApplySettings } from '@/components/AutoApplySettings';
 import { WorkmeLanding } from '@/components/WorkmeLanding';
 import { CVBuilderForm } from '@/components/CVBuilderForm';
+import { PasteTextCVBuilder } from '@/components/PasteTextCVBuilder';
 
 interface ResumeAnalysis {
   id: number;
@@ -173,6 +174,7 @@ export default function ResumeAnalysisApp() {
   const [hasAutoSearched, setHasAutoSearched] = useState<boolean>(false);
   const [showLanding, setShowLanding] = useState<boolean>(false);
   const [showCVBuilder, setShowCVBuilder] = useState<boolean>(false);
+  const [showPasteText, setShowPasteText] = useState<boolean>(false);
   const [isLoadingResumes, setIsLoadingResumes] = useState<boolean>(true);
   // Monetization / plan
   const [planTier, setPlanTier] = useState<PlanTier>('free'); // TODO: load from backend
@@ -1617,19 +1619,95 @@ export default function ResumeAnalysisApp() {
 
   // Show landing page if no CV and user hasn't made a choice
   // Only show if we're not loading and don't have a resume
-  if (showLanding && !uploadedResume && !showCVBuilder && !isLoadingResumes) {
+  if (showLanding && !uploadedResume && !showCVBuilder && !showPasteText && !isLoadingResumes) {
     return (
       <div className="min-h-screen bg-background text-foreground">
         <WorkmeLanding
           onUploadCV={() => {
             setShowLanding(false);
             setShowCVBuilder(false);
+            setShowPasteText(false);
           }}
           onCreateCV={() => {
             setShowLanding(false);
             setShowCVBuilder(true);
+            setShowPasteText(false);
+          }}
+          onPasteText={() => {
+            setShowLanding(false);
+            setShowCVBuilder(false);
+            setShowPasteText(true);
           }}
         />
+      </div>
+    );
+  }
+
+  // Show Paste Text Builder
+  if (showPasteText && !uploadedResume) {
+    return (
+      <div className="min-h-screen bg-background text-foreground pt-24">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+          <PasteTextCVBuilder
+            onComplete={async (cvData) => {
+              try {
+                setIsUploading(true);
+                setProgress('Sparar ditt CV...');
+
+                const response = await apiFetch('/api/resumes/create', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(cvData),
+                });
+
+                if (!response.ok) {
+                  const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                  throw new Error(errorData.error || `Failed to create resume (${response.status})`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.resume) {
+                  setProgress('');
+                  setUploadedResume(data.resume);
+                  setShowCVBuilder(false);
+                  setShowPasteText(false);
+                  setShowLanding(false);
+                  
+                  // Fetch application count and applications for this resume
+                  if (data.resume?.id) {
+                    fetchApplicationCount(data.resume.id);
+                  }
+                  
+                  toast({
+                    title: 'CV skapat!',
+                    description: 'Ditt CV har skapats och sparats. Du kan nu analysera det eller söka jobb.',
+                  });
+                } else {
+                  throw new Error(data.error || 'Failed to create resume');
+                }
+              } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'Failed to create resume';
+                setError(errorMessage);
+                setProgress('');
+                toast({
+                  title: 'Fel',
+                  description: errorMessage,
+                  variant: 'destructive',
+                });
+              } finally {
+                setIsUploading(false);
+                setProgress('');
+              }
+            }}
+            onCancel={() => {
+              setShowPasteText(false);
+              setShowLanding(true);
+            }}
+          />
+        </div>
       </div>
     );
   }

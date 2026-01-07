@@ -17,6 +17,7 @@ import {
 interface CVBuilderFormProps {
   onComplete: (cvData: any) => void;
   onCancel: () => void;
+  initialData?: any; // Pre-filled data from paste/parse
 }
 
 const STEPS = [
@@ -28,25 +29,25 @@ const STEPS = [
   { id: 6, title: 'Välj Mall', key: 'template' },
 ];
 
-export function CVBuilderForm({ onComplete, onCancel }: CVBuilderFormProps) {
+export function CVBuilderForm({ onComplete, onCancel, initialData }: CVBuilderFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   
   const [formData, setFormData] = useState({
     personal: {
-      fullName: '',
-      email: '',
-      phone: '',
-      location: '',
-      linkedin: '',
-      website: '',
+      fullName: initialData?.personal?.fullName || '',
+      email: initialData?.personal?.email || '',
+      phone: initialData?.personal?.phone || '',
+      location: initialData?.personal?.location || '',
+      linkedin: initialData?.personal?.linkedin || '',
+      website: initialData?.personal?.website || '',
     },
     summary: {
-      professionalSummary: '',
-      yearsOfExperience: '',
-      currentRole: '',
+      professionalSummary: initialData?.summary?.professionalSummary || '',
+      yearsOfExperience: initialData?.summary?.yearsOfExperience || '',
+      currentRole: initialData?.summary?.currentRole || '',
     },
-    experience: [] as Array<{
+    experience: initialData?.experience || [] as Array<{
       company: string;
       position: string;
       startDate: string;
@@ -54,15 +55,15 @@ export function CVBuilderForm({ onComplete, onCancel }: CVBuilderFormProps) {
       current: boolean;
       description: string;
     }>,
-    education: [] as Array<{
+    education: initialData?.education || [] as Array<{
       institution: string;
       degree: string;
       field: string;
       startDate: string;
       endDate: string;
     }>,
-    skills: [] as string[],
-    template: 'modern' as 'modern' | 'classic' | 'minimal' | 'professional',
+    skills: initialData?.skills || [] as string[],
+    template: initialData?.template || 'modern' as 'modern' | 'classic' | 'minimal' | 'professional',
   });
 
   const progress = (currentStep / STEPS.length) * 100;
@@ -484,7 +485,7 @@ export function CVBuilderForm({ onComplete, onCancel }: CVBuilderFormProps) {
               <p className="text-sm text-muted-foreground mb-3">
                 Lägg till dina färdigheter, separera med kommatecken
               </p>
-              <Textarea
+              <Input
                 value={formData.skills.join(', ')}
                 onChange={(e) => {
                   const skills = e.target.value
@@ -493,8 +494,13 @@ export function CVBuilderForm({ onComplete, onCancel }: CVBuilderFormProps) {
                     .filter((s) => s.length > 0);
                   setFormData({ ...formData, skills });
                 }}
+                onKeyDown={(e) => {
+                  // Allow all keys including comma
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                }}
                 placeholder="t.ex. JavaScript, React, TypeScript, Node.js, Python..."
-                rows={4}
               />
             </div>
             {formData.skills.length > 0 && (
