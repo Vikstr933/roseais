@@ -70,7 +70,7 @@ export function Navigation() {
               <Brain className="h-5 w-5 text-white" />
             </div>
             <div className="hidden lg:block">
-              <p className="leading-none text-gray-900 text-base font-bold">OmniAssistant</p>
+              <p className="leading-none text-gray-900 text-base font-bold">Elon</p>
               <p className="text-xs text-gray-600 font-normal">Help, in your own way.</p>
             </div>
           </Link>

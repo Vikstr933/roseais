@@ -1,6 +1,6 @@
 /**
  * useOmniAssistant Hook
- * React hook for interacting with OmniAssistant API
+ * React hook for interacting with the Elon assistant API
  * Part of Digital Office Platform (Fas 1)
  */
 
@@ -96,7 +96,7 @@ export function useOmniAssistant() {
   }, [features]);
 
   /**
-   * Send a message to OmniAssistant
+   * Send a message to Elon
    */
   const sendMessage = useCallback(
     async (

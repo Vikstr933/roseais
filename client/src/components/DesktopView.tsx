@@ -299,8 +299,8 @@ export function DesktopView({
   const [terminalHistory, setTerminalHistory] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.terminal);
-      return saved ? JSON.parse(saved) : ['$ Welcome to Chap-ZPT Terminal', '$ Type "help" for commands'];
-    } catch { return ['$ Welcome to Chap-ZPT Terminal']; }
+      return saved ? JSON.parse(saved) : ['$ Welcome to Elon Terminal', '$ Type "help" for commands'];
+    } catch { return ['$ Welcome to Elon Terminal']; }
   });
   const [terminalInput, setTerminalInput] = useState('');
   const [terminalWorking, setTerminalWorking] = useState(false);
@@ -865,7 +865,7 @@ export function DesktopView({
     if (cmdLower === 'help') {
       setTerminalHistory([...newHistory,
         '╔═══════════════════════════════════════════╗',
-        '║           Chap-ZPT Terminal               ║',
+        '║             Elon Terminal                 ║',
         '╠═══════════════════════════════════════════╣',
         '║ Built-in Commands:                        ║',
         '║   help      - Show this help              ║',
@@ -1615,4 +1615,3 @@ export function DesktopView({
     </TooltipProvider>
   );
 }
-

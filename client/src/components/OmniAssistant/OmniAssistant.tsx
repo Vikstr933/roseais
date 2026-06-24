@@ -68,7 +68,7 @@ interface ProjectFile {
 }
 
 export function OmniAssistant() {
-  console.log('[OmniAssistant] Component mounting...');
+  console.log('[Elon] Component mounting...');
   
   const [viewState, setViewState] = useState<ViewState>('closed');
   const [inputMessage, setInputMessage] = useState('');
@@ -99,11 +99,11 @@ export function OmniAssistant() {
   // Voice mode hook
   let voiceModeResult;
   try {
-    console.log('[OmniAssistant] Initializing useVoiceMode hook...');
+    console.log('[Elon] Initializing useVoiceMode hook...');
     voiceModeResult = useVoiceMode();
-    console.log('[OmniAssistant] useVoiceMode hook initialized successfully');
+    console.log('[Elon] useVoiceMode hook initialized successfully');
   } catch (error) {
-    console.error('[OmniAssistant] Error initializing useVoiceMode:', error);
+    console.error('[Elon] Error initializing useVoiceMode:', error);
     // Fallback to prevent crash
     voiceModeResult = {
       isListening: false,
@@ -190,17 +190,17 @@ export function OmniAssistant() {
 
   // Handle auto-send in call mode
   const handleCallMessage = useCallback(async (messageText: string) => {
-    console.log('[OmniAssistant] 📞 handleCallMessage called with:', messageText);
+    console.log('[Elon] handleCallMessage called with:', messageText);
     if (!messageText.trim()) {
-      console.warn('[OmniAssistant] ⚠️ Empty message, skipping');
+      console.warn('[Elon] Empty message, skipping');
       return;
     }
     if (isLoading) {
-      console.warn('[OmniAssistant] ⏳ Already loading, skipping');
+      console.warn('[Elon] Already loading, skipping');
       return;
     }
 
-    console.log('[OmniAssistant] 📤 Sending message to AI...');
+    console.log('[Elon] Sending message to AI...');
     const playgroundContext = buildPlaygroundContext();
     const workspaceId = getActiveWorkspaceId();
 
@@ -210,9 +210,9 @@ export function OmniAssistant() {
         workspaceId,
         playgroundContext,
       });
-      console.log('[OmniAssistant] ✅ Message sent successfully');
+      console.log('[Elon] Message sent successfully');
     } catch (error) {
-      console.error('[OmniAssistant] ❌ Error sending message:', error);
+      console.error('[Elon] Error sending message:', error);
     }
   }, [isLoading, sendMessage]);
 
@@ -746,7 +746,7 @@ export function OmniAssistant() {
       metadata: {
         source: 'elon-suggestion',
         title: 'Elon is updating your playground',
-        message: 'Running these instructions directly in Chap-ZPT…',
+        message: 'Running these instructions directly in Elon...',
         originalMessage: messageContent.substring(0, 200),
       },
     });
@@ -1008,7 +1008,7 @@ export function OmniAssistant() {
 
         {viewState === 'full' && (
           <>
-            {/* Mobile: Sheet (like Chap-ZPT) - only render on mobile */}
+            {/* Mobile: Sheet - only render on mobile */}
             {isMobile && (
               <Sheet open={true} onOpenChange={(open) => !open && setViewState('closed')}>
                 <SheetContent side="bottom" className="h-[85vh] p-0 flex flex-col [&>button]:hidden">
@@ -1686,7 +1686,7 @@ export function OmniAssistant() {
           >
             <Card className="w-[480px] shadow-2xl">
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b">
-                <CardTitle className="text-base">OmniAssistant Settings</CardTitle>
+                <CardTitle className="text-base">Elon Settings</CardTitle>
                 <Button
                   variant="ghost"
                   size="icon"

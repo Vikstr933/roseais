@@ -112,7 +112,7 @@ export function ChatMessage({ role, content, timestamp, errors, warnings, errorS
   const [errorsExpanded, setErrorsExpanded] = useState(true);
   const [warningsExpanded, setWarningsExpanded] = useState(false);
   const isAssistant = role === 'assistant';
-  const displayName = isAssistant ? 'Chap-ZPT' : 'You';
+  const displayName = isAssistant ? 'Elon' : 'You';
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);

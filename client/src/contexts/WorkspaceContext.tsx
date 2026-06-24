@@ -115,12 +115,12 @@ interface WorkspaceContextType {
   // Metadata management
   updateMetadata: (metadata: Record<string, any>) => void;
 
-  // Prompt forwarding (OmniAssistant → Playground)
+  // Prompt forwarding (Elon -> Playground)
   setPendingPrompt: (prompt: string, source: string, metadata?: Record<string, any>) => void;
   getPendingPrompt: () => { prompt: string; timestamp: number; source: string; metadata?: Record<string, any> } | null;
   clearPendingPrompt: () => void;
 
-  // Cross-component action bridge (OmniAssistant -> Playground)
+  // Cross-component action bridge (Elon -> Playground)
   registerPlaygroundActionListener: (listener: PlaygroundActionListener) => () => void;
   dispatchPlaygroundAction: (action: PlaygroundAction) => void;
 

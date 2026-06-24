@@ -158,7 +158,7 @@ export default function PluginGenerator() {
               <Label htmlFor="prompt">What should this plugin do?</Label>
               <Textarea
                 id="prompt"
-                placeholder="Example: Create a Discord plugin that monitors mentions of '@urgent' in my server and sends me notifications via the OmniAssistant. It should also be able to send messages when I'm away."
+                placeholder="Example: Create a Discord plugin that monitors mentions of '@urgent' in my server and sends me notifications via Elon. It should also be able to send messages when I'm away."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={6}

@@ -76,7 +76,7 @@ export function ChatBeforeBuildDialog({
     setIsLoading(true);
 
     try {
-      // Use OmniAssistant for chat
+      // Use Elon for chat
       const response = await apiFetch('/api/omniassistant/chat', {
         method: 'POST',
         headers: getAuthHeaders(sessionToken),
@@ -259,4 +259,3 @@ export function ChatBeforeBuildDialog({
     </Dialog>
   );
 }
-

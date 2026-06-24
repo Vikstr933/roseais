@@ -577,8 +577,8 @@ const initializeApp = async () => {
     app.use('/api/discord', discordRouter); // Discord bot management
     app.use('/api/secrets', secretsRouter); // Secrets vault for API keys
     app.use('/api/ai', aiRouter); // AI generation for Prompt Lab
-    app.use('/api/omniassistant', omniassistantRouter); // OmniAssistant - Digital Office Platform
-    app.use('/api/playground', playgroundRouter); // Playground Assistant (Chap-ZPT) - Dedicated playground chat
+    app.use('/api/omniassistant', omniassistantRouter); // Elon - Digital Office Platform
+    app.use('/api/playground', playgroundRouter); // Elon playground chat
     app.use('/api/workspace-sessions', workspaceSessionsRouter); // Workspace session persistence
     app.use('/api/activity', activityRouter); // User activity tracking routes
     app.use('/api/stats', statsRouter); // Platform statistics
@@ -941,4 +941,3 @@ process.on('SIGTERM', async () => {
   autoApplySchedulerService.stop();
   process.exit(0);
 });
-

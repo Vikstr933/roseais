@@ -1,6 +1,6 @@
 /**
- * OmniAssistant API Routes
- * New endpoints for enhanced AI assistant with persistent memory
+ * Elon API Routes
+ * Endpoints for enhanced AI assistant with persistent memory
  * Part of Digital Office Platform (Fas 1)
  *
  * These are NEW endpoints (/api/omniassistant/*) that don't conflict with
@@ -16,7 +16,7 @@ import { projectService } from '../services/ProjectService';
 
 const router = Router();
 
-// Initialize OmniAssistant service (singleton)
+// Initialize Elon service (singleton)
 const omniAssistant = new OmniAssistantService(
   personalAssistantAgent,
   multiModelAI,
@@ -51,7 +51,7 @@ router.post('/chat', authenticateUser, async (req, res) => {
       useContextEngine: features?.useContextEngine || false,
     };
 
-    console.log(`💬 OmniAssistant: Processing chat request`, {
+    console.log(`💬 Elon: Processing chat request`, {
       userId,
       messageLength: message.length,
       features: featureFlags,
@@ -72,7 +72,7 @@ router.post('/chat', authenticateUser, async (req, res) => {
       });
     }
 
-    // Non-streaming: Process request with OmniAssistant
+    // Non-streaming: Process request with Elon
     // Make insights generation async so it doesn't block the response
     const result = await omniAssistant.processRequest(userId, message, {
       sessionId,
@@ -94,7 +94,7 @@ router.post('/chat', authenticateUser, async (req, res) => {
         persistConversation: featureFlags.persistConversation,
         useContextEngine: featureFlags.useContextEngine,
       }).catch(error => {
-        console.error('⚠️ OmniAssistant: Background insights generation failed', error);
+        console.error('⚠️ Elon: Background insights generation failed', error);
       });
     }
 
@@ -109,7 +109,7 @@ router.post('/chat', authenticateUser, async (req, res) => {
       features: featureFlags,
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Chat error', error);
+    console.error('❌ Elon: Chat error', error);
     res.status(500).json({
       error: 'Failed to process chat message',
       code: 'CHAT_ERROR',
@@ -201,7 +201,7 @@ async function handleOmniAssistantStreaming(
         ...options,
         generateInsights: true,
       }).catch(error => {
-        console.error('⚠️ OmniAssistant: Background insights failed', error);
+        console.error('⚠️ Elon: Background insights failed', error);
       });
     }
 
@@ -233,7 +233,7 @@ router.get('/history', authenticateUser, async (req, res) => {
       count: history.length,
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to fetch history', error);
+    console.error('❌ Elon: Failed to fetch history', error);
     res.status(500).json({
       error: 'Failed to fetch conversation history',
       code: 'HISTORY_ERROR',
@@ -258,7 +258,7 @@ router.get('/insights', authenticateUser, async (req, res) => {
       count: insights.length,
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to fetch insights', error);
+    console.error('❌ Elon: Failed to fetch insights', error);
     res.status(500).json({
       error: 'Failed to fetch insights',
       code: 'INSIGHTS_ERROR',
@@ -288,7 +288,7 @@ router.post('/insights/:id/dismiss', authenticateUser, async (req, res) => {
       message: 'Insight dismissed',
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to dismiss insight', error);
+    console.error('❌ Elon: Failed to dismiss insight', error);
     res.status(500).json({
       error: 'Failed to dismiss insight',
       code: 'DISMISS_ERROR',
@@ -318,7 +318,7 @@ router.post('/insights/:id/action', authenticateUser, async (req, res) => {
       message: 'Insight marked as actioned',
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to mark insight as actioned', error);
+    console.error('❌ Elon: Failed to mark insight as actioned', error);
     res.status(500).json({
       error: 'Failed to update insight',
       code: 'ACTION_ERROR',
@@ -342,7 +342,7 @@ router.get('/preferences', authenticateUser, async (req, res) => {
       count: preferences.length,
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to fetch preferences', error);
+    console.error('❌ Elon: Failed to fetch preferences', error);
     res.status(500).json({
       error: 'Failed to fetch user preferences',
       code: 'PREFERENCES_ERROR',
@@ -366,7 +366,7 @@ router.get('/daily-summary', authenticateUser, async (req, res) => {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to generate daily summary', error);
+    console.error('❌ Elon: Failed to generate daily summary', error);
     res.status(500).json({
       error: 'Failed to generate daily summary',
       code: 'SUMMARY_ERROR',
@@ -393,7 +393,7 @@ router.post('/clear-session', authenticateUser, async (req, res) => {
       sessionId: effectiveSessionId,
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to clear session', error);
+    console.error('❌ Elon: Failed to clear session', error);
     res.status(500).json({
       error: 'Failed to clear session',
       code: 'CLEAR_ERROR',
@@ -428,7 +428,7 @@ router.post('/track-action', authenticateUser, async (req, res) => {
       message: 'Action tracked',
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to track action', error);
+    console.error('❌ Elon: Failed to track action', error);
     res.status(500).json({
       error: 'Failed to track action',
       code: 'TRACK_ERROR',
@@ -438,7 +438,7 @@ router.post('/track-action', authenticateUser, async (req, res) => {
 
 /**
  * GET /api/omniassistant/status
- * Get OmniAssistant system status and feature availability
+ * Get Elon system status and feature availability
  */
 router.get('/status', authenticateUser, async (req, res) => {
   try {
@@ -469,10 +469,10 @@ router.get('/status', authenticateUser, async (req, res) => {
         activeInsights: insights.length,
         learnedPreferences: preferences.length,
       },
-      message: 'OmniAssistant is ready to assist you across all departments of your digital office',
+      message: 'Elon is ready to assist you across all departments of your digital office',
     });
   } catch (error) {
-    console.error('❌ OmniAssistant: Failed to get status', error);
+    console.error('❌ Elon: Failed to get status', error);
     res.status(500).json({
       error: 'Failed to get system status',
       code: 'STATUS_ERROR',

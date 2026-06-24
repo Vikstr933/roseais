@@ -1,6 +1,6 @@
 /**
- * OmniAssistant - Digital Office Platform Components
- * Export all OmniAssistant related components
+ * Elon - Digital Office Platform Components
+ * Export all Elon related components
  */
 
 export { OmniAssistant } from './OmniAssistant';

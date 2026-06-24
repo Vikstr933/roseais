@@ -1,5 +1,5 @@
 /**
- * ChatHeader - Header for the Chap-ZPT Chat panel
+ * ChatHeader - Header for the Elon Chat panel
  * Contains title, agent status, status messages, and clear button
  */
 
@@ -32,7 +32,7 @@ export const ChatHeader = memo(function ChatHeader({
       <div className="flex items-center justify-between relative">
         <h2 className="text-h4 flex items-center gap-2 text-foreground">
           <Brain className="icon-md text-primary" />
-          <span className="font-bold tracking-tight">Chap-ZPT Chat</span>
+          <span className="font-bold tracking-tight">Elon Chat</span>
         </h2>
         <div className="flex items-center gap-2">
           <Button
@@ -72,4 +72,3 @@ export const ChatHeader = memo(function ChatHeader({
     </div>
   );
 });
-

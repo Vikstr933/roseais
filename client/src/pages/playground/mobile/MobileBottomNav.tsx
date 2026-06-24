@@ -82,7 +82,7 @@ export function MobileBottomNav({
         {/* Elon Assistant Button */}
         <button
           onClick={() => {
-            // Open Elon by clicking the OmniAssistant button
+            // Open Elon through the global assistant event
             const elonButton = document.querySelector('button[class*="rounded-full"][class*="shadow"]') as HTMLElement;
             if (elonButton && elonButton.querySelector('svg')) {
               elonButton.click();
@@ -98,4 +98,3 @@ export function MobileBottomNav({
     </nav>
   );
 }
-

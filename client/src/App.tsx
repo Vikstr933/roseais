@@ -31,9 +31,6 @@ const PluginGenerator = lazy(() => import('./pages/PluginGenerator'));
 const ElonChat = lazy(() => import('./pages/ElonChat'));
 const PublicProjects = lazy(() => import('./pages/PublicProjects'));
 const PublicProjectDetail = lazy(() => import('./pages/PublicProjectDetail'));
-const VideoTranscriptionApp = lazy(() => import('./pages/VideoTranscriptionApp'));
-const ResumeAnalysisApp = lazy(() => import('./pages/ResumeAnalysisApp'));
-const JobApplicationsPage = lazy(() => import('./pages/JobApplicationsPage'));
 const DataInsights = lazy(() => import('./pages/DataInsights'));
 
 // Lazy load heavy components
@@ -82,10 +79,6 @@ function AppContent() {
           <Route path="/" component={NewHome} />
           <Route path="/public-projects" component={PublicProjects} />
           <Route path="/public-projects/:id" component={PublicProjectDetail} />
-          <Route path="/community/video-transcription" component={VideoTranscriptionApp} />
-          <Route path="/community/resume-analysis" component={ResumeAnalysisApp} />
-          <Route path="/community/job-applications/resume/:resumeId" component={JobApplicationsPage} />
-          <Route path="/community/job-applications" component={JobApplicationsPage} />
           <Route path="/auth/callback" component={AuthCallback} />
           <Route path="/callback" component={AuthCallback} />
           <Route path="/pricing" component={Pricing} />
@@ -198,7 +191,7 @@ function AppContent() {
           {/* Elon - AI Assistant with Web Search */}
           <ErrorBoundary
             onError={(error, errorInfo) => {
-              console.error('[App] OmniAssistant ErrorBoundary caught error:', error);
+              console.error('[App] Elon ErrorBoundary caught error:', error);
               console.error('[App] Error info:', errorInfo);
               // Also log to window for visibility
               (window as any).__OMNI_ASSISTANT_ERROR__ = { error, errorInfo };

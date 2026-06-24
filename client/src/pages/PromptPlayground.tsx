@@ -1854,7 +1854,7 @@ export default function PromptPlayground() {
     }
   };
 
-  // New mutation for playground chat (Chap-ZPT)
+  // New mutation for playground chat (Elon)
   const playgroundChatMutation = useMutation({
     mutationFn: async (data: PromptForm) => {
       setError(null);
@@ -1864,7 +1864,7 @@ export default function PromptPlayground() {
 
       setIsLoading(true);
 
-      // Call Chap-ZPT playground chat endpoint
+      // Call Elon playground chat endpoint
       const chatResponse = await apiFetch('/api/playground/chat', {
         method: 'POST',
         headers: {
@@ -1931,7 +1931,7 @@ export default function PromptPlayground() {
       // **CHAT MODE CHECK - CRITICAL**
       // If Chat Mode is active, ALWAYS use chat endpoint, no intent detection needed
       if (isChatMode) {
-        console.log('🔵 Chat Mode active - routing directly to Chap-ZPT chat (no code generation)');
+        console.log('🔵 Chat Mode active - routing directly to Elon chat (no code generation)');
         return playgroundChatMutation.mutateAsync(data);
       }
       
@@ -1942,7 +1942,7 @@ export default function PromptPlayground() {
       const intentResult = await detectIntent(data.userPrompt, hasExistingFiles, existingFiles.length);
       const { intent, shouldGenerateCode, requiresProjectFiles } = intentResult;
 
-      // If intent is conversational, use Chap-ZPT chat instead
+      // If intent is conversational, use Elon chat instead
       // Note: User message is added optimistically in handleSubmit before mutation starts
       if (intent === 'conversational') {
         // Use playground chat mutation for conversational requests
@@ -2775,7 +2775,7 @@ export default function PromptPlayground() {
     generateMutation.mutate(data);
   }, [addChatMessage, generateMutation, form]);
 
-  // Handle prompt from URL (from homepage) and OmniAssistant prompts
+  // Handle prompt from URL (from homepage) and Elon prompts
   useEffect(() => {
     if (!hasProjectRoute) return; // Only process prompts when we have a project route
     
@@ -2836,7 +2836,7 @@ export default function PromptPlayground() {
             <div className="h-14 border-b bg-card flex items-center justify-between px-4 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Brain className="h-5 w-5 text-primary" />
-                <span className="font-bold">Chap-ZPT</span>
+                <span className="font-bold">Elon</span>
               </div>
               <Button size="sm" onClick={() => setShowCreateProjectDialog(true)}>
                 <Plus className="h-4 w-4 mr-1" />
@@ -2890,7 +2890,7 @@ export default function PromptPlayground() {
           <div className="h-14 sm:h-16 border-b bg-card/80 backdrop-blur flex items-center justify-between px-4 flex-shrink-0">
             <div className="flex items-center gap-3">
               <Brain className="h-6 w-6 text-primary" />
-              <span className="font-bold text-lg">Chap-ZPT</span>
+              <span className="font-bold text-lg">Elon</span>
               <Badge variant="secondary" className="text-[10px]">Desktop</Badge>
             </div>
             <div className="flex items-center gap-2">
@@ -3226,7 +3226,7 @@ export default function PromptPlayground() {
       {/* Show content if: not loading, OR we have project data (even if still loading files) */}
       {(!isLoadingProject || !hasProjectRoute || currentProject) && (
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative z-10 min-h-0">
-          {/* Chap-ZPT Chat Panel - Extracted Component */}
+          {/* Elon Chat Panel - Extracted Component */}
           <ChatPanel
             chatHistory={chatHistory}
             statusMessages={statusMessages}
@@ -3386,7 +3386,7 @@ export default function PromptPlayground() {
 
         {createProjectDialog}
 
-      {/* Mobile: Chap-ZPT Chat Bottom Sheet */}
+      {/* Mobile: Elon Chat Bottom Sheet */}
       <MobileChatSheet
         open={chatSheetOpen}
         onOpenChange={setChatSheetOpen}

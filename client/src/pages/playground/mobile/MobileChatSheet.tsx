@@ -32,7 +32,7 @@ export function MobileChatSheet({
           <div className="flex items-center justify-between">
             <SheetTitle className="flex items-center gap-2">
               <Brain className="h-5 w-5 text-primary" />
-              <span className="font-bold">Chap-ZPT Chat</span>
+              <span className="font-bold">Elon Chat</span>
             </SheetTitle>
             <div className="flex items-center gap-2">
               {chatHistory.length > 0 && (
@@ -62,7 +62,7 @@ export function MobileChatSheet({
           <div className="space-y-4">
             {chatHistory.length === 0 && (
               <div className="rounded-lg border border-border bg-muted/70 p-4 text-muted-foreground">
-                Start by describing what you want to build. Chap-ZPT will stage the files and keep
+                Start by describing what you want to build. Elon will stage the files and keep
                 the conversation inside this chat.
               </div>
             )}
@@ -148,4 +148,3 @@ export function MobileChatSheet({
     </Sheet>
   );
 }
-

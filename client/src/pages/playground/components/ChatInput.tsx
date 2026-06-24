@@ -1,5 +1,5 @@
 /**
- * ChatInput - Input form for sending messages to Chap-ZPT
+ * ChatInput - Input form for sending messages to Elon
  * Supports Enter to send, Shift+Enter for new line
  */
 
@@ -85,4 +85,3 @@ export const ChatInput = memo(function ChatInput({
     </div>
   );
 });
-

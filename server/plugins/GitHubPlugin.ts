@@ -663,7 +663,7 @@ export class GitHubPlugin extends BaseProductivityPlugin {
       },
       {
         name: 'import_repository',
-        description: 'Import an external GitHub repository into the playground workspace. This allows you to work on existing projects using Elon and Chap-ZPT.',
+        description: 'Import an external GitHub repository into the playground workspace. This allows you to work on existing projects using Elon.',
         parameters: {
           type: 'object',
           properties: {

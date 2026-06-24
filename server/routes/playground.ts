@@ -1,6 +1,6 @@
 /**
  * Playground API Routes
- * Dedicated endpoints for the AI Code Playground chat (Chap-ZPT)
+ * Dedicated endpoints for the AI Code Playground chat (Elon)
  */
 
 import { Router } from 'express';
@@ -12,7 +12,7 @@ const router = Router();
 
 /**
  * POST /api/playground/chat
- * Chat with Chap-ZPT (Playground Assistant Agent)
+ * Chat with Elon (Playground Assistant Agent)
  * Dedicated for playground interactions with automatic prompt improvement
  */
 router.post('/chat', authenticateUser, async (req, res) => {
@@ -101,4 +101,3 @@ router.post('/clear-session', authenticateUser, async (req, res) => {
 });
 
 export default router;
-

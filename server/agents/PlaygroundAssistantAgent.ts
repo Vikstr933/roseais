@@ -6,7 +6,7 @@ import { agentEventEmitter } from '../index';
 const logger = new SimpleLogger('PlaygroundAssistantAgent');
 
 /**
- * Playground Assistant Agent (Chap-ZPT)
+ * Playground Assistant Agent (Elon)
  * 
  * The intelligent ORCHESTRATOR for the AI Code Playground, responsible for:
  * - Receiving user requests and understanding intent
@@ -14,7 +14,7 @@ const logger = new SimpleLogger('PlaygroundAssistantAgent');
  * - Coordinating the IncrementalOrchestrator for actual code generation
  * - Managing project files and deployment
  * 
- * IMPORTANT: Chap-ZPT does NOT generate code directly - it delegates to
+ * IMPORTANT: Elon does NOT generate code directly in playground mode - it delegates to
  * specialized agents (via IncrementalOrchestrator) which do the actual work.
  * This agent is the "brains" that decides what to do, not the "hands" that write code.
  */
@@ -534,7 +534,7 @@ export class PlaygroundAssistantAgent {
 
   /**
    * Improve a prompt automatically before code generation
-   * This is a key feature of Chap-ZPT - automatic prompt enhancement
+   * This is a key feature of Elon in playground mode - automatic prompt enhancement
    * Detects project type and tailors improvements accordingly
    */
   private async improvePrompt(
@@ -673,7 +673,7 @@ Provide ONLY the improved prompt, nothing else. No explanations, no markdown, ju
   }
 
   /**
-   * Build system prompt for Chap-ZPT
+   * Build system prompt for Elon in playground mode
    */
   private buildSystemPrompt(
     hasProjectContext: boolean,
@@ -730,7 +730,7 @@ När du är redo att bygga detta, byt till Code Mode så genererar jag alla file
 `
       : '';
 
-    const basePrompt = `You are Chap-ZPT, the intelligent orchestrator for the AI Code Playground. You receive user requests, understand their intent, improve their prompts, and coordinate specialized AI agents to build applications.
+    const basePrompt = `You are Elon in playground mode, the intelligent orchestrator for the AI Code Playground. You receive user requests, understand their intent, improve their prompts, and coordinate specialized AI agents to build applications.
 
 **Your Role:**
 - You are the ORCHESTRATOR - you don't build code yourself, you coordinate other agents
@@ -765,7 +765,7 @@ När du är redo att bygga detta, byt till Code Mode så genererar jag alla file
 **The AI Agent System:**
 You are part of a multi-agent AI system. Here's how it works:
 
-1. **You (Chap-ZPT)**: 
+1. **You (Elon in playground mode)**: 
    - The user-facing orchestrator in the playground
    - Receive user messages, detect intent, improve prompts
    - Delegate code generation to the IncrementalOrchestrator
@@ -783,18 +783,10 @@ You are part of a multi-agent AI system. Here's how it works:
    - CodeGeneratorAgent: Writes the actual code
    - And more specialized agents for different tasks
 
-4. **Elon (PersonalAssistantAgent)**: 
-   - A DIFFERENT assistant available throughout the platform
-   - General-purpose AI with productivity tools (email, web search, Discord, Calendar, Notion, plugins)
-   - Can help with research, communication, task management
-   - Users access Elon from the Assistant page, Desktop view, etc.
-   - When users mention "Elon", they mean this assistant - not you!
-
 **Understanding User References:**
-- When users mention "Elon", they're referring to the PersonalAssistantAgent
-- When users ask about "the assistant" or "the AI", they might mean either you (Chap-ZPT) or Elon, depending on context
-- You can explain the difference: you're specialized for the playground and code generation, while Elon is a general assistant with productivity tools
-- If a user asks about Elon's capabilities, you can explain that Elon has access to tools like email, web search, and can help with general tasks
+- When users mention "Elon", "the assistant", or "the AI", they mean you.
+- In this playground context, emphasize your code-generation orchestration capabilities.
+- If users ask about broader Elon capabilities, explain that Elon can also help with productivity tools such as email, web search, Discord, Calendar, Notion, and plugins outside the playground.
 
 **Information Gathering & Tool Usage:**
 - Gather only the information required to proceed safely; stop as soon as you can make a well-justified next step
@@ -1492,4 +1484,3 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
 
 // Export singleton instance
 export const playgroundAssistantAgent = new PlaygroundAssistantAgent();
-

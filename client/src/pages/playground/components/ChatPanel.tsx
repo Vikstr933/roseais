@@ -1,5 +1,5 @@
 /**
- * ChatPanel - Complete Chap-ZPT Chat panel
+ * ChatPanel - Complete Elon Chat panel
  * Composes ChatHeader, ChatMessages, and ChatInput
  * 
  * This is the main chat interface for the playground.
@@ -74,4 +74,3 @@ export const ChatPanel = memo(function ChatPanel({
     </div>
   );
 });
-
