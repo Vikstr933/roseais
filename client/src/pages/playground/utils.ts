@@ -61,9 +61,22 @@ export function stripWorkspacePrefix(filePath: string): string {
  * Normalize a file path to be consistent
  */
 export function normalizePath(path: string): string {
-  return stripWorkspacePrefix(path)
+  const normalized = stripWorkspacePrefix(path)
     .replace(/\\/g, '/') // Convert Windows backslashes
-    .replace(/^\/+/, ''); // Remove leading slashes
+    .replace(/^\/+/, '') // Remove leading slashes
+    .replace(/^\.\//, ''); // Remove leading ./ from generated files
+
+  const parts: string[] = [];
+  for (const part of normalized.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      parts.pop();
+    } else {
+      parts.push(part);
+    }
+  }
+
+  return parts.join('/');
 }
 
 // ============================================================================
@@ -239,4 +252,3 @@ export function groupFilesByDirectory(files: GeneratedFile[]): Map<string, Gener
   
   return groups;
 }
-

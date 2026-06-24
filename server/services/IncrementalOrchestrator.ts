@@ -63,6 +63,7 @@ export interface IncrementalGenerationResult {
   allFiles: { path: string; content: string }[];
   totalDuration: number;
   errors?: string[];
+  warnings?: string[];
 }
 
 export class IncrementalOrchestrator {
@@ -95,7 +96,7 @@ export class IncrementalOrchestrator {
 
     // Add existing files to the map
     existingFiles.forEach(file => {
-      allFiles.set(file.path, file.content);
+      allFiles.set(this.normalizePath(file.path), file.content);
     });
 
     this.logger.info(`Starting incremental generation. App: ${plan.appName}, Total phases: ${plan.phases.length}`);
@@ -189,6 +190,7 @@ export class IncrementalOrchestrator {
           if (missingCssFiles.length > 0) {
             this.logger.info(`Auto-creating ${missingCssFiles.length} missing CSS file(s) for phase ${phase.phase}`);
             phaseResult.files.push(...missingCssFiles);
+            phaseResult.files = this.normalizeFiles(phaseResult.files);
             validation = await this.validatePhase(phaseResult.files, existingPhaseFiles);
           }
 
@@ -207,11 +209,11 @@ export class IncrementalOrchestrator {
             const aiFixResult = await aiFixer.validateAndFix(phaseResult.files);
             
             if (aiFixResult.success) {
-              phaseResult.files = aiFixResult.fixedFiles;
+              phaseResult.files = this.normalizeFiles(aiFixResult.fixedFiles);
               this.logger.info(`✅ AI fixed all errors in phase ${phase.phase} (${aiFixResult.fixAttempts} attempt(s))`);
             } else {
               // Use partially fixed files - AI made progress even if not perfect
-              phaseResult.files = aiFixResult.fixedFiles;
+              phaseResult.files = this.normalizeFiles(aiFixResult.fixedFiles);
               this.logger.warn(`AI fixed some errors but ${aiFixResult.remainingErrors.length} remain in phase ${phase.phase}`);
             }
             
@@ -237,10 +239,11 @@ export class IncrementalOrchestrator {
 
         // Thread-safe file addition
         phaseResult.files.forEach((file) => {
-          allFiles.set(file.path, file.content);
+          const normalizedFile = { ...file, path: this.normalizePath(file.path) };
+          allFiles.set(normalizedFile.path, normalizedFile.content);
           if (fileCallback) {
             const totalFilesSoFar = Array.from(allFiles.keys()).length;
-            fileCallback(file, totalFilesSoFar - 1, totalFilesSoFar);
+            fileCallback(normalizedFile, totalFilesSoFar - 1, totalFilesSoFar);
           }
         });
 
@@ -315,7 +318,7 @@ export class IncrementalOrchestrator {
         }
 
         phaseResult.duration = Date.now() - phaseStartTime;
-        phaseResult.success = phaseResult.files.length > 0;
+        phaseResult.success = phaseResult.files.length > 0 && (!phaseResult.errors || phaseResult.errors.length === 0);
 
         if (!phaseResult.success) {
           const errorMsg = phaseResult.errors ? phaseResult.errors.join(', ') : 'unknown errors';
@@ -348,8 +351,8 @@ export class IncrementalOrchestrator {
 
     const totalDuration = Date.now() - startTime;
     let allFilesArray = Array.from(allFiles.entries()).map(([path, content]) => ({
-      path,
-      content
+        path: this.normalizePath(path),
+        content
     }));
 
     // Analyze filesystem and generate any missing critical files
@@ -368,16 +371,17 @@ export class IncrementalOrchestrator {
         
         // Add missing files to allFiles
         missingFiles.forEach(file => {
-          allFiles.set(file.path, file.content);
+          const normalizedFile = { ...file, path: this.normalizePath(file.path) };
+          allFiles.set(normalizedFile.path, normalizedFile.content);
           if (fileCallback) {
             const totalFilesSoFar = Array.from(allFiles.keys()).length;
-            fileCallback(file, totalFilesSoFar - 1, totalFilesSoFar);
+            fileCallback(normalizedFile, totalFilesSoFar - 1, totalFilesSoFar);
           }
         });
         
         // Update allFilesArray
         allFilesArray = Array.from(allFiles.entries()).map(([path, content]) => ({
-          path,
+          path: this.normalizePath(path),
           content
         }));
       }
@@ -390,6 +394,9 @@ export class IncrementalOrchestrator {
     // This ensures projects are functional after first generation
     let finalFiles = allFilesArray;
     let validationIssuesFixed = 0;
+    let finalValidationPassed = false;
+    const finalValidationErrors: string[] = [];
+    const finalValidationWarnings: string[] = [];
     
     try {
       if (progressCallback) {
@@ -402,6 +409,9 @@ export class IncrementalOrchestrator {
 
       finalFiles = validationResult.validatedFiles;
       validationIssuesFixed = validationResult.issuesFixed;
+      finalValidationPassed = validationResult.canStart && validationResult.isValid;
+      finalValidationErrors.push(...validationResult.errors);
+      finalValidationWarnings.push(...validationResult.warnings);
 
       if (validationResult.issuesFixed > 0) {
         this.logger.info(`✅ Auto-fixed ${validationResult.issuesFixed} issues during final validation`);
@@ -420,18 +430,24 @@ export class IncrementalOrchestrator {
         this.logger.info(`Warnings: ${validationResult.warnings.slice(0, 5).join(', ')}${validationResult.warnings.length > 5 ? '...' : ''}`);
       }
     } catch (error) {
-      this.logger.warn('Final validation failed, continuing with generated files', error as Error);
-      // Continue anyway - don't fail entire generation
+      const message = error instanceof Error ? error.message : String(error);
+      finalValidationErrors.push(`Final validation failed: ${message}`);
+      this.logger.error('Final validation failed; generated project will be marked unsuccessful', error as Error);
     }
 
-    // Consider generation successful if we have files, even if some phases had warnings
-    // Only mark as failed if NO files were generated at all
+    // A generated app is only successful when files exist, phases have no blocking
+    // validation errors, and the final project validator says it can start.
     const hasFiles = finalFiles.length > 0;
     const allPhasesSuccessful = phaseResults.every(p => p.success);
-    const success = hasFiles && (allPhasesSuccessful || phaseResults.some(p => p.files.length > 0));
+    const success = hasFiles && allPhasesSuccessful && finalValidationPassed;
 
     const phasesWithWarnings = phaseResults.filter(p => p.errors && p.errors.length > 0).length;
-    this.logger.info(`Incremental generation completed. Success: ${success}, Total phases: ${phaseResults.length}, Duration: ${totalDuration}ms, Files generated: ${finalFiles.length}, Issues auto-fixed: ${validationIssuesFixed}, Phases with warnings: ${phasesWithWarnings}`);
+    this.logger.info(`Incremental generation completed. Success: ${success}, Total phases: ${phaseResults.length}, Duration: ${totalDuration}ms, Files generated: ${finalFiles.length}, Issues auto-fixed: ${validationIssuesFixed}, Phases with warnings: ${phasesWithWarnings}, Final validation passed: ${finalValidationPassed}`);
+
+    const phaseErrors = phaseResults
+      .filter(p => !p.success)
+      .flatMap(p => p.errors?.map(error => `${p.phase}: ${error}`) || []);
+    const allErrors = [...phaseErrors, ...finalValidationErrors];
 
     // Always return validated and fixed files
     return {
@@ -440,7 +456,8 @@ export class IncrementalOrchestrator {
       phases: phaseResults,
       allFiles: finalFiles,
       totalDuration,
-      errors: success ? undefined : phaseResults.filter(p => !p.success && p.files.length === 0).flatMap(p => p.errors || [])
+      errors: success ? undefined : allErrors,
+      warnings: finalValidationWarnings.length > 0 ? finalValidationWarnings : undefined
     };
   }
 
@@ -723,19 +740,18 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
     const suggestions: string[] = [];
 
     // Combine all files for validation
-    const allFiles = [...existingFiles, ...files];
+    const allFiles = this.normalizeFiles([...existingFiles, ...files]);
     const fileMap = new Map(allFiles.map(f => [f.path, f.content]));
 
     // Check each file
-    for (const file of files) {
+    for (const file of this.normalizeFiles(files)) {
       // 1. Syntax validation (basic) - CRITICAL, must fix
       const syntaxErrors = this.validateSyntax(file);
       errors.push(...syntaxErrors);
 
-      // 2. Import resolution - WARNING only (may be resolved in later phases)
+      // 2. Import resolution - blocking within the visible phase context
       const importErrors = this.validateImports(file, fileMap);
-      // Convert import errors to warnings - they might be resolved in later phases
-      warnings.push(...importErrors.map(e => `Import warning: ${e.message}`));
+      errors.push(...importErrors);
 
       // 3. JSON validity (for config files) - CRITICAL, must fix
       if (file.path.endsWith('.json')) {
@@ -743,10 +759,9 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
         errors.push(...jsonErrors);
       }
 
-      // 4. TypeScript/React specific checks - WARNING only (may be false positives)
+      // 4. TypeScript/React specific checks - basic heuristic, keep as warnings
       if (file.path.endsWith('.tsx') || file.path.endsWith('.ts')) {
         const tsErrors = this.validateTypeScript(file, fileMap);
-        // Convert TS errors to warnings - basic checks may have false positives
         warnings.push(...tsErrors.map(e => `TypeScript warning: ${e.message}`));
       }
     }
@@ -843,12 +858,12 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
       }
 
       // Resolve import path relative to file
-      const resolvedPath = this.resolveImportPath(file.path, importPath);
+      const resolvedPaths = this.resolveImportCandidates(file.path, importPath);
 
-      if (!fileMap.has(resolvedPath) && !resolvedPath.includes('node_modules')) {
+      if (resolvedPaths.length > 0 && !resolvedPaths.some(path => fileMap.has(path))) {
         errors.push({
           file: file.path,
-          message: `Import "${importPath}" cannot be resolved (file not found: ${resolvedPath})`,
+          message: `Import "${importPath}" cannot be resolved (checked: ${resolvedPaths.join(', ')})`,
           type: 'import'
         });
       }
@@ -860,34 +875,66 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
   /**
    * Resolve import path relative to file
    */
-  private resolveImportPath(filePath: string, importPath: string): string {
-    // CRITICAL: Preserve CSS and other asset file extensions
-    const hasExtension = /\.(tsx?|jsx?|json|css|scss|less|svg|png|jpg|jpeg|gif|webp)$/.test(importPath);
-    
-    let resolved = importPath;
-    
-    // Only remove TypeScript/JavaScript extensions if present
-    if (!hasExtension) {
-      resolved = importPath.replace(/\.(tsx?|jsx?)$/, '');
+  private resolveImportCandidates(filePath: string, importPath: string): string[] {
+    if (!importPath.startsWith('.') && !importPath.startsWith('/')) {
+      return [];
     }
-    
-    // If relative import, resolve relative to file directory
-    if (resolved.startsWith('.')) {
-      const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-      resolved = `${fileDir}/${resolved.substring(1)}`;
+
+    const normalizedFilePath = this.normalizePath(filePath);
+    const fileDir = normalizedFilePath.includes('/')
+      ? normalizedFilePath.substring(0, normalizedFilePath.lastIndexOf('/'))
+      : '';
+    const basePath = importPath.startsWith('/')
+      ? importPath.substring(1)
+      : this.normalizePath(`${fileDir}/${importPath}`);
+    const normalizedBase = this.normalizePath(basePath);
+
+    if (/\.[a-zA-Z0-9]+$/.test(normalizedBase)) {
+      return [normalizedBase];
     }
-    
-    // Add .tsx extension ONLY if no extension at all (not for CSS/assets)
-    if (!hasExtension && !resolved.match(/\.(tsx?|jsx?|json|css|scss|less|svg|png|jpg|jpeg|gif|webp)$/)) {
-      resolved += '.tsx';
+
+    return [
+      normalizedBase,
+      `${normalizedBase}.tsx`,
+      `${normalizedBase}.ts`,
+      `${normalizedBase}.jsx`,
+      `${normalizedBase}.js`,
+      `${normalizedBase}.json`,
+      `${normalizedBase}.css`,
+      `${normalizedBase}/index.tsx`,
+      `${normalizedBase}/index.ts`,
+      `${normalizedBase}/index.jsx`,
+      `${normalizedBase}/index.js`
+    ];
+  }
+
+  private normalizeFiles(files: { path: string; content: string }[]): { path: string; content: string }[] {
+    const normalized = new Map<string, string>();
+
+    for (const file of files) {
+      normalized.set(this.normalizePath(file.path), file.content);
     }
-    
-    // Remove leading slash
-    if (resolved.startsWith('/')) {
-      resolved = resolved.substring(1);
+
+    return Array.from(normalized.entries()).map(([path, content]) => ({ path, content }));
+  }
+
+  private normalizePath(filePath: string): string {
+    const parts: string[] = [];
+    const normalized = filePath
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/^\.\//, '');
+
+    for (const part of normalized.split('/')) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        parts.pop();
+      } else {
+        parts.push(part);
+      }
     }
-    
-    return resolved;
+
+    return parts.join('/');
   }
 
   /**
@@ -1437,4 +1484,3 @@ CRITICAL RULES:
 Start your response with [`;
   }
 }
-

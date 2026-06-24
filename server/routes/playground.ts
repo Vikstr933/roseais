@@ -18,7 +18,7 @@ const router = Router();
 router.post('/chat', authenticateUser, async (req, res) => {
   try {
     const userId = req.user!.id;
-    const { message, projectId, sessionId, chatMode } = req.body;
+    const { message, projectId, sessionId, chatMode, chatHistory } = req.body;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({
@@ -53,7 +53,16 @@ router.post('/chat', authenticateUser, async (req, res) => {
       sessionId: sessionId || userId,
       projectId,
       existingFiles,
-      chatMode: chatMode === true // Pass chat mode flag
+      chatMode: chatMode === true, // Pass chat mode flag
+      chatHistory: Array.isArray(chatHistory)
+        ? chatHistory
+            .filter((entry: any) => entry && typeof entry.content === 'string')
+            .slice(-10)
+            .map((entry: any) => ({
+              role: entry.role === 'assistant' ? 'assistant' : 'user',
+              content: entry.content
+            }))
+        : []
     });
 
     res.json({

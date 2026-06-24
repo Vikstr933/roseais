@@ -289,6 +289,7 @@ export class PlaygroundAssistantAgent {
       projectId?: string;
       existingFiles?: Array<{ path: string; content: string }>;
       chatMode?: boolean; // If true, AI should only chat, not generate code
+      chatHistory?: Array<{ role: string; content: string }>;
     }
   ): Promise<{
     response: string;
@@ -452,7 +453,8 @@ export class PlaygroundAssistantAgent {
               ...toolCall.input as Record<string, any>,
               _userId: userId,
               _sessionId: sessionId,
-              _projectId: projectId
+              _projectId: projectId,
+              _chatHistory: options?.chatHistory || this.toPlainChatHistory(history)
             });
             
             toolsUsed.push(toolCall.name);
@@ -1079,12 +1081,34 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
     }
   }
 
+  private toPlainChatHistory(history: Anthropic.MessageParam[]): Array<{ role: string; content: string }> {
+    return history
+      .map(message => {
+        const content = typeof message.content === 'string'
+          ? message.content
+          : (message.content as any[])
+              .map(part => typeof part?.text === 'string' ? part.text : '')
+              .join('\n')
+              .trim();
+
+        return {
+          role: message.role,
+          content
+        };
+      })
+      .filter(message => message.content.length > 0)
+      .slice(-10);
+  }
+
   private async generateCode(params: Record<string, any>): Promise<any> {
     // This will be called with the improved prompt
     const prompt = params.prompt as string;
     const projectId = params.projectId as string | undefined;
     const userId = params._userId as string;
     const sessionId = params._sessionId as string;
+    const chatHistory = Array.isArray(params._chatHistory)
+      ? params._chatHistory.filter((entry: any) => entry && typeof entry.content === 'string')
+      : [];
 
     try {
       let targetProjectId = projectId;
@@ -1162,7 +1186,9 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
             formattedPrompt,
             formatKnowledgeContext(knowledgeContext),
             existingProjectFiles,
-            userId
+            userId,
+            targetProjectId ? parseInt(targetProjectId) : null,
+            chatHistory
           );
           
           // Emit plan created event
@@ -1301,6 +1327,8 @@ Solutions should be correct, minimal, tested (or testable), and maintainable by 
             projectId: targetProjectId,
             filesGenerated: result.allFiles.length,
             success: result.success,
+            errors: result.errors || [],
+            warnings: result.warnings || [],
             timestamp: Date.now(),
           });
         } catch (error) {

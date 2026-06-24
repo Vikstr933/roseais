@@ -58,8 +58,9 @@ export class MissingFileGenerator {
   ): Promise<Array<{ path: string; content: string }>> {
     logger.info('Analyzing filesystem for missing files...');
 
-    const analysis = this.analyzeFileSystem(existingFiles);
-    const missingFiles = this.detectMissingFiles(analysis, existingFiles);
+    const normalizedExistingFiles = this.normalizeFiles(existingFiles);
+    const analysis = this.analyzeFileSystem(normalizedExistingFiles);
+    const missingFiles = this.detectMissingFiles(analysis, normalizedExistingFiles);
 
     if (missingFiles.length === 0) {
       logger.info('No missing files detected');
@@ -72,10 +73,10 @@ export class MissingFileGenerator {
 
     for (const missing of missingFiles) {
       if (missing.priority === 'critical' || missing.priority === 'high') {
-        const content = await this.generateFileContent(missing, analysis, existingFiles);
+        const content = await this.generateFileContent(missing, analysis, normalizedExistingFiles);
         if (content) {
           generatedFiles.push({
-            path: missing.path,
+            path: this.normalizePath(missing.path),
             content
           });
           logger.info(`Generated missing file: ${missing.path}`);
@@ -92,14 +93,15 @@ export class MissingFileGenerator {
   private analyzeFileSystem(
     files: Array<{ path: string; content: string }>
   ): FileSystemAnalysis {
-    const existingFiles = new Set(files.map(f => f.path));
-    const isMonorepo = files.some(f => f.path.startsWith('client/') || f.path.startsWith('server/'));
-    const hasClient = files.some(f => f.path.startsWith('client/'));
-    const hasServer = files.some(f => f.path.startsWith('server/'));
+    const normalizedFiles = this.normalizeFiles(files);
+    const existingFiles = new Set(normalizedFiles.map(f => f.path));
+    const isMonorepo = normalizedFiles.some(f => f.path.startsWith('client/') || f.path.startsWith('server/'));
+    const hasClient = normalizedFiles.some(f => f.path.startsWith('client/'));
+    const hasServer = normalizedFiles.some(f => f.path.startsWith('server/'));
 
     // Find package.json
     let packageJson: FileSystemAnalysis['packageJson'];
-    const packageJsonFile = files.find(f => 
+    const packageJsonFile = normalizedFiles.find(f =>
       f.path === 'package.json' || f.path === 'client/package.json'
     );
     if (packageJsonFile) {
@@ -115,19 +117,19 @@ export class MissingFileGenerator {
     if (packageJson) {
       const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
       if (deps.react || deps['react-dom']) {
-        projectType = files.some(f => f.path.endsWith('.tsx') || f.path.endsWith('.ts'))
+        projectType = normalizedFiles.some(f => f.path.endsWith('.tsx') || f.path.endsWith('.ts'))
           ? 'react-typescript'
           : 'react-javascript';
       } else if (deps.express || deps.fastify) {
         projectType = 'node';
       }
-    } else if (files.some(f => f.path.endsWith('.py'))) {
+    } else if (normalizedFiles.some(f => f.path.endsWith('.py'))) {
       projectType = 'python';
     }
 
     // Find vite.config
-    const viteConfigFile = files.find(f => 
-      f.path === 'vite.config.ts' || 
+    const viteConfigFile = normalizedFiles.find(f =>
+      f.path === 'vite.config.ts' ||
       f.path === 'vite.config.js' ||
       f.path === 'client/vite.config.ts' ||
       f.path === 'client/vite.config.js'
@@ -139,7 +141,7 @@ export class MissingFileGenerator {
 
     // Find App component
     let appComponent: FileSystemAnalysis['appComponent'];
-    const appFile = files.find(f => 
+    const appFile = normalizedFiles.find(f =>
       f.path === 'src/App.tsx' ||
       f.path === 'src/App.jsx' ||
       f.path === 'client/src/App.tsx' ||
@@ -158,7 +160,7 @@ export class MissingFileGenerator {
 
     // Find entry point
     let entryPoint: FileSystemAnalysis['entryPoint'];
-    const mainFile = files.find(f => 
+    const mainFile = normalizedFiles.find(f =>
       f.path === 'src/main.tsx' ||
       f.path === 'src/main.jsx' ||
       f.path === 'src/index.tsx' ||
@@ -195,19 +197,20 @@ export class MissingFileGenerator {
     files: Array<{ path: string; content: string }>
   ): MissingFile[] {
     const missing: MissingFile[] = [];
-    const cwd = analysis.isMonorepo && analysis.hasClient ? 'client' : '.';
-    const srcDir = analysis.isMonorepo && analysis.hasClient ? 'client/src' : 'src';
+    const rootDir = analysis.isMonorepo && analysis.hasClient ? 'client' : '';
+    const srcDir = rootDir ? `${rootDir}/src` : 'src';
+    const rootPath = (fileName: string) => rootDir ? `${rootDir}/${fileName}` : fileName;
 
     // For React/TypeScript projects
     if (analysis.projectType === 'react-typescript' || analysis.projectType === 'react-javascript') {
       // Check index.html
-      const indexHtmlPath = `${cwd}/index.html`;
+      const indexHtmlPath = rootPath('index.html');
       if (!analysis.existingFiles.has(indexHtmlPath)) {
         missing.push({
           path: indexHtmlPath,
           reason: 'Required HTML entry point',
           priority: 'critical',
-          suggestedContent: this.generateIndexHtml(analysis, srcDir)
+          suggestedContent: this.generateIndexHtml(analysis)
         });
       }
 
@@ -236,7 +239,7 @@ export class MissingFileGenerator {
       // Check vite.config.ts
       if (analysis.viteConfig && !analysis.viteConfig.exists && analysis.packageJson?.devDependencies?.vite) {
         missing.push({
-          path: `${cwd}/vite.config.ts`,
+          path: rootPath('vite.config.ts'),
           reason: 'Required Vite configuration',
           priority: 'high',
           suggestedContent: this.generateViteConfig(analysis)
@@ -294,7 +297,7 @@ export class MissingFileGenerator {
   /**
    * Generate index.html based on analysis
    */
-  private generateIndexHtml(analysis: FileSystemAnalysis, srcDir: string): string {
+  private generateIndexHtml(analysis: FileSystemAnalysis): string {
     const extension = analysis.projectType === 'react-typescript' ? 'tsx' : 'jsx';
     return `<!DOCTYPE html>
 <html lang="en">
@@ -305,7 +308,7 @@ export class MissingFileGenerator {
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/${srcDir}/main.${extension}"></script>
+    <script type="module" src="/src/main.${extension}"></script>
   </body>
 </html>`;
   }
@@ -426,6 +429,35 @@ body {
 }`;
   }
 
+  private normalizeFiles(files: Array<{ path: string; content: string }>): Array<{ path: string; content: string }> {
+    const normalized = new Map<string, string>();
+
+    for (const file of files) {
+      normalized.set(this.normalizePath(file.path), file.content);
+    }
+
+    return Array.from(normalized.entries()).map(([path, content]) => ({ path, content }));
+  }
+
+  private normalizePath(filePath: string): string {
+    const parts: string[] = [];
+    const normalized = filePath
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/^\.\//, '');
+
+    for (const part of normalized.split('/')) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        parts.pop();
+      } else {
+        parts.push(part);
+      }
+    }
+
+    return parts.join('/');
+  }
+
   /**
    * Build context for AI generation
    */
@@ -469,4 +501,3 @@ Generate a complete, functional file that works with the existing project struct
 Return ONLY the file content, no explanations.`;
   }
 }
-

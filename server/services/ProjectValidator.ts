@@ -7,7 +7,7 @@
  */
 
 import { SimpleLogger } from '../utils/SimpleLogger';
-import { ProjectFixer, ProjectAnalysis } from './ProjectFixer';
+import { ProjectFixer } from './ProjectFixer';
 import { MissingFileGenerator } from './MissingFileGenerator';
 
 const logger = new SimpleLogger('ProjectValidator');
@@ -43,7 +43,7 @@ export class ProjectValidator {
 
     const warnings: string[] = [];
     const errors: string[] = [];
-    let validatedFiles = [...files];
+    let validatedFiles = this.normalizeFiles(files);
     let issuesFixed = 0;
     let filesModified = 0;
 
@@ -69,7 +69,7 @@ export class ProjectValidator {
       const missingFiles = await this.missingFileGenerator.analyzeAndGenerateMissingFiles(validatedFiles);
       if (missingFiles.length > 0) {
         logger.info(`Generating ${missingFiles.length} missing critical files...`);
-        validatedFiles.push(...missingFiles);
+        validatedFiles = this.normalizeFiles([...validatedFiles, ...missingFiles]);
         filesModified += missingFiles.length;
         issuesFixed += missingFiles.length;
       }
@@ -82,16 +82,19 @@ export class ProjectValidator {
       }
 
       // Step 5: Validate dependencies
-      const dependencyValidation = this.validateDependencies(validatedFiles);
+      let dependencyValidation = this.validateDependencies(validatedFiles);
       if (!dependencyValidation.valid) {
-        errors.push(...dependencyValidation.errors);
-        warnings.push(...dependencyValidation.warnings);
-        
         // Auto-fix dependency issues
         if (dependencyValidation.fixes) {
           validatedFiles = this.applyDependencyFixes(validatedFiles, dependencyValidation.fixes);
           issuesFixed += dependencyValidation.fixes.length;
+          dependencyValidation = this.validateDependencies(validatedFiles);
         }
+
+        if (!dependencyValidation.valid) {
+          errors.push(...dependencyValidation.errors);
+        }
+        warnings.push(...dependencyValidation.warnings);
       }
 
       // Step 6: Validate entry points
@@ -104,6 +107,7 @@ export class ProjectValidator {
       // Step 7: Validate imports and exports
       const importValidation = this.validateImportsAndExports(validatedFiles);
       if (!importValidation.valid) {
+        errors.push(...importValidation.errors);
         warnings.push(...importValidation.warnings);
         // Try to fix import issues
         if (importValidation.fixes) {
@@ -119,21 +123,29 @@ export class ProjectValidator {
         warnings.push(...syntaxValidation.warnings);
       }
 
-      // Determine if project can start
-      const canStart = errors.length === 0 && analysis.criticalIssues === 0;
-      const isValid = canStart && syntaxValidation.valid && structureValidation.valid;
+      // Step 9: Block generic fallback app screens from counting as complete apps
+      const placeholderValidation = this.validateNoPlaceholderContent(validatedFiles);
+      if (!placeholderValidation.valid) {
+        errors.push(...placeholderValidation.errors);
+        warnings.push(...placeholderValidation.warnings);
+      }
 
-      logger.info(`Validation complete: isValid=${isValid}, canStart=${canStart}, issuesFixed=${issuesFixed}`);
+      // Determine if project can start
+      const canStart = errors.length === 0;
+      const isValid = canStart && syntaxValidation.valid && structureValidation.valid && importValidation.valid && placeholderValidation.valid;
+      const criticalIssues = errors.length;
+
+      logger.info(`Validation complete: isValid=${isValid}, canStart=${canStart}, issuesFixed=${issuesFixed}, criticalIssues=${criticalIssues}`);
 
       return {
         isValid,
         canStart,
         issuesFixed,
         filesModified,
-        criticalIssues: analysis.criticalIssues,
+        criticalIssues,
         warnings,
         errors,
-        validatedFiles
+        validatedFiles: this.normalizeFiles(validatedFiles)
       };
     } catch (error) {
       logger.error('Validation failed with error', error as Error);
@@ -160,12 +172,13 @@ export class ProjectValidator {
   ): { valid: boolean; errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const filePaths = new Set(files.map(f => f.path));
+    const normalizedFiles = this.normalizeFiles(files);
+    const filePaths = new Set(normalizedFiles.map(f => f.path));
 
     // Detect project type
-    const hasReactFiles = files.some(f => f.path.endsWith('.tsx') || f.path.endsWith('.jsx'));
-    const hasPackageJson = files.some(f => f.path === 'package.json' || f.path === 'client/package.json');
-    const isMonorepo = files.some(f => f.path.startsWith('client/') || f.path.startsWith('server/'));
+    const hasReactFiles = normalizedFiles.some(f => f.path.endsWith('.tsx') || f.path.endsWith('.jsx'));
+    const hasPackageJson = normalizedFiles.some(f => f.path === 'package.json' || f.path === 'client/package.json');
+    const isMonorepo = normalizedFiles.some(f => f.path.startsWith('client/') || f.path.startsWith('server/'));
 
     if (hasReactFiles || hasPackageJson) {
       // React/TypeScript project requirements
@@ -192,7 +205,7 @@ export class ProjectValidator {
       }
 
       // Check for TypeScript config if using .tsx files
-      if (files.some(f => f.path.endsWith('.tsx'))) {
+      if (normalizedFiles.some(f => f.path.endsWith('.tsx'))) {
         const tsConfigPath = isMonorepo ? 'client/tsconfig.json' : 'tsconfig.json';
         if (!filePaths.has(tsConfigPath)) {
           warnings.push(`Missing TypeScript config: ${tsConfigPath} (recommended for .tsx files)`);
@@ -315,24 +328,26 @@ export class ProjectValidator {
    */
   private validateImportsAndExports(
     files: Array<{ path: string; content: string }>
-  ): { valid: boolean; warnings: string[]; fixes?: Array<{ file: string; fix: string }> } {
+  ): { valid: boolean; errors: string[]; warnings: string[]; fixes?: Array<{ file: string; fix: string }> } {
+    const errors: string[] = [];
     const warnings: string[] = [];
     const fixes: Array<{ file: string; fix: string }> = [];
-    const fileMap = new Map(files.map(f => [f.path, f.content]));
+    const normalizedFiles = this.normalizeFiles(files);
+    const fileMap = new Map(normalizedFiles.map(f => [f.path, f.content]));
 
-    for (const file of files) {
+    for (const file of normalizedFiles) {
       if (file.path.endsWith('.tsx') || file.path.endsWith('.ts') || file.path.endsWith('.jsx') || file.path.endsWith('.js')) {
         // Check for relative imports
-        const importRegex = /import\s+.*?\s+from\s+['"]([^'"]+)['"]/g;
+        const importRegex = /(?:import\s+(?:.*?\s+from\s+)?|export\s+.*?\s+from\s+)['"]([^'"]+)['"]/g;
         let match;
         while ((match = importRegex.exec(file.content)) !== null) {
           const importPath = match[1];
           
           // Skip node_modules imports
           if (importPath.startsWith('.') || importPath.startsWith('/')) {
-            const resolvedPath = this.resolveImportPath(file.path, importPath);
-            if (resolvedPath && !fileMap.has(resolvedPath) && !resolvedPath.includes('node_modules')) {
-              warnings.push(`Import ${importPath} in ${file.path} resolves to missing file: ${resolvedPath}`);
+            const resolvedPaths = this.resolveImportCandidates(file.path, importPath);
+            if (resolvedPaths.length > 0 && !resolvedPaths.some(path => fileMap.has(path))) {
+              errors.push(`Import ${importPath} in ${file.path} resolves to missing file (checked: ${resolvedPaths.join(', ')})`);
             }
           }
         }
@@ -340,7 +355,8 @@ export class ProjectValidator {
     }
 
     return {
-      valid: warnings.length === 0,
+      valid: errors.length === 0,
+      errors,
       warnings,
       fixes: fixes.length > 0 ? fixes : undefined
     };
@@ -378,6 +394,40 @@ export class ProjectValidator {
         } catch (error) {
           errors.push(`Invalid JSON in ${file.path}: ${error instanceof Error ? error.message : String(error)}`);
         }
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  /**
+   * Do not let generic system-created placeholders pass as a completed app.
+   */
+  private validateNoPlaceholderContent(
+    files: Array<{ path: string; content: string }>
+  ): { valid: boolean; errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const placeholderPatterns = [
+      /Welcome to your new application/i,
+      /This is a starter template/i,
+      /Welcome to Your App/i,
+      /Start building your features here/i,
+      /Customize this component to build your application/i
+    ];
+
+    for (const file of files) {
+      if (!/(^|\/)App\.(tsx|jsx)$/.test(file.path)) {
+        continue;
+      }
+
+      if (placeholderPatterns.some(pattern => pattern.test(file.content))) {
+        errors.push(`${file.path} contains a generic fallback App component instead of the requested application`);
+        warnings.push('Regenerate the app component from the user prompt rather than publishing fallback content');
       }
     }
 
@@ -441,31 +491,65 @@ export class ProjectValidator {
   /**
    * Resolve import path
    */
-  private resolveImportPath(fromFile: string, importPath: string): string | null {
+  private resolveImportCandidates(fromFile: string, importPath: string): string[] {
     if (!importPath.startsWith('.') && !importPath.startsWith('/')) {
-      return null; // External import
+      return []; // External import
     }
 
-    const fromDir = fromFile.substring(0, fromFile.lastIndexOf('/')) || '.';
-    
-    if (importPath.startsWith('./')) {
-      return `${fromDir}/${importPath.substring(2)}`;
-    } else if (importPath.startsWith('../')) {
-      const parts = fromDir.split('/').filter(p => p);
-      const importParts = importPath.split('/').filter(p => p);
-      
-      for (const part of importParts) {
-        if (part === '..') {
-          parts.pop();
-        } else {
-          parts.push(part);
-        }
+    const normalizedFromFile = this.normalizePath(fromFile);
+    const fromDir = normalizedFromFile.includes('/')
+      ? normalizedFromFile.substring(0, normalizedFromFile.lastIndexOf('/'))
+      : '';
+    const basePath = importPath.startsWith('/')
+      ? importPath.substring(1)
+      : this.normalizePath(`${fromDir}/${importPath}`);
+    const normalizedBase = this.normalizePath(basePath);
+
+    if (/\.[a-zA-Z0-9]+$/.test(normalizedBase)) {
+      return [normalizedBase];
+    }
+
+    return [
+      normalizedBase,
+      `${normalizedBase}.tsx`,
+      `${normalizedBase}.ts`,
+      `${normalizedBase}.jsx`,
+      `${normalizedBase}.js`,
+      `${normalizedBase}.json`,
+      `${normalizedBase}.css`,
+      `${normalizedBase}/index.tsx`,
+      `${normalizedBase}/index.ts`,
+      `${normalizedBase}/index.jsx`,
+      `${normalizedBase}/index.js`
+    ];
+  }
+
+  private normalizeFiles(files: Array<{ path: string; content: string }>): Array<{ path: string; content: string }> {
+    const normalized = new Map<string, string>();
+
+    for (const file of files) {
+      normalized.set(this.normalizePath(file.path), file.content);
+    }
+
+    return Array.from(normalized.entries()).map(([path, content]) => ({ path, content }));
+  }
+
+  private normalizePath(filePath: string): string {
+    const parts: string[] = [];
+    const normalized = filePath
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .replace(/^\.\//, '');
+
+    for (const part of normalized.split('/')) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        parts.pop();
+      } else {
+        parts.push(part);
       }
-      
-      return parts.join('/');
     }
 
-    return importPath;
+    return parts.join('/');
   }
 }
-

@@ -1894,22 +1894,7 @@ async function handleIncrementalGeneration(
       }
     );
 
-    // Step 3: Create workspace and write files
-    const workspaceId = Date.now().toString();
-    const workspaceDir = path.join(process.cwd(), 'workspaces', workspaceId);
-    await fs.mkdir(workspaceDir, { recursive: true });
-
-    // Write all files
-    await Promise.all(
-      result.allFiles.map(async (file: { path: string; content: string }) => {
-        const filePath = path.join(workspaceDir, file.path);
-        const fileDir = path.dirname(filePath);
-        await fs.mkdir(fileDir, { recursive: true });
-        await fs.writeFile(filePath, file.content);
-      })
-    );
-
-    // Step 4: Final AI-Powered Validation and Fixing (BEFORE users see errors)
+    // Step 3: Final AI-Powered Validation and Fixing (BEFORE users see errors)
     // This ensures users only see working code
     sendSSEUpdate(req, 'STEP_START', {
       agent: 'AI Syntax Fixer',
@@ -1936,9 +1921,14 @@ async function handleIncrementalGeneration(
         remainingWarnings: 0
       });
     } else if (finalFixResult.remainingErrors.length > 0) {
-      // Some errors remain - log but continue (hardcoded fixes may help)
+      // Some errors remain - keep the files visible, but do not mark generation as ready.
       console.warn(`⚠️ ${finalFixResult.remainingErrors.length} compilation errors remain after AI fixing`);
       result.allFiles = finalFixResult.fixedFiles;
+      result.success = false;
+      result.errors = [
+        ...(result.errors || []),
+        ...finalFixResult.remainingErrors.map(error => `${error.file}: ${error.message}`)
+      ];
       
       sendSSEUpdate(req, 'AUTO_FIX_COMPLETE', {
         message: `Fixed most errors. ${finalFixResult.remainingErrors.length} error(s) remain`,
@@ -1947,8 +1937,33 @@ async function handleIncrementalGeneration(
       });
     }
 
-    // Step 5: Error Checking (for reporting to user, not blocking)
+    // Step 4: Create workspace and write the final fixed files
+    const workspaceId = Date.now().toString();
+    const workspaceDir = path.join(process.cwd(), 'workspaces', workspaceId);
+    await fs.mkdir(workspaceDir, { recursive: true });
+
+    await Promise.all(
+      result.allFiles.map(async (file: { path: string; content: string }) => {
+        const safePath = file.path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '');
+        if (safePath.split('/').includes('..')) {
+          throw new Error(`Unsafe generated file path rejected: ${file.path}`);
+        }
+        const filePath = path.join(workspaceDir, safePath);
+        const fileDir = path.dirname(filePath);
+        await fs.mkdir(fileDir, { recursive: true });
+        await fs.writeFile(filePath, file.content);
+      })
+    );
+
+    // Step 5: Error Checking
     const errorCheckResult = await errorChecker.checkErrors(result.allFiles);
+    if (errorCheckResult.errors.length > 0) {
+      result.success = false;
+      result.errors = [
+        ...(result.errors || []),
+        ...errorCheckResult.errors.map(error => `${error.file}: ${error.message}`)
+      ];
+    }
     
     // Log error check results for debugging
     console.log('🔍 Error check results:', {
@@ -1991,7 +2006,7 @@ async function handleIncrementalGeneration(
         duration: p.duration
       })),
       totalDuration: result.totalDuration,
-      errors: errorCheckResult.errors,
+      errors: result.errors || errorCheckResult.errors,
       warnings: errorCheckResult.warnings,
       errorSummary: errorCheckResult.summary
     });

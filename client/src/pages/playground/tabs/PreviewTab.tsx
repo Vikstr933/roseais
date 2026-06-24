@@ -174,6 +174,7 @@ export function PreviewTab({
     if (!response?.files || response.files.length === 0) return;
     if (!isWebContainerProject) return; // Only for WebContainer projects
     if (isServerRunning) return; // Don't remount if server is already running
+    const responseFiles = response.files;
 
     // Auto-mount files when project loads
     const mountFiles = async () => {
@@ -181,7 +182,7 @@ export function PreviewTab({
         console.log('📁 Auto-mounting files to WebContainer...');
         
         // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
-        const fixedFiles = response.files.map(file => {
+        const fixedFiles = responseFiles.map(file => {
           const filename = file.path?.split('/').pop() || '';
           const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
           
@@ -191,36 +192,13 @@ export function PreviewTab({
           return file;
         });
 
-        // Ensure App.tsx exists
+        // Do not create a synthetic App.tsx here. Missing App means generation is incomplete.
         const hasMainTsx = fixedFiles.some(f => f.path === 'src/main.tsx' || f.path.endsWith('/main.tsx'));
         const hasAppTsx = fixedFiles.some(f => f.path === 'src/App.tsx' || f.path.endsWith('/App.tsx'));
         
         if (hasMainTsx && !hasAppTsx) {
-          console.warn('⚠️ App.tsx missing but main.tsx exists - creating fallback App.tsx');
-          fixedFiles.push({
-            path: 'src/App.tsx',
-            content: `import React from 'react';
-
-export default function App() {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Welcome to Your App
-        </h1>
-        <p className="text-lg text-gray-600 mb-6">
-          Your application is ready! Start building your features here.
-        </p>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            💡 <strong>Next steps:</strong> Customize this component to build your application.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}`
-          });
+          console.error('App.tsx missing but main.tsx exists - generation is incomplete');
+          return;
         }
 
         // Boot WebContainer if needed
@@ -292,36 +270,14 @@ export default function App() {
         return file;
       });
 
-      // 🚨 CRITICAL: Ensure App.tsx exists (main.tsx imports it)
+      // Missing App.tsx is a generation failure, not something the preview should hide.
       const hasMainTsx = fixedFiles.some(f => f.path === 'src/main.tsx' || f.path.endsWith('/main.tsx'));
       const hasAppTsx = fixedFiles.some(f => f.path === 'src/App.tsx' || f.path.endsWith('/App.tsx'));
       
       if (hasMainTsx && !hasAppTsx) {
-        console.warn('⚠️ App.tsx missing but main.tsx exists - creating fallback App.tsx');
-        fixedFiles.push({
-          path: 'src/App.tsx',
-          content: `import React from 'react';
-
-export default function App() {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Welcome to Your App
-        </h1>
-        <p className="text-lg text-gray-600 mb-6">
-          Your application is ready! Start building your features here.
-        </p>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            💡 <strong>Next steps:</strong> Customize this component to build your application.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}`
-        });
+        console.error('Cannot start server: App.tsx missing but main.tsx imports it');
+        alert('Cannot start server: App.tsx is missing. The generated app is incomplete and needs to be regenerated or fixed first.');
+        return;
       }
 
       console.log(`📝 Writing ${fixedFiles.length} files to WebContainer...`);
@@ -542,4 +498,3 @@ export default function App() {
     </div>
   );
 }
-

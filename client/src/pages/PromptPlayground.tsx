@@ -1290,6 +1290,23 @@ export default function PromptPlayground() {
       if (agentData.type === 'GENERATION_COMPLETE') {
         setIsLoading(false);
         setAgentsActive(false);
+        if (agentData.success === false) {
+          const details = Array.isArray(agentData.errors) && agentData.errors.length > 0
+            ? `\n\nBlocking issues:\n${agentData.errors.slice(0, 5).map((error: string) => `- ${error}`).join('\n')}`
+            : '';
+
+          setError({
+            message: 'Generation finished, but the app did not pass validation.',
+            suggestion: 'Fix the blocking issues or regenerate before using it publicly.'
+          });
+          addChatMessage({
+            role: 'assistant',
+            content: `Generation finished, but the app is not release-ready yet.${details}`,
+            timestamp: Date.now()
+          });
+          return;
+        }
+
         addChatMessage({
           role: 'assistant',
           content: `✅ Code generation complete! Check the file tree to see your new files.`,
@@ -1515,6 +1532,27 @@ export default function PromptPlayground() {
           case 'GENERATION_COMPLETE':
             setIsLoading(false);
             setAgentsActive(false); // Stop agent animation when fully complete
+            if (data.data.success === false) {
+              const errors = Array.isArray(data.data.errors) ? data.data.errors : [];
+              const details = errors.length > 0
+                ? `\n\nBlocking issues:\n${errors.slice(0, 5).map((error: any) => {
+                    if (typeof error === 'string') return `- ${error}`;
+                    return `- ${error.file || 'Unknown file'}: ${error.message || 'Unknown error'}`;
+                  }).join('\n')}`
+                : '';
+
+              setError({
+                message: 'Generation finished, but the app did not pass validation.',
+                suggestion: 'Fix the blocking issues or regenerate before using it publicly.'
+              });
+              addChatMessage({
+                role: 'assistant',
+                content: `Generation finished, but the app is not release-ready yet.${details}`,
+                timestamp: Date.now()
+              });
+              break;
+            }
+
             addChatMessage({
               role: 'assistant',
               content: `All done! Your app is ready - check out the Preview tab!`,
@@ -1863,6 +1901,13 @@ export default function PromptPlayground() {
       // So we don't add it here to avoid duplicates
 
       setIsLoading(true);
+      const recentChatHistory = chatHistoryRef.current
+        .slice(-10)
+        .filter(message => message.role === 'user' || message.role === 'assistant')
+        .map(message => ({
+          role: message.role,
+          content: message.content
+        }));
 
       // Call Elon playground chat endpoint
       const chatResponse = await apiFetch('/api/playground/chat', {
@@ -1876,6 +1921,7 @@ export default function PromptPlayground() {
           projectId: currentProject?.id || null,
           sessionId: currentSessionId || undefined,
           chatMode: isChatMode, // Tell backend we're in chat mode
+          chatHistory: recentChatHistory,
         }),
       });
 

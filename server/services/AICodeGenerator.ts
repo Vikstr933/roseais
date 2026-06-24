@@ -1321,7 +1321,7 @@ export default function App() {
   );
 }`
       });
-      existingPaths.add('src/App.tsx');
+      existingPaths.add(appTsxPath);
     }
 
     this.logger.info('AICodeGenerator', `Ensured all required files. Total files: ${result.length}`, {
