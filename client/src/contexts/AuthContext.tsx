@@ -13,6 +13,8 @@ interface User {
   email: string;
   displayName: string;
   role?: string; // 'superadmin', 'admin', 'user'
+  tier?: 'free' | 'pro' | 'enterprise';
+  subscriptionStatus?: string;
   createdAt: string;
   lastActive: string;
   preferences: any;

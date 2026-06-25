@@ -15,7 +15,8 @@ interface SubscriptionData {
   subscriptionId: string;
   plan: 'free' | 'pro' | 'enterprise';
   status: string;
-  creditsRemaining: number;
+  creditsRemaining: number | null;
+  creditsUsed?: number;
   periodEnd: string | null;
   planDetails: {
     name: string;
@@ -138,8 +139,11 @@ export function BillingSettings() {
     );
   }
 
-  const creditPercentage = (subscription.creditsRemaining / subscription.planDetails.credits) * 100;
+  const creditsRemaining = subscription.creditsRemaining ?? subscription.planDetails.credits;
+  const creditsUsed = subscription.creditsUsed ?? Math.max(0, subscription.planDetails.credits - creditsRemaining);
+  const creditPercentage = (creditsRemaining / subscription.planDetails.credits) * 100;
   const isLowCredits = creditPercentage < 20;
+  const isFreePlan = subscription.plan === 'free';
 
   const planConfig = {
     free: {
@@ -183,7 +187,11 @@ export function BillingSettings() {
                   {subscription.planDetails.name} Plan
                 </CardTitle>
                 <CardDescription>
-                  {subscription.status === 'active' || subscription.status === 'trialing' ? (
+                  {isFreePlan ? (
+                    <Badge variant="outline" className="mt-1 border-gray-400 text-gray-700">
+                      Free
+                    </Badge>
+                  ) : subscription.status === 'active' || subscription.status === 'trialing' ? (
                     <Badge variant="outline" className="mt-1 border-green-500 text-green-700">
                       Active
                     </Badge>
@@ -207,9 +215,9 @@ export function BillingSettings() {
           {/* Credits Usage */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">AI Generation Credits</span>
+              <span className="text-sm font-medium">App Generations</span>
               <span className={`text-sm font-semibold ${isLowCredits ? 'text-red-600' : 'text-muted-foreground'}`}>
-                {subscription.creditsRemaining} / {subscription.planDetails.credits}
+                {creditsRemaining} / {subscription.planDetails.credits}
               </span>
             </div>
             <Progress
@@ -218,7 +226,7 @@ export function BillingSettings() {
             />
             {isLowCredits && (
               <p className="text-xs text-red-600 mt-2">
-                You're running low on credits! Consider upgrading your plan.
+                You're running low on app generations. Upgrade to keep building.
               </p>
             )}
           </div>
@@ -380,7 +388,7 @@ export function BillingSettings() {
         <CardHeader>
           <CardTitle>Usage Statistics</CardTitle>
           <CardDescription>
-            Track your AI generation usage over time
+            Track your app generation usage over time
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -388,14 +396,14 @@ export function BillingSettings() {
             <div className="p-4 border rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">This Month</p>
               <p className="text-2xl font-bold">
-                {subscription.planDetails.credits - subscription.creditsRemaining}
+                {creditsUsed}
               </p>
-              <p className="text-xs text-muted-foreground">generations used</p>
+              <p className="text-xs text-muted-foreground">app generations used</p>
             </div>
             <div className="p-4 border rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Remaining</p>
-              <p className="text-2xl font-bold">{subscription.creditsRemaining}</p>
-              <p className="text-xs text-muted-foreground">credits left</p>
+              <p className="text-2xl font-bold">{creditsRemaining}</p>
+              <p className="text-xs text-muted-foreground">app generations left</p>
             </div>
             <div className="p-4 border rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Usage Rate</p>

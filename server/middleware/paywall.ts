@@ -154,7 +154,7 @@ export function enforceFreeGenerationLimit(
       return sendPaywallResponse(
         res,
         'generation_limit',
-        `Free accounts include ${limit} AI generations per month. Upgrade to Pro to keep building.`
+        `Free accounts include ${limit} app generations per month. Upgrade to Pro to keep building.`
       );
     } catch (error) {
       console.error('Failed to check free generation limit:', error);

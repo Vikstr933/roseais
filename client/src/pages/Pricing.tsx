@@ -24,12 +24,12 @@ const plans: Plan[] = [
   {
     name: 'Free',
     price: 0,
-    credits: 10,
+    credits: 3,
     features: [
-      '10 AI generations per month',
-      'Basic components',
+      '3 free app generations per month',
+      'Frontend web apps',
       'Community support',
-      'Public projects only'
+      'Preview before upgrading'
     ],
     icon: Sparkles,
     color: 'from-gray-400 to-gray-600'
@@ -40,12 +40,12 @@ const plans: Plan[] = [
     priceId: 'price_pro_monthly', // Replace with actual Stripe Price ID
     credits: 500,
     features: [
-      '500 AI generations per month',
-      'Advanced components',
+      '500 app generations per month',
+      'Fullstack apps with backend, auth, databases, and uploads',
       'Priority support',
-      'Private projects',
-      'Custom domains',
-      'Team collaboration'
+      'Publish to community',
+      'Export source code',
+      'Deploy to production'
     ],
     popular: true,
     icon: Zap,
@@ -57,7 +57,7 @@ const plans: Plan[] = [
     priceId: 'price_enterprise_monthly', // Replace with actual Stripe Price ID
     credits: 2000,
     features: [
-      '2000 AI generations per month',
+      '2000 app generations per month',
       'All Pro features',
       'Dedicated support',
       'Custom AI training',
@@ -194,7 +194,7 @@ export default function Pricing() {
                     <div className="flex items-center gap-2 text-sm">
                       <Zap className="h-4 w-4 text-yellow-500" />
                       <span className="font-semibold">
-                        {plan.credits} AI generations/month
+                        {plan.credits} app generations/month
                       </span>
                     </div>
 

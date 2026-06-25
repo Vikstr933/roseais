@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { Eye, Code, Brain, MessageSquare, Settings, Laptop, User, Users, Plus, RefreshCw, X, PowerOff, Loader2, Folder, LayoutGrid, Smartphone } from "lucide-react";
+import { Eye, Code, Brain, MessageSquare, Settings, Laptop, User, Users, Plus, RefreshCw, X, PowerOff, Loader2, Folder, LayoutGrid, Smartphone, Crown } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,6 +108,7 @@ export default function PromptPlayground() {
   const [match, params] = useRoute('/playground/:projectId');
   const [, setLocation] = useLocation();
   const hasProjectRoute = Boolean(match && params?.projectId);
+  const isFreeUser = (user?.tier || 'free') === 'free';
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<'desktop' | 'preview'>('desktop');
   const [editorTheme, setEditorTheme] = useState<'vs-dark' | 'light'>('vs-dark');
@@ -280,6 +281,16 @@ export default function PromptPlayground() {
       ));
     },
   });
+
+  const handleCreateProject = useCallback(
+    async (projectData: { name: string; description: string; projectType?: string }) => {
+      const project = await createProjectHook(projectData);
+      if (project) {
+        setShowCreateProjectDialog(false);
+      }
+    },
+    [createProjectHook]
+  );
 
   // Project settings are now handled by ProjectSettingsDialog
 
@@ -1126,7 +1137,7 @@ export default function PromptPlayground() {
     <CreateProjectDialog
       open={showCreateProjectDialog}
       onOpenChange={setShowCreateProjectDialog}
-      onCreateProject={createProjectHook}
+      onCreateProject={handleCreateProject}
       isLoading={isCreating}
     />
   );
@@ -2912,10 +2923,18 @@ export default function PromptPlayground() {
                 <Brain className="h-5 w-5 text-primary" />
                 <span className="font-bold">Elon</span>
               </div>
-              <Button size="sm" onClick={() => setShowCreateProjectDialog(true)}>
-                <Plus className="h-4 w-4 mr-1" />
-                New
-              </Button>
+              <div className="flex items-center gap-2">
+                {isFreeUser && (
+                  <Button size="sm" variant="outline" onClick={() => setLocation('/pricing')}>
+                    <Crown className="h-4 w-4 mr-1" />
+                    Upgrade
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => setShowCreateProjectDialog(true)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  New
+                </Button>
+              </div>
             </div>
             
             {/* Project List */}
@@ -2968,6 +2987,16 @@ export default function PromptPlayground() {
               <Badge variant="secondary" className="text-[10px]">Desktop</Badge>
             </div>
             <div className="flex items-center gap-2">
+              {isFreeUser && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLocation('/pricing')}
+                >
+                  <Crown className="h-4 w-4 mr-1.5" />
+                  Upgrade
+                </Button>
+              )}
               <Button 
                 variant="outline" 
                 size="sm"
@@ -3099,6 +3128,18 @@ export default function PromptPlayground() {
 
         {/* Action Buttons - Compact on mobile */}
         <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+          {isFreeUser && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation('/pricing')}
+              className="hidden sm:flex items-center gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+            >
+              <Crown className="h-4 w-4" />
+              Upgrade
+            </Button>
+          )}
+
           {/* Project Selector */}
           {projects.length > 0 && (
             <Select

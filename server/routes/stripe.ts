@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { db } from '../../db/index.js';
-import { users } from '../../db/schema-pg.js';
-import { eq } from 'drizzle-orm';
+import { userUsage, users } from '../../db/schema-pg.js';
+import { and, eq, gte, sum } from 'drizzle-orm';
 import { Logger } from '../utils/Logger';
 
 const router = Router();
@@ -20,12 +20,12 @@ const PLANS = {
   free: {
     name: 'Free',
     price: 0,
-    credits: 10,
+    credits: 3,
     features: [
-      '10 AI generations per month',
-      'Basic components',
+      '3 free app generations per month',
+      'Frontend web apps',
       'Community support',
-      'Public projects only'
+      'Preview before upgrading'
     ]
   },
   pro: {
@@ -34,12 +34,12 @@ const PLANS = {
     price: 29,
     credits: 500,
     features: [
-      '500 AI generations per month',
-      'Advanced components',
+      '500 app generations per month',
+      'Fullstack apps with backend, auth, databases, and uploads',
       'Priority support',
-      'Private projects',
-      'Custom domains',
-      'Team collaboration'
+      'Publish to community',
+      'Export source code',
+      'Deploy to production'
     ]
   },
   enterprise: {
@@ -48,7 +48,7 @@ const PLANS = {
     price: 99,
     credits: 2000,
     features: [
-      '2000 AI generations per month',
+      '2000 app generations per month',
       'All Pro features',
       'Dedicated support',
       'Custom AI training',
@@ -210,13 +210,24 @@ router.get('/subscription/:userId', async (req: Request, res: Response) => {
     const userTier = (user.tier as string) || 'free';
     const planKey = (['free', 'pro', 'enterprise'].includes(userTier) ? userTier : 'free') as keyof typeof PLANS;
     const plan = PLANS[planKey] || PLANS.free;
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthStartStr = monthStart.toISOString().split('T')[0];
+    const [usage] = await db
+      .select({ used: sum(userUsage.aiRequests) })
+      .from(userUsage)
+      .where(and(eq(userUsage.userId, userId), gte(userUsage.date, monthStartStr)));
+    const usedThisMonth = Number(usage?.used || 0);
+    const creditsRemaining = Math.max(0, plan.credits - usedThisMonth);
 
     res.json({
       customerId: user.stripeCustomerId || null,
       subscriptionId: user.subscriptionId || null,
-      plan: userTier,
-      status: user.subscriptionStatus || 'inactive',
-      creditsRemaining: null, // Not stored in users table
+      plan: planKey,
+      status: user.subscriptionStatus || (planKey === 'free' ? 'free' : 'inactive'),
+      creditsRemaining,
+      creditsUsed: usedThisMonth,
       periodEnd: null, // Not stored in users table
       planDetails: plan
     });

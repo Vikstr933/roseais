@@ -11,7 +11,7 @@ import { useLocation } from 'wouter';
 interface SubscriptionData {
   plan: 'free' | 'pro' | 'enterprise';
   status: string;
-  creditsRemaining: number;
+  creditsRemaining: number | null;
   periodEnd: string | null;
   planDetails: {
     name: string;
@@ -60,7 +60,8 @@ export function SubscriptionStatus() {
     return null;
   }
 
-  const creditPercentage = (subscription.creditsRemaining / subscription.planDetails.credits) * 100;
+  const creditsRemaining = subscription.creditsRemaining ?? subscription.planDetails.credits;
+  const creditPercentage = (creditsRemaining / subscription.planDetails.credits) * 100;
   const isLowCredits = creditPercentage < 20;
 
   const planConfig = {
@@ -116,9 +117,9 @@ export function SubscriptionStatus() {
         {/* Credits Display */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Generation Credits</span>
+            <span className="text-sm font-medium">App Generations</span>
             <span className={`text-sm font-semibold ${isLowCredits ? 'text-red-600' : 'text-muted-foreground'}`}>
-              {subscription.creditsRemaining} / {subscription.planDetails.credits}
+              {creditsRemaining} / {subscription.planDetails.credits}
             </span>
           </div>
           <Progress
@@ -127,7 +128,7 @@ export function SubscriptionStatus() {
           />
           {isLowCredits && (
             <p className="text-xs text-red-600 mt-1">
-              Running low on credits! Consider upgrading.
+              Running low on app generations. Consider upgrading.
             </p>
           )}
         </div>
