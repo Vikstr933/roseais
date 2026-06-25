@@ -184,8 +184,17 @@ export default function PromptPlayground() {
   const livePreviewUrlRef = useRef<string | null>(null);
   const activeDeploySignatureRef = useRef<string | null>(null);
   const completedDeploySignatureRef = useRef<string | null>(null);
-  const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean } | null>(null);
-  const [projects, setProjects] = useState<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean }>>([]);
+  type PlaygroundProjectSummary = {
+    id: number;
+    name: string;
+    description?: string;
+    workspaceType?: 'personal' | 'team';
+    isPublic?: boolean;
+    screenshotUrl?: string | null;
+    thumbnailUrl?: string | null;
+  };
+  const [currentProject, setCurrentProject] = useState<PlaygroundProjectSummary | null>(null);
+  const [projects, setProjects] = useState<PlaygroundProjectSummary[]>([]);
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
   const [showStartFreshDialog, setShowStartFreshDialog] = useState(false);
   const [isResettingProject, setIsResettingProject] = useState(false);
@@ -719,7 +728,7 @@ export default function PromptPlayground() {
   // This useEffect will be moved after generateMutation is defined to avoid temporal dead zone
 
   // Load user projects list - MUST be before useEffect that uses it for optimistic updates
-  const { data: userProjects = [], isLoading: isLoadingProjects, refetch: refetchProjects } = useQuery<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean }>>({
+  const { data: userProjects = [], isLoading: isLoadingProjects, refetch: refetchProjects } = useQuery<PlaygroundProjectSummary[]>({
     queryKey: ['/api/workspaces'],
     queryFn: async () => {
       if (!sessionToken) return [];
@@ -811,7 +820,10 @@ export default function PromptPlayground() {
           id: cachedProject.id,
           name: cachedProject.name,
           description: cachedProject.description,
-          workspaceType: cachedProject.workspaceType || 'personal'
+          workspaceType: cachedProject.workspaceType || 'personal',
+          isPublic: cachedProject.isPublic,
+          screenshotUrl: cachedProject.screenshotUrl,
+          thumbnailUrl: cachedProject.thumbnailUrl,
         });
       }
 
@@ -900,7 +912,10 @@ export default function PromptPlayground() {
                 id: project.id,
                 name: project.name,
                 description: project.description,
-                workspaceType: project.workspaceType || prev?.workspaceType || 'personal'
+                workspaceType: project.workspaceType || prev?.workspaceType || 'personal',
+                isPublic: project.isPublic,
+                screenshotUrl: project.screenshotUrl,
+                thumbnailUrl: project.thumbnailUrl,
               };
             });
 
@@ -1080,14 +1095,14 @@ export default function PromptPlayground() {
     const matchingProject = projects.find(project => project.id === projectId);
     if (matchingProject) {
       setCurrentProject(prev => {
-        // Only update if the ID actually changed to prevent unnecessary re-renders
-        if (prev?.id === matchingProject.id) return prev;
         return {
           id: matchingProject.id,
           name: matchingProject.name,
           description: matchingProject.description,
           workspaceType: matchingProject.workspaceType || prev?.workspaceType || 'personal',
           isPublic: matchingProject.isPublic,
+          screenshotUrl: matchingProject.screenshotUrl,
+          thumbnailUrl: matchingProject.thumbnailUrl,
         };
       });
     }
@@ -3613,8 +3628,18 @@ export default function PromptPlayground() {
           projectName={currentProject.name}
           projectDescription={currentProject.description}
           isPublic={currentProject.isPublic}
-          onProjectUpdate={() => {
-            // Refresh project data
+          previewUrl={livePreviewUrl}
+          onProjectUpdate={(updatedProject) => {
+            if (updatedProject?.id === currentProject.id) {
+              setCurrentProject(prev => prev ? {
+                ...prev,
+                name: updatedProject.name || prev.name,
+                description: updatedProject.description ?? prev.description,
+                isPublic: updatedProject.isPublic ?? prev.isPublic,
+                screenshotUrl: updatedProject.screenshotUrl ?? prev.screenshotUrl,
+                thumbnailUrl: updatedProject.thumbnailUrl ?? prev.thumbnailUrl,
+              } : prev);
+            }
             refetchProjects();
           }}
         />

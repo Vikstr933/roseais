@@ -3,7 +3,6 @@ import { db } from '../../db';
 import { workspaces, users, projectFiles, projectRemixes, projectVotes, projectViews } from '../../db/schema-pg';
 import { sql, eq, and, desc, count, or, ilike, inArray } from 'drizzle-orm';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
-import { screenshotService } from '../services/ScreenshotService';
 
 const router = Router();
 
@@ -35,6 +34,7 @@ function ensureAbsoluteUrl(url: string | null | undefined): string | null {
  */
 router.get('/', optionalAuth, async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store');
     const { 
       featured, 
       category, 
@@ -214,6 +214,7 @@ router.get('/:id/files', optionalAuth, async (req, res) => {
  */
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store');
     const projectId = Number(req.params.id);
 
     const project = await db
@@ -553,4 +554,3 @@ router.get('/:id/vote-status', optionalAuth, async (req, res) => {
 });
 
 export default router;
-

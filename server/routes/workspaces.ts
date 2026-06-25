@@ -8,14 +8,22 @@ import { authenticateUser, optionalAuth } from '../middleware/auth';
 import { agentEventEmitter } from '../index';
 import { performanceService } from '../services/PerformanceService';
 
+function parseOptionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return Boolean(value);
+}
+
 // Helper to invalidate workspace list cache
 // This clears all cached workspace list responses
 function invalidateWorkspaceCache(userId?: string) {
   const cache = performanceService.getCache();
   // Delete all cache entries containing /api/workspaces
   // This handles different query params and user contexts
-  const deleted = cache.deletePattern('/api/workspaces');
-  console.log(`[Cache] Invalidated ${deleted} workspace cache entries`);
+  const deletedWorkspaces = cache.deletePattern('/api/workspaces');
+  const deletedPublicProjects = cache.deletePattern('/api/public-projects');
+  console.log(`[Cache] Invalidated ${deletedWorkspaces} workspace cache entries and ${deletedPublicProjects} public project cache entries`);
 }
 
 const router = Router();
@@ -384,7 +392,7 @@ router.put('/:id', authenticateUser, async (req, res) => {
   try {
     const workspaceId = parseInt(req.params.id);
     const userId = req.user!.id;
-    const { name, description, agentConfig, testCases, collaborators, status } =
+    const { name, description, agentConfig, testCases, collaborators, status, isPublic } =
       req.body;
 
     // First verify workspace exists and user owns it
@@ -411,12 +419,17 @@ router.put('/:id', authenticateUser, async (req, res) => {
       updatedAt: new Date(),
     };
 
-    if (name) updateData.name = name;
-    if (description) updateData.description = description;
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
     if (agentConfig) updateData.agentConfig = JSON.stringify(agentConfig);
     if (testCases) updateData.testCases = JSON.stringify(testCases);
     if (collaborators) updateData.collaborators = JSON.stringify(collaborators);
     if (status) updateData.status = status;
+    const parsedIsPublic = parseOptionalBoolean(isPublic);
+    if (parsedIsPublic !== undefined) {
+      updateData.isPublic = parsedIsPublic;
+      console.log(`[PUT /workspaces/${workspaceId}] Updating isPublic to: ${parsedIsPublic}`);
+    }
 
     const updatedWorkspace = await db
       .update(workspaces)
@@ -1191,9 +1204,10 @@ router.patch('/:id', authenticateUser, async (req, res) => {
 
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (isPublic !== undefined) {
-      updateData.isPublic = isPublic;
-      console.log(`[PATCH /workspaces/${workspaceId}] Updating isPublic to: ${isPublic}`);
+    const parsedIsPublic = parseOptionalBoolean(isPublic);
+    if (parsedIsPublic !== undefined) {
+      updateData.isPublic = parsedIsPublic;
+      console.log(`[PATCH /workspaces/${workspaceId}] Updating isPublic to: ${parsedIsPublic}`);
     }
 
     // Update workspace
@@ -1207,6 +1221,7 @@ router.patch('/:id', authenticateUser, async (req, res) => {
       isPublic: updatedWorkspace?.isPublic,
       name: updatedWorkspace?.name,
     });
+    invalidateWorkspaceCache(req.user!.id);
     res.json(updatedWorkspace);
   } catch (error) {
     console.error('Error updating workspace settings:', error);

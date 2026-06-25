@@ -38,7 +38,17 @@ interface ProjectSettingsProps {
   projectName: string;
   projectDescription?: string;
   isPublic?: boolean;
-  onProjectUpdate?: () => void;
+  previewUrl?: string | null;
+  onProjectUpdate?: (project?: UpdatedProject) => void;
+}
+
+interface UpdatedProject {
+  id: number;
+  name?: string;
+  description?: string;
+  isPublic?: boolean;
+  screenshotUrl?: string | null;
+  thumbnailUrl?: string | null;
 }
 
 interface ProjectAPIKey {
@@ -66,6 +76,7 @@ export function ProjectSettingsDialog({
   projectName,
   projectDescription,
   isPublic,
+  previewUrl,
   onProjectUpdate
 }: ProjectSettingsProps) {
   const { sessionToken, isAdmin } = useAuth();
@@ -99,7 +110,33 @@ export function ProjectSettingsDialog({
       setVisibility(isPublic || false);
       fetchProjectData();
     }
-  }, [open, projectId]);
+  }, [open, projectId, projectName, projectDescription, isPublic]);
+
+  const captureCommunityScreenshot = async () => {
+    try {
+      const body: { force: boolean; url?: string } = { force: false };
+      if (previewUrl && /^https?:\/\//i.test(previewUrl)) {
+        body.url = previewUrl;
+        body.force = true;
+      }
+
+      const captureRes = await apiFetch(`/api/screenshots/${projectId}/capture`, {
+        method: 'POST',
+        headers: getAuthHeaders(sessionToken),
+        body: JSON.stringify(body)
+      });
+
+      if (!captureRes.ok) {
+        console.warn('[ProjectSettingsDialog] Screenshot capture skipped:', captureRes.status);
+        return null;
+      }
+
+      return captureRes.json();
+    } catch (error) {
+      console.warn('[ProjectSettingsDialog] Screenshot capture failed:', error);
+      return null;
+    }
+  };
 
   const fetchProjectData = async () => {
     try {
@@ -138,7 +175,7 @@ export function ProjectSettingsDialog({
     setLoading(true);
     try {
       const res = await apiFetch(`/api/workspaces/${projectId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: getAuthHeaders(sessionToken),
         body: JSON.stringify({
           name,
@@ -148,11 +185,33 @@ export function ProjectSettingsDialog({
       });
 
       if (res.ok) {
+        const updatedProject = await res.json();
+        let projectForUpdate = updatedProject;
+        let screenshotCaptured = false;
+
+        if (visibility) {
+          const screenshot = await captureCommunityScreenshot();
+          if (screenshot?.success) {
+            screenshotCaptured = true;
+            projectForUpdate = {
+              ...updatedProject,
+              screenshotUrl: screenshot.screenshotUrl,
+              thumbnailUrl: screenshot.thumbnailUrl
+            };
+          }
+        }
+
+        setName(projectForUpdate.name || name);
+        setDescription(projectForUpdate.description ?? description);
+        setVisibility(projectForUpdate.isPublic ?? visibility);
+        onProjectUpdate?.(projectForUpdate);
+
         toast({
           title: 'Success',
-          description: 'Project settings updated'
+          description: screenshotCaptured
+            ? 'Project settings updated and community preview captured'
+            : 'Project settings updated'
         });
-        onProjectUpdate?.();
       } else {
         throw new Error('Failed to update project');
       }
@@ -611,4 +670,3 @@ export function ProjectSettingsDialog({
     </>
   );
 }
-

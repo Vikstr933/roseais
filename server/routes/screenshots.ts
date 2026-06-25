@@ -5,6 +5,8 @@
  */
 
 import { Router } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import { authenticateUser } from '../middleware/auth';
 import { screenshotService } from '../services/ScreenshotService';
 import { db } from '../../db';
@@ -162,4 +164,3 @@ router.get('/:filename', async (req, res) => {
 });
 
 export default router;
-

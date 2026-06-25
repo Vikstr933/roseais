@@ -372,6 +372,11 @@ export default function PublicProjects() {
               const hasValidThumbnail = project.thumbnailUrl && 
                 (project.thumbnailUrl.startsWith('http://') || project.thumbnailUrl.startsWith('https://')) &&
                 project.thumbnailUrl.length > 10;
+              const previewImageUrl = hasValidThumbnail
+                ? project.thumbnailUrl
+                : hasValidScreenshot
+                  ? project.screenshotUrl
+                  : null;
               
               return (
                 <motion.div
@@ -387,11 +392,11 @@ export default function PublicProjects() {
                   >
                     {/* Screenshot/Thumbnail */}
                     <div className={`aspect-[4/3] relative overflow-hidden bg-muted ${
-                      !hasValidScreenshot && !hasValidThumbnail ? `bg-gradient-to-br ${categoryGradient}` : ''
+                      !previewImageUrl ? `bg-gradient-to-br ${categoryGradient}` : ''
                     }`}>
-                      {(hasValidScreenshot || hasValidThumbnail) ? (
+                      {previewImageUrl ? (
                         <img
-                          src={project.screenshotUrl || project.thumbnailUrl || ''}
+                          src={previewImageUrl}
                           alt={project.name}
                           className="w-full h-full object-cover"
                           loading="lazy"
