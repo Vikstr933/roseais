@@ -26,6 +26,15 @@ class WebContainerServiceClass {
   private bootedInstance: WebContainer | null = null;
   private nextPort = 3000;
 
+  private isLocalPreviewUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+    } catch {
+      return url.includes('localhost') || url.includes('127.0.0.1');
+    }
+  }
+
   /**
    * Check if WebContainer is supported in this browser
    */
@@ -203,16 +212,27 @@ class WebContainerServiceClass {
     const devProcess = await webcontainer.spawn('npm', ['run', 'dev', '--', '--port', port.toString(), '--host']);
 
     return new Promise((resolve, reject) => {
+      let resolved = false;
+
+      webcontainer.on('server-ready', (serverPort: number, url: string) => {
+        if (!resolved && serverPort === port && !this.isLocalPreviewUrl(url)) {
+          resolved = true;
+          resolve(url);
+        }
+      });
+
       devProcess.output.pipeTo(
         new WritableStream({
           write(data) {
             const output = typeof data === 'string' ? data : new TextDecoder().decode(data);
             console.log('🚀 Dev server:', output);
 
-            // Check if server is ready
-            if (output.includes('Local:') || output.includes('localhost')) {
-              const url = `http://localhost:${port}`;
-              resolve(url);
+            if (!resolved) {
+              const remoteUrl = output.match(/https?:\/\/[^\s]+webcontainer-api\.io[^\s]*/)?.[0];
+              if (remoteUrl) {
+                resolved = true;
+                resolve(remoteUrl);
+              }
             }
           },
         })
@@ -220,7 +240,9 @@ class WebContainerServiceClass {
 
       // Timeout after 30 seconds
       setTimeout(() => {
-        reject(new Error('Dev server startup timeout'));
+        if (!resolved) {
+          reject(new Error('Dev server started, but WebContainer did not provide a browser preview URL.'));
+        }
       }, 30000);
     });
   }
@@ -343,7 +365,7 @@ class WebContainerServiceClass {
 
       // Listen for WebContainer's server-ready event (gives us the actual URL)
       webcontainer.on('server-ready', (serverPort: number, url: string) => {
-        if (!resolved && serverPort === port) {
+        if (!resolved && serverPort === port && !this.isLocalPreviewUrl(url)) {
           resolved = true;
           this.devServerUrl = url;
           console.log('✅ WebContainer server ready:', url);
@@ -360,19 +382,12 @@ class WebContainerServiceClass {
             onProgress?.(message);
             console.log('🚀 Dev server:', message);
 
-            // Check if server is ready (fallback if server-ready event doesn't fire)
             if (!resolved) {
-              const urlMatch = message.match(/Local:\s+(https?:\/\/[^\s]+)/) || 
-                             message.match(/localhost:(\d+)/);
-              if (urlMatch) {
-                // For WebContainer, localhost URLs work in browser but not for backend analysis
-                // Use the matched URL or construct localhost URL
-                const matchedUrl = urlMatch[1] || `http://localhost:${port}`;
-                service.devServerUrl = matchedUrl;
-                if (!resolved) {
-                  resolved = true;
-                  resolve(matchedUrl);
-                }
+              const remoteUrl = message.match(/https?:\/\/[^\s]+webcontainer-api\.io[^\s]*/)?.[0];
+              if (remoteUrl) {
+                service.devServerUrl = remoteUrl;
+                resolved = true;
+                resolve(remoteUrl);
               }
             }
           },
@@ -382,10 +397,8 @@ class WebContainerServiceClass {
       // Timeout after 30 seconds
       setTimeout(() => {
         if (!resolved) {
-          // Fallback URL - localhost works in browser iframe
-          this.devServerUrl = `http://localhost:${port}`;
           resolved = true;
-          resolve(this.devServerUrl);
+          reject(new Error('Dev server started, but WebContainer did not provide a browser preview URL.'));
         }
       }, 30000);
     });
@@ -435,4 +448,3 @@ export const webContainerService = new WebContainerServiceClass();
 
 // Export type for convenience
 export type WebContainerService = WebContainerServiceClass;
-

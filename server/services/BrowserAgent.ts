@@ -174,7 +174,7 @@ export class BrowserAgent {
       ];
 
       // Use first viewport for main analysis
-      const mainViewport = viewports[0];
+      const mainViewport = viewports[0] ?? { width: 1920, height: 1080, name: 'desktop' };
       await page.setViewportSize({ width: mainViewport.width, height: mainViewport.height });
 
       // Navigate and wait for page to load
@@ -191,8 +191,8 @@ export class BrowserAgent {
             const body = document.body;
             if (!body) return false;
             // Check if body has visible content (not just whitespace)
-            const hasContent = body.children.length > 0 || 
-                             body.textContent?.trim().length > 0 ||
+            const hasContent = body.children.length > 0 ||
+                             (body.textContent?.trim().length ?? 0) > 0 ||
                              body.innerHTML.trim().length > 100; // At least some HTML
             return hasContent;
           },
@@ -247,8 +247,8 @@ export class BrowserAgent {
           const body = document.body;
           if (!body) return false;
           // Check for visible content
-          const hasVisibleContent = body.children.length > 0 || 
-                                   body.textContent?.trim().length > 0 ||
+          const hasVisibleContent = body.children.length > 0 ||
+                                   (body.textContent?.trim().length ?? 0) > 0 ||
                                    window.getComputedStyle(body).backgroundColor !== 'rgb(255, 255, 255)'; // Not just white background
           return hasVisibleContent;
         });
@@ -365,9 +365,22 @@ export class BrowserAgent {
     const overlappingElements = await page.evaluate(() => {
       const overlaps: Array<{ element1: string; element2: string }> = [];
       const elements = Array.from(document.querySelectorAll('*'));
+      const ignoredTags = new Set(['html', 'body', 'head', 'script', 'style', 'link', 'meta', 'iframe']);
       
       for (let i = 0; i < elements.length; i++) {
         for (let j = i + 1; j < elements.length; j++) {
+          const firstTag = elements[i].tagName.toLowerCase();
+          const secondTag = elements[j].tagName.toLowerCase();
+
+          if (ignoredTags.has(firstTag) || ignoredTags.has(secondTag)) {
+            continue;
+          }
+
+          // Parent/child boxes overlap by definition; only sibling overlap is useful.
+          if (elements[i].contains(elements[j]) || elements[j].contains(elements[i])) {
+            continue;
+          }
+
           const rect1 = elements[i].getBoundingClientRect();
           const rect2 = elements[j].getBoundingClientRect();
           
@@ -579,9 +592,6 @@ export class BrowserAgent {
     violations: AccessibilityViolation[];
   }> {
     try {
-      // Use Playwright's accessibility snapshot
-      const snapshot = await page.accessibility.snapshot();
-      
       // Basic checks
       const violations: AccessibilityViolation[] = [];
 
@@ -806,4 +816,3 @@ Respond in JSON format:
     }
   }
 }
-

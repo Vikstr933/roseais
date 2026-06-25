@@ -44,6 +44,24 @@ export interface GenerateResponse {
   orchestrationPlan: {
     subtasks: OrchestrationStep[];
   } | null;
+  success?: boolean;
+  errors?: Array<string | { file?: string; message?: string }>;
+  warnings?: Array<string | { file?: string; message?: string }>;
+  errorSummary?: {
+    total: number;
+    errors: number;
+    warnings: number;
+    info: number;
+    fixable: number;
+  };
+  metadata?: {
+    success?: boolean;
+    workspaceId?: string;
+    generationMode?: string;
+    phases?: number;
+    totalDuration?: number;
+    filesGenerated?: number;
+  };
 }
 
 /**

@@ -2034,11 +2034,15 @@ async function handleIncrementalGeneration(
 
     // 🔥 DON'T CALL res.json() for SSE - Send final event and end the stream
     sendSSEUpdate(req, 'FINAL_RESPONSE', {
+      success: result.success,
       response: {
         type: 'component',
         text: componentText,
         files: responseFiles
       },
+      errors: result.errors || errorCheckResult.errors,
+      warnings: errorCheckResult.warnings,
+      errorSummary: errorCheckResult.summary,
       metadata: {
         workspaceId,
         generationMode: 'incremental',

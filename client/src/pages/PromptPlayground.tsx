@@ -181,6 +181,9 @@ export default function PromptPlayground() {
   const [relevanceData, setRelevanceData] = useState<any[]>([]);
   const [currentComponentName, setCurrentComponentName] = useState<string>('');
   const [livePreviewUrl, setLivePreviewUrl] = useState<string | null>(null);
+  const livePreviewUrlRef = useRef<string | null>(null);
+  const activeDeploySignatureRef = useRef<string | null>(null);
+  const completedDeploySignatureRef = useRef<string | null>(null);
   const [currentProject, setCurrentProject] = useState<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean } | null>(null);
   const [projects, setProjects] = useState<Array<{ id: number; name: string; description?: string; workspaceType?: 'personal' | 'team'; isPublic?: boolean }>>([]);
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
@@ -206,6 +209,39 @@ export default function PromptPlayground() {
   } | null>(null);
   const [showProjectAPIKeyDialog, setShowProjectAPIKeyDialog] = useState(false);
   // Incremental generation is ALWAYS enabled - it's the standard way to generate code
+
+  useEffect(() => {
+    livePreviewUrlRef.current = livePreviewUrl;
+  }, [livePreviewUrl]);
+
+  const isLocalPreviewUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url);
+      return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+    } catch {
+      return url.includes('localhost') || url.includes('127.0.0.1');
+    }
+  };
+
+  const createDeploymentSignature = (
+    files: Array<{ path: string; content: string }>,
+    componentName: string
+  ): string => {
+    const fileSignature = files
+      .map(file => `${file.path}:${file.content.length}`)
+      .sort()
+      .join('|');
+
+    return `${componentName}:${files.length}:${fileSignature}`;
+  };
+
+  const isGenerationReadyForPreview = (result: GenerateResponse | any): boolean => {
+    return (
+      result?.success !== false &&
+      result?.metadata?.success !== false &&
+      (result?.errorSummary?.errors ?? 0) === 0
+    );
+  };
 
   // Project management hook
   const {
@@ -1104,23 +1140,24 @@ export default function PromptPlayground() {
           const localUrlMatch = line.match(/(?:Local:\s+|started at\s+)(https?:\/\/[^\s]+)/i);
           if (localUrlMatch && localUrlMatch[1]) {
             const url = localUrlMatch[1];
+            if (isLocalPreviewUrl(url)) {
+              return;
+            }
             // Only auto-switch to preview if user is still on desktop tab
             // This allows them to see the generation animation first
-            setTimeout(() => {
-              setLivePreviewUrl(url);
-              // Auto-switch to preview only if still on desktop (to see the result)
-              setActiveTab((currentTab) => {
-                if (currentTab === 'desktop') {
-                  addChatMessage({
-                    role: 'assistant',
-                    content: `Dev server ready at ${url}. Switching to Preview…`,
-                    timestamp: Date.now()
-                  });
-                  return 'preview';
-                }
-                return currentTab; // Keep current tab if user manually switched
-              });
-            }, 100);
+            setLivePreviewUrl(url);
+            // Auto-switch to preview only if still on desktop (to see the result)
+            setActiveTab((currentTab) => {
+              if (currentTab === 'desktop') {
+                addChatMessage({
+                  role: 'assistant',
+                  content: `Preview is ready in the Preview tab.`,
+                  timestamp: Date.now()
+                });
+                return 'preview';
+              }
+              return currentTab; // Keep current tab if user manually switched
+            });
           }
         }
       } catch {
@@ -1145,17 +1182,18 @@ export default function PromptPlayground() {
                   const localUrlMatch = line.match(/(?:Local:\s+|started at\s+)(https?:\/\/[^\s]+)/i);
                   if (localUrlMatch && localUrlMatch[1]) {
                     const url = localUrlMatch[1];
+                    if (isLocalPreviewUrl(url)) {
+                      return;
+                    }
                     // Only auto-switch to preview if user is still on desktop tab
-                    setTimeout(() => {
-                      setLivePreviewUrl(url);
-                      setActiveTab((currentTab) => {
-                        if (currentTab === 'desktop') {
-                          addChatMessage({ role: 'assistant', content: `Dev server ready at ${url}. Switching to Preview…`, timestamp: Date.now() });
-                          return 'preview';
-                        }
-                        return currentTab; // Keep current tab if user manually switched
-                      });
-                    }, 100);
+                    setLivePreviewUrl(url);
+                    setActiveTab((currentTab) => {
+                      if (currentTab === 'desktop') {
+                        addChatMessage({ role: 'assistant', content: `Preview is ready in the Preview tab.`, timestamp: Date.now() });
+                        return 'preview';
+                      }
+                      return currentTab; // Keep current tab if user manually switched
+                    });
                   }
                 }
               } catch {}
@@ -1624,11 +1662,6 @@ export default function PromptPlayground() {
       // WebContainer runs in browser, so localhost URLs are only accessible from the browser
       if (url.includes('localhost') || url.includes('127.0.0.1')) {
         console.log('⏭️ Skipping browser analysis for localhost URL (backend cannot access):', url);
-        addChatMessage({
-          role: 'assistant',
-          content: 'ℹ️ Browser analysis skipped - localhost URLs are only accessible from your browser. The preview is working correctly!',
-          timestamp: Date.now()
-        });
         return;
       }
 
@@ -1677,14 +1710,34 @@ export default function PromptPlayground() {
   // The early return for desktop view is now at the end, after all hooks
 
   // 🚀 Deploy to WebContainer or fallback to server-side
-  async function deployToRuntime(files: Array<{ path: string; content: string }>, componentName: string) {
+  async function deployToRuntime(
+    files: Array<{ path: string; content: string }>,
+    componentName: string,
+    options: { force?: boolean } = {}
+  ) {
+    const deploySignature = createDeploymentSignature(files, componentName);
+
+    if (!options.force) {
+      if (activeDeploySignatureRef.current === deploySignature) {
+        console.log('Deployment already in progress for this file set, skipping duplicate request');
+        return;
+      }
+
+      if (completedDeploySignatureRef.current === deploySignature && livePreviewUrlRef.current) {
+        setActiveTab('preview');
+        return;
+      }
+    }
+
+    activeDeploySignatureRef.current = deploySignature;
+
     try {
       if (webContainerReady) {
         console.log('Deploying to WebContainer...');
         
         addChatMessage({
           role: 'assistant',
-          content: `Deploying to browser-based WebContainer for instant preview...`,
+          content: `Preparing your browser preview...`,
           timestamp: Date.now()
         });
 
@@ -1694,7 +1747,7 @@ export default function PromptPlayground() {
           const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
           
           if (isConfigFile && file.path?.startsWith('src/')) {
-            console.log(`Moving ${file.path} â†’ ${filename} (root level)`);
+            console.log(`Moving ${file.path} to ${filename} (root level)`);
             return { ...file, path: filename };
           }
           return file;
@@ -1706,37 +1759,25 @@ export default function PromptPlayground() {
 
         addChatMessage({
           role: 'assistant',
-          content: `Installing npm dependencies in browser...`,
+          content: `Installing dependencies for the preview...`,
           timestamp: Date.now()
         });
 
         // Install dependencies
-        await webContainerService.installDependencies((msg) => {
-          if (msg.includes('added') || msg.includes('dependencies')) {
-            addChatMessage({
-              role: 'assistant',
-              content: `${msg}`,
-              timestamp: Date.now()
-            });
-          }
-        });
+        await webContainerService.installDependencies();
 
         addChatMessage({
           role: 'assistant',
-          content: `Starting Vite dev server in browser...`,
+          content: `Starting the preview...`,
           timestamp: Date.now()
         });
 
         // Start dev server
-        const devServerUrl = await webContainerService.startDevServer((msg) => {
-          if (msg.includes('ready') || msg.includes('Local:')) {
-            addChatMessage({
-              role: 'assistant',
-              content: `${msg}`,
-              timestamp: Date.now()
-            });
-          }
-        });
+        const devServerUrl = await webContainerService.startDevServer();
+
+        if (isLocalPreviewUrl(devServerUrl)) {
+          throw new Error('The preview server started locally, but no browser-accessible preview URL was returned.');
+        }
 
         console.log('WebContainer dev server URL:', devServerUrl);
 
@@ -1749,23 +1790,21 @@ export default function PromptPlayground() {
           return currentTab; // Keep current tab if user manually switched
         });
 
-        // Wait for tab switch to render before setting preview URL
-        // This ensures iframe is visible when it starts loading
+        setLivePreviewUrl(devServerUrl);
+        setDevServerRunning(true);
+        completedDeploySignatureRef.current = deploySignature;
+
+        addChatMessage({
+          role: 'assistant',
+          content: `Preview is ready in the Preview tab.`,
+          timestamp: Date.now()
+        });
+
+        // Automatically analyze the page for visual issues after a short delay
+        // Give the page time to fully load before analysis
         setTimeout(() => {
-          setLivePreviewUrl(devServerUrl);
-
-          addChatMessage({
-            role: 'assistant',
-            content: `Preview is ready at: ${devServerUrl}`,
-            timestamp: Date.now()
-          });
-
-          // Automatically analyze the page for visual issues after a short delay
-          // Give the page time to fully load before analysis
-          setTimeout(() => {
-            analyzePageForVisualIssues(devServerUrl);
-          }, 3000); // Wait 3 seconds for page to load
-        }, 100);
+          analyzePageForVisualIssues(devServerUrl);
+        }, 3000);
 
       } else {
         // Fallback to server-side deployment
@@ -1773,15 +1812,15 @@ export default function PromptPlayground() {
         
         addChatMessage({
           role: 'assistant',
-          content: `Deploying to server (WebContainer unavailable)...`,
+          content: `Starting preview on the server...`,
           timestamp: Date.now()
         });
 
         // Call existing server-side deployment
-      const response = await apiFetch('/api/components/generate', {
-        method: 'POST',
-        headers: getAuthHeaders(sessionToken),
-        body: JSON.stringify({
+        const response = await apiFetch('/api/components/generate', {
+          method: 'POST',
+          headers: getAuthHeaders(sessionToken),
+          body: JSON.stringify({
             componentName,
             files,
             deploymentType: 'local'
@@ -1789,8 +1828,12 @@ export default function PromptPlayground() {
         });
 
         if (response.ok) {
-      const result = await safeJsonParse(response);
+          const result = await safeJsonParse(response);
           if (result.deploymentUrl) {
+            if (isLocalPreviewUrl(result.deploymentUrl)) {
+              throw new Error('The server returned a local preview URL that cannot be opened from this browser.');
+            }
+
             // Only auto-switch to preview if user is still on desktop tab
             setActiveTab((currentTab) => {
               if (currentTab === 'desktop') {
@@ -1799,16 +1842,15 @@ export default function PromptPlayground() {
               return currentTab; // Keep current tab if user manually switched
             });
 
-            // Wait for tab switch to render before setting preview URL
-            setTimeout(() => {
-              setLivePreviewUrl(result.deploymentUrl);
+            setLivePreviewUrl(result.deploymentUrl);
+            setDevServerRunning(true);
+            completedDeploySignatureRef.current = deploySignature;
 
-              addChatMessage({
-        role: 'assistant',
-                content: `Server deployment complete! Preview available at: ${result.deploymentUrl}`,
-                timestamp: Date.now()
-              });
-            }, 100);
+            addChatMessage({
+              role: 'assistant',
+              content: `Preview is ready in the Preview tab.`,
+              timestamp: Date.now()
+            });
           }
         }
       }
@@ -1816,9 +1858,13 @@ export default function PromptPlayground() {
       console.error('Deployment failed:', error);
       addChatMessage({
         role: 'assistant',
-        content: `Deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        content: `Preview could not start: ${error instanceof Error ? error.message : 'Unknown error'}. The generated files are still available to inspect and edit.`,
         timestamp: Date.now()
       });
+    } finally {
+      if (activeDeploySignatureRef.current === deploySignature) {
+        activeDeploySignatureRef.current = null;
+      }
     }
   }
 
@@ -2524,6 +2570,7 @@ export default function PromptPlayground() {
                       ...data.data
                     };
                     console.log('📁 Final result files:', finalResult.response?.files?.length);
+                    const canAutoPreview = isGenerationReadyForPreview(finalResult);
                     
                     // Show error summary if present
                     if (data.data?.errorSummary && data.data.errorSummary.total > 0) {
@@ -2536,7 +2583,7 @@ export default function PromptPlayground() {
                     }
 
                     // 🚀 Auto-deploy to WebContainer if files are available
-                    if (finalResult.response?.files && finalResult.response.files.length > 0) {
+                    if (canAutoPreview && finalResult.response?.files && finalResult.response.files.length > 0) {
                       const displayFiles = mapRawFilesToGenerated(finalResult.response.files);
                       const componentName = currentComponentName || 'App';
                       
@@ -2544,6 +2591,8 @@ export default function PromptPlayground() {
                       setTimeout(() => {
                         deployToRuntime(displayFiles, componentName);
                       }, 500);
+                    } else if (!canAutoPreview) {
+                      console.log('Skipping auto-preview because generation did not pass validation');
                     }
                   }
                 } catch (e) {
@@ -2600,6 +2649,7 @@ export default function PromptPlayground() {
 
         // âœ¨ Display files one by one with animation - BOLT.NEW STYLE!
         const displayFiles = mapRawFilesToGenerated(data.response.files);
+        const canAutoPreview = isGenerationReadyForPreview(data);
 
         console.log('ðŸ"‚ Files to display:', displayFiles.length);
 
@@ -2665,31 +2715,29 @@ export default function PromptPlayground() {
         updateGeneratedFiles(fixedDisplayFiles);
 
         // Add summary chat message
-        addChatMessage({
-          role: 'assistant',
-          content: `ðŸŽ‰ All ${displayFiles.length} files created successfully! Installing dependencies and starting development server...`,
-          timestamp: Date.now()
-        });
-        
-        addChatMessage({
-          role: 'assistant',
-          content: `ðŸš€ Development server is spinning up. This usually takes 10-15 seconds...`,
-          timestamp: Date.now()
-        });
-        
-        addChatMessage({
-          role: 'assistant',
-          content: `âœ¨ Almost ready! I'll automatically switch to the preview tab once the server is live.`,
-          timestamp: Date.now()
-        });
+        if (canAutoPreview) {
+          addChatMessage({
+            role: 'assistant',
+            content: `Files are ready. Starting the preview now...`,
+            timestamp: Date.now()
+          });
+        } else {
+          addChatMessage({
+            role: 'assistant',
+            content: `Files were generated, but preview will stay off until the blocking validation errors are fixed.`,
+            timestamp: Date.now()
+          });
+        }
         
         setIsLoading(false);
         console.log('âœ… All files displayed!');
         
-        // ðŸš€ Deploy to WebContainer or server immediately
-        setTimeout(() => {
-          deployToRuntime(displayFiles, componentName);
-        }, 500); // Small delay for UI to update
+        // Deploy only when the backend says this generation is valid.
+        if (canAutoPreview) {
+          setTimeout(() => {
+            deployToRuntime(fixedDisplayFiles, componentName);
+          }, 500); // Small delay for UI to update
+        }
 
         // Save chat messages and files to project if we're in a project context
         if (currentProject?.id && sessionToken) {
@@ -3119,7 +3167,7 @@ export default function PromptPlayground() {
                       setLivePreviewUrl(null);
                       setDevServerRunning(false);
                       await new Promise(resolve => setTimeout(resolve, 500));
-                      await deployToRuntime(existingFiles, componentName);
+                      await deployToRuntime(existingFiles, componentName, { force: true });
                     }
                   } catch (error: any) {
                     toast({
