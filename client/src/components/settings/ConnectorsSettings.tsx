@@ -39,21 +39,24 @@ export function ConnectorsSettings() {
 
   useEffect(() => {
     fetchConnectors();
-  }, [user]);
+  }, [user, isAdmin]);
 
   const fetchConnectors = async () => {
     if (!user) return;
     
     setLoading(true);
     try {
-      // Fetch shared connectors
-      const sharedRes = await apiFetch('/api/shared-connectors', {
-        headers: getAuthHeaders(sessionToken)
-      });
-      
-      if (sharedRes.ok) {
-        const data = await sharedRes.json();
-        setSharedConnectors(data.connectors || []);
+      if (isAdmin) {
+        const sharedRes = await apiFetch('/api/shared-connectors', {
+          headers: getAuthHeaders(sessionToken)
+        });
+
+        if (sharedRes.ok) {
+          const data = await sharedRes.json();
+          setSharedConnectors(data.connectors || []);
+        }
+      } else {
+        setSharedConnectors([]);
       }
 
       // Fetch personal connectors (from integrations)
@@ -97,20 +100,19 @@ export function ConnectorsSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Shared Connectors */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Lock className="h-5 w-5 text-primary" />
-                Shared Connectors
-              </CardTitle>
-              <CardDescription className="mt-2">
-                Workspace-wide connectors configured by admins. Available to all projects.
-              </CardDescription>
-            </div>
-            {isAdmin && (
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5 text-primary" />
+                  Shared Connectors
+                </CardTitle>
+                <CardDescription className="mt-2">
+                  Workspace-wide connectors configured by admins. Available to all projects.
+                </CardDescription>
+              </div>
               <Button
                 variant="outline"
                 onClick={() => setLocation('/integrations?tab=shared')}
@@ -118,15 +120,13 @@ export function ConnectorsSettings() {
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Manage
               </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {sharedConnectors.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Plug className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No shared connectors configured yet.</p>
-              {isAdmin && (
+            </div>
+          </CardHeader>
+          <CardContent>
+            {sharedConnectors.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Plug className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No shared connectors configured yet.</p>
                 <Button
                   variant="link"
                   onClick={() => setLocation('/integrations?tab=shared')}
@@ -134,57 +134,57 @@ export function ConnectorsSettings() {
                 >
                   Configure your first connector →
                 </Button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {sharedConnectors.map((connector) => (
-                <div
-                  key={connector.id}
-                  className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Plug className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{connector.serviceName}</p>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="h-4 w-4 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs">
-                                Configured by {connector.configuredByName || 'Admin'}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(connector.createdAt).toLocaleDateString()}
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sharedConnectors.map((connector) => (
+                  <div
+                    key={connector.id}
+                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Plug className="h-5 w-5 text-primary" />
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {connector.name}
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{connector.serviceName}</p>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Info className="h-4 w-4 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">
+                                  Configured by {connector.configuredByName || 'Admin'}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(connector.createdAt).toLocaleDateString()}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {connector.name}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={connector.isActive ? 'default' : 'secondary'}>
+                        {connector.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {connector.keyType}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={connector.isActive ? 'default' : 'secondary'}>
-                      {connector.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {connector.keyType}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Personal Connectors */}
       <Card>
@@ -257,7 +257,9 @@ export function ConnectorsSettings() {
             <div className="space-y-2 text-sm">
               <p className="font-medium">About Connectors</p>
               <ul className="space-y-1 text-muted-foreground">
-                <li>• <strong>Shared Connectors</strong> are configured once by admins and available to all projects</li>
+                {isAdmin && (
+                  <li>• <strong>Shared Connectors</strong> are configured once by admins and available to all projects</li>
+                )}
                 <li>• <strong>Personal Connectors</strong> are your individual tool connections</li>
                 <li>• Visit the <button onClick={() => setLocation('/integrations')} className="underline">Integrations page</button> to add more connectors</li>
               </ul>
@@ -268,4 +270,3 @@ export function ConnectorsSettings() {
     </div>
   );
 }
-

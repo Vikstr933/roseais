@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { User, Lock, Building, CreditCard, Settings as SettingsIcon, Key } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { AccountSettings } from '@/components/settings/AccountSettings';
 import { SecuritySettings } from '@/components/settings/SecuritySettings';
 import { CompanySettings } from '@/components/settings/CompanySettings';
@@ -10,7 +11,26 @@ import { PreferencesSettings } from '@/components/settings/PreferencesSettings';
 import { CredentialsAndKeysSettings } from '@/components/settings/CredentialsAndKeysSettings';
 
 export default function Settings() {
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
+  const tabs = [
+    { value: 'account', label: 'Account', icon: User },
+    { value: 'security', label: 'Security', icon: Lock },
+    ...(isAdmin
+      ? [
+          { value: 'credentials', label: 'Credentials & Keys', icon: Key },
+          { value: 'company', label: 'Company', icon: Building },
+        ]
+      : []),
+    { value: 'billing', label: 'Billing', icon: CreditCard },
+    { value: 'preferences', label: 'Preferences', icon: SettingsIcon },
+  ];
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.value === activeTab)) {
+      setActiveTab('account');
+    }
+  }, [activeTab, isAdmin]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
@@ -19,7 +39,7 @@ export default function Settings() {
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 text-foreground">Settings</h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            Manage your account, credentials, and preferences
+            Manage your account, billing, and preferences
           </p>
         </div>
 
@@ -29,48 +49,16 @@ export default function Settings() {
             {/* Vertical Tab List - LEFT SIDE */}
             <Card className="p-2 h-fit">
               <TabsList className="flex flex-col items-stretch h-auto bg-transparent space-y-1">
-                <TabsTrigger 
-                  value="account" 
-                  className="justify-start gap-3 px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  <User className="h-4 w-4" />
-                  <span>Account</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="security" 
-                  className="justify-start gap-3 px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  <Lock className="h-4 w-4" />
-                  <span>Security</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="credentials" 
-                  className="justify-start gap-3 px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  <Key className="h-4 w-4" />
-                  <span>Credentials & Keys</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="company" 
-                  className="justify-start gap-3 px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  <Building className="h-4 w-4" />
-                  <span>Company</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="billing" 
-                  className="justify-start gap-3 px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  <CreditCard className="h-4 w-4" />
-                  <span>Billing</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="preferences" 
-                  className="justify-start gap-3 px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                >
-                  <SettingsIcon className="h-4 w-4" />
-                  <span>Preferences</span>
-                </TabsTrigger>
+                {tabs.map(({ value, label, icon: Icon }) => (
+                  <TabsTrigger
+                    key={value}
+                    value={value}
+                    className="justify-start gap-3 px-4 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{label}</span>
+                  </TabsTrigger>
+                ))}
               </TabsList>
             </Card>
 
@@ -84,13 +72,17 @@ export default function Settings() {
                 <SecuritySettings />
               </TabsContent>
 
-              <TabsContent value="credentials" className="mt-0">
-                <CredentialsAndKeysSettings />
-              </TabsContent>
+              {isAdmin && (
+                <>
+                  <TabsContent value="credentials" className="mt-0">
+                    <CredentialsAndKeysSettings />
+                  </TabsContent>
 
-              <TabsContent value="company" className="mt-0">
-                <CompanySettings />
-              </TabsContent>
+                  <TabsContent value="company" className="mt-0">
+                    <CompanySettings />
+                  </TabsContent>
+                </>
+              )}
 
               <TabsContent value="billing" className="mt-0">
                 <BillingSettings />

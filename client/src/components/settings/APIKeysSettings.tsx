@@ -28,7 +28,7 @@ interface ProjectAPIKey {
 }
 
 export function APIKeysSettings() {
-  const { user, sessionToken } = useAuth();
+  const { user, sessionToken, isAdmin } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [loading, setLoading] = useState(true);
@@ -227,7 +227,9 @@ export function APIKeysSettings() {
               <p className="font-medium">About API Keys</p>
               <ul className="space-y-1 text-muted-foreground">
                 <li>• <strong>Personal API Keys</strong> are specific to a single project</li>
-                <li>• <strong>Shared API Keys</strong> come from Shared Connectors and are available to all projects</li>
+                {isAdmin && (
+                  <li>• <strong>Shared API Keys</strong> come from Shared Connectors and are available to all projects</li>
+                )}
                 <li>• To add/edit API keys for a project, open the project and click the gear icon (⚙️)</li>
                 <li>• API keys are encrypted and stored securely</li>
               </ul>
@@ -238,4 +240,3 @@ export function APIKeysSettings() {
     </div>
   );
 }
-

@@ -79,10 +79,27 @@ interface GenerationStats {
   };
 }
 
+type IntegrationTab = 'all' | 'shared' | 'personal' | 'connected' | 'available';
+
 export default function Integrations() {
   const { sessionToken, isAdmin, isSuperAdmin } = useAuth();
+  const canManageSharedConnectors = isAdmin || isSuperAdmin;
+  const normalizeIntegrationTab = (value: string | null): IntegrationTab => {
+    if (value === 'shared') {
+      return canManageSharedConnectors ? 'shared' : 'personal';
+    }
+
+    if (value === 'personal' || value === 'connected' || value === 'available') {
+      return value;
+    }
+
+    return 'all';
+  };
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
+  const [activeTab, setActiveTab] = useState<IntegrationTab>(() =>
+    normalizeIntegrationTab(new URLSearchParams(window.location.search).get('tab'))
+  );
   const [availablePlugins, setAvailablePlugins] = useState<Plugin[]>([]);
   const [userPluginStatus, setUserPluginStatus] = useState<PluginStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +152,11 @@ export default function Integrations() {
   const getPluginById = (pluginId: string) => availablePlugins.find(p => p.id === pluginId);
   const isCustomPlugin = (plugin?: Plugin) =>
     !!plugin && (plugin.isUserGenerated || plugin.category === 'custom' || plugin.id.startsWith('plugin_'));
+  const handleIntegrationTabChange = (value: string) => {
+    const nextTab = normalizeIntegrationTab(value);
+    setActiveTab(nextTab);
+    setLocation(nextTab === 'all' ? '/integrations' : `/integrations?tab=${nextTab}`);
+  };
   const openCredentialDialogForPlugin = (plugin: Plugin) => {
     const hasDefinedFields = plugin.credentialsRequired && Object.keys(plugin.credentialsRequired).length > 0;
     const fields = hasDefinedFields
@@ -323,9 +345,24 @@ export default function Integrations() {
   };
 
   useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    const nextTab = normalizeIntegrationTab(requestedTab);
+    setActiveTab((currentTab) => (currentTab === nextTab ? currentTab : nextTab));
+
+    if (requestedTab === 'shared' && !canManageSharedConnectors) {
+      setLocation('/integrations?tab=personal');
+    }
+  }, [location, canManageSharedConnectors, setLocation]);
+
+  useEffect(() => {
     loadPlugins(1);
     loadUserStatus();
-    loadSharedConnectors();
+    if (canManageSharedConnectors) {
+      loadSharedConnectors();
+    } else {
+      setSharedConnectors([]);
+      setAvailablePreBuiltConnectors([]);
+    }
     loadDiscordStatus();
     loadDiscordBotStatus();
 
@@ -454,7 +491,7 @@ export default function Integrations() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [toast]);
+  }, [toast, canManageSharedConnectors]);
 
   // Load Discord link status
   const loadDiscordStatus = async () => {
@@ -628,7 +665,11 @@ export default function Integrations() {
 
   // Load shared connectors (workspace-wide API keys)
   const loadSharedConnectors = async () => {
-    if (!sessionToken) return;
+    if (!sessionToken || !canManageSharedConnectors) {
+      setSharedConnectors([]);
+      setAvailablePreBuiltConnectors([]);
+      return;
+    }
     setLoadingSharedConnectors(true);
     try {
       const response = await apiFetch('/api/shared-connectors', {
@@ -1244,7 +1285,7 @@ export default function Integrations() {
               <p className="text-xs text-muted-foreground truncate">
                 {discordBotStatus?.connected 
                   ? `Connected as ${discordBotStatus.botUser?.username || 'bot'}`
-                  : 'Connect Elon\'s Discord bot to your server (Admin only)'}
+                  : 'Connect Elon\'s Discord bot to your server'}
               </p>
             </div>
           </div>
@@ -1404,10 +1445,12 @@ export default function Integrations() {
       )}
       
 
-      <Tabs defaultValue="all" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleIntegrationTabChange} className="w-full">
         <TabsList className="w-full flex-wrap h-auto">
           <TabsTrigger value="all" className="flex-1 min-w-[80px]">All Skills</TabsTrigger>
-          <TabsTrigger value="shared" className="flex-1 min-w-[80px]">Shared</TabsTrigger>
+          {canManageSharedConnectors && (
+            <TabsTrigger value="shared" className="flex-1 min-w-[80px]">Shared</TabsTrigger>
+          )}
           <TabsTrigger value="personal" className="flex-1 min-w-[80px]">Personal</TabsTrigger>
           <TabsTrigger value="connected" className="flex-1 min-w-[80px]">Connected</TabsTrigger>
           <TabsTrigger value="available" className="flex-1 min-w-[80px]">Available</TabsTrigger>
@@ -1719,57 +1762,58 @@ export default function Integrations() {
           </div>
         </TabsContent>
 
-        <TabsContent value="shared" className="mt-6">
-          <TooltipProvider>
-            <div className="mb-6 space-y-4">
-              {/* Help Section */}
-              <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-blue-600" />
-                      Shared Connectors
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p className="text-xs">
-                            Shared connectors are workspace-wide API keys and environment variables configured by admins. 
-                            Once set up, all users in your workspace can use them automatically when generating apps.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </h3>
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Configured once by admins, available to everyone in your workspace. These connectors provide API keys and environment variables that are automatically injected into your generated apps.
-                    </p>
-                    
-                    {/* Examples */}
-                    <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border border-blue-100 dark:border-blue-900">
-                      <p className="text-xs font-medium mb-2 text-blue-900 dark:text-blue-100">How it works:</p>
-                      <ul className="text-xs text-muted-foreground space-y-1.5">
-                        <li className="flex items-start gap-2">
-                          <span className="text-blue-600 mt-0.5">•</span>
-                          <span><strong>Stripe:</strong> When you generate a payment app, Stripe API keys are automatically available as environment variables</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span className="text-blue-600 mt-0.5">•</span>
-                          <span><strong>Vercel:</strong> Your deployments automatically use the configured Vercel token for publishing</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span className="text-blue-600 mt-0.5">•</span>
-                          <span><strong>GitHub:</strong> Repository operations use the shared GitHub token automatically</span>
-                        </li>
-                      </ul>
+        {canManageSharedConnectors && (
+          <TabsContent value="shared" className="mt-6">
+            <TooltipProvider>
+              <div className="mb-6 space-y-4">
+                {/* Help Section */}
+                <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-3">
+                    <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-blue-600" />
+                        Shared Connectors
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="text-xs">
+                              Shared connectors are workspace-wide API keys and environment variables configured by admins.
+                              Once set up, all users in your workspace can use them automatically when generating apps.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Configured once by admins, available to everyone in your workspace. These connectors provide API keys and environment variables that are automatically injected into your generated apps.
+                      </p>
+
+                      {/* Examples */}
+                      <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border border-blue-100 dark:border-blue-900">
+                        <p className="text-xs font-medium mb-2 text-blue-900 dark:text-blue-100">How it works:</p>
+                        <ul className="text-xs text-muted-foreground space-y-1.5">
+                          <li className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5">•</span>
+                            <span><strong>Stripe:</strong> When you generate a payment app, Stripe API keys are automatically available as environment variables</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5">•</span>
+                            <span><strong>Vercel:</strong> Your deployments automatically use the configured Vercel token for publishing</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5">•</span>
+                            <span><strong>GitHub:</strong> Repository operations use the shared GitHub token automatically</span>
+                          </li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Connectors List */}
-              {loadingSharedConnectors ? (
+                {/* Connectors List */}
+                {loadingSharedConnectors ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
@@ -1811,7 +1855,7 @@ export default function Integrations() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                          {isAdmin && (
+                          {canManageSharedConnectors && (
                             <>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1908,38 +1952,27 @@ export default function Integrations() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                          {isAdmin ? (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedConnector({
-                                  ...connector,
-                                  isConfigured: false,
-                                });
-                                setConnectorConfigMode('create');
-                                setConnectorConfigId(undefined);
-                                setConnectorConfigDialogOpen(true);
-                              }}
-                              disabled={connecting.has(connector.id)}
-                              className="h-8"
-                            >
-                              {connecting.has(connector.id) ? (
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                              ) : (
-                                <Plus className="w-3 h-3 mr-1" />
-                              )}
-                              Configure
-                            </Button>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-xs text-muted-foreground">Admin only</span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">Only admins can configure shared connectors</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedConnector({
+                                ...connector,
+                                isConfigured: false,
+                              });
+                              setConnectorConfigMode('create');
+                              setConnectorConfigId(undefined);
+                              setConnectorConfigDialogOpen(true);
+                            }}
+                            disabled={connecting.has(connector.id)}
+                            className="h-8"
+                          >
+                            {connecting.has(connector.id) ? (
+                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            ) : (
+                              <Plus className="w-3 h-3 mr-1" />
+                            )}
+                            Configure
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -1948,16 +1981,17 @@ export default function Integrations() {
                     <div className="text-center py-12 text-muted-foreground">
                       <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No shared connectors available</p>
-                      {isAdmin && (
+                      {canManageSharedConnectors && (
                         <p className="text-xs mt-1">Configure a connector above to get started</p>
                       )}
                     </div>
                   )}
                 </div>
               )}
-            </div>
-          </TooltipProvider>
-        </TabsContent>
+              </div>
+            </TooltipProvider>
+          </TabsContent>
+        )}
 
         <TabsContent value="personal" className="mt-6">
           <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">

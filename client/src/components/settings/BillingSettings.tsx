@@ -42,12 +42,11 @@ export function BillingSettings() {
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoices] = useState<Invoice[]>([]);
 
   useEffect(() => {
     if (user) {
       fetchSubscription();
-      fetchInvoices();
     }
   }, [user]);
 
@@ -66,19 +65,6 @@ export function BillingSettings() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchInvoices = async () => {
-    // Mock invoices for now - implement actual Stripe invoice fetching
-    setInvoices([
-      {
-        id: 'inv_001',
-        date: '2025-01-01',
-        amount: 29,
-        status: 'paid',
-        invoiceUrl: '#'
-      }
-    ]);
   };
 
   const handleManageBilling = async () => {
@@ -309,8 +295,8 @@ export function BillingSettings() {
                   <CreditCard className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="font-medium">Credit Card</p>
-                  <p className="text-sm text-muted-foreground">•••• •••• •••• ••••</p>
+                  <p className="font-medium">Stripe Billing Portal</p>
+                  <p className="text-sm text-muted-foreground">View payment methods, invoices, and billing details securely in Stripe.</p>
                 </div>
               </div>
               <Button variant="outline" size="sm" onClick={handleManageBilling} disabled={portalLoading}>
@@ -318,15 +304,12 @@ export function BillingSettings() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    Update
+                    Open
                     <ExternalLink className="ml-2 h-3 w-3" />
                   </>
                 )}
               </Button>
             </div>
-            <p className="text-sm text-muted-foreground mt-3">
-              Update your payment method in the Stripe billing portal
-            </p>
           </CardContent>
         </Card>
       )}
@@ -367,7 +350,12 @@ export function BillingSettings() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => window.open(invoice.invoiceUrl, '_blank', 'noopener,noreferrer')}
+                        disabled={!invoice.invoiceUrl}
+                      >
                         <Download className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -377,7 +365,9 @@ export function BillingSettings() {
             </Table>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
-              No billing history available
+              {subscription.plan === 'free'
+                ? 'No invoices yet. Upgrade to a paid plan when you are ready.'
+                : 'Invoices will appear in the Stripe billing portal after your first paid invoice.'}
             </div>
           )}
         </CardContent>

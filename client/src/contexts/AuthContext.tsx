@@ -12,6 +12,7 @@ interface User {
   username: string;
   email: string;
   displayName: string;
+  avatarUrl?: string;
   role?: string; // 'superadmin', 'admin', 'user'
   tier?: 'free' | 'pro' | 'enterprise';
   subscriptionStatus?: string;

@@ -572,7 +572,9 @@ export function ProjectSettingsDialog({
                         Deployment settings are managed through the Deploy button in the toolbar.
                       </p>
                       <p className="text-xs text-muted-foreground mt-2">
-                        This project uses credentials from: Shared Connectors → Personal Connectors → Platform Credentials
+                        {isAdmin
+                          ? 'This project uses credentials from: Shared Connectors -> Personal Connectors -> Platform Credentials'
+                          : 'This project can use your personal connectors and available platform credentials when you deploy.'}
                       </p>
                     </div>
                   </CardContent>

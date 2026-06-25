@@ -99,7 +99,7 @@ export function CredentialsAndKeysSettings() {
 
   useEffect(() => {
     fetchAllCredentials();
-  }, [user]);
+  }, [user, isAdmin]);
 
   const fetchAllCredentials = async () => {
     if (!user) return;
@@ -107,11 +107,14 @@ export function CredentialsAndKeysSettings() {
     setLoading(true);
     try {
       await Promise.all([
-        fetchSharedConnectors(),
+        ...(isAdmin ? [fetchSharedConnectors()] : []),
         fetchPersonalConnectors(),
         fetchProjectAPIKeys(),
         fetchPersonalSecrets()
       ]);
+      if (!isAdmin) {
+        setSharedConnectors([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -333,20 +336,21 @@ export function CredentialsAndKeysSettings() {
         </p>
       </div>
 
-      {/* Shared Connectors */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Lock className="h-5 w-5 text-primary" />
-                Shared Connectors
-              </CardTitle>
-              <CardDescription className="mt-2">
-                Workspace-wide connectors (Stripe, Vercel, GitHub). Configured by admins, available to all projects.
-              </CardDescription>
-            </div>
-            {isAdmin && (
+      {isAdmin && (
+        <>
+          {/* Shared Connectors */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-primary" />
+                    Shared Connectors
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    Workspace-wide connectors (Stripe, Vercel, GitHub). Configured by admins, available to all projects.
+                  </CardDescription>
+                </div>
               <Button
                 variant="outline"
                 size="sm"
@@ -355,41 +359,42 @@ export function CredentialsAndKeysSettings() {
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Configure
               </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {sharedConnectors.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground">
-              <p className="text-sm">No shared connectors configured.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {sharedConnectors.map((connector) => (
-                <div
-                  key={connector.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                >
-                  <div className="flex items-center gap-3">
-                    <Plug className="h-4 w-4 text-primary" />
-                    <div>
-                      <p className="font-medium text-sm">{connector.serviceName}</p>
-                      <p className="text-xs text-muted-foreground">{connector.name}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={connector.isActive ? 'default' : 'secondary'} className="text-xs">
-                      {connector.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sharedConnectors.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <p className="text-sm">No shared connectors configured.</p>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ) : (
+                <div className="space-y-2">
+                  {sharedConnectors.map((connector) => (
+                    <div
+                      key={connector.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Plug className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="font-medium text-sm">{connector.serviceName}</p>
+                          <p className="text-xs text-muted-foreground">{connector.name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={connector.isActive ? 'default' : 'secondary'} className="text-xs">
+                          {connector.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-      <Separator />
+          <Separator />
+        </>
+      )}
 
       {/* Personal Connectors */}
       <Card>
@@ -606,7 +611,9 @@ export function CredentialsAndKeysSettings() {
             <div className="space-y-2 text-sm">
               <p className="font-medium">Understanding Credentials & Keys</p>
               <ul className="space-y-1 text-muted-foreground">
-                <li>• <strong>Shared Connectors</strong>: Configured by admins, available to all projects</li>
+                {isAdmin && (
+                  <li>• <strong>Shared Connectors</strong>: Configured by admins, available to all projects</li>
+                )}
                 <li>• <strong>Personal Connectors</strong>: Your OAuth connections (Notion, etc.)</li>
                 <li>• <strong>Project API Keys</strong>: Keys specific to individual projects</li>
                 <li>• <strong>Personal Secrets</strong>: Your private keys, used as fallback</li>
@@ -618,4 +625,3 @@ export function CredentialsAndKeysSettings() {
     </div>
   );
 }
-

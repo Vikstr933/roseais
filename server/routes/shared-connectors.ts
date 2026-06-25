@@ -3,20 +3,18 @@ import { db } from '../../db';
 import { apiKeys, users, workspaces } from '../../db/schema-pg';
 import { eq, and, or, isNull } from 'drizzle-orm';
 import { authenticateUser } from '../middleware/auth';
+import { requireAdmin } from '../middleware/admin';
 import { getAllPreBuiltConnectors, getPreBuiltConnector } from '../data/pre-built-connectors';
 
 const router = Router();
 
-// All routes require authentication
+// Shared connector configuration is an admin-only workspace/platform setting.
 router.use(authenticateUser);
+router.use(requireAdmin);
 
 /**
  * GET /api/shared-connectors
- * Get all shared connectors for the current user
- * 
- * SECURITY NOTE: "Shared" means "available across all user's projects", NOT "shared between users".
- * Each user has their own connectors (Stripe, Vercel, GitHub, etc.) that they configure.
- * These connectors are used when generating applications that need API keys (e.g., Stripe for payments).
+ * Get shared connectors for the current admin.
  */
 router.get('/', async (req, res) => {
   try {
@@ -25,9 +23,8 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    // SECURITY: Shared connectors are per-user, not global
-    // Each user can configure their own connectors (Stripe, Vercel, GitHub, etc.)
-    // for use in their generated applications
+    // Admin-owned connectors are stored without a project so they can be reused by
+    // platform workflows that need Stripe, Vercel, GitHub, and similar credentials.
     const sharedConnectors = await db
       .select({
         id: apiKeys.id,
@@ -109,10 +106,7 @@ router.get('/', async (req, res) => {
 
 /**
  * POST /api/shared-connectors
- * Create a new shared connector for the current user
- * 
- * SECURITY: Each user creates their own connectors. They're not shared between users.
- * "Shared" means the connector is available across all of the user's projects.
+ * Create a new shared connector. Admin only.
  */
 router.post('/', async (req, res) => {
   try {
@@ -139,8 +133,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Check if shared connector already exists for this user and service
-    // SECURITY: Each user can have their own connector for each service
+    // Check if shared connector already exists for this admin and service.
     const existing = await db
       .select()
       .from(apiKeys)
@@ -341,4 +334,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 export default router;
-
