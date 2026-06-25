@@ -327,10 +327,18 @@ export class AnalysisAgent {
    */
   private addBackendPhases(
     plan: GenerationPlan,
-    fullstackConfig: any
+    _fullstackConfig: any
   ): void {
-    // Find the last phase index
-    const lastPhaseIndex = plan.phases.length;
+    plan.phases = plan.phases.map(phase => {
+      if (phase.phase.startsWith('backend')) {
+        return phase;
+      }
+
+      return {
+        ...phase,
+        files: phase.files.map(file => this.toClientPathForFullstack(file))
+      };
+    });
 
     // Add backend foundation phase (after base phase)
     const basePhaseIndex = plan.phases.findIndex(p => p.phase === 'base');
@@ -370,8 +378,8 @@ export class AnalysisAgent {
         phase: 'frontend-api',
         description: 'Frontend API integration and configuration',
         files: [
-          'src/lib/api.ts',
-          '.env.example'
+          'client/src/lib/api.ts',
+          'client/.env.example'
         ],
         dependencies: ['core', 'backend-routes'],
         agentId: 'component-developer'
@@ -379,6 +387,34 @@ export class AnalysisAgent {
     }
 
     plan.totalPhases = plan.phases.length;
+  }
+
+  private toClientPathForFullstack(filePath: string): string {
+    if (
+      filePath.startsWith('client/') ||
+      filePath.startsWith('server/') ||
+      filePath.startsWith('backend/')
+    ) {
+      return filePath;
+    }
+
+    if (filePath.startsWith('src/')) {
+      return `client/${filePath}`;
+    }
+
+    const frontendRootFiles = new Set([
+      'package.json',
+      'tsconfig.json',
+      'tsconfig.node.json',
+      'vite.config.ts',
+      'vite.config.js',
+      'index.html',
+      'postcss.config.js',
+      'tailwind.config.js',
+      '.env.example'
+    ]);
+
+    return frontendRootFiles.has(filePath) ? `client/${filePath}` : filePath;
   }
 
   /**
@@ -549,26 +585,31 @@ BACKEND PHASES (Add these after base phase):
      * All API endpoints: ${fullstackConfig.apiEndpoints.join(', ')}
      * Proper error handling (try/catch)
      * JSON responses
+     * If authentication is needed: working /api/auth/register, /api/auth/login, /api/auth/me, and /api/users routes
+     * If uploads are needed: working multipart /api/uploads route accepting a FormData field named "file"
      * ${fullstackConfig.databaseType !== 'none' ? `Database connection setup (${fullstackConfig.databaseType})` : 'Mock data for now (can be connected to database later)'}
 
 3. **frontend-api** phase (Add after core phase):
-   - Files: src/lib/api.ts, .env.example
+   - Files: client/src/lib/api.ts, client/.env.example
    - Purpose: Configure frontend to call backend API
    - Dependencies: ["core", "backend-routes"]
-   - **CRITICAL**: src/lib/api.ts MUST include:
+   - **CRITICAL**: client/src/lib/api.ts MUST include:
      * API_BASE_URL constant (use VITE_API_URL env var or default to http://localhost:3001)
      * Helper functions: api.get(), api.post(), api.put(), api.delete()
+     * Helper function api.uploadFile(endpoint, file, metadata) when uploads are needed
      * Proper error handling
      * Content-Type headers
-   - **CRITICAL**: .env.example MUST include:
+   - **CRITICAL**: client/.env.example MUST include:
      * VITE_API_URL=http://localhost:3001
 
 **INTEGRATION REQUIREMENTS:**
-- Frontend components MUST use the api helper from src/lib/api.ts
+- Frontend files MUST live under client/ for fullstack projects: client/index.html, client/src/main.tsx, client/src/App.tsx, client/src/index.css
+- Frontend components MUST use the api helper from client/src/lib/api.ts
 - All API calls MUST use the correct endpoints: ${fullstackConfig.apiEndpoints.join(', ')}
 - CORS MUST be configured in backend to allow requests from http://localhost:5173
 - Backend and frontend MUST be properly connected - no manual configuration needed
 - Environment variables MUST be set up correctly in both frontend and backend
+- Do not fake auth or upload behavior only in React state when backend endpoints are requested; wire forms/buttons to the API helper.
 ` : ''}
 
 **LANGUAGE DETECTION - CRITICAL:**

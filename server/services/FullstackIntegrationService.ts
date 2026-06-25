@@ -12,6 +12,11 @@ export interface FullstackConfig {
   corsEnabled: boolean;
   databaseType?: 'mongodb' | 'postgresql' | 'mysql' | 'none';
   requiredApiKeys?: string[]; // API keys required by the backend (e.g., ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'])
+  features?: {
+    auth: boolean;
+    uploads: boolean;
+    persistence: boolean;
+  };
 }
 
 export interface IntegrationCheck {
@@ -38,6 +43,7 @@ export class FullstackIntegrationService {
     files: Array<{ path: string; content: string }>
   ): Promise<FullstackConfig> {
     const promptLower = userPrompt.toLowerCase();
+    const features = this.detectFeatureFlags(promptLower);
     
     // Keywords that indicate backend is needed
     const backendKeywords = [
@@ -45,10 +51,20 @@ export class FullstackIntegrationService {
       'express', 'node', 'rest', 'endpoint', 'route', 'authentication', 'auth',
       'login', 'register', 'user', 'save', 'store', 'persist', 'fetch data',
       'crud', 'create', 'read', 'update', 'delete', 'fullstack', 'full stack',
-      'mern', 'mean', 'mevn', 'serverless', 'lambda', 'firebase', 'supabase'
+      'mern', 'mean', 'mevn', 'serverless', 'lambda', 'firebase', 'supabase',
+      'upload', 'uploads', 'file', 'files', 'image', 'images', 'photo', 'photos',
+      'media', 'attachment', 'avatar', 'storage', 'account', 'profile', 'member',
+      'backend', 'databas', 'server', 'api', 'autentisering', 'inloggning',
+      'logga in', 'registrera', 'skapa konto', 'användare', 'anvandare',
+      'konto', 'profil', 'medlem', 'spara', 'lagra', 'ladda upp', 'uppladdning',
+      'fil', 'filer', 'bild', 'bilder', 'foto', 'foton', 'bilaga'
     ];
 
-    const needsBackend = backendKeywords.some(keyword => promptLower.includes(keyword));
+    const needsBackend =
+      backendKeywords.some(keyword => promptLower.includes(keyword)) ||
+      features.auth ||
+      features.uploads ||
+      features.persistence;
 
     // Check existing files for backend indicators
     const hasBackendFiles = files.some(f => 
@@ -77,7 +93,7 @@ export class FullstackIntegrationService {
     const apiEndpoints = this.detectAPIEndpoints(userPrompt, files);
 
     // Detect database type
-    const databaseType = this.detectDatabaseType(files);
+    const databaseType = this.detectDatabaseType(files, userPrompt);
 
     // Detect required API keys from prompt
     const requiredApiKeys = this.detectRequiredAPIKeys(userPrompt);
@@ -90,8 +106,35 @@ export class FullstackIntegrationService {
       backendPort: 3001,
       corsEnabled: true,
       databaseType,
-      requiredApiKeys
+      requiredApiKeys,
+      features
     };
+  }
+
+  private detectFeatureFlags(promptLower: string): NonNullable<FullstackConfig['features']> {
+    const hasAny = (terms: string[]) => terms.some(term => promptLower.includes(term));
+
+    const auth = hasAny([
+      'auth', 'authentication', 'login', 'log in', 'sign in', 'signin',
+      'register', 'sign up', 'signup', 'account', 'profile', 'member', 'user',
+      'inloggning', 'logga in', 'registrera', 'skapa konto', 'konto', 'profil',
+      'medlem', 'användare', 'anvandare'
+    ]);
+
+    const uploads = hasAny([
+      'upload', 'uploads', 'file upload', 'file', 'files', 'image', 'images',
+      'photo', 'photos', 'media', 'attachment', 'avatar', 'storage',
+      'ladda upp', 'uppladdning', 'fil', 'filer', 'bild', 'bilder', 'foto',
+      'foton', 'media', 'bilaga', 'lagring'
+    ]);
+
+    const persistence = hasAny([
+      'database', 'db', 'save', 'store', 'persist', 'crud', 'create', 'read',
+      'update', 'delete', 'mongodb', 'postgres', 'mysql', 'firebase', 'supabase',
+      'databas', 'spara', 'lagra', 'beständig', 'permanent'
+    ]);
+
+    return { auth, uploads, persistence };
   }
 
   /**
@@ -159,6 +202,10 @@ Does this application need:
 3. Database integration?
 4. User authentication?
 5. Data persistence beyond localStorage?
+6. File/image uploads, media storage, or user-generated files?
+
+Treat Swedish requests such as "skapa användare", "logga in", "ladda upp bilder",
+"ladda upp filer", "spara", and "databas" as backend signals.
 
 Respond with JSON:
 {
@@ -201,13 +248,17 @@ Respond with JSON:
   ): string[] {
     const endpoints: string[] = [];
     const promptLower = userPrompt.toLowerCase();
+    const features = this.detectFeatureFlags(promptLower);
 
     // Common endpoint patterns
     if (promptLower.includes('todo') || promptLower.includes('task')) {
       endpoints.push('/api/todos', '/api/todos/:id');
     }
-    if (promptLower.includes('user') || promptLower.includes('auth') || promptLower.includes('login')) {
-      endpoints.push('/api/auth/login', '/api/auth/register', '/api/users');
+    if (features.auth) {
+      endpoints.push('/api/auth/login', '/api/auth/register', '/api/auth/me', '/api/users');
+    }
+    if (features.uploads) {
+      endpoints.push('/api/uploads', '/api/uploads/:id');
     }
     if (promptLower.includes('product') || promptLower.includes('shop') || promptLower.includes('ecommerce')) {
       endpoints.push('/api/products', '/api/products/:id', '/api/cart');
@@ -233,7 +284,21 @@ Respond with JSON:
   /**
    * Detect database type from files
    */
-  private detectDatabaseType(files: Array<{ path: string; content: string }>): 'mongodb' | 'postgresql' | 'mysql' | 'none' {
+  private detectDatabaseType(
+    files: Array<{ path: string; content: string }>,
+    userPrompt: string = ''
+  ): 'mongodb' | 'postgresql' | 'mysql' | 'none' {
+    const promptLower = userPrompt.toLowerCase();
+    if (promptLower.includes('mongodb') || promptLower.includes('mongo')) {
+      return 'mongodb';
+    }
+    if (promptLower.includes('postgres') || promptLower.includes('postgresql')) {
+      return 'postgresql';
+    }
+    if (promptLower.includes('mysql')) {
+      return 'mysql';
+    }
+
     for (const file of files) {
       const content = file.content.toLowerCase();
       if (content.includes('mongoose') || content.includes('mongodb')) {
@@ -287,6 +352,7 @@ Respond with JSON:
       const content = f.content.toLowerCase();
       return content.includes('fetch(') || 
              content.includes('axios') || 
+             content.includes('api.') ||
              content.includes('api/') ||
              content.includes('localhost:');
     });
@@ -323,7 +389,6 @@ Respond with JSON:
     }
 
     // Check if endpoints match
-    const frontendEndpoints = this.extractFrontendEndpoints(frontendFiles);
     const backendEndpoints = this.extractBackendEndpoints(backendFiles);
     
     const missingEndpoints = config.apiEndpoints.filter(endpoint => 
@@ -528,23 +593,45 @@ export default defineConfig({
    * Generate server/index.js
    */
   private generateServerFile(config: FullstackConfig): string {
+    const hasUploads = this.hasUploadEndpoints(config);
+
     return `import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import routes from './routes.js';
+${hasUploads ? `import { fileURLToPath } from 'url';
+import path from 'path';
+` : ''}import routes from './routes.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || ${config.backendPort};
+${hasUploads ? `const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, 'uploads');
+` : ''}
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173'
+].filter(Boolean);
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.endsWith('.webcontainer-api.io')) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
   credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+${hasUploads ? `app.use('/uploads', express.static(uploadDir));
+` : ''}
 
 // Routes
 app.use('/api', routes);
@@ -567,104 +654,251 @@ export default app;`;
    * Generate server/routes.js
    */
   private generateRoutesFile(config: FullstackConfig): string {
-    const routes = config.apiEndpoints.map(endpoint => {
-      const method = endpoint.includes('login') || endpoint.includes('register') || endpoint.includes('create') 
-        ? 'post' 
-        : endpoint.includes(':id') && !endpoint.includes('create')
-        ? 'get'
-        : 'get';
-      
-      const routePath = endpoint.replace('/api', '');
-      const handlerName = routePath.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '');
+    const hasAuth = this.hasAuthEndpoints(config);
+    const hasUploads = this.hasUploadEndpoints(config);
+    const handledPaths = new Set<string>();
+    const imports = [`import express from 'express';`];
 
-      // Generate handler code based on API keys required
-      let handlerCode = '';
-      if (config.requiredApiKeys?.includes('OPENAI_API_KEY') && (endpoint.includes('chat') || endpoint.includes('message') || endpoint.includes('completion'))) {
-        handlerCode = `    // OpenAI integration
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
+    if (hasAuth || hasUploads) {
+      imports.push(`import crypto from 'crypto';`);
     }
-    
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+
+    if (hasAuth) {
+      ['/auth/login', '/auth/register', '/auth/me', '/users'].forEach(path => handledPaths.add(path));
     }
-    
-    // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${process.env.OPENAI_API_KEY}\`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: message }],
-        max_tokens: 500
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      return res.status(response.status).json({ error: error.error?.message || 'OpenAI API error' });
+
+    if (hasUploads) {
+      imports.push(`import multer from 'multer';`);
+      imports.push(`import fs from 'fs';`);
+      imports.push(`import path from 'path';`);
+      imports.push(`import { fileURLToPath } from 'url';`);
+      ['/uploads', '/uploads/:id'].forEach(path => handledPaths.add(path));
     }
-    
-    const data = await response.json();
-    res.json({ message: data.choices[0]?.message?.content || 'No response' });`;
-      } else if (config.requiredApiKeys?.includes('ANTHROPIC_API_KEY') && (endpoint.includes('chat') || endpoint.includes('message') || endpoint.includes('completion'))) {
-        handlerCode = `    // Anthropic Claude integration
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured' });
+
+    const sections: string[] = [`const router = express.Router();`];
+
+    if (hasAuth) {
+      sections.push(`const users = [];
+const sessions = new Map();
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return \`\${salt}:\${hash}\`;
+}
+
+function verifyPassword(password, storedHash) {
+  const [salt, hash] = storedHash.split(':');
+  const candidate = hashPassword(password, salt).split(':')[1];
+  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(candidate));
+}
+
+function createSession(userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, userId);
+  return token;
+}
+
+function publicUser(user) {
+  const { passwordHash, ...safeUser } = user;
+  return safeUser;
+}
+
+function getAuthUser(req) {
+  const token = req.headers.authorization?.replace(/^Bearer\\s+/i, '');
+  const userId = token ? sessions.get(token) : null;
+  return userId ? users.find(user => user.id === userId) : null;
+}
+
+router.post('/auth/register', async (req, res) => {
+  const { name, email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (users.some(user => user.email === normalizedEmail)) {
+    return res.status(409).json({ error: 'A user with this email already exists' });
+  }
+
+  const user = {
+    id: crypto.randomUUID(),
+    name: name || normalizedEmail.split('@')[0],
+    email: normalizedEmail,
+    passwordHash: hashPassword(String(password)),
+    createdAt: new Date().toISOString()
+  };
+  users.push(user);
+
+  res.status(201).json({ user: publicUser(user), token: createSession(user.id) });
+});
+
+router.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const user = users.find(candidate => candidate.email === normalizedEmail);
+
+  if (!user || !password || !verifyPassword(String(password), user.passwordHash)) {
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  res.json({ user: publicUser(user), token: createSession(user.id) });
+});
+
+router.get('/auth/me', async (req, res) => {
+  const user = getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  res.json({ user: publicUser(user) });
+});
+
+router.get('/users', async (_req, res) => {
+  res.json({ users: users.map(publicUser) });
+});`);
     }
-    
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+
+    if (hasUploads) {
+      sections.push(`const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, 'uploads');
+const uploadedFiles = [];
+
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-z0-9_.-]/gi, '-').toLowerCase();
+    cb(null, \`\${Date.now()}-\${Math.round(Math.random() * 1e9)}-\${safeName}\`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf';
+    cb(allowed ? null : new Error('Only images and PDF files are allowed'), allowed);
+  }
+});
+
+router.get('/uploads', async (_req, res) => {
+  res.json({ files: uploadedFiles });
+});
+
+router.post('/uploads', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'A file field named "file" is required' });
+  }
+
+  const file = {
+    id: crypto.randomUUID?.() || \`\${Date.now()}\`,
+    originalName: req.file.originalname,
+    fileName: req.file.filename,
+    mimeType: req.file.mimetype,
+    size: req.file.size,
+    url: \`/uploads/\${req.file.filename}\`,
+    metadata: req.body || {},
+    createdAt: new Date().toISOString()
+  };
+
+  uploadedFiles.unshift(file);
+  res.status(201).json({ file });
+});
+
+router.get('/uploads/:id', async (req, res) => {
+  const file = uploadedFiles.find(candidate => candidate.id === req.params.id);
+  if (!file) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  res.json({ file });
+});`);
     }
-    
-    // Call Anthropic API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: message }]
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      return res.status(response.status).json({ error: error.error?.message || 'Anthropic API error' });
+
+    const genericRoutes = this.generateGenericRoutes(config, handledPaths);
+    if (genericRoutes) {
+      sections.push(genericRoutes);
     }
-    
-    const data = await response.json();
-    res.json({ message: data.content[0]?.text || 'No response' });`;
-      } else {
-        handlerCode = `    // TODO: Implement ${handlerName} handler
-    res.json({ message: '${handlerName} endpoint', data: [] });`;
+
+    return `${imports.join('\n')}
+
+${sections.join('\n\n')}
+
+export default router;`;
+  }
+
+  private hasAuthEndpoints(config: FullstackConfig): boolean {
+    return Boolean(config.features?.auth) ||
+      config.apiEndpoints.some(endpoint => /auth|login|register|users?/i.test(endpoint));
+  }
+
+  private hasUploadEndpoints(config: FullstackConfig): boolean {
+    return Boolean(config.features?.uploads) ||
+      config.apiEndpoints.some(endpoint => /upload|file|image|media|photo|storage/i.test(endpoint));
+  }
+
+  private generateGenericRoutes(config: FullstackConfig, handledPaths: Set<string>): string {
+    const genericEndpoints = config.apiEndpoints
+      .map(endpoint => endpoint.replace('/api', '') || '/')
+      .filter(routePath => !handledPaths.has(routePath));
+
+    if (genericEndpoints.length === 0) {
+      return '';
+    }
+
+    const stores = new Set(
+      genericEndpoints.map(routePath => routePath.replace(/\/:id$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'items')
+    );
+
+    const storeDeclarations = Array.from(stores)
+      .map(storeName => `const ${storeName}Store = [];`)
+      .join('\n');
+
+    const routes = genericEndpoints.map(routePath => {
+      const storeName = routePath.replace(/\/:id$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'items';
+
+      if (routePath.includes(':id')) {
+        return `router.get('${routePath}', async (req, res) => {
+  const item = ${storeName}Store.find(candidate => candidate.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Not found' });
+  res.json({ data: item });
+});
+
+router.put('${routePath}', async (req, res) => {
+  const index = ${storeName}Store.findIndex(candidate => candidate.id === req.params.id);
+  if (index === -1) return res.status(404).json({ error: 'Not found' });
+  ${storeName}Store[index] = { ...${storeName}Store[index], ...req.body, updatedAt: new Date().toISOString() };
+  res.json({ data: ${storeName}Store[index] });
+});
+
+router.delete('${routePath}', async (req, res) => {
+  const index = ${storeName}Store.findIndex(candidate => candidate.id === req.params.id);
+  if (index === -1) return res.status(404).json({ error: 'Not found' });
+  const [deleted] = ${storeName}Store.splice(index, 1);
+  res.json({ data: deleted });
+});`;
       }
 
-      return `router.${method}('${routePath}', async (req, res) => {
-  try {
-${handlerCode}
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+      return `router.get('${routePath}', async (_req, res) => {
+  res.json({ data: ${storeName}Store });
+});
+
+router.post('${routePath}', async (req, res) => {
+  const item = {
+    id: \`\${Date.now()}-\${Math.round(Math.random() * 1e9)}\`,
+    ...req.body,
+    createdAt: new Date().toISOString()
+  };
+  ${storeName}Store.unshift(item);
+  res.status(201).json({ data: item });
 });`;
     }).join('\n\n');
 
-    return `import express from 'express';
+    return `${storeDeclarations}
 
-const router = express.Router();
-
-${routes}
-
-export default router;`;
+${routes}`;
   }
 
   /**
@@ -676,6 +910,10 @@ export default router;`;
       'cors': '^2.8.5',
       'dotenv': '^16.3.1'
     };
+
+    if (this.hasUploadEndpoints(config)) {
+      dependencies['multer'] = '^1.4.5-lts.1';
+    }
 
     // Add API client dependencies if API keys are required
     if (config.requiredApiKeys?.includes('OPENAI_API_KEY') || 
@@ -765,6 +1003,16 @@ export default router;`;
       lines.push('MYSQL_DATABASE=your-database-name');
     }
 
+    if (this.hasUploadEndpoints(config)) {
+      if (lines[lines.length - 1] !== '') {
+        lines.push('');
+      }
+      lines.push('# Uploads');
+      lines.push('# Preview mode stores uploaded files on the local server filesystem.');
+      lines.push('# For production, connect this to durable object storage such as S3, R2, or Supabase Storage.');
+      lines.push('MAX_UPLOAD_SIZE_MB=10');
+    }
+
     return lines.join('\n');
   }
 
@@ -774,7 +1022,7 @@ export default router;`;
   public generateFrontendApiConfig(config: FullstackConfig): Array<{ path: string; content: string }> {
     const files: Array<{ path: string; content: string }> = [];
 
-    // Generate src/lib/api.ts
+    // Generate client/src/lib/api.ts for fullstack monorepo projects
     const apiConfig = `/**
  * API Configuration
  * 
@@ -846,12 +1094,29 @@ export const api = {
     
     return response.json();
   },
+
+  async uploadFile(endpoint: string, file: File, metadata: Record<string, string> = {}) {
+    const formData = new FormData();
+    formData.append('file', file);
+    Object.entries(metadata).forEach(([key, value]) => formData.append(key, value));
+
+    const response = await fetch(\`\${API_BASE_URL}/api\${endpoint}\`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(\`API error: \${response.statusText}\`);
+    }
+
+    return response.json();
+  },
 };
 
 export default api;`;
 
     files.push({
-      path: 'src/lib/api.ts',
+      path: 'client/src/lib/api.ts',
       content: apiConfig
     });
 
@@ -860,7 +1125,7 @@ export default api;`;
 VITE_API_URL=http://localhost:${config.backendPort}`;
 
     files.push({
-      path: '.env.example',
+      path: 'client/.env.example',
       content: envExample
     });
 
@@ -920,4 +1185,3 @@ VITE_API_URL=http://localhost:${config.backendPort}`;
 }
 
 export const fullstackIntegrationService = new FullstackIntegrationService();
-

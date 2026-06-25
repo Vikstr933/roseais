@@ -55,9 +55,9 @@ function detectProjectType(files: GeneratedFile[]): 'web' | 'python-script' | 'p
   
   const hasReactFiles = files.some(f => 
     f?.path?.endsWith('.tsx') || f?.path?.endsWith('.jsx') ||
-    (f?.path === 'package.json' && f?.content?.includes('react'))
+    ((f?.path === 'package.json' || f?.path === 'client/package.json') && f?.content?.includes('react'))
   );
-  const hasPackageJson = files.some(f => f?.path === 'package.json');
+  const hasPackageJson = files.some(f => f?.path === 'package.json' || f?.path === 'client/package.json' || f?.path === 'server/package.json');
   
   if (hasReactFiles) return 'web';
   if (hasPackageJson) return 'node';

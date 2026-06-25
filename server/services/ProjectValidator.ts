@@ -526,12 +526,49 @@ export class ProjectValidator {
 
   private normalizeFiles(files: Array<{ path: string; content: string }>): Array<{ path: string; content: string }> {
     const normalized = new Map<string, string>();
+    const normalizedInput = files.map(file => ({
+      ...file,
+      path: this.normalizePath(file.path)
+    }));
+    const hasServer = normalizedInput.some(file => file.path.startsWith('server/'));
+    const hasClientPackage = normalizedInput.some(file => file.path === 'client/package.json');
 
-    for (const file of files) {
-      normalized.set(this.normalizePath(file.path), file.content);
+    for (const file of normalizedInput) {
+      normalized.set(this.normalizeFullstackPath(file.path, hasServer, hasClientPackage), file.content);
     }
 
     return Array.from(normalized.entries()).map(([path, content]) => ({ path, content }));
+  }
+
+  private normalizeFullstackPath(path: string, hasServer: boolean, hasClientPackage: boolean): string {
+    if (!hasServer || path.startsWith('client/') || path.startsWith('server/')) {
+      return path;
+    }
+
+    if (path.startsWith('src/')) {
+      return `client/${path}`;
+    }
+
+    const frontendRootFiles = new Set([
+      'index.html',
+      'vite.config.ts',
+      'vite.config.js',
+      'tsconfig.json',
+      'tsconfig.node.json',
+      'tailwind.config.js',
+      'postcss.config.js',
+      '.env.example'
+    ]);
+
+    if (frontendRootFiles.has(path)) {
+      return `client/${path}`;
+    }
+
+    if (path === 'package.json' && !hasClientPackage) {
+      return 'client/package.json';
+    }
+
+    return path;
   }
 
   private normalizePath(filePath: string): string {

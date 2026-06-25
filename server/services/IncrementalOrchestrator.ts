@@ -654,6 +654,7 @@ export class IncrementalOrchestrator {
     
     // Detect project structure for context (orchestrator responsibility)
     const isMonorepo = existingFiles.some(f => f.path.startsWith('server/') || f.path.startsWith('client/'));
+    const phaseUsesClientDir = phase.files.some(file => file.startsWith('client/'));
     const hasServer = existingFiles.some(f => f.path.startsWith('server/'));
     const isLandingPage = userPrompt.toLowerCase().includes('landing page') || 
                           userPrompt.toLowerCase().includes('nice landing') || 
@@ -687,6 +688,12 @@ DESCRIPTION: ${phase.description}
 FILES TO GENERATE:
 ${phase.files.map(f => `- ${f}`).join('\n')}
 ${monorepoContext}
+${phaseUsesClientDir ? `
+PROJECT STRUCTURE: Fullstack client/server app
+- Generate the exact requested client/ paths. Do not create duplicate root-level package.json, index.html, vite.config.ts, or src/ files.
+- Frontend source files go in client/src/.
+- Frontend config files go in client/.
+` : ''}
 ${existingFilesSection}
 ${patternsSection}
 ${knowledgeContext ? `CONTEXT:\n${knowledgeContext}\n` : ''}
@@ -722,6 +729,8 @@ If this is a base phase for a React/TypeScript project, you MUST generate ALL of
 If this is a core phase, you MUST generate:
 - src/App.tsx (main app component with default export)
 - src/index.css (global styles)
+
+For fullstack client/server phases, prefix the frontend paths above with client/ exactly as listed in FILES TO GENERATE.
 
 **DO NOT skip any required files - the app will not work without them!**
 
@@ -961,7 +970,7 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
    */
   private validateTypeScript(
     file: { path: string; content: string },
-    fileMap: Map<string, string>
+    _fileMap: Map<string, string>
   ): ValidationError[] {
     const errors: ValidationError[] = [];
 
@@ -1039,9 +1048,9 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
    */
   private async fixPhase(
     files: { path: string; content: string }[],
-    errors: ValidationError[],
-    existingFiles: { path: string; content: string }[],
-    phase: GenerationPhase
+    _errors: ValidationError[],
+    _existingFiles: { path: string; content: string }[],
+    _phase: GenerationPhase
   ): Promise<{ path: string; content: string }[]> {
     // ALWAYS apply syntax fixes, even if no errors reported
     // This ensures we catch {; patterns and other syntax errors proactively
@@ -1382,7 +1391,7 @@ OUTPUT: Respond with JSON array: [{"path": "...", "content": "..."}]`;
   /**
    * Summarize file content to reduce token usage
    */
-  private summarizeFileContent(content: string, path: string): string {
+  private summarizeFileContent(content: string, _path: string): string {
     const lines = content.split('\n');
     const maxLines = 100; // Keep first 100 lines for context
     

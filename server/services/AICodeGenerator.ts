@@ -973,8 +973,8 @@ Suggestions to fix:
       'vite': '^7.1.7'
     };
 
-    // Check if this is a monorepo structure (has server/ directory)
-    const isMonorepo = result.some(f => f.path.startsWith('server/'));
+    // Check if this is a monorepo structure (has client/ or server/ directory)
+    const isMonorepo = result.some(f => f.path.startsWith('client/') || f.path.startsWith('server/'));
     const packageJsonPath = isMonorepo ? 'client/package.json' : 'package.json';
     
     // Ensure package.json with proper dependencies (client/package.json for monorepo, package.json for single-package)
@@ -1138,9 +1138,10 @@ export default defineConfig({
     }
 
     // Ensure tsconfig.node.json FIRST (required by vite.config.ts and referenced by tsconfig.json)
-    if (!existingPaths.has('tsconfig.node.json')) {
+    const tsconfigNodePath = isMonorepo ? 'client/tsconfig.node.json' : 'tsconfig.node.json';
+    if (!existingPaths.has(tsconfigNodePath)) {
       result.push({
-        path: 'tsconfig.node.json',
+        path: tsconfigNodePath,
         content: JSON.stringify({
           compilerOptions: {
             target: 'ES2022',
@@ -1161,11 +1162,12 @@ export default defineConfig({
     }
 
     // Ensure tsconfig.json (may reference tsconfig.node.json)
-    const existingTsConfigIndex = result.findIndex(f => f.path === 'tsconfig.json');
+    const tsconfigPath = isMonorepo ? 'client/tsconfig.json' : 'tsconfig.json';
+    const existingTsConfigIndex = result.findIndex(f => f.path === tsconfigPath);
     if (existingTsConfigIndex === -1) {
       // Create new tsconfig.json without references (simpler, works without tsconfig.node.json)
       result.push({
-        path: 'tsconfig.json',
+        path: tsconfigPath,
         content: JSON.stringify({
           compilerOptions: {
             target: 'ES2020',
@@ -1193,7 +1195,7 @@ export default defineConfig({
       try {
         const tsConfig = JSON.parse(result[existingTsConfigIndex].content);
         // If references exist but tsconfig.node.json doesn't exist, remove references
-        if (tsConfig.references && !existingPaths.has('tsconfig.node.json')) {
+        if (tsConfig.references && !existingPaths.has(tsconfigNodePath)) {
           delete tsConfig.references;
           result[existingTsConfigIndex].content = JSON.stringify(tsConfig, null, 2);
           this.logger.info('AICodeGenerator', 'Removed references from tsconfig.json (tsconfig.node.json not found)');
@@ -1229,9 +1231,10 @@ export default defineConfig({
     }
 
     // Ensure tailwind.config.js
-    if (!existingPaths.has('tailwind.config.js')) {
+    const tailwindConfigPath = isMonorepo ? 'client/tailwind.config.js' : 'tailwind.config.js';
+    if (!existingPaths.has(tailwindConfigPath)) {
       result.push({
-        path: 'tailwind.config.js',
+        path: tailwindConfigPath,
         content: `/** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -1247,9 +1250,10 @@ export default {
     }
 
     // Ensure postcss.config.js
-    if (!existingPaths.has('postcss.config.js')) {
+    const postcssConfigPath = isMonorepo ? 'client/postcss.config.js' : 'postcss.config.js';
+    if (!existingPaths.has(postcssConfigPath)) {
       result.push({
-        path: 'postcss.config.js',
+        path: postcssConfigPath,
         content: `export default {
   plugins: {
     tailwindcss: {},
@@ -1567,9 +1571,6 @@ export default function App() {
   private resolveImportPath(fromFile: string, importPath: string): string | null {
     // Get directory of the importing file
     const fromDir = fromFile.substring(0, fromFile.lastIndexOf('/'));
-
-    // Handle different import patterns
-    let targetPath = importPath;
 
     // Remove leading './' or '../'
     const parts = importPath.split('/');

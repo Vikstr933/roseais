@@ -21,10 +21,19 @@ export interface GeneratedFile {
   content: string;
 }
 
+interface PreviewLayout {
+  isFullstack: boolean;
+  frontendCwd: string;
+  backendCwd: string | null;
+  frontendPort: number;
+  backendPort: number;
+}
+
 class WebContainerServiceClass {
   private instances: Map<string, WebContainerInstance> = new Map();
   private bootedInstance: WebContainer | null = null;
   private nextPort = 3000;
+  private backendServerProcess: any = null;
 
   private isLocalPreviewUrl(url: string): boolean {
     try {
@@ -152,9 +161,10 @@ class WebContainerServiceClass {
     webcontainer: WebContainer,
     files: GeneratedFile[]
   ): Promise<void> {
+    const normalizedFiles = this.normalizePreviewFiles(files);
     const fileTree: Record<string, { file: { contents: string } }> = {};
 
-    for (const file of files) {
+    for (const file of normalizedFiles) {
       const pathParts = file.path.split('/');
       let current: any = fileTree;
 
@@ -173,78 +183,21 @@ class WebContainerServiceClass {
     }
 
     await webcontainer.mount(fileTree);
-    console.log(`📁 Mounted ${files.length} files to WebContainer`);
+    console.log(`📁 Mounted ${normalizedFiles.length} files to WebContainer`);
   }
 
   /**
    * Install dependencies (internal method)
    */
   private async _installDependencies(webcontainer: WebContainer): Promise<void> {
-    const installProcess = await webcontainer.spawn('npm', ['install']);
-
-    return new Promise((resolve, reject) => {
-      installProcess.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            // Log installation progress (optional)
-            console.log('📦 Installing dependencies...', data);
-          },
-        })
-      );
-
-      installProcess.exit.then((code) => {
-        if (code === 0) {
-          console.log('✅ Dependencies installed');
-          resolve();
-        } else {
-          console.error('❌ Failed to install dependencies');
-          reject(new Error(`npm install failed with code ${code}`));
-        }
-      });
-    });
+    await this.installDependenciesForLayout(webcontainer);
   }
 
   /**
    * Start dev server (internal method)
    */
   private async _startDevServer(webcontainer: WebContainer): Promise<string> {
-    const port = this.nextPort++;
-    const devProcess = await webcontainer.spawn('npm', ['run', 'dev', '--', '--port', port.toString(), '--host']);
-
-    return new Promise((resolve, reject) => {
-      let resolved = false;
-
-      webcontainer.on('server-ready', (serverPort: number, url: string) => {
-        if (!resolved && serverPort === port && !this.isLocalPreviewUrl(url)) {
-          resolved = true;
-          resolve(url);
-        }
-      });
-
-      devProcess.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            const output = typeof data === 'string' ? data : new TextDecoder().decode(data);
-            console.log('🚀 Dev server:', output);
-
-            if (!resolved) {
-              const remoteUrl = output.match(/https?:\/\/[^\s]+webcontainer-api\.io[^\s]*/)?.[0];
-              if (remoteUrl) {
-                resolved = true;
-                resolve(remoteUrl);
-              }
-            }
-          },
-        })
-      );
-
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        if (!resolved) {
-          reject(new Error('Dev server started, but WebContainer did not provide a browser preview URL.'));
-        }
-      }, 30000);
-    });
+    return this.startDevServerForLayout(webcontainer);
   }
 
   /**
@@ -272,6 +225,7 @@ class WebContainerServiceClass {
    */
   async writeFiles(files: GeneratedFile[]): Promise<void> {
     const webcontainer = await this.boot();
+    const normalizedFiles = this.normalizePreviewFiles(files);
     
     // Check if filesystem is already mounted by trying to read root directory
     let isMounted = false;
@@ -285,11 +239,11 @@ class WebContainerServiceClass {
 
     if (!isMounted) {
       // First time: mount the entire filesystem
-      await this.mountFiles(webcontainer, files);
-      console.log(`📝 Mounted ${files.length} files to WebContainer`);
+      await this.mountFiles(webcontainer, normalizedFiles);
+      console.log(`📝 Mounted ${normalizedFiles.length} files to WebContainer`);
     } else {
       // Already mounted: write files individually using filesystem API
-      for (const file of files) {
+      for (const file of normalizedFiles) {
         try {
           // Ensure directory exists
           const dirPath = file.path.split('/').slice(0, -1).join('/');
@@ -308,8 +262,247 @@ class WebContainerServiceClass {
           // Continue with other files
         }
       }
-      console.log(`📝 Updated ${files.length} files in WebContainer`);
+      console.log(`📝 Updated ${normalizedFiles.length} files in WebContainer`);
     }
+  }
+
+  private normalizePreviewFiles(files: GeneratedFile[]): GeneratedFile[] {
+    const normalizedInput = files.map(file => ({
+      ...file,
+      path: file.path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '')
+    }));
+    const hasServer = normalizedInput.some(file => file.path.startsWith('server/'));
+    const hasClientPackage = normalizedInput.some(file => file.path === 'client/package.json');
+    const normalized = new Map<string, string>();
+
+    for (const file of normalizedInput) {
+      normalized.set(this.normalizeFullstackPath(file.path, hasServer, hasClientPackage), file.content);
+    }
+
+    return Array.from(normalized.entries()).map(([path, content]) => ({ path, content }));
+  }
+
+  private normalizeFullstackPath(path: string, hasServer: boolean, hasClientPackage: boolean): string {
+    if (!hasServer || path.startsWith('client/') || path.startsWith('server/')) {
+      return path;
+    }
+
+    if (path.startsWith('src/')) {
+      return `client/${path}`;
+    }
+
+    const frontendRootFiles = new Set([
+      'index.html',
+      'vite.config.ts',
+      'vite.config.js',
+      'tsconfig.json',
+      'tsconfig.node.json',
+      'tailwind.config.js',
+      'postcss.config.js',
+      '.env.example'
+    ]);
+
+    if (frontendRootFiles.has(path)) {
+      return `client/${path}`;
+    }
+
+    if (path === 'package.json' && !hasClientPackage) {
+      return 'client/package.json';
+    }
+
+    return path;
+  }
+
+  private async fileExists(webcontainer: WebContainer, path: string): Promise<boolean> {
+    try {
+      await webcontainer.fs.readFile(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async detectPreviewLayout(webcontainer: WebContainer): Promise<PreviewLayout> {
+    const hasClientPackage = await this.fileExists(webcontainer, 'client/package.json');
+    const hasServerPackage = await this.fileExists(webcontainer, 'server/package.json');
+    const hasRootPackage = await this.fileExists(webcontainer, 'package.json');
+
+    return {
+      isFullstack: hasServerPackage && (hasClientPackage || hasRootPackage),
+      frontendCwd: hasClientPackage ? 'client' : '.',
+      backendCwd: hasServerPackage ? 'server' : null,
+      frontendPort: this.nextPort++,
+      backendPort: 3001,
+    };
+  }
+
+  private async spawnNpm(
+    webcontainer: WebContainer,
+    cwd: string,
+    args: string[],
+    label: string,
+    onProgress?: (message: string) => void,
+    env?: Record<string, string>
+  ): Promise<any> {
+    const options = cwd === '.'
+      ? (env ? { env } : undefined)
+      : (env ? { cwd, env } : { cwd });
+    const process = options
+      ? await webcontainer.spawn('npm', args, options)
+      : await webcontainer.spawn('npm', args);
+
+    process.output.pipeTo(
+      new WritableStream({
+        write(data) {
+          const message = typeof data === 'string' ? data : new TextDecoder().decode(data);
+          onProgress?.(message);
+          console.log(`${label}:`, message);
+        },
+      })
+    ).catch(error => {
+      console.warn(`${label} output stream ended`, error);
+    });
+
+    return process;
+  }
+
+  private async installDependenciesForLayout(
+    webcontainer: WebContainer,
+    onProgress?: (message: string) => void
+  ): Promise<void> {
+    const layout = await this.detectPreviewLayout(webcontainer);
+    const installTargets = layout.isFullstack && layout.backendCwd
+      ? [layout.frontendCwd, layout.backendCwd]
+      : [layout.frontendCwd];
+
+    for (const cwd of installTargets) {
+      onProgress?.(`Installing dependencies in ${cwd === '.' ? 'project root' : cwd}...\n`);
+      const installProcess = await this.spawnNpm(
+        webcontainer,
+        cwd,
+        ['install'],
+        `📦 npm install (${cwd})`,
+        onProgress
+      );
+
+      const code = await installProcess.exit;
+      if (code !== 0) {
+        throw new Error(`npm install failed in ${cwd} with code ${code}`);
+      }
+    }
+
+    console.log('✅ Dependencies installed');
+  }
+
+  private waitForServerUrl(
+    webcontainer: WebContainer,
+    process: any,
+    expectedPort: number,
+    label: string,
+    onProgress?: (message: string) => void,
+    timeoutMs: number = 30000
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      let resolved = false;
+
+      webcontainer.on('server-ready', (serverPort: number, url: string) => {
+        if (!resolved && serverPort === expectedPort && !this.isLocalPreviewUrl(url)) {
+          resolved = true;
+          resolve(url);
+        }
+      });
+
+      process.output.pipeTo(
+        new WritableStream({
+          write: (data) => {
+            const message = typeof data === 'string' ? data : new TextDecoder().decode(data);
+            onProgress?.(message);
+            console.log(`${label}:`, message);
+
+            if (!resolved) {
+              const remoteUrl = message.match(/https?:\/\/[^\s]+webcontainer-api\.io[^\s]*/)?.[0];
+              if (remoteUrl && !this.isLocalPreviewUrl(remoteUrl)) {
+                resolved = true;
+                resolve(remoteUrl);
+              }
+            }
+          },
+        })
+      ).catch((error: unknown) => {
+        if (!resolved) {
+          reject(error);
+        }
+      });
+
+      process.exit.then((code: number) => {
+        if (!resolved && code !== 0) {
+          reject(new Error(`${label} exited with code ${code}`));
+        }
+      });
+
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error(`${label} started, but WebContainer did not provide a browser-accessible preview URL.`));
+        }
+      }, timeoutMs);
+    });
+  }
+
+  private async startDevServerForLayout(
+    webcontainer: WebContainer,
+    onProgress?: (message: string) => void
+  ): Promise<string> {
+    const layout = await this.detectPreviewLayout(webcontainer);
+
+    if (this.devServerProcess || this.backendServerProcess) {
+      await this.stopDevServer();
+    }
+
+    let backendUrl: string | null = null;
+
+    if (layout.isFullstack && layout.backendCwd) {
+      onProgress?.('Starting backend API server...\n');
+      this.backendServerProcess = await webcontainer.spawn('npm', ['run', 'dev'], {
+        cwd: layout.backendCwd,
+        env: {
+          PORT: String(layout.backendPort),
+        },
+      });
+
+      backendUrl = await this.waitForServerUrl(
+        webcontainer,
+        this.backendServerProcess,
+        layout.backendPort,
+        '🚀 Backend server',
+        onProgress
+      );
+      onProgress?.(`Backend ready at ${backendUrl}\n`);
+    }
+
+    onProgress?.('Starting frontend preview...\n');
+    const frontendEnv = backendUrl ? { VITE_API_URL: backendUrl } : undefined;
+    const frontendArgs = ['run', 'dev', '--', '--port', layout.frontendPort.toString(), '--host'];
+    if (layout.frontendCwd === '.') {
+      this.devServerProcess = frontendEnv
+        ? await webcontainer.spawn('npm', frontendArgs, { env: frontendEnv })
+        : await webcontainer.spawn('npm', frontendArgs);
+    } else {
+      this.devServerProcess = frontendEnv
+        ? await webcontainer.spawn('npm', frontendArgs, { cwd: layout.frontendCwd, env: frontendEnv })
+        : await webcontainer.spawn('npm', frontendArgs, { cwd: layout.frontendCwd });
+    }
+
+    const frontendUrl = await this.waitForServerUrl(
+      webcontainer,
+      this.devServerProcess,
+      layout.frontendPort,
+      '🚀 Frontend dev server',
+      onProgress
+    );
+
+    this.devServerUrl = frontendUrl;
+    return frontendUrl;
   }
 
   /**
@@ -317,30 +510,7 @@ class WebContainerServiceClass {
    */
   public async installDependencies(onProgress?: (message: string) => void): Promise<void> {
     const webcontainer = await this.boot();
-    
-    const installProcess = await webcontainer.spawn('npm', ['install']);
-
-    return new Promise((resolve, reject) => {
-      installProcess.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            const message = typeof data === 'string' ? data : new TextDecoder().decode(data);
-            onProgress?.(message);
-            console.log('📦 npm install:', message);
-          },
-        })
-      );
-
-      installProcess.exit.then((code) => {
-        if (code === 0) {
-          console.log('✅ Dependencies installed');
-          resolve();
-        } else {
-          console.error('❌ Failed to install dependencies');
-          reject(new Error(`npm install failed with code ${code}`));
-        }
-      });
-    });
+    await this.installDependenciesForLayout(webcontainer, onProgress);
   }
 
   /**
@@ -351,57 +521,9 @@ class WebContainerServiceClass {
 
   public async startDevServer(onProgress?: (message: string) => void): Promise<string> {
     const webcontainer = await this.boot();
-    const port = this.nextPort++;
-
-    // Stop existing dev server if any
-    if (this.devServerProcess) {
-      await this.stopDevServer();
-    }
-
-    this.devServerProcess = await webcontainer.spawn('npm', ['run', 'dev', '--', '--port', port.toString(), '--host']);
-
-    return new Promise((resolve, reject) => {
-      let resolved = false;
-
-      // Listen for WebContainer's server-ready event (gives us the actual URL)
-      webcontainer.on('server-ready', (serverPort: number, url: string) => {
-        if (!resolved && serverPort === port && !this.isLocalPreviewUrl(url)) {
-          resolved = true;
-          this.devServerUrl = url;
-          console.log('✅ WebContainer server ready:', url);
-          resolve(url);
-        }
-      });
-
-      // Also listen to output for progress and fallback URL detection
-      const service = this; // Capture 'this' for use in closure
-      this.devServerProcess.output.pipeTo(
-        new WritableStream({
-          write(data) {
-            const message = typeof data === 'string' ? data : new TextDecoder().decode(data);
-            onProgress?.(message);
-            console.log('🚀 Dev server:', message);
-
-            if (!resolved) {
-              const remoteUrl = message.match(/https?:\/\/[^\s]+webcontainer-api\.io[^\s]*/)?.[0];
-              if (remoteUrl) {
-                service.devServerUrl = remoteUrl;
-                resolved = true;
-                resolve(remoteUrl);
-              }
-            }
-          },
-        })
-      );
-
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          reject(new Error('Dev server started, but WebContainer did not provide a browser preview URL.'));
-        }
-      }, 30000);
-    });
+    const url = await this.startDevServerForLayout(webcontainer, onProgress);
+    console.log('✅ WebContainer server ready:', url);
+    return url;
   }
 
   /**
@@ -416,6 +538,16 @@ class WebContainerServiceClass {
         console.log('🛑 Dev server stopped');
       } catch (error) {
         console.warn('Failed to stop dev server:', error);
+      }
+    }
+
+    if (this.backendServerProcess) {
+      try {
+        this.backendServerProcess.kill();
+        this.backendServerProcess = null;
+        console.log('🛑 Backend server stopped');
+      } catch (error) {
+        console.warn('Failed to stop backend server:', error);
       }
     }
   }
