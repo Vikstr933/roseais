@@ -19,6 +19,11 @@ import { userService } from '../services/APIKeyService';
 import { monetizationService } from '../services/MonetizationService';
 import { checkUsageCredits, deductCredits } from '../middleware/usageCheck';
 import {
+  enforceFreeGenerationLimit,
+  requirePaidForFullstackGeneration,
+  requirePaidPlan,
+} from '../middleware/paywall';
+import {
   checkGenerationLock,
   createGenerationLock,
   releaseGenerationLock,
@@ -440,7 +445,11 @@ router.post('/components/stop-server', authenticateUser, async (req, res) => {
   }
 });
 
-router.post('/components/download', authenticateUser, async (req, res) => {
+router.post(
+  '/components/download',
+  authenticateUser,
+  requirePaidPlan('code_export', 'Downloading generated source code requires a Pro plan.'),
+  async (req, res) => {
   try {
     const { componentName, files } = req.body;
     const baseWorkspaceDir = path.join(
@@ -619,7 +628,12 @@ router.post('/components/generate/trigger', authenticateUser, async (req, res) =
 });
 
 // Smart Orchestrator Demo Endpoint - 30-50% cost savings, 40-60% faster!
-router.post('/components/generate/smart', authenticateUser, async (req, res) => {
+router.post(
+  '/components/generate/smart',
+  authenticateUser,
+  enforceFreeGenerationLimit(),
+  requirePaidForFullstackGeneration,
+  async (req, res) => {
   try {
     const { prompt } = req.body;
     const userId = req.user?.id;
@@ -641,6 +655,17 @@ router.post('/components/generate/smart', authenticateUser, async (req, res) => 
       constraints,
       userId
     });
+
+    if (userId) {
+      await monetizationService.trackUsage(
+        userId,
+        'anthropic',
+        'smart_component_generation',
+        1000,
+        undefined,
+        { agentsUsed: result.metadata.agentsUsed }
+      );
+    }
 
     // Return result with metadata
     res.json({
@@ -682,7 +707,12 @@ router.get('/components/smart/cache-stats', authenticateUser, async (req, res) =
   }
 });
 
-router.post('/components/generate', authenticateUser, async (req, res) => {
+router.post(
+  '/components/generate',
+  authenticateUser,
+  enforceFreeGenerationLimit(),
+  requirePaidForFullstackGeneration,
+  async (req, res) => {
   try {
     const { prompt, sessionId, selectedKnowledge, projectId, useSmartOrchestration = true } = req.body;
     const userId = req.user?.id;
@@ -1159,7 +1189,11 @@ router.get('/components/:componentName/files', authenticateUser, async (req, res
 });
 
 // POST /api/components/:componentName/deploy/vercel - Deploy component to Vercel
-router.post('/components/:componentName/deploy/vercel', authenticateUser, async (req, res) => {
+router.post(
+  '/components/:componentName/deploy/vercel',
+  authenticateUser,
+  requirePaidPlan('production_deploy', 'Deploying generated apps to Vercel requires a Pro plan.'),
+  async (req, res) => {
   try {
     const { componentName } = req.params;
     const { framework = 'react', buildCommand, outputDirectory } = req.body;

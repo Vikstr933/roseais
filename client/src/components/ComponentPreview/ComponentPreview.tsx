@@ -138,7 +138,10 @@ export function ComponentPreview({ componentName, files }: PreviewProps) {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to generate download');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || 'Failed to generate download');
+      }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

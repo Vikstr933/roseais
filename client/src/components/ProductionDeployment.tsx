@@ -98,10 +98,11 @@ export function ProductionDeployment({ files, projectName, workspaceId, onDeploy
           description: "Your app is now live and ready to share.",
         });
       } else {
-        setDeploymentResult({ success: false, error: result.error });
+        const message = result.message || result.error || "Something went wrong during deployment.";
+        setDeploymentResult({ success: false, error: message });
         toast({
           title: "❌ Deployment Failed",
-          description: result.error || "Something went wrong during deployment.",
+          description: message,
           variant: "destructive",
         });
       }

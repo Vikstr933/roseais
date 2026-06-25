@@ -213,12 +213,14 @@ export function ProjectSettingsDialog({
             : 'Project settings updated'
         });
       } else {
-        throw new Error('Failed to update project');
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || 'Failed to update project');
       }
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to update project settings',
+        description:
+          error instanceof Error ? error.message : 'Failed to update project settings',
         variant: 'destructive'
       });
     } finally {

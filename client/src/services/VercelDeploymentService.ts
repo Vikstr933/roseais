@@ -40,7 +40,7 @@ export class VercelDeploymentService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.details || errorData.error || 'Failed to deploy to Vercel');
+        throw new Error(errorData.message || errorData.details || errorData.error || 'Failed to deploy to Vercel');
       }
 
       const result = await response.json();

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { productionDeploymentService } from '../services/ProductionDeploymentService';
 import { authenticateUser } from '../middleware/auth';
+import { requirePaidPlan } from '../middleware/paywall';
 import { z } from 'zod';
 
 const router = Router();
@@ -24,7 +25,11 @@ const deploymentConfigSchema = z.object({
 /**
  * Deploy generated code to production (GitHub + Vercel)
  */
-router.post('/deploy', authenticateUser, async (req, res) => {
+router.post(
+  '/deploy',
+  authenticateUser,
+  requirePaidPlan('production_deploy', 'Production deployment requires a Pro plan.'),
+  async (req, res) => {
   try {
     const validatedData = deploymentConfigSchema.parse(req.body);
     const userId = (req as any).user?.id || 'anonymous';

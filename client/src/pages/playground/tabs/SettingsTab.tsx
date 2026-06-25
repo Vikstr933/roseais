@@ -83,7 +83,7 @@ export function SettingsTab({ editorTheme, setEditorTheme, currentProject }: Set
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to update settings`);
+        throw new Error(errorData.message || errorData.error || `Failed to update settings`);
       }
 
       toast({
@@ -229,4 +229,3 @@ export function SettingsTab({ editorTheme, setEditorTheme, currentProject }: Set
     </ScrollArea>
   );
 }
-

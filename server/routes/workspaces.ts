@@ -5,6 +5,7 @@ import { chatMessages, codeGenerationSessions } from '../../db/schema-pg';
 import { eq, and, sql } from 'drizzle-orm';
 import { projectService } from '../services/ProjectService';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
+import { requirePaidPlan, requirePaidPlanWhen } from '../middleware/paywall';
 import { agentEventEmitter } from '../index';
 import { performanceService } from '../services/PerformanceService';
 
@@ -168,19 +169,17 @@ router.get('/:id', authenticateUser, async (req, res) => {
 // POST /api/workspaces - Create new project
 router.post('/', authenticateUser, async (req, res) => {
   try {
-    const { name, description, projectType, agentConfig, testCases, settings } =
-      req.body;
+    const { name, agentConfig, testCases, settings } = req.body;
+    const projectName = typeof name === 'string' ? name.trim() : '';
 
-    if (!name || !description) {
-      return res
-        .status(400)
-        .json({ error: 'Name and description are required' });
+    if (!projectName) {
+      return res.status(400).json({ error: 'Project name is required' });
     }
 
     const projectData = {
-      name,
-      description,
-      projectType: projectType || 'web_app',
+      name: projectName,
+      description: '',
+      projectType: 'web_app' as const,
       ownerId: req.user!.id,
       agentConfig,
       testCases,
@@ -262,7 +261,11 @@ router.post('/join', authenticateUser, async (req, res) => {
 });
 
 // POST /api/workspaces/:id/export - Export playground generation to project
-router.post('/:id/export', authenticateUser, async (req, res) => {
+router.post(
+  '/:id/export',
+  authenticateUser,
+  requirePaidPlan('code_export', 'Saving generated files into a project requires a Pro plan.'),
+  async (req, res) => {
   try {
     const projectId = parseInt(req.params.id);
     const { files, componentName } = req.body;
@@ -388,7 +391,15 @@ router.put('/:id/publishing-policy', authenticateUser, async (req, res) => {
 });
 
 // PUT /api/workspaces/:id - Update workspace
-router.put('/:id', authenticateUser, async (req, res) => {
+router.put(
+  '/:id',
+  authenticateUser,
+  requirePaidPlanWhen(
+    'public_project',
+    req => parseOptionalBoolean(req.body?.isPublic) === true,
+    'Publishing projects to the community requires a Pro plan.'
+  ),
+  async (req, res) => {
   try {
     const workspaceId = parseInt(req.params.id);
     const userId = req.user!.id;
@@ -1144,7 +1155,15 @@ router.delete('/:id/members/:memberId', authenticateUser, async (req, res) => {
 });
 
 // PATCH /api/workspaces/:id - Update workspace settings (alternative to PUT)
-router.patch('/:id', authenticateUser, async (req, res) => {
+router.patch(
+  '/:id',
+  authenticateUser,
+  requirePaidPlanWhen(
+    'public_project',
+    req => parseOptionalBoolean(req.body?.isPublic) === true,
+    'Publishing projects to the community requires a Pro plan.'
+  ),
+  async (req, res) => {
   try {
     const workspaceId = parseInt(req.params.id);
     const {
