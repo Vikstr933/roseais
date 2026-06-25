@@ -97,15 +97,24 @@ export class ErrorChecker {
 
   private checkMissingFiles(files: { path: string; content: string }[]): CodeError[] {
     const errors: CodeError[] = [];
-    const filePaths = new Set(files.map(f => f.path));
+    const filePaths = new Set(files.map(f => f.path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '')));
+    const isMonorepo = Array.from(filePaths).some(path => path.startsWith('client/') || path.startsWith('server/'));
 
-    const requiredFiles = [
-      { path: 'package.json', reason: 'Required for npm dependencies' },
-      { path: 'tsconfig.json', reason: 'Required for TypeScript compilation' },
-      { path: 'index.html', reason: 'Required HTML entry point' },
-      { path: 'src/main.tsx', reason: 'Required React entry point' },
-      { path: 'src/App.tsx', reason: 'Required main component' }
-    ];
+    const requiredFiles = isMonorepo
+      ? [
+          { path: 'client/package.json', reason: 'Required for frontend npm dependencies' },
+          { path: 'client/tsconfig.json', reason: 'Required for frontend TypeScript compilation' },
+          { path: 'client/index.html', reason: 'Required frontend HTML entry point' },
+          { path: 'client/src/main.tsx', reason: 'Required frontend React entry point' },
+          { path: 'client/src/App.tsx', reason: 'Required frontend main component' }
+        ]
+      : [
+          { path: 'package.json', reason: 'Required for npm dependencies' },
+          { path: 'tsconfig.json', reason: 'Required for TypeScript compilation' },
+          { path: 'index.html', reason: 'Required HTML entry point' },
+          { path: 'src/main.tsx', reason: 'Required React entry point' },
+          { path: 'src/App.tsx', reason: 'Required main component' }
+        ];
 
     requiredFiles.forEach(req => {
       if (!filePaths.has(req.path)) {

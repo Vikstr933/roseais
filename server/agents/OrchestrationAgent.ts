@@ -579,10 +579,20 @@ export class OrchestrationAgent extends BaseAgent {
     const warnings: string[] = [];
     let isValid = true;
 
+    const filePaths = files.map(f => f.path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, ''));
+    const isMonorepo = filePaths.some(path => path.startsWith('client/') || path.startsWith('server/'));
+    const packageJsonPath = isMonorepo ? 'client/package.json' : 'package.json';
+    const mainEntryPath = isMonorepo ? 'client/src/main.tsx' : 'src/main.tsx';
+    const tsConfigPath = isMonorepo ? 'client/tsconfig.json' : 'tsconfig.json';
+
     // Check for required files
-    const hasPackageJson = files.some(f => f.path === 'package.json');
-    const hasMainComponent = files.some(f => f.path.endsWith('.tsx') && !f.path.includes('main.tsx'));
-    const hasMainEntry = files.some(f => f.path === 'src/main.tsx');
+    const hasPackageJson = filePaths.includes(packageJsonPath);
+    const hasMainComponent = filePaths.some(path =>
+      path.endsWith('.tsx') &&
+      !path.endsWith('main.tsx') &&
+      (!isMonorepo || path.startsWith('client/src/'))
+    );
+    const hasMainEntry = filePaths.includes(mainEntryPath);
 
     if (!hasPackageJson) {
       warnings.push('Missing package.json');
@@ -600,7 +610,7 @@ export class OrchestrationAgent extends BaseAgent {
     }
 
     // Check for TypeScript configuration
-    const hasTsConfig = files.some(f => f.path === 'tsconfig.json');
+    const hasTsConfig = filePaths.includes(tsConfigPath);
     if (!hasTsConfig) {
       warnings.push('Missing TypeScript configuration');
     }

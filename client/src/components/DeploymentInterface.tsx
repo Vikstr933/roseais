@@ -3,7 +3,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { ExternalLink, Play, Globe, Trash2, Loader2 } from 'lucide-react';
-import { WebContainerService } from '../services/WebContainerService';
+import { webContainerService } from '../services/WebContainerService';
 import { vercelDeploymentService, VercelDeployment } from '../services/VercelDeploymentService';
 
 interface DeploymentInterfaceProps {
@@ -22,8 +22,6 @@ export const DeploymentInterface: React.FC<DeploymentInterfaceProps> = ({
   const [vercelDeployments, setVercelDeployments] = useState<VercelDeployment[]>([]);
   const [vercelDeploying, setVercelDeploying] = useState(false);
   const [vercelError, setVercelError] = useState<string>('');
-
-  const webContainerService = new WebContainerService();
 
   useEffect(() => {
     loadVercelDeployments();

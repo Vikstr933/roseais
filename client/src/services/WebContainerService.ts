@@ -32,7 +32,6 @@ interface PreviewLayout {
 class WebContainerServiceClass {
   private instances: Map<string, WebContainerInstance> = new Map();
   private bootedInstance: WebContainer | null = null;
-  private nextPort = 3000;
   private backendServerProcess: any = null;
 
   private isLocalPreviewUrl(url: string): boolean {
@@ -266,6 +265,44 @@ class WebContainerServiceClass {
     }
   }
 
+  async listFiles(path: string = '.'): Promise<string[]> {
+    const webcontainer = await this.boot();
+    return webcontainer.fs.readdir(path);
+  }
+
+  async executeCommand(
+    executable: string,
+    args: string[] = [],
+    options: {
+      cwd?: string;
+      onOutput?: (line: string) => void;
+      env?: Record<string, string>;
+    } = {}
+  ): Promise<{ exitCode: number }> {
+    const webcontainer = await this.boot();
+    const spawnOptions = {
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+      ...(options.env ? { env: options.env } : {}),
+    };
+    const process = Object.keys(spawnOptions).length > 0
+      ? await webcontainer.spawn(executable, args, spawnOptions)
+      : await webcontainer.spawn(executable, args);
+
+    process.output.pipeTo(
+      new WritableStream({
+        write(data) {
+          const message = typeof data === 'string' ? data : new TextDecoder().decode(data);
+          options.onOutput?.(message);
+        },
+      })
+    ).catch(error => {
+      console.warn(`Command output stream ended for ${executable}`, error);
+    });
+
+    const exitCode = await process.exit;
+    return { exitCode };
+  }
+
   private normalizePreviewFiles(files: GeneratedFile[]): GeneratedFile[] {
     const normalizedInput = files.map(file => ({
       ...file,
@@ -331,7 +368,7 @@ class WebContainerServiceClass {
       isFullstack: hasServerPackage && (hasClientPackage || hasRootPackage),
       frontendCwd: hasClientPackage ? 'client' : '.',
       backendCwd: hasServerPackage ? 'server' : null,
-      frontendPort: this.nextPort++,
+      frontendPort: 3000,
       backendPort: 3001,
     };
   }
@@ -400,13 +437,15 @@ class WebContainerServiceClass {
     expectedPort: number,
     label: string,
     onProgress?: (message: string) => void,
-    timeoutMs: number = 30000
+    timeoutMs: number = 45000,
+    allowAnyRemotePort: boolean = false
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       let resolved = false;
 
       webcontainer.on('server-ready', (serverPort: number, url: string) => {
-        if (!resolved && serverPort === expectedPort && !this.isLocalPreviewUrl(url)) {
+        const matchesExpectedServer = serverPort === expectedPort || allowAnyRemotePort;
+        if (!resolved && matchesExpectedServer && !this.isLocalPreviewUrl(url)) {
           resolved = true;
           resolve(url);
         }
@@ -498,7 +537,9 @@ class WebContainerServiceClass {
       this.devServerProcess,
       layout.frontendPort,
       '🚀 Frontend dev server',
-      onProgress
+      onProgress,
+      45000,
+      true
     );
 
     this.devServerUrl = frontendUrl;
