@@ -52,11 +52,15 @@ export class ErrorChecker {
     const importErrors = this.checkImportErrors(files);
     warnings.push(...importErrors);
 
-    // Check 4: TypeScript configuration issues
+    // Check 4: Inert navigation controls
+    const navigationWarnings = this.checkNavigationInteractivity(files);
+    warnings.push(...navigationWarnings);
+
+    // Check 5: TypeScript configuration issues
     const tsConfigErrors = this.checkTypeScriptConfig(files);
     errors.push(...tsConfigErrors);
 
-    // Check 5: Package.json issues
+    // Check 6: Package.json issues
     const packageErrors = this.checkPackageJson(files);
     errors.push(...packageErrors.filter(e => e.severity === 'error'));
     warnings.push(...packageErrors.filter(e => e.severity === 'warning'));
@@ -173,6 +177,62 @@ export class ErrorChecker {
         }
       }
     });
+
+    return warnings;
+  }
+
+  private checkNavigationInteractivity(files: { path: string; content: string }[]): CodeError[] {
+    const warnings: CodeError[] = [];
+    const pageLikeLabels = [
+      'home',
+      'gallery',
+      'community',
+      'about',
+      'cards',
+      'packs',
+      'settings',
+      'profile',
+      'dashboard',
+      'collection',
+    ];
+
+    for (const file of files) {
+      if (!/\.(tsx|jsx)$/.test(file.path)) continue;
+
+      const navBlocks = file.content.matchAll(/<nav\b[\s\S]*?<\/nav>/gi);
+      for (const navMatch of navBlocks) {
+        const navContent = navMatch[0];
+        const normalizedNavText = navContent
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .toLowerCase();
+        const matchedLabels = pageLikeLabels.filter(label =>
+          new RegExp(`\\b${label}\\b`, 'i').test(normalizedNavText)
+        );
+
+        if (matchedLabels.length < 2) continue;
+
+        const deadHref = /href=["']#?["']/i.test(navContent);
+        const buttonMatches = Array.from(navContent.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi));
+        const inertButtons = buttonMatches.filter(([, attributes, children]) => {
+          const labelText = children.replace(/<[^>]+>/g, ' ').toLowerCase();
+          return !/onClick\s*=/.test(attributes) && pageLikeLabels.some(label => new RegExp(`\\b${label}\\b`, 'i').test(labelText));
+        });
+
+        if (!deadHref && inertButtons.length === 0) continue;
+
+        const line = file.content.slice(0, navMatch.index ?? 0).split('\n').length;
+        warnings.push({
+          file: file.path,
+          line,
+          message: `Navigation appears to include page labels (${matchedLabels.join(', ')}) but has inert links or buttons`,
+          severity: 'warning',
+          category: 'runtime',
+          suggestion: 'Wire each navigation item to active page/tab state, matching anchor sections, or real router routes',
+          fixable: true,
+        });
+      }
+    }
 
     return warnings;
   }

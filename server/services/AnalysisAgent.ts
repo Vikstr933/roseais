@@ -471,6 +471,16 @@ CRITICAL REQUIREMENTS FOR LANDING PAGES:
 - If the user requests a "landing page", "nice landing page", or mentions "design", the CSS MUST be production-ready and visually impressive
 - Do NOT generate minimal or basic CSS - landing pages need full, comprehensive styling
 
+CRITICAL REQUIREMENTS FOR NAVIGATION AND MULTI-VIEW APPS:
+- If the UI shows navigation items such as Home, Gallery, Community, About, Cards, Packs, Settings, or similar page/tab labels, each visible item MUST be functional.
+- Use one of these patterns and include all required code:
+  * In-app view state: activePage/activeTab state, onClick handlers in the nav, and conditional rendering for every nav item.
+  * Anchor navigation: href="#section-id" links and matching section id attributes in the rendered page.
+  * Router navigation: react-router-dom routes, Links/NavLinks, and route components for every nav item.
+- NEVER create decorative nav links, href="#", buttons without onClick, or labels for pages that do not exist.
+- If the request mentions multiple pages/sections, plan the required page/section components explicitly. Do not rely on a Header-only visual nav.
+- The preview must let users click between all advertised pages/tabs/sections without staying stuck on the default view.
+
 Create a plan with the following structure:
 
 PHASE 1: BASE FOUNDATION
@@ -1116,4 +1126,3 @@ When planning component structure, ensure:
 Always respond with valid JSON in the specified format.`;
   }
 }
-

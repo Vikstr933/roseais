@@ -376,6 +376,7 @@ CRITICAL REQUIREMENTS:
 - Use Tailwind CSS for styling (with inline classes, use modern gradients and shadows)
 - Make the component fully functional and interactive with realistic data
 - Include proper error handling and loading states
+- Every visible navigation item, tab, or page label must be functional. If you render labels such as Gallery, Community, About, Cards, Packs, Settings, or similar, implement active view state with onClick handlers, real anchor sections with matching ids, or router Links/Routes. Never render decorative href="#" links or nav buttons without handlers.
 
 🚨 CRITICAL SYNTAX RULES - VERIFY BEFORE RESPONDING 🚨
 ABSOLUTELY NO SYNTAX ERRORS ALLOWED:
@@ -475,7 +476,8 @@ The component should be a complete, functional implementation in ONE SINGLE FILE
 - NO local imports (no "./components/...", no "./utils/...", etc.)
 - Put ALL types, sub-components, and helpers IN THE SAME FILE
 - Export the main component as: "export default function App()"
-- Make it fully functional and production-ready`;
+- Make it fully functional and production-ready
+- If you include navigation, tabs, or multiple pages/sections, every visible item must switch view, scroll to a real section, or route to a real page. No decorative nav items, href="#", or inert buttons.`;
 
     return prompt;
   }
@@ -546,7 +548,11 @@ CRITICAL RULES:
 4. App.tsx uses DEFAULT export: export default function App() {}
 5. Match export type to import type (named import = named export)
 6. All imports must have corresponding files in your JSON array
-7. NO syntax errors - especially:
+7. Every visible navigation item, tab, or page label must be functional:
+   - Use activePage/activeTab state + onClick handlers, real anchor ids, or react-router-dom routes
+   - Create/render every page or section named in the navbar
+   - Never use decorative href="#" links or buttons without onClick
+8. NO syntax errors - especially:
    - No semicolons after { or before : in ternaries
    - No interface Name {; or return {; patterns
    - All brackets/braces/parens must be balanced
@@ -594,7 +600,8 @@ Start your response with [`;
 - Put utilities in src/utils/*.ts
 - Put custom hooks in src/hooks/*.ts
 - Return the result as a JSON array of files
-- Make it production-ready and fully functional`;
+- Make it production-ready and fully functional
+- If you include navigation, tabs, or multiple pages/sections, every visible item must switch view, scroll to a real section, or route to a real page. No decorative nav items, href="#", or inert buttons.`;
 
     return prompt;
   }
