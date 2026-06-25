@@ -8,10 +8,11 @@ import { memo, forwardRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Sparkles, Code2, Zap, Wand2, MessageCircle, Loader2 } from 'lucide-react';
 import { ChatMessage } from '../../../components/ChatMessage';
-import type { WorkspaceChatMessage } from '../types';
+import type { StatusMessage, WorkspaceChatMessage } from '../types';
 
 interface ChatMessagesProps {
   chatHistory: WorkspaceChatMessage[];
+  statusMessages: StatusMessage[];
   isLoading: boolean;
   isChatMode?: boolean;
 }
@@ -57,11 +58,15 @@ function TypingDots() {
 }
 
 // Enhanced loading component for CODE mode
-function CodeLoadingIndicator() {
+function CodeLoadingIndicator({ latestStatus }: { latestStatus?: StatusMessage }) {
   const [messageIndex, setMessageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   
   useEffect(() => {
+    if (latestStatus) {
+      return;
+    }
+
     // Rotate through messages
     const messageInterval = setInterval(() => {
       setMessageIndex((prev) => (prev + 1) % CODE_LOADING_MESSAGES.length);
@@ -79,9 +84,12 @@ function CodeLoadingIndicator() {
       clearInterval(messageInterval);
       clearInterval(progressInterval);
     };
-  }, []);
+  }, [latestStatus]);
   
-  const CurrentIcon = CODE_LOADING_MESSAGES[messageIndex].icon;
+  const statusProgress = latestStatus?.content.match(/\((\d+)%\)/);
+  const currentProgress = statusProgress ? Number(statusProgress[1]) : progress;
+  const CurrentIcon = latestStatus ? Loader2 : CODE_LOADING_MESSAGES[messageIndex].icon;
+  const displayText = latestStatus?.content || CODE_LOADING_MESSAGES[messageIndex].text;
   
   return (
     <motion.div
@@ -126,9 +134,9 @@ function CodeLoadingIndicator() {
                 exit={{ opacity: 0, x: 10 }}
                 className="flex items-center gap-2"
               >
-                <CurrentIcon className="h-4 w-4 text-primary" />
+                <CurrentIcon className={`h-4 w-4 text-primary ${latestStatus ? 'animate-spin' : ''}`} />
                 <span className="text-sm font-medium text-foreground">
-                  {CODE_LOADING_MESSAGES[messageIndex].text}
+                  {displayText}
                 </span>
               </motion.div>
             </div>
@@ -140,7 +148,7 @@ function CodeLoadingIndicator() {
             <motion.div
               className="absolute left-0 top-0 h-full bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 rounded-full"
               initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
+              animate={{ width: `${currentProgress}%` }}
               transition={{ duration: 0.3 }}
             />
             {/* Shimmer effect */}
@@ -151,11 +159,12 @@ function CodeLoadingIndicator() {
             />
           </div>
           
-          {/* Helpful tip */}
-          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <Sparkles className="h-3 w-3" />
-            Watch the Editor tab light up as code appears!
-          </p>
+          {!latestStatus && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Sparkles className="h-3 w-3" />
+              Watch the Editor tab light up as code appears!
+            </p>
+          )}
         </div>
       </div>
     </motion.div>
@@ -225,9 +234,11 @@ function ChatLoadingIndicator() {
 
 export const ChatMessages = memo(
   forwardRef<HTMLDivElement, ChatMessagesProps>(function ChatMessages(
-    { chatHistory, isLoading, isChatMode = false },
+    { chatHistory, statusMessages, isLoading, isChatMode = false },
     ref
   ) {
+    const latestStatus = statusMessages[statusMessages.length - 1];
+
     return (
       <div
         ref={ref}
@@ -310,11 +321,10 @@ export const ChatMessages = memo(
 
           {/* Conditional loading indicator based on mode */}
           <AnimatePresence mode="wait">
-            {isLoading && (isChatMode ? <ChatLoadingIndicator /> : <CodeLoadingIndicator />)}
+            {isLoading && (isChatMode ? <ChatLoadingIndicator /> : <CodeLoadingIndicator latestStatus={latestStatus} />)}
           </AnimatePresence>
         </div>
       </div>
     );
   })
 );
-

@@ -2315,32 +2315,22 @@ export default function PromptPlayground() {
                     // Handle different SSE event types
                     if (data.type === 'INCREMENTAL_GENERATION_START') {
                       console.log('🔄 Incremental generation started:', data.data);
-                      addChatMessage({
-                        role: 'assistant',
-                        content: '🔄 Starting incremental code generation...',
-                        timestamp: Date.now()
-                      });
+                      setStatusMessages([]);
+                      addStatusMessage('Starting incremental code generation...', 'progress');
                     } else if (data.type === 'PLAN_CREATED') {
                       console.log('📋 Generation plan created:', data.data);
                       const plan = data.data.plan;
-                      addChatMessage({
-                        role: 'assistant',
-                        content: `📋 Created generation plan: ${plan.appName} with ${plan.phases.length} phases\n${plan.phases.map((p: any) => `  • ${p.phase}: ${p.description} (${p.files} files)`).join('\n')}`,
-                        timestamp: Date.now()
-                      });
+                      addStatusMessage(`Created generation plan: ${plan.appName} with ${plan.phases.length} phases`, 'progress');
                     } else if (data.type === 'PHASE_PROGRESS') {
                       console.log('⏳ Phase progress:', data.data);
                       setCurrentStep(`Phase: ${data.data.phase} - ${data.data.message}`);
                       setOverallProgress(data.data.progress || 0);
-                      addChatMessage({
-                        role: 'assistant',
-                        content: `⏳ ${data.data.phase}: ${data.data.message} (${Math.round(data.data.progress)}%)`,
-                        timestamp: Date.now()
-                      });
+                      addStatusMessage(`${data.data.phase}: ${data.data.message} (${Math.round(data.data.progress)}%)`, 'progress');
                     } else if (data.type === 'STEP_START') {
                     console.log('ðŸ“ Step started:', data.data);
                     setCurrentStep(data.data.details || '');
                     setOverallProgress(data.data.progress || 0);
+                    addStatusMessage(data.data.details || data.data.task || 'Processing...', 'progress');
                     
                     // Update orchestration steps
                     setOrchestrationSteps(prev => {
@@ -2361,12 +2351,6 @@ export default function PromptPlayground() {
                       }
                     });
 
-                    // Add chat message
-                    addChatMessage({
-                      role: 'assistant',
-                      content: `${data.data.details || 'Processing...'}`,
-                      timestamp: Date.now()
-                    });
                   } else if (data.type === 'STEP_COMPLETE') {
                     console.log('âœ… Step completed:', data.data);
                     setOverallProgress(data.data.progress || 0);
@@ -2378,12 +2362,7 @@ export default function PromptPlayground() {
                         : s
                     ));
 
-                    // Add completion message
-                    addChatMessage({
-                      role: 'assistant',
-                      content: `âœ… ${data.data.result || 'Step completed'}`,
-                      timestamp: Date.now()
-                    });
+                    addStatusMessage(data.data.result || 'Step completed', 'success');
                   } else if (data.type === 'FILE_GENERATED') {
                     const filePath = data.data?.file?.path;
                     if (!filePath || typeof filePath !== 'string') {
@@ -2500,11 +2479,7 @@ export default function PromptPlayground() {
 
                     // Removed chat messages - files update silently in real-time via setResponse above
                   } else if (data.type === 'PROJECT_CONTEXT_LOADED') {
-                    addChatMessage({
-                      role: 'assistant',
-                      content: data.data.message || 'Loaded project context',
-                      timestamp: Date.now()
-                    });
+                    addStatusMessage(data.data.message || 'Loaded project context', 'info');
                   } else if (data.type === 'AUTO_FIXING') {
                     // Silently handle auto-fixing - don't show to user, just log
                     console.log('🔧 Auto-fixing errors:', data.data);
@@ -2513,11 +2488,7 @@ export default function PromptPlayground() {
                     console.log('✅ Auto-fix complete:', data.data);
                     // Only show message if there are still remaining errors after auto-fix
                     if (data.data.remainingErrors > 0 || data.data.remainingWarnings > 0) {
-                      addChatMessage({
-                        role: 'assistant',
-                        content: data.data.message || `✅ Fixed errors automatically. ${data.data.remainingErrors} error${data.data.remainingErrors !== 1 ? 's' : ''} and ${data.data.remainingWarnings} warning${data.data.remainingWarnings !== 1 ? 's' : ''} remain.`,
-                        timestamp: Date.now()
-                      });
+                      addStatusMessage(data.data.message || `Fixed errors automatically. ${data.data.remainingErrors} error${data.data.remainingErrors !== 1 ? 's' : ''} and ${data.data.remainingWarnings} warning${data.data.remainingWarnings !== 1 ? 's' : ''} remain.`, 'warning');
                     }
                   } else if (data.type === 'ERROR_CHECK_COMPLETE') {
                     console.log('🔍 Error check complete', data.data);
@@ -2566,11 +2537,7 @@ export default function PromptPlayground() {
                         }
                       });
                     } else if (summary && summary.total === 0) {
-                      addChatMessage({
-                        role: 'assistant',
-                        content: '✅ No errors found! Code looks good.',
-                        timestamp: Date.now()
-                      });
+                      addStatusMessage('No errors found. Code looks good.', 'success');
                     }
                     // If all errors were auto-fixed, don't show anything (silent success)
                   } else if (data.type === 'COMPLETE' || data.type === 'GENERATION_COMPLETE' || data.type === 'FINAL_RESPONSE') {
@@ -2595,6 +2562,8 @@ export default function PromptPlayground() {
                         content: `📊 Generation complete! Found ${errorSummary.errors} error${errorSummary.errors !== 1 ? 's' : ''} and ${errorSummary.warnings} warning${errorSummary.warnings !== 1 ? 's' : ''}. Check the errors above for details.`,
                         timestamp: Date.now()
                       });
+                    } else {
+                      addStatusMessage('Generation finished. Preparing preview...', 'success');
                     }
 
                     // 🚀 Auto-deploy to WebContainer if files are available
@@ -2796,11 +2765,7 @@ export default function PromptPlayground() {
               .then(async (response) => {
                 if (response.ok) {
                   console.log('âœ… Files saved to project');
-                  addChatMessage({
-                    role: 'assistant',
-                    content: `ðŸ'¾ Saved ${displayFiles.length} files to workspace`,
-                    timestamp: Date.now()
-                  });
+                  addStatusMessage(`Saved ${displayFiles.length} files to workspace`, 'success');
                 } else {
                   const error = await response.text();
                   console.error('Failed to save files:', error);

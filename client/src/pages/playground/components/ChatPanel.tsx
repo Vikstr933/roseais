@@ -62,6 +62,7 @@ export const ChatPanel = memo(function ChatPanel({
       <ChatMessages
         ref={chatMessagesRef}
         chatHistory={chatHistory}
+        statusMessages={statusMessages}
         isLoading={isLoading}
         isChatMode={isChatMode}
       />

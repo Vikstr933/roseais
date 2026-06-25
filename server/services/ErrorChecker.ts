@@ -40,12 +40,9 @@ export class ErrorChecker {
 
     logger.info(`Checking ${files.length} files for errors...`);
 
-    // Check 1: Syntax errors (basic pattern matching)
-    for (const file of files) {
-      const syntaxErrors = this.checkSyntaxErrors(file);
-      errors.push(...syntaxErrors.filter(e => e.severity === 'error'));
-      warnings.push(...syntaxErrors.filter(e => e.severity === 'warning'));
-    }
+    // Syntax is validated by AISyntaxFixer with esbuild before this checker runs.
+    // Regex syntax checks produced false positives on valid code like `statement; }`,
+    // which blocked previews even when the generated app compiled successfully.
 
     // Check 2: Missing required files
     const missingFiles = this.checkMissingFiles(files);
@@ -94,72 +91,6 @@ export class ErrorChecker {
     };
   }
 
-  private checkSyntaxErrors(file: { path: string; content: string }): CodeError[] {
-    const errors: CodeError[] = [];
-    const content = file.content;
-    const lines = content.split('\n');
-
-    // Check for common syntax errors
-    const patterns = [
-      {
-        regex: /\{\s*;/g,
-        message: 'Semicolon after opening brace',
-        fixable: true,
-        suggestion: 'Remove semicolon after opening brace: {; -> {'
-      },
-      {
-        regex: /return\s*\(\s*;/g,
-        message: 'Incomplete return statement',
-        fixable: true,
-        suggestion: 'Remove semicolon: return (; -> return ('
-      },
-      {
-        regex: /return\s*\{\s*;/g,
-        message: 'Incomplete return statement',
-        fixable: true,
-        suggestion: 'Remove semicolon: return {; -> return {'
-      },
-      {
-        regex: /([a-zA-Z_$][a-zA-Z0-9_$]*\s*:\s*[^;]+);(\s*[},])/g,
-        message: 'Semicolon in object literal (should be comma)',
-        fixable: true,
-        suggestion: 'Replace semicolon with comma in object literal'
-      },
-      {
-        regex: /interface\s+\w+\s*\{\s*;/g,
-        message: 'Semicolon after interface opening brace',
-        fixable: true,
-        suggestion: 'Remove semicolon: interface Name {; -> interface Name {'
-      },
-      {
-        regex: /;\s*\}/g,
-        message: 'Semicolon before closing brace',
-        fixable: true,
-        suggestion: 'Remove semicolon before closing brace: ;} -> }'
-      }
-    ];
-
-    patterns.forEach(pattern => {
-      const matches = content.match(pattern.regex);
-      if (matches) {
-        matches.forEach(match => {
-          const lineNumber = content.substring(0, content.indexOf(match)).split('\n').length;
-          errors.push({
-            file: file.path,
-            line: lineNumber,
-            message: pattern.message,
-            severity: 'error',
-            category: 'syntax',
-            suggestion: pattern.suggestion,
-            fixable: pattern.fixable
-          });
-        });
-      }
-    });
-
-    return errors;
-  }
-
   private checkMissingFiles(files: { path: string; content: string }[]): CodeError[] {
     const errors: CodeError[] = [];
     const filePaths = new Set(files.map(f => f.path));
@@ -191,17 +122,46 @@ export class ErrorChecker {
   private checkImportErrors(files: { path: string; content: string }[]): CodeError[] {
     const warnings: CodeError[] = [];
     const fileMap = new Map(files.map(f => [f.path, f.content]));
+    const filePaths = new Set(files.map(f => f.path.replace(/\\/g, '/')));
+
+    const resolveRelativeImport = (fromFile: string, importPath: string): string[] => {
+      const fromParts = fromFile.replace(/\\/g, '/').split('/');
+      fromParts.pop();
+      const combined = [...fromParts, ...importPath.split('/')];
+      const normalized: string[] = [];
+
+      for (const part of combined) {
+        if (!part || part === '.') continue;
+        if (part === '..') {
+          normalized.pop();
+          continue;
+        }
+        normalized.push(part);
+      }
+
+      const basePath = normalized.join('/');
+      return [
+        basePath,
+        `${basePath}.tsx`,
+        `${basePath}.ts`,
+        `${basePath}.jsx`,
+        `${basePath}.js`,
+        `${basePath}/index.tsx`,
+        `${basePath}/index.ts`,
+        `${basePath}/index.jsx`,
+        `${basePath}/index.js`,
+      ];
+    };
 
     files.forEach(file => {
-      const importRegex = /import\s+(?:.*\s+from\s+)?['"](\.\/[^'"]+)['"]/g;
+      const importRegex = /import\s+(?:.*\s+from\s+)?['"](\.{1,2}\/[^'"]+)['"]/g;
       const matches = file.content.matchAll(importRegex);
 
       for (const match of matches) {
         const importPath = match[1];
-        // Check if imported file exists
-        if (!fileMap.has(importPath.replace(/\.tsx?$/, '')) && 
-            !fileMap.has(importPath + '.tsx') && 
-            !fileMap.has(importPath + '.ts')) {
+        const candidates = resolveRelativeImport(file.path, importPath);
+
+        if (!candidates.some(candidate => filePaths.has(candidate) || fileMap.has(candidate))) {
           warnings.push({
             file: file.path,
             message: `Import not found: ${importPath}`,
@@ -321,7 +281,7 @@ export class ErrorChecker {
   private async getAISuggestions(
     files: { path: string; content: string }[],
     errors: CodeError[],
-    warnings: CodeError[]
+    _warnings: CodeError[]
   ): Promise<Array<{ suggestion: string; fixable: boolean }>> {
     try {
       const errorSummary = errors.slice(0, 10).map(e => 
@@ -387,4 +347,3 @@ Provide fix suggestions for each error. Format as JSON array:
 }
 
 export const errorChecker = new ErrorChecker();
-
