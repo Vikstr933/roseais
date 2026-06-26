@@ -405,7 +405,11 @@ export class IncrementalOrchestrator {
 
       const { ProjectValidator } = await import('./ProjectValidator');
       const validator = new ProjectValidator();
-      const validationResult = await validator.validateAndFixProject(allFilesArray);
+      const validationResult = await validator.validateAndFixProject(allFilesArray, {
+        userPrompt,
+        appName: plan.appName,
+        knowledgeContext
+      });
 
       finalFiles = validationResult.validatedFiles;
       validationIssuesFixed = validationResult.issuesFixed;

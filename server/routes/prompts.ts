@@ -1905,6 +1905,25 @@ async function handleIncrementalGeneration(
       currentStep: plan.phases.length + 2
     });
 
+    const { ImportCompletenessFixer } = await import('../services/ImportCompletenessFixer');
+    const importCompletenessFixer = new ImportCompletenessFixer();
+    const importRepairResult = await importCompletenessFixer.repairMissingImports(result.allFiles, {
+      userPrompt,
+      appName: plan.appName,
+      knowledgeContext: formatKnowledgeContext(knowledgeContext)
+    });
+
+    if (importRepairResult.generatedFiles.length > 0) {
+      result.allFiles = importRepairResult.fixedFiles;
+      console.log(`✅ Generated ${importRepairResult.generatedFiles.length} missing local import file(s) before final validation`);
+
+      sendSSEUpdate(req, 'AUTO_FIX_COMPLETE', {
+        message: `Completed missing local modules automatically`,
+        remainingErrors: importRepairResult.remainingMissingImports.length,
+        remainingWarnings: 0
+      });
+    }
+
     const { AISyntaxFixer } = await import('../services/AISyntaxFixer');
     const aiFixer = new AISyntaxFixer();
     

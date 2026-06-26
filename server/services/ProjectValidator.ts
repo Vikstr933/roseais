@@ -9,6 +9,7 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
 import { ProjectFixer } from './ProjectFixer';
 import { MissingFileGenerator } from './MissingFileGenerator';
+import { ImportCompletenessContext, ImportCompletenessFixer } from './ImportCompletenessFixer';
 
 const logger = new SimpleLogger('ProjectValidator');
 
@@ -26,10 +27,12 @@ export interface ValidationResult {
 export class ProjectValidator {
   private projectFixer: ProjectFixer;
   private missingFileGenerator: MissingFileGenerator;
+  private importCompletenessFixer: ImportCompletenessFixer;
 
   constructor() {
     this.projectFixer = new ProjectFixer();
     this.missingFileGenerator = new MissingFileGenerator();
+    this.importCompletenessFixer = new ImportCompletenessFixer();
   }
 
   /**
@@ -37,7 +40,8 @@ export class ProjectValidator {
    * This ensures projects are functional before returning to user
    */
   async validateAndFixProject(
-    files: Array<{ path: string; content: string }>
+    files: Array<{ path: string; content: string }>,
+    context: ImportCompletenessContext = {}
   ): Promise<ValidationResult> {
     logger.info(`Starting comprehensive validation for ${files.length} files...`);
 
@@ -105,14 +109,24 @@ export class ProjectValidator {
       }
 
       // Step 7: Validate imports and exports
-      const importValidation = this.validateImportsAndExports(validatedFiles);
+      let importValidation = this.validateImportsAndExports(validatedFiles);
       if (!importValidation.valid) {
-        errors.push(...importValidation.errors);
-        warnings.push(...importValidation.warnings);
-        // Try to fix import issues
-        if (importValidation.fixes) {
-          validatedFiles = this.applyImportFixes(validatedFiles, importValidation.fixes);
-          issuesFixed += importValidation.fixes.length;
+        const importRepair = await this.importCompletenessFixer.repairMissingImports(
+          validatedFiles,
+          context
+        );
+
+        if (importRepair.generatedFiles.length > 0) {
+          validatedFiles = importRepair.fixedFiles;
+          filesModified += importRepair.generatedFiles.length;
+          issuesFixed += importRepair.generatedFiles.length;
+          logger.info(`Generated ${importRepair.generatedFiles.length} missing import module(s) during validation`);
+        }
+
+        importValidation = this.validateImportsAndExports(validatedFiles);
+        if (!importValidation.valid) {
+          errors.push(...importValidation.errors);
+          warnings.push(...importValidation.warnings);
         }
       }
 
@@ -328,10 +342,9 @@ export class ProjectValidator {
    */
   private validateImportsAndExports(
     files: Array<{ path: string; content: string }>
-  ): { valid: boolean; errors: string[]; warnings: string[]; fixes?: Array<{ file: string; fix: string }> } {
+  ): { valid: boolean; errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const fixes: Array<{ file: string; fix: string }> = [];
     const normalizedFiles = this.normalizeFiles(files);
     const fileMap = new Map(normalizedFiles.map(f => [f.path, f.content]));
 
@@ -357,8 +370,7 @@ export class ProjectValidator {
     return {
       valid: errors.length === 0,
       errors,
-      warnings,
-      fixes: fixes.length > 0 ? fixes : undefined
+      warnings
     };
   }
 
@@ -473,19 +485,6 @@ export class ProjectValidator {
     }
 
     return result;
-  }
-
-  /**
-   * Apply import fixes (placeholder - would need AI to generate missing files)
-   */
-  private applyImportFixes(
-    files: Array<{ path: string; content: string }>,
-    fixes: Array<{ file: string; fix: string }>
-  ): Array<{ path: string; content: string }> {
-    // This would require AI to generate missing imported files
-    // For now, just log warnings
-    logger.warn(`Import fixes needed but not implemented: ${fixes.length} fixes`);
-    return files;
   }
 
   /**
