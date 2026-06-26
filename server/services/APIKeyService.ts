@@ -491,7 +491,45 @@ export class APIKeyService {
       const hashScope = `${userId}:${projectId ?? 'user-wide'}:${serviceName}:${keyName}:${keyValue}`;
       const keyHash = crypto.createHash('sha256').update(hashScope).digest('hex');
       const id = `${userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      const name = serviceName || keyName || 'API Key';
+      const name = keyName || serviceName || 'API Key';
+
+      const existing = await db
+        .select()
+        .from(apiKeys)
+        .where(and(eq(apiKeys.keyHash, keyHash), eq(apiKeys.userId, userId)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        const result = await db
+          .update(apiKeys)
+          .set({
+            encryptedKey,
+            name,
+            serviceName,
+            keyType,
+            projectId: projectId || null,
+            isActive: true,
+          })
+          .where(eq(apiKeys.id, existing[0].id))
+          .returning();
+
+        const apiKey = result[0];
+        return {
+          id: parseInt(apiKey.id) || 0,
+          userId: apiKey.userId,
+          serviceName: apiKey.serviceName || serviceName,
+          keyName: apiKey.name || keyName,
+          encryptedKey: apiKey.encryptedKey || '',
+          keyType: keyType || 'api_key',
+          description: description || null,
+          website: website || null,
+          isActive: apiKey.isActive ? 1 : 0,
+          createdAt: apiKey.createdAt?.toISOString() || now,
+          updatedAt: now,
+          lastUsed: apiKey.lastUsed?.toISOString() || null,
+          usageCount: 0,
+        };
+      }
 
       const result = await db
         .insert(apiKeys)
@@ -951,16 +989,34 @@ export class APIKeyService {
       addRequirements(commonRequirements.supabase);
     }
 
+    const hasUploadAction =
+      /\b(upload|uploads|uploading)\b/.test(promptLower) ||
+      promptLower.includes('ladda upp') ||
+      promptLower.includes('uppladdning') ||
+      promptLower.includes('bildupload') ||
+      promptLower.includes('filuppladdning');
+    const hasStorageAction =
+      promptLower.includes('image storage') ||
+      promptLower.includes('file storage') ||
+      promptLower.includes('media storage') ||
+      promptLower.includes('store images') ||
+      promptLower.includes('store files') ||
+      promptLower.includes('save images') ||
+      promptLower.includes('save files') ||
+      promptLower.includes('lagra bilder') ||
+      promptLower.includes('lagra filer') ||
+      promptLower.includes('spara bilder') ||
+      promptLower.includes('spara filer');
+    const hasMediaOrFileTerm =
+      /\b(image|images|photo|photos|picture|pictures|file|files|avatar|avatars|media)\b/.test(promptLower) ||
+      /(^|[^a-zåäö])(bild|bilden|bilder|bilderna|foto|foton|fil|filen|filer|filerna)([^a-zåäö]|$)/.test(promptLower);
     const needsUploadStorage =
       promptLower.includes('cloudinary') ||
       promptLower.includes('image upload') ||
       promptLower.includes('file upload') ||
-      promptLower.includes('upload images') ||
-      promptLower.includes('upload files') ||
-      promptLower.includes('ladda upp') ||
       promptLower.includes('bildupload') ||
-      promptLower.includes('bilder') ||
-      promptLower.includes('filer');
+      promptLower.includes('filuppladdning') ||
+      ((hasUploadAction || hasStorageAction) && hasMediaOrFileTerm);
 
     if (needsUploadStorage && !promptLower.includes('supabase')) {
       addRequirements(commonRequirements.cloudinary);
