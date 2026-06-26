@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { db } from '../../db';
 import { workspaces, projectMembers, projectRemixes, projectFolders, projectFiles, users } from '../../db/schema-pg';
 import { chatMessages, codeGenerationSessions } from '../../db/schema-pg';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, count } from 'drizzle-orm';
 import { projectService } from '../services/ProjectService';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
 import { requirePaidPlan, requirePaidPlanWhen } from '../middleware/paywall';
 import { agentEventEmitter } from '../index';
 import { performanceService } from '../services/PerformanceService';
+import { getTierLimits } from '../services/TierLimitsService';
 
 function parseOptionalBoolean(value: unknown): boolean | undefined {
   if (value === undefined) return undefined;
@@ -174,6 +175,34 @@ router.post('/', authenticateUser, async (req, res) => {
 
     if (!projectName) {
       return res.status(400).json({ error: 'Project name is required' });
+    }
+
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
+      const limits = getTierLimits(req.user?.tier);
+      const [usage] = await db
+        .select({ total: count() })
+        .from(workspaces as any)
+        .where(
+          and(
+            eq((workspaces as any).ownerId, req.user!.id),
+            eq((workspaces as any).status, 'active')
+          )
+        );
+
+      const activeProjects = Number(usage?.total || 0);
+      if (limits.maxProjects !== -1 && activeProjects >= limits.maxProjects) {
+        const tierLabel = (req.user?.tier || 'free') === 'free' ? 'Free accounts' : `${req.user?.tier} accounts`;
+        return res.status(402).json({
+          success: false,
+          error: 'Project limit reached',
+          message: `${tierLabel} include ${limits.maxProjects} active projects. Upgrade to create more.`,
+          upgradeRequired: true,
+          requiredTier: 'pro',
+          feature: 'project_limit',
+          limit: limits.maxProjects,
+          used: activeProjects,
+        });
+      }
     }
 
     const projectData = {

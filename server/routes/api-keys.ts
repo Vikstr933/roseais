@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { userService, apiKeyService } from '../services/APIKeyService';
+import { apiKeyService } from '../services/APIKeyService';
 import { authenticateUser } from '../middleware/auth';
+import { getTierLimits, hasPaidEntitlement } from '../services/TierLimitsService';
 
 const router = Router();
 
@@ -9,16 +10,21 @@ const router = Router();
  * POST /api/api-keys/store
  * Store an API key for a user
  */
-router.post('/store', async (req, res) => {
+router.post('/store', authenticateUser, async (req, res) => {
   try {
-    const sessionToken = req.headers.authorization?.replace('Bearer ', '');
-    if (!sessionToken) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
+    const user = req.user!;
+    const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+    const tierLimits = getTierLimits(user.tier);
 
-    const user = await userService.getUserFromSession(sessionToken);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid session' });
+    if (!hasPaidEntitlement(user.tier, user.role)) {
+      return res.status(402).json({
+        success: false,
+        error: 'Upgrade required',
+        message: 'Project API keys are available on paid plans.',
+        upgradeRequired: true,
+        requiredTier: 'pro',
+        feature: 'api_keys',
+      });
     }
 
     const { serviceName, keyName, keyValue, keyType, description, website, projectId } =
@@ -34,6 +40,24 @@ router.post('/store', async (req, res) => {
     const validatedProjectId = projectId !== undefined 
       ? (projectId === null ? null : parseInt(projectId))
       : null;
+
+    if (!Number.isFinite(validatedProjectId as number) && validatedProjectId !== null) {
+      return res.status(400).json({
+        error: 'Invalid projectId',
+        message: 'projectId must be a number or null',
+      });
+    }
+
+    if (validatedProjectId === null && !isAdmin && !tierLimits.userWideApiKeys) {
+      return res.status(402).json({
+        success: false,
+        error: 'Project-specific API keys required',
+        message: 'Your plan stores API keys per project. Open a project and save the key there.',
+        upgradeRequired: true,
+        requiredTier: 'enterprise',
+        feature: 'api_keys',
+      });
+    }
 
     console.log(
       `POST /api/api-keys/store - Storing API key for user: ${user.id}, service: ${serviceName}, projectId: ${validatedProjectId || 'user-wide'}`
@@ -113,17 +137,17 @@ router.get('/user/:userId', authenticateUser, async (req, res) => {
  */
 router.post('/check-requirements', authenticateUser, async (req, res) => {
   try {
-    const { userId, prompt } = req.body;
+    const { userId, prompt, projectId } = req.body;
     const authenticatedUserId = req.user?.id;
 
-    if (!userId || !prompt) {
+    if (!prompt) {
       return res.status(400).json({
-        error: 'userId and prompt are required',
+        error: 'prompt is required',
       });
     }
 
     // Security: Users can only check their own API keys
-    if (userId !== authenticatedUserId) {
+    if (userId && userId !== authenticatedUserId) {
       console.log(`[FORBIDDEN] User ${authenticatedUserId} attempted to check keys for user ${userId}`);
       return res.status(403).json({
         error: 'Forbidden',
@@ -132,13 +156,32 @@ router.post('/check-requirements', authenticateUser, async (req, res) => {
     }
 
     console.log(
-      `POST /api/api-keys/check-requirements - Checking requirements for user: ${userId}`
+      `POST /api/api-keys/check-requirements - Checking requirements for user: ${authenticatedUserId}`
     );
 
     const requirements = apiKeyService.analyzePromptForAPIKeys(prompt);
+    const validatedProjectId =
+      projectId === undefined || projectId === null ? null : parseInt(projectId);
+
+    if (requirements.length > 0 && !hasPaidEntitlement(req.user?.tier, req.user?.role)) {
+      return res.json({
+        success: true,
+        hasAllKeys: false,
+        requiresUpgrade: true,
+        requiredTier: 'pro',
+        feature: 'api_keys',
+        message: 'This app needs external API keys. Project API keys are available on paid plans.',
+        missingKeys: requirements,
+        missingKeyNames: requirements.map(key => `${key.serviceName}:${key.keyName}`),
+        existingKeys: [],
+        requirements,
+      });
+    }
+
     const checkResult = await apiKeyService.checkRequiredAPIKeys(
-      userId,
-      requirements
+      authenticatedUserId!,
+      requirements,
+      validatedProjectId
     );
 
     console.log(
@@ -147,7 +190,9 @@ router.post('/check-requirements', authenticateUser, async (req, res) => {
     res.json({
       success: true,
       hasAllKeys: checkResult.hasAllKeys,
+      requiresUpgrade: false,
       missingKeys: checkResult.missingKeys,
+      missingKeyNames: checkResult.missingKeys.map(key => `${key.serviceName}:${key.keyName}`),
       existingKeys: checkResult.existingKeys,
       requirements,
     });

@@ -2,18 +2,16 @@ import { NextFunction, Request, Response } from 'express';
 import { and, eq, gte, sum } from 'drizzle-orm';
 import { db } from '../../db';
 import { userUsage } from '../../db/schema-pg';
+import { getTierLimits, hasPaidEntitlement } from '../services/TierLimitsService';
 
 export type PaidFeature =
   | 'production_deploy'
   | 'code_export'
   | 'public_project'
   | 'fullstack_generation'
-  | 'generation_limit';
-
-const configuredFreeGenerationLimit = Number(process.env.FREE_MONTHLY_GENERATION_LIMIT || 3);
-const FREE_MONTHLY_GENERATION_LIMIT = Number.isFinite(configuredFreeGenerationLimit)
-  ? configuredFreeGenerationLimit
-  : 3;
+  | 'generation_limit'
+  | 'api_keys'
+  | 'project_limit';
 
 const FULLSTACK_TERMS = [
   'backend',
@@ -56,11 +54,7 @@ const FULLSTACK_TERMS = [
 ];
 
 function isPaidUser(req: Request): boolean {
-  const role = req.user?.role;
-  if (role === 'admin' || role === 'superadmin') return true;
-
-  const tier = req.user?.tier || 'free';
-  return tier === 'pro' || tier === 'enterprise';
+  return hasPaidEntitlement(req.user?.tier, req.user?.role);
 }
 
 function sendPaywallResponse(
@@ -115,7 +109,12 @@ export function requirePaidForFullstackGeneration(
   res: Response,
   next: NextFunction
 ) {
-  const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
+  const prompt =
+    typeof req.body?.prompt === 'string'
+      ? req.body.prompt
+      : typeof req.body?.userPrompt === 'string'
+        ? req.body.userPrompt
+        : '';
 
   if (!promptNeedsPaidFullstack(prompt) || isPaidUser(req)) {
     return next();
@@ -129,7 +128,7 @@ export function requirePaidForFullstackGeneration(
 }
 
 export function enforceFreeGenerationLimit(
-  limit = FREE_MONTHLY_GENERATION_LIMIT
+  limit = getTierLimits('free').appGenerationsPerMonth
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (isPaidUser(req)) return next();

@@ -36,7 +36,7 @@ export default function Home() {
       title: 'Create Anything',
       description:
         'From simple components to complex applications, build whatever you can imagine with intelligent AI assistance.',
-      highlight: 'Unlimited Creation',
+      highlight: 'Guided Creation',
     },
     {
       icon: <Users className="h-6 w-6" />,
@@ -78,7 +78,7 @@ export default function Home() {
   const stats = [
     {
       label: 'Projects Created',
-      value: 'Unlimited',
+      value: 'Plan-based',
       icon: <Rocket className="h-5 w-5" />,
     },
     {
@@ -105,61 +105,45 @@ export default function Home() {
       period: '/month',
       description: 'Perfect for getting started',
       features: [
-        '100,000 tokens/month',
-        'Basic AI assistance',
+        '3 app generations/month',
+        '3 active projects',
+        'Frontend web apps',
         'Community support',
-        'Public projects',
-        'Standard agents',
+        'Preview before upgrading',
       ],
       cta: 'Get Started Free',
       popular: false,
     },
     {
       name: 'Pro',
-      price: '$20',
+      price: '$29',
       period: '/month',
       description: 'For professional developers',
       features: [
-        '1M tokens/month',
-        'Advanced AI orchestration',
+        '500 app generations/month',
+        '50 active projects',
+        'Project-specific API keys',
+        'Fullstack apps',
         'Priority support',
-        'Private projects',
-        'Custom agents',
-        'Team collaboration',
+        'Publish, export, and deploy',
       ],
       cta: 'Start Pro Trial',
       popular: true,
     },
     {
-      name: 'Team',
-      price: '$50',
-      period: '/month',
-      description: 'For growing teams',
-      features: [
-        '3M tokens/month',
-        'Custom knowledge bases',
-        'Advanced analytics',
-        'Team workspaces',
-        'Custom integrations',
-        'Priority support',
-      ],
-      cta: 'Start Team Trial',
-      popular: false,
-    },
-    {
       name: 'Enterprise',
-      price: 'Custom',
-      period: '',
+      price: '$99',
+      period: '/month',
       description: 'For organizations',
       features: [
-        'Unlimited tokens',
+        '2000 app generations/month',
+        '250 active projects',
+        'Reusable API keys',
         'Dedicated support',
-        'Custom deployments',
-        'Advanced security',
+        'Advanced analytics',
         'SLA guarantee',
-        'On-premise options',
       ],
-      cta: 'Contact Sales',
+      cta: 'Start Enterprise',
       popular: false,
     },
   ];
@@ -527,13 +511,12 @@ export default function Home() {
               Start free, scale as you grow. No hidden fees, no surprises.
             </p>
             <p className="text-sm text-gray-500 max-w-2xl mx-auto">
-              Tokens are consumed based on the complexity of your projects.
-              Simple components use fewer tokens, while complex applications
-              with multiple agents use more.
+              Paid plans unlock project API keys, fullstack generation,
+              publishing, source export, and production deployment.
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {pricingTiers.map((tier, index) => (
               <motion.div
                 key={tier.name}

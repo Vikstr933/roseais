@@ -4,6 +4,7 @@ import { db } from '../../db/index.js';
 import { userUsage, users } from '../../db/schema-pg.js';
 import { and, eq, gte, sum } from 'drizzle-orm';
 import { Logger } from '../utils/Logger';
+import { getPlanDetails, normalizePlanTier, PLAN_DETAILS } from '../services/TierLimitsService';
 
 const router = Router();
 const logger = new Logger(process.cwd());
@@ -14,50 +15,6 @@ const stripe = process.env.STRIPE_SECRET_KEY
       apiVersion: '2025-09-30.clover',
     })
   : null;
-
-// Subscription plans configuration
-const PLANS = {
-  free: {
-    name: 'Free',
-    price: 0,
-    credits: 3,
-    features: [
-      '3 free app generations per month',
-      'Frontend web apps',
-      'Community support',
-      'Preview before upgrading'
-    ]
-  },
-  pro: {
-    name: 'Pro',
-    priceId: process.env.STRIPE_PRO_PRICE_ID, // Monthly subscription
-    price: 29,
-    credits: 500,
-    features: [
-      '500 app generations per month',
-      'Fullstack apps with backend, auth, databases, and uploads',
-      'Priority support',
-      'Publish to community',
-      'Export source code',
-      'Deploy to production'
-    ]
-  },
-  enterprise: {
-    name: 'Enterprise',
-    priceId: process.env.STRIPE_ENTERPRISE_PRICE_ID,
-    price: 99,
-    credits: 2000,
-    features: [
-      '2000 app generations per month',
-      'All Pro features',
-      'Dedicated support',
-      'Custom AI training',
-      'SLA guarantee',
-      'Advanced analytics',
-      'Unlimited team members'
-    ]
-  }
-};
 
 // Create a checkout session for subscription
 router.post('/create-checkout-session', async (req: Request, res: Response) => {
@@ -207,9 +164,8 @@ router.get('/subscription/:userId', async (req: Request, res: Response) => {
     }
 
     // Map tier to plan (tier is the subscription plan in our schema)
-    const userTier = (user.tier as string) || 'free';
-    const planKey = (['free', 'pro', 'enterprise'].includes(userTier) ? userTier : 'free') as keyof typeof PLANS;
-    const plan = PLANS[planKey] || PLANS.free;
+    const planKey = normalizePlanTier(user.tier as string);
+    const plan = getPlanDetails(planKey);
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
@@ -260,10 +216,8 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
     // Determine plan based on price ID
     let plan = 'free';
-    if (priceId === PLANS.pro.priceId) plan = 'pro';
-    if (priceId === PLANS.enterprise.priceId) plan = 'enterprise';
-
-    const planDetails = PLANS[plan as keyof typeof PLANS];
+    if (priceId === PLAN_DETAILS.pro.priceId) plan = 'pro';
+    if (priceId === PLAN_DETAILS.enterprise.priceId) plan = 'enterprise';
 
     // Update user in database using Drizzle ORM
     await db
@@ -297,8 +251,8 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 
   // Determine plan
   let plan = 'free';
-  if (priceId === PLANS.pro.priceId) plan = 'pro';
-  if (priceId === PLANS.enterprise.priceId) plan = 'enterprise';
+  if (priceId === PLAN_DETAILS.pro.priceId) plan = 'pro';
+  if (priceId === PLAN_DETAILS.enterprise.priceId) plan = 'enterprise';
 
   // Update subscription using Drizzle ORM
   await db
@@ -373,7 +327,7 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
 // Get available plans
 router.get('/plans', (req: Request, res: Response) => {
-  res.json({ plans: PLANS });
+  res.json({ plans: PLAN_DETAILS });
 });
 
 export default router;

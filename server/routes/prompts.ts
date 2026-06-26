@@ -7,6 +7,10 @@ import { knowledgeService } from '../services/KnowledgeService';
 import { apiKeyService } from '../services/APIKeyService';
 import { authenticateUser, optionalAuth } from '../middleware/auth';
 import { rateLimitAI, getRateLimitStatus } from '../middleware/rateLimiting';
+import {
+  enforceFreeGenerationLimit,
+  requirePaidForFullstackGeneration,
+} from '../middleware/paywall';
 import { validateRequest, sanitizeAIResponse } from '../middleware/validation';
 import { userPromptSchema } from '../validation/schemas';
 import path from 'path';
@@ -17,6 +21,8 @@ import { agentSelector } from '../services/AgentSelector';
 import { IncrementalOrchestrator } from '../services/IncrementalOrchestrator';
 import { AnalysisAgent } from '../services/AnalysisAgent';
 import { errorChecker } from '../services/ErrorChecker';
+import { hasPaidEntitlement } from '../services/TierLimitsService';
+import { monetizationService } from '../services/MonetizationService';
 
 const aiCodeGenerator = new AICodeGenerator();
 const incrementalOrchestrator = new IncrementalOrchestrator();
@@ -733,6 +739,8 @@ router.post(
   authenticateUser,
   validateRequest(userPromptSchema), // Validate input FIRST
   rateLimitAI, // Add rate limiting BEFORE expensive AI calls
+  enforceFreeGenerationLimit(),
+  requirePaidForFullstackGeneration,
   async (req, res) => {
     try {
       const {
@@ -745,8 +753,44 @@ router.post(
         selectedKnowledge = null, // New parameter for manual knowledge selection
         userId = 'anonymous', // User ID for API key management
         projectId = null, // Project ID for context continuation
+        sessionId = null,
         chatHistory = [], // Chat history for context awareness (e.g., Python context from earlier messages)
       } = req.body;
+
+      const apiKeyRequirements = apiKeyService.analyzePromptForAPIKeys(userPrompt);
+      if (apiKeyRequirements.length > 0) {
+        if (!hasPaidEntitlement(req.user?.tier, req.user?.role)) {
+          return res.status(402).json({
+            success: false,
+            error: 'Upgrade required',
+            message: 'This app needs external API keys. Project API keys are available on paid plans.',
+            upgradeRequired: true,
+            requiredTier: 'pro',
+            feature: 'api_keys',
+            missingKeys: apiKeyRequirements,
+            missingKeyNames: apiKeyRequirements.map(key => `${key.serviceName}:${key.keyName}`),
+          });
+        }
+
+        const apiKeyCheck = await apiKeyService.checkRequiredAPIKeys(
+          req.user!.id,
+          apiKeyRequirements,
+          projectId
+        );
+
+        if (!apiKeyCheck.hasAllKeys && apiKeyCheck.missingKeys.length > 0) {
+          return res.status(428).json({
+            success: false,
+            error: 'API keys required',
+            message: 'Please provide the required project API keys to continue.',
+            projectId: projectId || null,
+            projectName: projectId ? `Project ${projectId}` : undefined,
+            missingKeys: apiKeyCheck.missingKeys,
+            missingKeyNames: apiKeyCheck.missingKeys.map(key => `${key.serviceName}:${key.keyName}`),
+            existingKeys: apiKeyCheck.existingKeys,
+          });
+        }
+      }
 
       // 🔥 SET UP SSE HEADERS FIRST - This enables real-time file streaming
       res.writeHead(200, {
@@ -820,39 +864,6 @@ router.post(
         });
       }
 
-      // Check for required API keys first (skip if system ANTHROPIC_API_KEY is set)
-      if (!process.env.ANTHROPIC_API_KEY) {
-        const apiKeyRequirements =
-          apiKeyService.analyzePromptForAPIKeys(userPrompt);
-        const apiKeyCheck = await apiKeyService.checkRequiredAPIKeys(
-          userId,
-          apiKeyRequirements
-        );
-
-        if (!apiKeyCheck.hasAllKeys && apiKeyCheck.missingKeys.length > 0) {
-          // Send API key request via SSE
-          // Filter out any undefined/null service names
-          const validMissingKeys = apiKeyCheck.missingKeys
-            .map(k => k?.serviceName)
-            .filter((key): key is string => typeof key === 'string' && key.trim().length > 0);
-          
-          if (validMissingKeys.length > 0) {
-            sendSSEUpdate(req, 'API_KEY_REQUIRED', {
-              message: 'API keys required for this request',
-              missingKeys: validMissingKeys,
-              projectId: projectId || null,
-              projectName: projectId ? `Project ${projectId}` : undefined,
-            });
-          }
-
-        return res.status(400).json({
-          error: 'API keys required',
-          missingKeys: apiKeyCheck.missingKeys,
-          message: 'Please provide the required API keys to continue',
-        });
-        }
-      }
-
       // Get knowledge context (automatic or manual selection)
       let knowledgeContext;
       if (selectedKnowledge) {
@@ -917,7 +928,7 @@ router.post(
       // ALWAYS use incremental generation - it's the standard way
       // This ensures better code quality, fewer errors, and working apps
       console.log('🔄 Using INCREMENTAL generation mode (always enabled)');
-      return await handleIncrementalGeneration(
+      const generationResult = await handleIncrementalGeneration(
         req,
         res,
         userPrompt,
@@ -926,6 +937,19 @@ router.post(
         workflowId,
         chatHistory // Pass chat history for context awareness
       );
+
+      if (req.user?.id && generationResult?.success) {
+        await monetizationService.trackUsage(
+          req.user.id,
+          'anthropic',
+          'app_generation',
+          1000,
+          sessionId || undefined,
+          { projectId, generationMode: 'incremental' }
+        );
+      }
+
+      return generationResult;
 
       // NOTE: Old orchestration code removed - incremental generation is always used
       // All code below this point is unreachable and kept for reference only
@@ -2076,6 +2100,11 @@ async function handleIncrementalGeneration(
 
     // End the SSE stream
     res.end();
+    return {
+      success: Boolean(result.success),
+      filesGenerated: responseFiles.length,
+      workspaceId,
+    };
   } catch (error) {
     console.error('Incremental generation error:', error);
     
@@ -2096,6 +2125,10 @@ async function handleIncrementalGeneration(
       console.error('Failed to send SSE error update:', sseError);
     }
     // Don't call res.end() or res.json() - SSE stream should close naturally
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 

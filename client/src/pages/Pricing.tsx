@@ -27,6 +27,7 @@ const plans: Plan[] = [
     credits: 3,
     features: [
       '3 free app generations per month',
+      '3 active projects',
       'Frontend web apps',
       'Community support',
       'Preview before upgrading'
@@ -41,6 +42,8 @@ const plans: Plan[] = [
     credits: 500,
     features: [
       '500 app generations per month',
+      '50 active projects',
+      'Project-specific API keys',
       'Fullstack apps with backend, auth, databases, and uploads',
       'Priority support',
       'Publish to community',
@@ -58,12 +61,14 @@ const plans: Plan[] = [
     credits: 2000,
     features: [
       '2000 app generations per month',
+      '250 active projects',
+      'Project-specific and reusable API keys',
       'All Pro features',
       'Dedicated support',
       'Custom AI training',
       'SLA guarantee',
       'Advanced analytics',
-      'Unlimited team members'
+      'Team collaboration'
     ],
     icon: Crown,
     color: 'from-purple-500 to-pink-600'

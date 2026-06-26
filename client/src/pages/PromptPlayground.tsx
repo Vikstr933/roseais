@@ -45,7 +45,7 @@ import { webContainerService } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useProjectManagement } from "../hooks/useProjectManagement";
 import { DatabaseAPIKeyDialog } from "../components/DatabaseAPIKeyDialog";
-import { ProjectAPIKeyDialog } from "../components/ProjectAPIKeyDialog";
+import { ProjectAPIKeyDialog, type MissingAPIKey } from "../components/ProjectAPIKeyDialog";
 import { DesktopView } from "../components/DesktopView";
 import { ProjectSettingsDialog } from "../components/ProjectSettingsDialog";
 
@@ -214,11 +214,12 @@ export default function PromptPlayground() {
     projectId?: number;
   } | null>(null);
   const [projectAPIKeyDialogData, setProjectAPIKeyDialogData] = useState<{
-    missingApiKeys: string[];
+    missingApiKeys: MissingAPIKey[];
     projectId: number | null;
     projectName?: string;
   } | null>(null);
   const [showProjectAPIKeyDialog, setShowProjectAPIKeyDialog] = useState(false);
+  const [pendingGenerationAfterApiKeys, setPendingGenerationAfterApiKeys] = useState<PromptForm | null>(null);
   // Incremental generation is ALWAYS enabled - it's the standard way to generate code
 
   useEffect(() => {
@@ -1414,11 +1415,12 @@ export default function PromptPlayground() {
       
       if (agentData.type === 'API_KEY_REQUIRED') {
         // Show project API key dialog for general API key requirements during generation
-        if (agentData.missingApiKeys && Array.isArray(agentData.missingApiKeys) && agentData.missingApiKeys.length > 0) {
-          // Filter out any undefined/null values
-          const validKeys = agentData.missingApiKeys.filter((key: any): key is string => 
-            typeof key === 'string' && key.trim().length > 0
-          );
+        const missingApiKeys = agentData.missingApiKeys || agentData.missingKeys;
+        if (missingApiKeys && Array.isArray(missingApiKeys) && missingApiKeys.length > 0) {
+          const validKeys = missingApiKeys.filter((key: any): key is MissingAPIKey => {
+            if (typeof key === 'string') return key.trim().length > 0;
+            return Boolean(key?.serviceName && key?.keyName);
+          });
           
           if (validKeys.length > 0) {
             setProjectAPIKeyDialogData({
@@ -2186,6 +2188,75 @@ export default function PromptPlayground() {
         // Return early - don't call generation API
         return { response: { type: 'text', text: 'Deploying existing files...', files: existingFiles } };
       }
+
+      try {
+        const apiKeyCheckResponse = await apiFetch('/api/api-keys/check-requirements', {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(sessionToken),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: data.userPrompt,
+            projectId: currentProject?.id || null,
+          }),
+        });
+
+        if (apiKeyCheckResponse.ok) {
+          const apiKeyCheck = await safeJsonParse(apiKeyCheckResponse);
+          const missingKeys = Array.isArray(apiKeyCheck.missingKeys)
+            ? apiKeyCheck.missingKeys
+            : [];
+
+          if (apiKeyCheck.requiresUpgrade && missingKeys.length > 0) {
+            setPendingGenerationAfterApiKeys(null);
+            addChatMessage({
+              role: 'assistant',
+              content: 'This app needs external API keys for production features like auth, payments, databases, or uploads. Project API keys are available on paid plans, so please upgrade before I generate this version.',
+              timestamp: Date.now()
+            });
+            toast({
+              title: 'Upgrade required',
+              description: apiKeyCheck.message || 'Project API keys are available on paid plans.',
+              variant: 'destructive',
+            });
+            return { handled: true, response: { type: 'text', text: '', files: [] } } as any;
+          }
+
+          if (!apiKeyCheck.hasAllKeys && missingKeys.length > 0) {
+            setPendingGenerationAfterApiKeys(data);
+            setProjectAPIKeyDialogData({
+              missingApiKeys: missingKeys,
+              projectId: currentProject?.id || null,
+              projectName: currentProject?.name,
+            });
+            setShowProjectAPIKeyDialog(true);
+            addChatMessage({
+              role: 'assistant',
+              content: 'I need a few project API keys before I can generate this as a functional app. Add them now and I’ll continue with the same prompt.',
+              timestamp: Date.now()
+            });
+            return { handled: true, response: { type: 'text', text: '', files: [] } } as any;
+          }
+        } else {
+          const apiKeyError = await safeJsonParse(apiKeyCheckResponse).catch(() => null);
+          if (apiKeyCheckResponse.status === 402) {
+            addChatMessage({
+              role: 'assistant',
+              content: apiKeyError?.message || 'This request requires a paid plan before generation can continue.',
+              timestamp: Date.now()
+            });
+            toast({
+              title: 'Upgrade required',
+              description: apiKeyError?.message || 'Upgrade to continue.',
+              variant: 'destructive',
+            });
+            return { handled: true, response: { type: 'text', text: '', files: [] } } as any;
+          }
+        }
+      } catch (error) {
+        console.warn('API key preflight failed, continuing generation:', error);
+      }
       
       // Clear old files if this is a NEW generation (not a modification)
       // For modifications, we preserve existing files for context
@@ -2656,6 +2727,11 @@ export default function PromptPlayground() {
       }
     },
     onSuccess: async (data: GenerateResponse) => {
+      if ((data as any)?.handled) {
+        setIsLoading(false);
+        return;
+      }
+
       console.log('ðŸŽ¯ Generation response received:', data);
       console.log('ðŸ“ Files in response:', data.response?.files);
       
@@ -3644,13 +3720,22 @@ export default function PromptPlayground() {
           projectId={projectAPIKeyDialogData.projectId}
           projectName={projectAPIKeyDialogData.projectName}
           onKeysAdded={async () => {
+            const pendingGeneration = pendingGenerationAfterApiKeys;
             setShowProjectAPIKeyDialog(false);
             setProjectAPIKeyDialogData(null);
+            setPendingGenerationAfterApiKeys(null);
             // Continue generation - API keys are now available
             toast({
               title: 'API Keys Saved',
-              description: 'API keys have been saved. Generation will continue.',
+              description: pendingGeneration
+                ? 'API keys have been saved. Continuing generation now.'
+                : 'API keys have been saved.',
             });
+            if (pendingGeneration) {
+              setTimeout(() => {
+                generateMutation.mutate(pendingGeneration);
+              }, 0);
+            }
           }}
         />
       )}

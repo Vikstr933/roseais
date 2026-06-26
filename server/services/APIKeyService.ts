@@ -488,7 +488,8 @@ export class APIKeyService {
       const now = new Date().toISOString();
 
       // Note: apiKeys table schema: id (text), userId (text), keyHash (text), name (text), isActive (boolean)
-      const keyHash = crypto.createHash('sha256').update(keyValue).digest('hex');
+      const hashScope = `${userId}:${projectId ?? 'user-wide'}:${serviceName}:${keyName}:${keyValue}`;
+      const keyHash = crypto.createHash('sha256').update(hashScope).digest('hex');
       const id = `${userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const name = serviceName || keyName || 'API Key';
 
@@ -537,37 +538,51 @@ export class APIKeyService {
   async getAPIKey(
     userId: string,
     serviceName: string,
-    keyName?: string
+    keyName?: string,
+    projectId?: number | null
   ): Promise<string | null> {
     try {
-      const conditions = [
-        eq(apiKeys.userId, userId),
-        eq(apiKeys.isActive, true)
-      ];
+      const findKey = async (scopeProjectId?: number | null) => {
+        const conditions = [
+          eq(apiKeys.userId, userId),
+          eq(apiKeys.isActive, true)
+        ];
 
-      // Match by serviceName if available, otherwise by name
-      if (serviceName) {
-        conditions.push(eq(apiKeys.serviceName, serviceName));
-      }
-      if (keyName) {
-        conditions.push(eq(apiKeys.name, keyName));
-      }
+        if (serviceName) {
+          conditions.push(eq(apiKeys.serviceName, serviceName));
+        }
+        if (keyName) {
+          conditions.push(eq(apiKeys.name, keyName));
+        }
+        if (scopeProjectId !== undefined) {
+          conditions.push(scopeProjectId === null
+            ? isNull(apiKeys.projectId)
+            : eq(apiKeys.projectId, scopeProjectId)
+          );
+        }
 
-      const result = await db
-        .select({
-          id: apiKeys.id,
-          encryptedKey: apiKeys.encryptedKey,
-        })
-        .from(apiKeys)
-        .where(and(...conditions))
-        .limit(1);
+        return db
+          .select({
+            id: apiKeys.id,
+            encryptedKey: apiKeys.encryptedKey,
+          })
+          .from(apiKeys)
+          .where(and(...conditions))
+          .limit(1);
+      };
 
-      if (result.length === 0 || !result[0].encryptedKey) {
+      const result = projectId !== undefined && projectId !== null
+        ? await findKey(projectId)
+        : [];
+      const fallbackResult = result.length > 0 ? result : await findKey(null);
+      const finalResult = fallbackResult.length > 0 ? fallbackResult : await findKey(undefined);
+
+      if (finalResult.length === 0 || !finalResult[0].encryptedKey) {
         return null;
       }
 
       // Decrypt the key
-      const decrypted = this.decryptKey(result[0].encryptedKey);
+      const decrypted = this.decryptKey(finalResult[0].encryptedKey);
 
       // Update lastUsed
       await db
@@ -575,7 +590,7 @@ export class APIKeyService {
         .set({
           lastUsed: new Date(),
         })
-        .where(eq(apiKeys.id, result[0].id));
+        .where(eq(apiKeys.id, finalResult[0].id));
 
       return decrypted;
     } catch (error) {
@@ -778,6 +793,70 @@ export class APIKeyService {
             'To enable payment features, you need a Stripe Secret Key. Please provide your Stripe secret key:',
         },
       ],
+      supabase: [
+        {
+          serviceName: 'supabase',
+          keyName: 'url',
+          keyType: 'api_key',
+          description: 'Supabase project URL',
+          website: 'https://supabase.com/dashboard',
+          requiredFor: 'Authentication, database, and file storage functionality',
+          promptMessage:
+            'To enable auth, database, or storage features, please provide your Supabase project URL:',
+        },
+        {
+          serviceName: 'supabase',
+          keyName: 'anon_key',
+          keyType: 'api_key',
+          description: 'Supabase anon public API key',
+          website: 'https://supabase.com/dashboard',
+          requiredFor: 'Frontend Supabase client access',
+          promptMessage:
+            'To connect your generated app to Supabase, please provide your Supabase anon key:',
+        },
+        {
+          serviceName: 'supabase',
+          keyName: 'service_role_key',
+          keyType: 'secret',
+          description: 'Supabase service role key',
+          website: 'https://supabase.com/dashboard',
+          requiredFor: 'Server-side database setup and secure backend operations',
+          promptMessage:
+            'To configure backend database operations, please provide your Supabase service role key:',
+        },
+      ],
+      cloudinary: [
+        {
+          serviceName: 'cloudinary',
+          keyName: 'cloud_name',
+          keyType: 'api_key',
+          description: 'Cloudinary cloud name',
+          website: 'https://cloudinary.com/console',
+          requiredFor: 'Image and file upload storage',
+          promptMessage:
+            'To enable image uploads, please provide your Cloudinary cloud name:',
+        },
+        {
+          serviceName: 'cloudinary',
+          keyName: 'api_key',
+          keyType: 'api_key',
+          description: 'Cloudinary API key',
+          website: 'https://cloudinary.com/console',
+          requiredFor: 'Image and file upload storage',
+          promptMessage:
+            'To enable image uploads, please provide your Cloudinary API key:',
+        },
+        {
+          serviceName: 'cloudinary',
+          keyName: 'api_secret',
+          keyType: 'secret',
+          description: 'Cloudinary API secret',
+          website: 'https://cloudinary.com/console',
+          requiredFor: 'Secure upload signing',
+          promptMessage:
+            'To enable secure image uploads, please provide your Cloudinary API secret:',
+        },
+      ],
     };
   }
 
@@ -788,21 +867,31 @@ export class APIKeyService {
     const promptLower = prompt.toLowerCase();
     const requirements: APIKeyRequest[] = [];
     const commonRequirements = this.getCommonAPIKeyRequirements();
+    const addRequirements = (keys: APIKeyRequest[]) => {
+      for (const key of keys) {
+        const exists = requirements.some(
+          existing => existing.serviceName === key.serviceName && existing.keyName === key.keyName
+        );
+        if (!exists) requirements.push(key);
+      }
+    };
 
     // Check for AI/LLM usage
     if (
-      promptLower.includes('ai') ||
+      promptLower.includes('openai') ||
       promptLower.includes('gpt') ||
-      promptLower.includes('claude') ||
-      promptLower.includes('generate') ||
-      promptLower.includes('chat')
+      promptLower.includes('chatgpt') ||
+      promptLower.includes('llm') ||
+      promptLower.includes('ai assistant') ||
+      promptLower.includes('ai chatbot') ||
+      promptLower.includes('ai agent')
     ) {
-      requirements.push(...commonRequirements.openai);
+      addRequirements(commonRequirements.openai);
     }
 
     // Check for Anthropic/Claude specific
     if (promptLower.includes('claude') || promptLower.includes('anthropic')) {
-      requirements.push(...commonRequirements.anthropic);
+      addRequirements(commonRequirements.anthropic);
     }
 
     // Check for Hugging Face
@@ -811,7 +900,7 @@ export class APIKeyService {
       promptLower.includes('transformers') ||
       promptLower.includes('huggingface')
     ) {
-      requirements.push(...commonRequirements.huggingface);
+      addRequirements(commonRequirements.huggingface);
     }
 
     // Check for GitHub integration
@@ -821,7 +910,7 @@ export class APIKeyService {
       promptLower.includes('repo') ||
       promptLower.includes('git')
     ) {
-      requirements.push(...commonRequirements.github);
+      addRequirements(commonRequirements.github);
     }
 
     // Check for payment processing
@@ -829,9 +918,52 @@ export class APIKeyService {
       promptLower.includes('payment') ||
       promptLower.includes('stripe') ||
       promptLower.includes('billing') ||
-      promptLower.includes('subscription')
+      promptLower.includes('subscription') ||
+      promptLower.includes('checkout') ||
+      promptLower.includes('betalning') ||
+      promptLower.includes('betala') ||
+      promptLower.includes('abonnemang')
     ) {
-      requirements.push(...commonRequirements.stripe);
+      addRequirements(commonRequirements.stripe);
+    }
+
+    const needsDatabaseOrAuth =
+      promptLower.includes('supabase') ||
+      promptLower.includes('database') ||
+      promptLower.includes('databas') ||
+      promptLower.includes('postgres') ||
+      promptLower.includes('auth') ||
+      promptLower.includes('login') ||
+      promptLower.includes('log in') ||
+      promptLower.includes('signin') ||
+      promptLower.includes('sign in') ||
+      promptLower.includes('register') ||
+      promptLower.includes('signup') ||
+      promptLower.includes('user account') ||
+      promptLower.includes('users') ||
+      promptLower.includes('användare') ||
+      promptLower.includes('anvandare') ||
+      promptLower.includes('logga in') ||
+      promptLower.includes('registrera') ||
+      promptLower.includes('konto');
+
+    if (needsDatabaseOrAuth) {
+      addRequirements(commonRequirements.supabase);
+    }
+
+    const needsUploadStorage =
+      promptLower.includes('cloudinary') ||
+      promptLower.includes('image upload') ||
+      promptLower.includes('file upload') ||
+      promptLower.includes('upload images') ||
+      promptLower.includes('upload files') ||
+      promptLower.includes('ladda upp') ||
+      promptLower.includes('bildupload') ||
+      promptLower.includes('bilder') ||
+      promptLower.includes('filer');
+
+    if (needsUploadStorage && !promptLower.includes('supabase')) {
+      addRequirements(commonRequirements.cloudinary);
     }
 
     return requirements;
