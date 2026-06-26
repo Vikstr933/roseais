@@ -56,11 +56,12 @@ const pool = new Pool({
     ? { rejectUnauthorized: false }
     : false,
 
-  // Connection pool settings - optimized for performance and stability
-  min: 2,                        // Minimum number of clients (always maintained)
-  max: 10,                       // Maximum number of clients in the pool
+  // Connection pool settings - keep the pool lean on Render/Supabase so short
+  // mobile bursts do not spend 90s waiting behind saturated connections.
+  min: 0,                        // Do not pin idle database connections
+  max: Number(process.env.DB_POOL_MAX || 5),
   idleTimeoutMillis: 30000,      // Close idle clients after 30s
-  connectionTimeoutMillis: 20000, // Timeout for new connections (20s - increased for Supabase)
+  connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
   
   // Keep-alive settings to prevent connection termination
   keepAlive: true,                        // Enable TCP keep-alive
@@ -87,57 +88,21 @@ pool.on('error', (err) => {
   // The pool will automatically remove the bad connection and create a new one
 });
 
-// Handle connection termination gracefully
+// Handle connection lifecycle logging. Avoid background validation queries on
+// individual clients; they can queue behind application queries and contribute
+// to pool pressure under mobile reconnect/load bursts.
 pool.on('connect', (client) => {
-  // Set up periodic connection validation for this client
-  // This helps detect dead connections before they're used
-  const validationInterval = setInterval(async () => {
-    try {
-      // Simple query to validate connection is alive
-      await client.query('SELECT 1');
-    } catch (error) {
-      // Connection is dead, clear interval and let pool handle it
-      clearInterval(validationInterval);
-      console.warn('⚠️  Connection validation failed, connection will be removed from pool');
-    }
-  }, 60000); // Validate every 60 seconds
-
   // Handle client errors
   client.on('error', (err) => {
     console.error('❌ Database client error:', err);
-    clearInterval(validationInterval);
     // Client will be removed from pool automatically
   });
   
   // Handle client disconnection
   client.on('end', () => {
     console.warn('⚠️  Database client connection ended');
-    clearInterval(validationInterval);
   });
 });
-
-// Wrapper function to validate connection before use
-async function validateConnection(): Promise<boolean> {
-  try {
-    const result = await pool.query('SELECT 1');
-    return result.rows.length > 0;
-  } catch (error) {
-    console.warn('⚠️  Connection validation failed:', error instanceof Error ? error.message : String(error));
-    return false;
-  }
-}
-
-// Periodic connection health check (every 30 seconds)
-setInterval(async () => {
-  try {
-    const isValid = await validateConnection();
-    if (!isValid) {
-      console.warn('⚠️  Database connection health check failed, pool will recreate connections');
-    }
-  } catch (error) {
-    // Silently handle - this is just a health check
-  }
-}, 30000);
 
 // Create Drizzle instance
 const db = drizzle(pool, { schema });

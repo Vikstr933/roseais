@@ -117,12 +117,18 @@ router.get('/:id', authenticateUser, async (req, res) => {
       });
     }
 
-    // Get file count
-    const files = await projectService.getProjectFiles(workspaceId);
-    const fileCount = files.length;
-
-    // Get recent activity
-    const recentActivity = await projectService.getProjectActivity(workspaceId, 10);
+    // Keep the project detail endpoint lightweight. The playground loads full
+    // file contents through /files, so this route should only count rows.
+    const fileCountResult = await db
+      .select({ value: count() })
+      .from(projectFiles as any)
+      .where(
+        and(
+          eq((projectFiles as any).projectId, workspaceId),
+          eq((projectFiles as any).isActive, true)
+        )
+      );
+    const fileCount = Number(fileCountResult[0]?.value || 0);
 
     // Transform the data to match the expected format
     const transformedWorkspace = {
@@ -157,7 +163,7 @@ router.get('/:id', authenticateUser, async (req, res) => {
       // Additional fields expected by frontend
       members,
       fileCount,
-      recentActivity,
+      recentActivity: [],
     };
 
     res.json(transformedWorkspace);
@@ -581,7 +587,8 @@ router.delete('/:id', authenticateUser, async (req, res) => {
 router.get('/:id/chat', optionalAuth, async (req, res) => {
   try {
     const projectId = parseInt(req.params.id);
-    const limit = parseInt(req.query.limit as string) || 50;
+    const requestedLimit = parseInt(req.query.limit as string) || 50;
+    const limit = Math.min(Math.max(requestedLimit, 1), 50);
 
     // Check if user has access to project (if authenticated)
     if (req.user) {

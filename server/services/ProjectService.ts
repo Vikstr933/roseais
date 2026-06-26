@@ -15,7 +15,7 @@ import {
   type ProjectActivity,
   type ProjectFile,
 } from '../../db/schema-pg';
-import { eq, and, desc, or, sql } from 'drizzle-orm';
+import { eq, and, desc, or, sql, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface CreateProjectData {
@@ -118,17 +118,11 @@ export class ProjectService {
       const projectId = row.workspace.id;
 
       if (!projectMap.has(projectId)) {
-        // Get recent activity and file count
-        const [recentActivity, fileCount] = await Promise.all([
-          this.getRecentActivity(projectId, 5),
-          this.getFileCount(projectId),
-        ]);
-
         projectMap.set(projectId, {
           ...row.workspace,
           members: [],
-          recentActivity,
-          fileCount,
+          recentActivity: [],
+          fileCount: 0,
         });
       }
 
@@ -138,6 +132,30 @@ export class ProjectService {
           ...row.member,
           user: row.user,
         });
+      }
+    }
+
+    const projectIds = Array.from(projectMap.keys());
+    if (projectIds.length > 0) {
+      const fileCounts = await db
+        .select({
+          projectId: projectFiles.projectId,
+          value: sql<number>`count(*)`,
+        })
+        .from(projectFiles)
+        .where(
+          and(
+            inArray(projectFiles.projectId, projectIds),
+            eq(projectFiles.isActive, true)
+          )
+        )
+        .groupBy(projectFiles.projectId);
+
+      for (const row of fileCounts) {
+        const project = projectMap.get(row.projectId);
+        if (project) {
+          project.fileCount = Number(row.value || 0);
+        }
       }
     }
 
@@ -386,6 +404,20 @@ export class ProjectService {
           and(eq(projectFiles.projectId, projectId), eq(projectFiles.isActive, true))
         )
         .orderBy(projectFiles.filePath);
+    }, {
+      maxRetries: 1,
+      retryDelay: 500,
+      retryableErrors: [
+        'Connection terminated',
+        'Connection terminated unexpectedly',
+        'ECONNREFUSED',
+        'ETIMEDOUT',
+        'ENOTFOUND',
+        'Connection closed',
+        'Connection lost',
+        'server closed the connection',
+        'terminating connection due to administrator command',
+      ],
     });
   }
 

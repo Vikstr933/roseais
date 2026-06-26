@@ -218,19 +218,6 @@ const initializeApp = async () => {
       res.status(403).send();
     });
 
-    // Advanced Security Middleware
-    app.use(securityMiddleware.securityHeaders({
-      allowedOrigins: allowedOrigins.filter(origin => typeof origin === 'string')
-    }));
-    app.use(securityMiddleware.requestMonitoring());
-    app.use(securityMiddleware.inputValidation());
-    app.use(securityMiddleware.apiRateLimit());
-
-    // Performance Optimization Middleware
-    app.use(compressionMiddleware());
-    app.use(memoryMonitoring());
-    app.use('/api', apiCache(performanceService.getCache(), 300)); // 5 minute cache for API routes
-
     // Apply CORS to all routes (including health checks for browser access)
     app.use(cors({
       origin: (origin, callback) => {

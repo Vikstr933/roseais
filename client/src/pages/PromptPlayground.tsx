@@ -993,7 +993,7 @@ export default function PromptPlayground() {
       // Load chat history
       // Only load if we haven't already loaded for this project
       if (welcomeMessageAddedRef.current !== projectId) {
-        apiFetch(`/api/workspaces/${projectId}/chat?limit=100`, {
+        apiFetch(`/api/workspaces/${projectId}/chat?limit=50`, {
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
           'Content-Type': 'application/json',
@@ -1100,10 +1100,17 @@ export default function PromptPlayground() {
         })
         .catch(err => {
           console.error('Failed to load project files:', err);
-          // On error, clear files to ensure clean state
           if (!isMounted) return;
-          setResponse(null);
-          updateGeneratedFiles([]);
+          // Keep any files already restored from the workspace session. A transient
+          // database timeout should not make the project look empty.
+          const sessionFiles = currentSession?.generatedFiles || [];
+          if (sessionFiles.length > 0) {
+            setResponse({
+              type: 'component',
+              text: '',
+              files: sessionFiles
+            });
+          }
         })
         .finally(() => {
           if (isMounted) {
