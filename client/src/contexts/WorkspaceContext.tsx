@@ -177,6 +177,20 @@ function cleanupOldSessions(sessions: WorkspaceSession[]): WorkspaceSession[] {
   return sorted.slice(0, MAX_SESSIONS_LOCAL);
 }
 
+function isSummarySession(session?: WorkspaceSession | null): boolean {
+  return Boolean(session?.metadata?.summaryOnly);
+}
+
+function toTimestamp(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
 /**
  * Safely save to localStorage with quota error handling
  */
@@ -403,7 +417,26 @@ const pendingActionsRef = useRef<PlaygroundAction[]>([]);
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setSessions(data.sessions || []);
+          const serverSessions = (data.sessions || []) as WorkspaceSession[];
+          setSessions(prev => {
+            const fullSessionsById = new Map(
+              prev
+                .filter(session => !isSummarySession(session))
+                .map(session => [session.id, session])
+            );
+
+            return serverSessions.map(serverSession => {
+              const existingFullSession = fullSessionsById.get(serverSession.id);
+              if (
+                existingFullSession &&
+                toTimestamp(existingFullSession.updatedAt) >= toTimestamp(serverSession.updatedAt)
+              ) {
+                return existingFullSession;
+              }
+
+              return serverSession;
+            });
+          });
         }
       }
     } catch (error) {
@@ -460,7 +493,7 @@ const pendingActionsRef = useRef<PlaygroundAction[]>([]);
   const loadSession = async (sessionId: string) => {
     // First try localStorage
     const session = sessions.find(s => s.id === sessionId);
-    if (session) {
+    if (session && !isSummarySession(session)) {
       setCurrentSession(session);
       return;
     }
@@ -519,6 +552,11 @@ const pendingActionsRef = useRef<PlaygroundAction[]>([]);
   const switchSession = (sessionId: string) => {
     const session = sessions.find(s => s.id === sessionId);
     if (session) {
+      if (isSummarySession(session)) {
+        void loadSession(sessionId);
+        return;
+      }
+
       setCurrentSession(session);
     }
   };

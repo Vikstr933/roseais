@@ -8,6 +8,16 @@ import { SimpleLogger } from '../utils/SimpleLogger';
 const router = Router();
 const logger = new SimpleLogger('WorkspaceAPI');
 
+function timestampMs(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
+  return Date.now();
+}
+
 /**
  * Workspace API - Persistent state management across the entire application
  *
@@ -29,83 +39,46 @@ router.get('/', authenticateUser, async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    // Load sessions from database
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    // Keep the session list intentionally lightweight. Full generated files and
+    // chat history are loaded through GET /:sessionId only when a user opens one.
     const sessions = await db
-      .select()
+      .select({
+        id: (codeGenerationSessions as any).id,
+        title: (codeGenerationSessions as any).title,
+        createdAt: (codeGenerationSessions as any).createdAt,
+        updatedAt: (codeGenerationSessions as any).updatedAt,
+        inputPrompt: (codeGenerationSessions as any).inputPrompt,
+        workspaceId: (codeGenerationSessions as any).workspaceId,
+        type: sql<string>`COALESCE(${(codeGenerationSessions as any).metadata}->>'type', 'playground')`
+      })
       .from(codeGenerationSessions as any)
       .where(eq((codeGenerationSessions as any).userId, userId))
       .orderBy(desc((codeGenerationSessions as any).updatedAt))
       .limit(50);
 
-    // Load only recent chat history for each session (limit to prevent memory issues)
-    // Only load last 10 messages per session to reduce memory usage
-    const MAX_CHAT_MESSAGES_PER_SESSION = 10;
-    
-    const sessionsWithHistory = await Promise.all(
-      sessions.map(async (session) => {
-        // Use workspaceId (integer) instead of session.id (string) for chat messages
-        // Only load recent messages to prevent memory bloat
-        const history = session.workspaceId
-          ? await db
-              .select()
-              .from(chatMessages as any)
-              .where(eq((chatMessages as any).projectId, session.workspaceId))
-              .orderBy(desc((chatMessages as any).createdAt))
-              .limit(MAX_CHAT_MESSAGES_PER_SESSION)
-          : [];
-
-        // Reverse to get chronological order (oldest first)
-        const orderedHistory = history.reverse();
-
-        // Get total count efficiently (only count, don't select all data)
-        let chatHistoryCount = 0;
-        if (session.workspaceId) {
-          const countResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(chatMessages as any)
-            .where(eq((chatMessages as any).projectId, session.workspaceId));
-          chatHistoryCount = countResult[0]?.count || 0;
-        }
-
-        // Limit generatedFiles to prevent huge responses
-        // Only include file paths and sizes, not full content
-        const allGeneratedFiles = session.metadata?.generatedFiles || [];
-        const limitedGeneratedFiles = allGeneratedFiles.slice(0, 20).map((file: any) => ({
-          path: file.path,
-          language: file.language,
-          size: file.content?.length || 0,
-          // Don't include full content in list view to reduce response size
-          // Content will be available when opening specific session
-        }));
-
-        return {
-          id: session.id,
-          name: session.title,
-          type: session.metadata?.type || 'playground',
-          createdAt: session.createdAt,
-          updatedAt: session.updatedAt,
-          chatHistory: orderedHistory.map(msg => ({
-            role: msg.role,
-            content: msg.content,
-            timestamp: msg.createdAt?.getTime() || Date.now(),
-            files: msg.metadata?.files || []
-          })),
-          chatHistoryCount,
-          generatedFiles: limitedGeneratedFiles,
-          generatedFilesCount: allGeneratedFiles.length,
-          currentPrompt: session.metadata?.currentPrompt,
-          // Don't include full metadata to reduce size - only essential fields
-          metadata: {
-            type: session.metadata?.type,
-            // Exclude large nested objects from metadata
-          }
-        };
-      })
-    );
+    const sessionSummaries = sessions.map((session) => ({
+      id: session.id,
+      name: session.title,
+      type: session.type || 'playground',
+      createdAt: timestampMs(session.createdAt),
+      updatedAt: timestampMs(session.updatedAt),
+      chatHistory: [],
+      chatHistoryCount: 0,
+      generatedFiles: [],
+      generatedFilesCount: 0,
+      currentPrompt: session.inputPrompt,
+      metadata: {
+        type: session.type || 'playground',
+        summaryOnly: true,
+        workspaceId: session.workspaceId
+      }
+    }));
 
     res.json({
       success: true,
-      sessions: sessionsWithHistory
+      sessions: sessionSummaries
     });
   } catch (error) {
     logger.error('Failed to load workspace sessions', error as Error);
@@ -129,9 +102,18 @@ router.get('/:sessionId', authenticateUser, async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
+    res.setHeader('Cache-Control', 'private, no-store');
+
     // Load session from database
     const sessions = await db
-      .select()
+      .select({
+        id: (codeGenerationSessions as any).id,
+        title: (codeGenerationSessions as any).title,
+        createdAt: (codeGenerationSessions as any).createdAt,
+        updatedAt: (codeGenerationSessions as any).updatedAt,
+        workspaceId: (codeGenerationSessions as any).workspaceId,
+        metadata: (codeGenerationSessions as any).metadata
+      })
       .from(codeGenerationSessions as any)
       .where(
         and(
@@ -165,8 +147,8 @@ router.get('/:sessionId', authenticateUser, async (req, res) => {
         id: session.id,
         name: session.title,
         type: session.metadata?.type || 'playground',
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
+        createdAt: timestampMs(session.createdAt),
+        updatedAt: timestampMs(session.updatedAt),
         chatHistory: history.map(msg => ({
           role: msg.role,
           content: msg.content,
@@ -254,7 +236,8 @@ router.post('/', authenticateUser, async (req, res) => {
           })
           .returning();
 
-        workspaceId = newWorkspace[0].id;
+        const createdWorkspace = (newWorkspace as any[])[0];
+        workspaceId = createdWorkspace.id;
       }
     } else {
       // Check if workspace already exists for this session
@@ -286,7 +269,8 @@ router.post('/', authenticateUser, async (req, res) => {
           })
           .returning();
 
-        workspaceId = newWorkspace[0].id;
+        const createdWorkspace = (newWorkspace as any[])[0];
+        workspaceId = createdWorkspace.id;
       }
     }
 
