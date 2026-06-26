@@ -75,6 +75,7 @@ import {
   toPlaygroundResponse,
   stripWorkspacePrefix,
   mapRawFilesToGenerated,
+  validateLocalImports,
 } from "./playground/utils";
 
 // Extracted components
@@ -1795,6 +1796,20 @@ export default function PromptPlayground() {
           }
           return file;
         });
+
+        const missingImports = validateLocalImports(fixedFiles);
+        if (missingImports.length > 0) {
+          const preview = missingImports
+            .slice(0, 5)
+            .map(item => `${item.file}:${item.line} imports ${item.importPath}`)
+            .join('\n');
+          addChatMessage({
+            role: 'assistant',
+            content: `Preview could not start because the generated app is missing component files:\n${preview}`,
+            timestamp: Date.now()
+          });
+          return;
+        }
 
         // Write files to WebContainer
         await webContainerService.writeFiles(fixedFiles);

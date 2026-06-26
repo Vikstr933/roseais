@@ -50,7 +50,7 @@ export class ErrorChecker {
 
     // Check 3: Import errors
     const importErrors = this.checkImportErrors(files);
-    warnings.push(...importErrors);
+    errors.push(...importErrors);
 
     // Check 4: Inert navigation controls
     const navigationWarnings = this.checkNavigationInteractivity(files);
@@ -133,7 +133,7 @@ export class ErrorChecker {
   }
 
   private checkImportErrors(files: { path: string; content: string }[]): CodeError[] {
-    const warnings: CodeError[] = [];
+    const errors: CodeError[] = [];
     const fileMap = new Map(files.map(f => [f.path, f.content]));
     const filePaths = new Set(files.map(f => f.path.replace(/\\/g, '/')));
 
@@ -175,10 +175,12 @@ export class ErrorChecker {
         const candidates = resolveRelativeImport(file.path, importPath);
 
         if (!candidates.some(candidate => filePaths.has(candidate) || fileMap.has(candidate))) {
-          warnings.push({
+          const line = file.content.slice(0, match.index ?? 0).split('\n').length;
+          errors.push({
             file: file.path,
+            line,
             message: `Import not found: ${importPath}`,
-            severity: 'warning',
+            severity: 'error',
             category: 'import',
             suggestion: `Check if ${importPath} exists or remove the import`,
             fixable: true
@@ -187,7 +189,7 @@ export class ErrorChecker {
       }
     });
 
-    return warnings;
+    return errors;
   }
 
   private checkNavigationInteractivity(files: { path: string; content: string }[]): CodeError[] {

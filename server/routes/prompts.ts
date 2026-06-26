@@ -1909,7 +1909,9 @@ async function handleIncrementalGeneration(
     const aiFixer = new AISyntaxFixer();
     
     // Validate and fix with AI (Sonnet 4.5) - this happens BEFORE users see any errors
-    const finalFixResult = await aiFixer.validateAndFix(result.allFiles);
+    const finalFixResult = await aiFixer.validateAndFix(result.allFiles, {
+      validateLocalImports: true
+    });
     
     if (finalFixResult.success) {
       result.allFiles = finalFixResult.fixedFiles;

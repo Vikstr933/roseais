@@ -26,6 +26,10 @@ export interface FixResult {
   fixAttempts: number;
 }
 
+interface ValidationOptions {
+  validateLocalImports?: boolean;
+}
+
 export class AISyntaxFixer {
   private maxFixAttempts = 3;
 
@@ -34,12 +38,13 @@ export class AISyntaxFixer {
    * This runs BEFORE files are saved, so users never see broken code
    */
   async validateAndFix(
-    files: { path: string; content: string }[]
+    files: { path: string; content: string }[],
+    options: ValidationOptions = {}
   ): Promise<FixResult> {
     logger.info(`Validating ${files.length} files with esbuild...`);
 
     // Step 1: Validate with esbuild to catch real compilation errors
-    const errors = await this.validateWithEsbuild(files);
+    const errors = await this.validateWithEsbuild(files, options);
 
     if (errors.length === 0) {
       logger.info('All files validated successfully - no fixes needed');
@@ -66,7 +71,7 @@ export class AISyntaxFixer {
       fixedFiles = fixResult.fixedFiles;
 
       // Re-validate to check if fixes worked
-      const newErrors = await this.validateWithEsbuild(fixedFiles);
+      const newErrors = await this.validateWithEsbuild(fixedFiles, options);
       
       if (newErrors.length === 0) {
         logger.info(`✅ All errors fixed after ${attempts} attempt(s)`);
@@ -104,11 +109,17 @@ export class AISyntaxFixer {
    * Validate files using esbuild to catch real compilation errors
    */
   private async validateWithEsbuild(
-    files: { path: string; content: string }[]
+    files: { path: string; content: string }[],
+    options: ValidationOptions = {}
   ): Promise<CompilationError[]> {
     const errors: CompilationError[] = [];
+    const normalizedFiles = files.map(file => ({
+      ...file,
+      path: this.normalizePath(file.path)
+    }));
+    const filePaths = new Set(normalizedFiles.map(file => file.path));
 
-    for (const file of files) {
+    for (const file of normalizedFiles) {
       // Only validate TypeScript/JavaScript files
       if (!file.path.match(/\.(tsx?|jsx?)$/)) {
         continue;
@@ -141,9 +152,92 @@ export class AISyntaxFixer {
           });
         }
       }
+
+      if (options.validateLocalImports) {
+        errors.push(...this.validateLocalImports(file, filePaths));
+      }
     }
 
     return errors;
+  }
+
+  private validateLocalImports(
+    file: { path: string; content: string },
+    filePaths: Set<string>
+  ): CompilationError[] {
+    const errors: CompilationError[] = [];
+    const importRegex = /(?:import\s+(?:[\s\S]*?\s+from\s+)?|export\s+[\s\S]*?\s+from\s+)['"](\.{1,2}\/[^'"]+)['"]/g;
+
+    for (const match of file.content.matchAll(importRegex)) {
+      const importPath = match[1];
+      const candidates = this.resolveRelativeImport(file.path, importPath);
+
+      if (candidates.some(candidate => filePaths.has(candidate))) {
+        continue;
+      }
+
+      const line = file.content.slice(0, match.index ?? 0).split('\n').length;
+      errors.push({
+        file: file.path,
+        line,
+        column: 0,
+        message: `Missing local import "${importPath}" (checked: ${candidates.join(', ')})`,
+        code: this.getErrorContext(file.content, line, 0)
+      });
+    }
+
+    return errors;
+  }
+
+  private resolveRelativeImport(fromFile: string, importPath: string): string[] {
+    const fromParts = this.normalizePath(fromFile).split('/');
+    fromParts.pop();
+
+    const parts: string[] = [];
+    for (const part of [...fromParts, ...importPath.split('/')]) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        parts.pop();
+      } else {
+        parts.push(part);
+      }
+    }
+
+    const basePath = parts.join('/');
+    if (/\.[a-zA-Z0-9]+$/.test(basePath)) {
+      return [basePath];
+    }
+
+    return [
+      basePath,
+      `${basePath}.tsx`,
+      `${basePath}.ts`,
+      `${basePath}.jsx`,
+      `${basePath}.js`,
+      `${basePath}.css`,
+      `${basePath}.scss`,
+      `${basePath}.json`,
+      `${basePath}/index.tsx`,
+      `${basePath}/index.ts`,
+      `${basePath}/index.jsx`,
+      `${basePath}/index.js`,
+    ];
+  }
+
+  private normalizePath(path: string): string {
+    const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '');
+    const parts: string[] = [];
+
+    for (const part of normalized.split('/')) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        parts.pop();
+      } else {
+        parts.push(part);
+      }
+    }
+
+    return parts.join('/');
   }
 
   /**
@@ -227,7 +321,8 @@ CRITICAL RULES:
 2. Preserve all existing functionality
 3. Maintain code style and formatting
 4. Fix syntax errors precisely (e.g., remove semicolons before colons in ternary operators)
-5. Ensure the code compiles without errors
+5. If an error says a local import is missing, preserve the user-facing section by inlining the component or replacing the import with equivalent code in this file. Do not silently remove requested UI.
+6. Ensure the code compiles without errors
 
 Return ONLY the fixed code - no explanations, no markdown, just the corrected source code.`;
 
@@ -287,4 +382,3 @@ Return the COMPLETE fixed code that compiles without errors. Do not include mark
 }
 
 export const aiSyntaxFixer = new AISyntaxFixer();
-

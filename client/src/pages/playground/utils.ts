@@ -252,3 +252,71 @@ export function groupFilesByDirectory(files: GeneratedFile[]): Map<string, Gener
   
   return groups;
 }
+
+// ============================================================================
+// Preview Validation
+// ============================================================================
+
+export interface MissingLocalImport {
+  file: string;
+  line: number;
+  importPath: string;
+}
+
+function resolveRelativeImport(fromFile: string, importPath: string): string[] {
+  const fromParts = normalizePath(fromFile).split('/');
+  fromParts.pop();
+
+  const parts: string[] = [];
+  for (const part of [...fromParts, ...importPath.split('/')]) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      parts.pop();
+    } else {
+      parts.push(part);
+    }
+  }
+
+  const basePath = parts.join('/');
+  return [
+    basePath,
+    `${basePath}.tsx`,
+    `${basePath}.ts`,
+    `${basePath}.jsx`,
+    `${basePath}.js`,
+    `${basePath}.css`,
+    `${basePath}.scss`,
+    `${basePath}/index.tsx`,
+    `${basePath}/index.ts`,
+    `${basePath}/index.jsx`,
+    `${basePath}/index.js`,
+  ];
+}
+
+export function validateLocalImports(files: Array<{ path: string; content: string }>): MissingLocalImport[] {
+  const normalizedFiles = files.map(file => ({
+    ...file,
+    path: normalizePath(file.path),
+  }));
+  const filePaths = new Set(normalizedFiles.map(file => file.path));
+  const missingImports: MissingLocalImport[] = [];
+  const importRegex = /import\s+(?:[\s\S]*?\s+from\s+)?['"](\.{1,2}\/[^'"]+)['"]/g;
+
+  for (const file of normalizedFiles) {
+    if (!/\.(tsx|ts|jsx|js)$/.test(file.path)) continue;
+
+    for (const match of file.content.matchAll(importRegex)) {
+      const importPath = match[1];
+      const candidates = resolveRelativeImport(file.path, importPath);
+      if (candidates.some(candidate => filePaths.has(candidate))) continue;
+
+      missingImports.push({
+        file: file.path,
+        line: file.content.slice(0, match.index ?? 0).split('\n').length,
+        importPath,
+      });
+    }
+  }
+
+  return missingImports;
+}

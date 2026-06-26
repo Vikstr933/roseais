@@ -7,6 +7,7 @@ import { Badge } from "../../../components/ui/badge";
 import type { GeneratedFile } from "../types";
 import { useEffect, useMemo, useState } from "react";
 import { webContainerService } from "../../../services/WebContainerService";
+import { validateLocalImports } from "../utils";
 
 interface PreviewTabProps {
   response: { type: string; files?: GeneratedFile[] } | null;
@@ -201,6 +202,12 @@ export function PreviewTab({
           return;
         }
 
+        const missingImports = validateLocalImports(fixedFiles);
+        if (missingImports.length > 0) {
+          console.error('Cannot auto-mount files with missing local imports:', missingImports);
+          return;
+        }
+
         // Boot WebContainer if needed
         await webContainerService.boot();
         
@@ -277,6 +284,17 @@ export function PreviewTab({
       if (hasMainTsx && !hasAppTsx) {
         console.error('Cannot start server: App.tsx missing but main.tsx imports it');
         alert('Cannot start server: App.tsx is missing. The generated app is incomplete and needs to be regenerated or fixed first.');
+        return;
+      }
+
+      const missingImports = validateLocalImports(fixedFiles);
+      if (missingImports.length > 0) {
+        const preview = missingImports
+          .slice(0, 5)
+          .map(item => `${item.file}:${item.line} imports ${item.importPath}`)
+          .join('\n');
+        console.error('Cannot start server: generated app has missing local imports', missingImports);
+        alert(`Cannot start server: the generated app is missing component files.\n\n${preview}`);
         return;
       }
 
