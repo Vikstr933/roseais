@@ -235,10 +235,47 @@ export function compressionMiddleware() {
 /**
  * Cache Middleware for API Responses
  */
+function isSensitiveApiPath(path: string): boolean {
+  const sensitivePrefixes = [
+    '/api/auth',
+    '/api/workspace-sessions',
+    '/api/workspaces',
+    '/api/api-keys',
+    '/api/secrets',
+    '/api/credentials',
+    '/api/shared-connectors',
+    '/api/billing',
+    '/api/stripe',
+    '/api/monetization',
+    '/api/user',
+    '/api/sessions',
+    '/api/activity',
+    '/api/admin',
+    '/api/resumes',
+    '/api/job-applications',
+    '/api/saved-jobs',
+    '/api/auto-apply',
+    '/api/tool-permissions',
+  ];
+
+  return sensitivePrefixes.some(prefix => path === prefix || path.startsWith(`${prefix}/`));
+}
+
+function shouldBypassApiCache(req: Request): boolean {
+  const hasCredentials = Boolean(req.headers.authorization || req.headers.cookie);
+  return hasCredentials || isSensitiveApiPath(req.path) || isSensitiveApiPath(req.originalUrl);
+}
+
 export function apiCache(cache: AdvancedCache, ttl?: number) {
   return (req: Request, res: Response, next: NextFunction) => {
     // Only cache GET requests
     if (req.method !== 'GET') {
+      return next();
+    }
+
+    if (shouldBypassApiCache(req)) {
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Cache', 'BYPASS');
       return next();
     }
 
