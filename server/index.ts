@@ -496,7 +496,7 @@ const initializeApp = async () => {
       console.log('[DEBUG] ✅✅✅ Direct app.post /api/auth/oauth matched! ✅✅✅');
       console.log('[DEBUG] Request body:', req.body);
       // Forward to oauthRouter
-      return oauthRouter.handle(req, res, next);
+      return (oauthRouter as any).handle(req, res, next);
     });
     
     app.use('/api/auth', authRouter);
@@ -618,13 +618,15 @@ const initializeApp = async () => {
       res.sendFile(path.join(process.cwd(), 'client/index.html'));
     });
 
-    // Add Cross-Origin Isolation headers for WebContainer support
-    // These headers enable SharedArrayBuffer which is required by WebContainer
+    // Add Cross-Origin Isolation headers for WebContainer support.
+    // These headers enable SharedArrayBuffer, and credentialless keeps public
+    // third-party assets from breaking the generated app previews.
     app.use((req, res, next) => {
       // Only add these headers for HTML pages (client routes), not API routes
       if (!req.path.startsWith('/api/')) {
         res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+        res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       }
       next();
     });

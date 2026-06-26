@@ -21,6 +21,14 @@ export interface GeneratedFile {
   content: string;
 }
 
+export interface WebContainerSupport {
+  supported: boolean;
+  reason?: 'server' | 'shared-array-buffer' | 'cross-origin-isolation' | 'api-unavailable';
+  isMobileBrowser: boolean;
+  isIOSBrowser: boolean;
+  userMessage: string;
+}
+
 interface PreviewLayout {
   isFullstack: boolean;
   frontendCwd: string;
@@ -46,22 +54,81 @@ class WebContainerServiceClass {
   /**
    * Check if WebContainer is supported in this browser
    */
-  isSupported(): boolean {
-    // WebContainer requires SharedArrayBuffer and other modern APIs
-    if (typeof window === 'undefined') return false;
-    
-    // Check for required APIs
-    if (!('SharedArrayBuffer' in window)) {
-      return false;
+  getSupportStatus(): WebContainerSupport {
+    if (typeof window === 'undefined') {
+      return {
+        supported: false,
+        reason: 'server',
+        isMobileBrowser: false,
+        isIOSBrowser: false,
+        userMessage: 'Live preview is only available in a browser.'
+      };
     }
 
-    // Check for WebContainer API
-    try {
-      // @webcontainer/api should be available
-      return typeof WebContainer !== 'undefined';
-    } catch {
-      return false;
+    const userAgent = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    const isIPadOS = platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isIOSBrowser = /iPhone|iPad|iPod/i.test(userAgent) || isIPadOS;
+    const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent) || isIPadOS;
+    const hasSharedArrayBuffer = 'SharedArrayBuffer' in window;
+    const isCrossOriginIsolated = (window as any).crossOriginIsolated === true;
+
+    if (!hasSharedArrayBuffer) {
+      return {
+        supported: false,
+        reason: 'shared-array-buffer',
+        isMobileBrowser,
+        isIOSBrowser,
+        userMessage: isIOSBrowser
+          ? 'Chrome on iPhone uses Apple’s browser engine, which does not provide the browser runtime WebContainer needs. Use Chrome on Android or desktop for in-browser preview.'
+          : 'Live preview needs SharedArrayBuffer support. Refresh after the latest deployment and use Chrome with third-party cookies/service workers allowed.'
+      };
     }
+
+    if (!isCrossOriginIsolated) {
+      return {
+        supported: false,
+        reason: 'cross-origin-isolation',
+        isMobileBrowser,
+        isIOSBrowser,
+        userMessage: 'Live preview needs cross-origin isolation to run safely. Refresh after the latest deployment so the new COOP/COEP headers are active.'
+      };
+    }
+
+    try {
+      if (typeof WebContainer === 'undefined') {
+        return {
+          supported: false,
+          reason: 'api-unavailable',
+          isMobileBrowser,
+          isIOSBrowser,
+          userMessage: isIOSBrowser
+            ? 'Chrome on iPhone uses Apple’s browser engine, which cannot run this in-browser preview runtime.'
+            : 'Live preview is not available in this browser. Use Chrome with WebAssembly and service workers enabled.'
+        };
+      }
+    } catch {
+      return {
+        supported: false,
+        reason: 'api-unavailable',
+        isMobileBrowser,
+        isIOSBrowser,
+        userMessage: isIOSBrowser
+          ? 'Chrome on iPhone uses Apple’s browser engine, which cannot run this in-browser preview runtime.'
+          : 'Live preview is not available in this browser. Use Chrome with WebAssembly and service workers enabled.'
+      };
+    }
+
+    return {
+      supported: true,
+      isMobileBrowser,
+      isIOSBrowser,
+      userMessage: 'Live preview is supported in this browser.'
+    };
+  }
+
+  isSupported(): boolean {
+    return this.getSupportStatus().supported;
   }
 
   /**
@@ -73,11 +140,15 @@ class WebContainerServiceClass {
     }
 
     // Check browser support
-    if (!this.isSupported()) {
-      const error = new Error('WebContainer is not supported in this browser. Required: SharedArrayBuffer and Cross-Origin Isolation headers.');
+    const support = this.getSupportStatus();
+    if (!support.supported) {
+      const error = new Error(support.userMessage);
       console.error('❌ WebContainer not supported:', {
-        hasSharedArrayBuffer: 'SharedArrayBuffer' in window,
+        reason: support.reason,
+        hasSharedArrayBuffer: typeof window !== 'undefined' && 'SharedArrayBuffer' in window,
+        crossOriginIsolated: typeof window !== 'undefined' ? (window as any).crossOriginIsolated === true : false,
         hasWebContainer: typeof WebContainer !== 'undefined',
+        isMobileBrowser: support.isMobileBrowser,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
       });
       throw error;

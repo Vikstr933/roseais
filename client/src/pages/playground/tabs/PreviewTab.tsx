@@ -1,4 +1,4 @@
-import { Eye, ChevronUp, Server, Play, Square } from "lucide-react";
+import { Eye, ChevronUp, Server, Play, Square, AlertTriangle } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { AdvancedPreview } from "../../../components/AdvancedPreview";
 import { PythonPreview } from "../../../components/PythonPreview";
@@ -6,7 +6,7 @@ import { PythonServerPreview } from "../../../components/PythonServerPreview";
 import { Badge } from "../../../components/ui/badge";
 import type { GeneratedFile } from "../types";
 import { useEffect, useMemo, useState } from "react";
-import { webContainerService } from "../../../services/WebContainerService";
+import { webContainerService, type WebContainerSupport } from "../../../services/WebContainerService";
 import { validateLocalImports } from "../utils";
 
 interface PreviewTabProps {
@@ -16,6 +16,7 @@ interface PreviewTabProps {
   isLoading: boolean;
   setPreviewModalOpen: (open: boolean) => void;
   setLivePreviewUrl?: (url: string | null) => void;
+  webContainerSupport?: WebContainerSupport;
 }
 
 // Detailed Python project type detection
@@ -66,6 +67,20 @@ function detectProjectType(files: GeneratedFile[]): 'web' | 'python-script' | 'p
   return 'unknown';
 }
 
+function PreviewUnavailableState({ message }: { message: string }) {
+  return (
+    <div className="h-full flex items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+          <AlertTriangle className="h-6 w-6" />
+        </div>
+        <h3 className="text-base font-semibold mb-2">Live preview is not available here</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">{message}</p>
+      </div>
+    </div>
+  );
+}
+
 export function PreviewTab({
   response,
   livePreviewUrl,
@@ -73,11 +88,14 @@ export function PreviewTab({
   isLoading,
   setPreviewModalOpen,
   setLivePreviewUrl,
+  webContainerSupport,
 }: PreviewTabProps) {
   const [forcePreviewType, setForcePreviewType] = useState<'auto' | 'web' | 'python-script' | 'python-server'>('auto');
   const [isServerRunning, setIsServerRunning] = useState<boolean>(!!livePreviewUrl);
   const [isStartingServer, setIsStartingServer] = useState<boolean>(false);
   const [isStoppingServer, setIsStoppingServer] = useState<boolean>(false);
+  const [previewNotice, setPreviewNotice] = useState<string | null>(null);
+  const supportStatus = webContainerSupport ?? webContainerService.getSupportStatus();
   
   // Detect project type from files
   const projectType = useMemo(() => {
@@ -154,6 +172,8 @@ export function PreviewTab({
     return result;
   }, [response?.files, isPythonWebApp]);
 
+  const livePreviewUnavailable = isWebContainerProject && !supportStatus.supported && !livePreviewUrl;
+
   // Debug logging
   useEffect(() => {
     console.log('🔍 PreviewTab state:', {
@@ -175,6 +195,7 @@ export function PreviewTab({
     if (!response?.files || response.files.length === 0) return;
     if (!isWebContainerProject) return; // Only for WebContainer projects
     if (isServerRunning) return; // Don't remount if server is already running
+    if (!supportStatus.supported) return;
     const responseFiles = response.files;
 
     // Auto-mount files when project loads
@@ -221,7 +242,7 @@ export function PreviewTab({
     };
 
     mountFiles();
-  }, [response?.files, isWebContainerProject, isServerRunning]);
+  }, [response?.files, isWebContainerProject, isServerRunning, supportStatus.supported]);
 
   // Handle start dev server
   const handleStartServer = async () => {
@@ -234,30 +255,32 @@ export function PreviewTab({
 
     if (!response) {
       console.error('Cannot start server: response is null');
-      alert('Cannot start server: No project loaded. Please wait for the project to finish loading.');
+      setPreviewNotice('No project is loaded yet. Please wait for the project to finish loading.');
       return;
     }
 
     if (!response.files || response.files.length === 0) {
       console.error('Cannot start server: no files in response');
-      alert('Cannot start server: No files found in this project. Please generate or add files first.');
+      setPreviewNotice('No files were found in this project. Generate or add files first.');
       return;
     }
 
     if (!setLivePreviewUrl) {
       console.error('Cannot start server: setLivePreviewUrl is not provided');
-      alert('Cannot start server: Preview URL setter is missing. This is a bug, please refresh the page.');
+      setPreviewNotice('Preview could not start. Please refresh the page and try again.');
       return;
     }
 
     // Check if WebContainer is supported
-    if (!webContainerService.isSupported()) {
-      console.error('WebContainer is not supported in this browser');
-      alert('WebContainer is not supported in this browser. Please use a modern browser with SharedArrayBuffer support.');
+    const currentSupport = webContainerSupport ?? webContainerService.getSupportStatus();
+    if (!currentSupport.supported) {
+      console.info('Live preview is not supported in this browser:', currentSupport);
+      setPreviewNotice(currentSupport.userMessage);
       return;
     }
     
     setIsStartingServer(true);
+    setPreviewNotice(null);
     try {
       console.log('🚀 Starting dev server...');
       
@@ -283,7 +306,7 @@ export function PreviewTab({
       
       if (hasMainTsx && !hasAppTsx) {
         console.error('Cannot start server: App.tsx missing but main.tsx imports it');
-        alert('Cannot start server: App.tsx is missing. The generated app is incomplete and needs to be regenerated or fixed first.');
+        setPreviewNotice('Preview could not start because App.tsx is missing. The generated app needs to be fixed first.');
         return;
       }
 
@@ -294,7 +317,7 @@ export function PreviewTab({
           .map(item => `${item.file}:${item.line} imports ${item.importPath}`)
           .join('\n');
         console.error('Cannot start server: generated app has missing local imports', missingImports);
-        alert(`Cannot start server: the generated app is missing component files.\n\n${preview}`);
+        setPreviewNotice(`Preview could not start because the generated app is missing component files: ${preview}`);
         return;
       }
 
@@ -318,7 +341,7 @@ export function PreviewTab({
     } catch (error) {
       console.error('❌ Failed to start dev server:', error);
       // Show user-friendly error message
-      alert(`Failed to start dev server: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPreviewNotice(error instanceof Error ? error.message : 'Preview could not start. Please try again.');
     } finally {
       setIsStartingServer(false);
     }
@@ -412,10 +435,10 @@ export function PreviewTab({
               size="sm"
               className="h-7 text-xs"
               onClick={handleStartServer}
-              disabled={isStartingServer}
+              disabled={isStartingServer || !supportStatus.supported}
             >
               <Play className="h-3 w-3 mr-1" />
-              {isStartingServer ? 'Starting...' : 'Start Server'}
+              {!supportStatus.supported ? 'Check browser' : isStartingServer ? 'Starting...' : 'Start Server'}
             </Button>
           )}
           {livePreviewUrl && (
@@ -423,11 +446,20 @@ export function PreviewTab({
               {livePreviewUrl}
             </Badge>
           )}
-          {!webContainerService.isSupported() && (
-            <Badge variant="destructive" className="text-xs">
-              WebContainer Not Supported
+          {!supportStatus.supported && (
+            <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300">
+              Browser runtime unavailable
             </Badge>
           )}
+        </div>
+      )}
+
+      {(previewNotice || livePreviewUnavailable) && (
+        <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-100">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>{previewNotice || supportStatus.userMessage}</span>
+          </div>
         </div>
       )}
       
@@ -465,10 +497,10 @@ export function PreviewTab({
                       size="sm"
                       className="text-xs h-7"
                       onClick={handleStartServer}
-                      disabled={isStartingServer}
+                      disabled={isStartingServer || !supportStatus.supported}
                     >
                       <Play className="h-3 w-3 mr-1" />
-                      Start
+                      {!supportStatus.supported ? 'Unavailable' : 'Start'}
                     </Button>
                   )}
                 </>
@@ -489,6 +521,8 @@ export function PreviewTab({
               <PythonPreview files={response!.files!} />
             ) : activePreviewType === 'python-server' ? (
               <PythonServerPreview files={response!.files!} />
+            ) : livePreviewUnavailable ? (
+              <PreviewUnavailableState message={supportStatus.userMessage} />
             ) : (
               <AdvancedPreview
                 files={response!.files!}

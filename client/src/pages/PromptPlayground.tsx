@@ -41,7 +41,7 @@ import { useAuth, getAuthHeaders } from "../contexts/AuthContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import type { GeneratedFile, ChatMessage as WorkspaceChatMessage, PlaygroundAction } from "../contexts/WorkspaceContext";
 import { useRoute, useLocation } from "wouter";
-import { webContainerService } from "../services/WebContainerService";
+import { webContainerService, type WebContainerSupport } from "../services/WebContainerService";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useProjectManagement } from "../hooks/useProjectManagement";
 import { DatabaseAPIKeyDialog } from "../components/DatabaseAPIKeyDialog";
@@ -589,6 +589,7 @@ export default function PromptPlayground() {
   // WebContainer state
   const [webContainerReady, setWebContainerReady] = useState(false);
   const [webContainerBooting, setWebContainerBooting] = useState(false);
+  const [webContainerSupport, setWebContainerSupport] = useState<WebContainerSupport>(() => webContainerService.getSupportStatus());
   const { toast } = useToast();
   
   // Cleanup streaming intervals on unmount
@@ -779,8 +780,16 @@ export default function PromptPlayground() {
   // Boot WebContainer on component mount
   useEffect(() => {
     async function initWebContainer() {
-      // Check if WebContainer is supported
-      // WebContainer is always enabled - no fallback
+      const support = webContainerService.getSupportStatus();
+      setWebContainerSupport(support);
+
+      if (!support.supported) {
+        setWebContainerBooting(false);
+        setWebContainerReady(false);
+        console.info('Live browser preview is unavailable in this browser:', support);
+        return;
+      }
+
       try {
         setWebContainerBooting(true);
         console.log('Booting WebContainer...');
@@ -796,6 +805,13 @@ export default function PromptPlayground() {
         console.error('Failed to boot WebContainer:', error);
         setWebContainerBooting(false);
         setWebContainerReady(false);
+
+        const latestSupport = webContainerService.getSupportStatus();
+        setWebContainerSupport(latestSupport);
+        if (!latestSupport.supported) {
+          return;
+        }
+
         // Show error but keep trying in background
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('WebContainer boot failed:', errorMessage);
@@ -3225,7 +3241,7 @@ export default function PromptPlayground() {
                 }`}>
                   {webContainerReady ? 'Server' :
                    webContainerBooting ? 'Booting' :
-                   'Server'}
+                   webContainerSupport.supported ? 'Server' : 'Preview unavailable'}
                 </span>
               </div>
             </div>
@@ -3593,6 +3609,7 @@ export default function PromptPlayground() {
                 isLoading={isLoading}
                 setPreviewModalOpen={setPreviewModalOpen}
                 setLivePreviewUrl={setLivePreviewUrl}
+                webContainerSupport={webContainerSupport}
               />
             )}
 
@@ -3645,6 +3662,7 @@ export default function PromptPlayground() {
         response={response}
         livePreviewUrl={livePreviewUrl}
         currentComponentName={currentComponentName}
+        previewUnavailableMessage={!webContainerSupport.supported ? webContainerSupport.userMessage : undefined}
       />
 
       {/* Rename Project Dialog */}
