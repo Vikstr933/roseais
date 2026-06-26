@@ -159,7 +159,7 @@ class WebContainerServiceClass {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`🚀 Booting WebContainer (attempt ${attempt}/${maxRetries})...`);
-        this.bootedInstance = await WebContainer.boot();
+        this.bootedInstance = await WebContainer.boot({ coep: 'credentialless' });
         console.log('✅ WebContainer booted successfully');
         return this.bootedInstance;
       } catch (error) {
