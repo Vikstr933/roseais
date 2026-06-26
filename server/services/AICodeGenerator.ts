@@ -552,7 +552,12 @@ CRITICAL RULES:
    - Use activePage/activeTab state + onClick handlers, real anchor ids, or react-router-dom routes
    - Create/render every page or section named in the navbar
    - Never use decorative href="#" links or buttons without onClick
-8. NO syntax errors - especially:
+8. Vite dev server config must work in preview and on mobile devices:
+   - server.host = '0.0.0.0'
+   - server.allowedHosts = true
+   - server.cors enabled for GET/POST/PUT/DELETE/PATCH/OPTIONS
+   - headers include Access-Control-Allow-Origin, Access-Control-Allow-Methods, and Access-Control-Allow-Headers
+9. NO syntax errors - especially:
    - No semicolons after { or before : in ternaries
    - No interface Name {; or return {; patterns
    - All brackets/braces/parens must be balanced
@@ -1127,7 +1132,19 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true
+    host: '0.0.0.0',
+    strictPort: false,
+    allowedHosts: true,
+    cors: {
+      origin: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With']
+    },
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cache-Control, X-Requested-With'
+    }
   },
   build: {
     outDir: 'dist',

@@ -361,9 +361,19 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    cors: true,
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: false,
+    allowedHosts: true,
+    cors: {
+      origin: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With']
+    },
     headers: {
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cache-Control, X-Requested-With'
     }
   }
 });`;
@@ -373,9 +383,19 @@ export default defineConfig({
 
 export default defineConfig({
   server: {
-    cors: true,
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: false,
+    allowedHosts: true,
+    cors: {
+      origin: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With']
+    },
     headers: {
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cache-Control, X-Requested-With'
     }
   }
 });`;

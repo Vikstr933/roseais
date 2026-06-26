@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
@@ -127,7 +127,19 @@ const initializeApp = async () => {
     const allowedOrigins: (string | RegExp)[] = [
       'http://localhost:5173',
       'http://localhost:5174',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000',
+      'capacitor://localhost',
+      'ionic://localhost',
+      new RegExp('^https?://localhost(:[0-9]+)?$'),
+      new RegExp('^https?://127\\.0\\.0\\.1(:[0-9]+)?$'),
       new RegExp('http://localhost:5[0-9]{3}'),
+      new RegExp('^https?://10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}(:[0-9]+)?$'),
+      new RegExp('^https?://172\\.(1[6-9]|2[0-9]|3[0-1])\\.[0-9]{1,3}\\.[0-9]{1,3}(:[0-9]+)?$'),
+      new RegExp('^https?://192\\.168\\.[0-9]{1,3}\\.[0-9]{1,3}(:[0-9]+)?$'),
+      new RegExp('^https://.*\\.webcontainer-api\\.io$'),
       // Add backend URL (for self-requests)
       backendUrl,
       // Add Vercel deployment patterns
@@ -139,6 +151,40 @@ const initializeApp = async () => {
       // Add Render backend URLs pattern
       new RegExp('^https://.*\\.onrender\\.com$'), // Match all Render URLs
     ];
+
+    const corsMethods = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
+    const corsAllowedHeaders = 'Content-Type, Authorization, Cache-Control, X-Requested-With, X-Mobile-Client, X-Device-Type';
+    const corsExposedHeaders = 'Content-Type, Authorization';
+
+    const isAllowedCorsOrigin = (origin?: string): boolean => {
+      if (!origin) return true;
+      if (origin === backendUrl) return true;
+      if (origin.includes('onrender.com')) return true;
+      if (origin.includes('vercel.app')) return true;
+      if (origin.includes('webcontainer-api.io')) return true;
+
+      return allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin;
+        }
+        return allowed.test(origin);
+      });
+    };
+
+    const setCorsHeaders = (res: Response, origin?: string): boolean => {
+      if (!isAllowedCorsOrigin(origin)) {
+        return false;
+      }
+
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', corsMethods);
+      res.setHeader('Access-Control-Allow-Headers', corsAllowedHeaders);
+      res.setHeader('Access-Control-Expose-Headers', corsExposedHeaders);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      res.setHeader('Vary', 'Origin');
+      return true;
+    };
 
     // Add production origins if set
     if (process.env.ALLOWED_ORIGINS) {
@@ -159,65 +205,17 @@ const initializeApp = async () => {
         console.log(`[CORS Preflight] OPTIONS request from origin: ${origin || 'none'}`);
       }
       
-      // Always allow requests from backend to itself
-      if (!origin || origin === backendUrl || origin.includes('onrender.com')) {
+      // Always allow known app, preview, and mobile development origins.
+      if (setCorsHeaders(res, origin)) {
         if (isDevelopment) {
-          console.log(`[CORS Preflight] ✅ Allowing backend/onrender origin: ${origin || 'none'}`);
+          console.log(`[CORS Preflight] ✅ Allowing origin: ${origin || 'none'}`);
         }
-        res.setHeader('Access-Control-Allow-Origin', origin || '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Max-Age', '86400');
         return res.status(204).send();
       }
-      
-      // In production, always allow Vercel and Render origins as fallback (check this FIRST)
-      if (origin && origin.includes('vercel.app')) {
-        if (isDevelopment) {
-          console.log(`[CORS Preflight] ✅ Allowing Vercel origin: ${origin}`);
-        }
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Max-Age', '86400');
-        return res.status(204).send();
-      }
-      if (origin && origin.includes('onrender.com')) {
-        if (isDevelopment) {
-          console.log(`[CORS Preflight] ✅ Allowing Render origin: ${origin}`);
-        }
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Max-Age', '86400');
-        return res.status(204).send();
-      }
-      
-      let isAllowed = allowedOrigins.some(allowed => {
-        if (typeof allowed === 'string') {
-          return allowed === origin;
-        } else if (allowed instanceof RegExp) {
-          return allowed.test(origin);
-        }
-        return false;
-      });
 
-      if (isAllowed) {
-        console.log(`[CORS Preflight] ✅ Allowing origin from allowed list: ${origin}`);
-        res.setHeader('Access-Control-Allow-Origin', origin || '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Max-Age', '86400');
-        res.status(204).send();
-      } else {
-        console.error(`[CORS Preflight] ❌ Blocked origin: ${origin}`);
-        console.error(`[CORS Preflight] Allowed origins:`, allowedOrigins.map(o => o.toString()));
-        res.status(403).send();
-      }
+      console.error(`[CORS Preflight] ❌ Blocked origin: ${origin}`);
+      console.error(`[CORS Preflight] Allowed origins:`, allowedOrigins.map(o => o.toString()));
+      res.status(403).send();
     });
 
     // Advanced Security Middleware
@@ -245,34 +243,8 @@ const initializeApp = async () => {
           return callback(null, true);
         }
 
-        // Always allow requests from backend to itself
-        if (origin === backendUrl || origin.includes('onrender.com')) {
-          console.log(`[CORS] ✅ Allowing backend self-request: ${origin}`);
-          return callback(null, true);
-        }
-
-        // In production, always allow Vercel and Render origins as fallback (check this FIRST)
-        if (origin.includes('vercel.app')) {
-          console.log(`[CORS] ✅ Allowing Vercel origin: ${origin}`);
-          return callback(null, true);
-        }
-        if (origin.includes('onrender.com')) {
-          console.log(`[CORS] ✅ Allowing Render origin: ${origin}`);
-          return callback(null, true);
-        }
-
-        // Check if origin is in allowed list (string or regex match)
-        const isAllowed = allowedOrigins.some(allowed => {
-          if (typeof allowed === 'string') {
-            return allowed === origin;
-          } else if (allowed instanceof RegExp) {
-            return allowed.test(origin);
-          }
-          return false;
-        });
-
-        if (isAllowed) {
-          console.log(`[CORS] ✅ Allowing origin from allowed list: ${origin}`);
+        if (isAllowedCorsOrigin(origin)) {
+          console.log(`[CORS] ✅ Allowing origin: ${origin}`);
           callback(null, true);
         } else {
           // Log detailed info for debugging
@@ -287,7 +259,7 @@ const initializeApp = async () => {
       },
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Mobile-Client', 'X-Device-Type'],
       exposedHeaders: ['Content-Type', 'Authorization'],
       preflightContinue: false,
       optionsSuccessStatus: 204,
@@ -340,30 +312,7 @@ const initializeApp = async () => {
     app.use('/api', (req, res, next) => {
       const origin = req.headers.origin;
       
-      // Always allow localhost in development
-      if (origin && origin.includes('localhost')) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Max-Age', '86400');
-      }
-      // Allow Vercel
-      else if (origin && origin.includes('vercel.app')) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Max-Age', '86400');
-      }
-      // Allow Render
-      else if (origin && origin.includes('onrender.com')) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Max-Age', '86400');
-      }
+      setCorsHeaders(res, origin);
       
       // Handle OPTIONS preflight here as well
       if (req.method === 'OPTIONS') {
@@ -376,10 +325,8 @@ const initializeApp = async () => {
     // Special CORS handling for SSE endpoints
     app.use('/api/sse', (req, res, next) => {
       const origin = req.headers.origin;
-      if (origin && allowedOrigins.some(allowed =>
-        typeof allowed === 'string' ? allowed === origin : allowed.test(origin)
-      )) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
+      if (origin && isAllowedCorsOrigin(origin)) {
+        setCorsHeaders(res, origin);
       } else {
         // Fallback to first allowed origin for development
         res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:5173');

@@ -567,10 +567,15 @@ BACKEND PHASES (Add these after base phase):
      * vite in devDependencies (^7.1.7)
      * @vitejs/plugin-react in devDependencies (^5.0.0)
      * react and react-dom in dependencies
-   - **CRITICAL**: client/vite.config.ts MUST exist with proper Vite configuration
+   - **CRITICAL**: client/vite.config.ts MUST exist with mobile/preview-safe Vite configuration:
+     * server.host = '0.0.0.0'
+     * server.allowedHosts = true
+     * server.cors enabled for GET/POST/PUT/DELETE/PATCH/OPTIONS
+     * Access-Control-Allow-Origin/Methods/Headers headers set for preview/mobile devices
    - Dependencies: ["base"]
    - **CRITICAL**: server/index.js MUST include:
-     * Express setup with CORS enabled (origin: http://localhost:5173)
+     * Express setup with CORS enabled for http://localhost:5173, http://127.0.0.1:5173, private LAN IP origins, capacitor://localhost, ionic://localhost, and *.webcontainer-api.io preview origins
+     * OPTIONS preflight handling with Access-Control-Allow-Origin/Methods/Headers/Credentials
      * JSON body parser middleware
      * Health check endpoint (/health)
      * Server listening on port 3001 (or from env)
@@ -606,7 +611,7 @@ BACKEND PHASES (Add these after base phase):
 - Frontend files MUST live under client/ for fullstack projects: client/index.html, client/src/main.tsx, client/src/App.tsx, client/src/index.css
 - Frontend components MUST use the api helper from client/src/lib/api.ts
 - All API calls MUST use the correct endpoints: ${fullstackConfig.apiEndpoints.join(', ')}
-- CORS MUST be configured in backend to allow requests from http://localhost:5173
+- CORS MUST be configured in backend to allow requests from http://localhost:5173, http://127.0.0.1:5173, private LAN IP origins used by phones/tablets, capacitor://localhost, ionic://localhost, and *.webcontainer-api.io preview origins.
 - Backend and frontend MUST be properly connected - no manual configuration needed
 - Environment variables MUST be set up correctly in both frontend and backend
 - Do not fake auth or upload behavior only in React state when backend endpoints are requested; wire forms/buttons to the API helper.

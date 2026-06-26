@@ -579,7 +579,19 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true
+    host: '0.0.0.0',
+    strictPort: false,
+    allowedHosts: true,
+    cors: {
+      origin: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With']
+    },
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cache-Control, X-Requested-With'
+    }
   },
   build: {
     outDir: 'dist',
@@ -614,20 +626,37 @@ const uploadDir = path.join(__dirname, 'uploads');
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:5173',
-  'http://127.0.0.1:5173'
+  'http://127.0.0.1:5173',
+  'capacitor://localhost',
+  'ionic://localhost'
 ].filter(Boolean);
 
-// Middleware
-app.use(cors({
+const previewOriginPattern = /^https:\\/\\/.*\\.webcontainer-api\\.io$/;
+const localNetworkOriginPattern = /^https?:\\/\\/(?:(?:localhost|127\\.0\\.0\\.1)(?::\\d+)?|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?|192\\.168\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?|172\\.(?:1[6-9]|2\\d|3[0-1])\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?)$/;
+
+function isAllowedOrigin(origin) {
+  return allowedOrigins.includes(origin) ||
+    previewOriginPattern.test(origin) ||
+    localNetworkOriginPattern.test(origin);
+}
+
+const corsOptions = {
   origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || origin.endsWith('.webcontainer-api.io')) {
+    if (!origin || isAllowedOrigin(origin)) {
       return callback(null, true);
     }
+
     return callback(null, true);
   },
-  credentials: true
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+
+// Middleware
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 ${hasUploads ? `app.use('/uploads', express.static(uploadDir));
@@ -1155,7 +1184,40 @@ VITE_API_URL=http://localhost:${config.backendPort}`;
           // Add cors import and middleware
           const updatedContent = content
             .replace(/import express from 'express';/, `import express from 'express';\nimport cors from 'cors';`)
-            .replace(/app\.use\(express\.json\(\)\);/, `app.use(cors({\n  origin: process.env.FRONTEND_URL || 'http://localhost:5173',\n  credentials: true\n}));\napp.use(express.json());`);
+            .replace(/app\.use\(express\.json\(\)\);/, `const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'capacitor://localhost',
+  'ionic://localhost'
+].filter(Boolean);
+
+const previewOriginPattern = /^https:\\/\\/.*\\.webcontainer-api\\.io$/;
+const localNetworkOriginPattern = /^https?:\\/\\/(?:(?:localhost|127\\.0\\.0\\.1)(?::\\d+)?|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?|192\\.168\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?|172\\.(?:1[6-9]|2\\d|3[0-1])\\.\\d{1,3}\\.\\d{1,3}(?::\\d+)?)$/;
+
+function isAllowedOrigin(origin) {
+  return allowedOrigins.includes(origin) ||
+    previewOriginPattern.test(origin) ||
+    localNetworkOriginPattern.test(origin);
+}
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use(express.json());`);
           
           serverFile.content = updatedContent;
         }
