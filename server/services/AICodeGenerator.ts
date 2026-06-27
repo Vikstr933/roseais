@@ -38,6 +38,15 @@ export interface AIGenerationResponse {
 }
 
 export class AICodeGenerator {
+  private static readonly PROFESSIONAL_ICON_GUIDELINES = `PROFESSIONAL ICON POLICY:
+- Use lucide-react for iconography in generated web apps whenever icons are helpful.
+- Import only the named lucide icons that are actually used, for example: import { Dumbbell, Apple, Calendar, Mail, Phone, MapPin, ArrowRight, CheckCircle } from 'lucide-react';
+- Do not use emoji characters as UI icons in generated app screens, navigation, cards, stats, feature lists, buttons, or service cards unless the user explicitly asks for emojis.
+- Choose domain-specific lucide icons that match the content, such as Dumbbell for fitness, Leaf for gardening, Sparkles for beauty, Camera for galleries, CreditCard for payments, Shield for security, Mail/Phone/MapPin for contact details.
+- Keep icon style consistent: similar size, stroke width, color treatment, and spacing across the app.
+- Decorative icons should use aria-hidden="true"; interactive icon buttons need accessible labels.
+- If lucide-react is used, package.json must include lucide-react in dependencies.`;
+
   private anthropic: Anthropic;
   private logger: Logger;
   private limiter: RateLimiter;
@@ -94,6 +103,8 @@ export class AICodeGenerator {
           user: userPrompt.length
         });
       }
+
+      systemPrompt = this.withProfessionalIconGuidelines(systemPrompt);
 
       // Use multi-model AI service
       // Increase maxTokens for complex apps that generate many files
@@ -362,6 +373,33 @@ export class AICodeGenerator {
         error: errorMessage,
       };
     }
+  }
+
+  private withProfessionalIconGuidelines(systemPrompt: string): string {
+    const trimmedPrompt = systemPrompt.trim();
+    if (trimmedPrompt.includes('PROFESSIONAL ICON POLICY')) {
+      return trimmedPrompt;
+    }
+
+    return `${trimmedPrompt}\n\n${AICodeGenerator.PROFESSIONAL_ICON_GUIDELINES}`;
+  }
+
+  private getDependencyVersion(dep: string): string {
+    const versions: Record<string, string> = {
+      'react': '^18.3.1',
+      'react-dom': '^18.3.1',
+      'framer-motion': '^11.13.1',
+      'lucide-react': '^0.453.0',
+      'clsx': '^2.1.1',
+      'tailwind-merge': '^2.5.4',
+      'date-fns': '^3.6.0',
+      'recharts': '^2.13.0',
+      'react-hook-form': '^7.53.1',
+      'zod': '^3.25.76',
+      'react-router-dom': '^6.26.0',
+    };
+
+    return versions[dep] || 'latest';
   }
 
   private buildSystemPrompt(request: AIGenerationRequest): string {
@@ -1045,6 +1083,11 @@ Suggestions to fix:
         if (!existingPackageJson.dependencies['react-dom']) {
           existingPackageJson.dependencies['react-dom'] = '^18.3.1';
         }
+        dependencies.forEach(dep => {
+          if (!existingPackageJson.dependencies[dep]) {
+            existingPackageJson.dependencies[dep] = this.getDependencyVersion(dep);
+          }
+        });
 
         // Ensure scripts exist
         if (!existingPackageJson.scripts) {
