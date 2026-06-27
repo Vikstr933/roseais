@@ -421,6 +421,57 @@ export default function PromptPlayground() {
     }
   };
 
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const startServerHostedPreview = async (
+    files: Array<{ path: string; content: string }>,
+    componentName: string
+  ): Promise<string> => {
+    const createResponse = await apiFetch('/api/previews', {
+      method: 'POST',
+      headers: getAuthHeaders(sessionToken),
+      body: JSON.stringify({
+        projectId: currentProject?.id || null,
+        componentName,
+        files,
+      }),
+    });
+
+    const createData = await safeJsonParse(createResponse);
+    if (!createResponse.ok) {
+      throw new Error(createData?.message || createData?.error || 'Could not start server preview');
+    }
+
+    if (!createData?.id) {
+      throw new Error('Server preview did not return a session id');
+    }
+
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      const statusResponse = await apiFetch(`/api/previews/${createData.id}`, {
+        method: 'GET',
+        headers: getAuthHeaders(sessionToken),
+      }, 0);
+      const statusData = await safeJsonParse(statusResponse);
+
+      if (!statusResponse.ok) {
+        throw new Error(statusData?.error || 'Could not check server preview status');
+      }
+
+      if (statusData.status === 'ready' && statusData.previewUrl) {
+        return statusData.previewUrl;
+      }
+
+      if (statusData.status === 'failed') {
+        throw new Error(statusData.errorMessage || 'Server preview build failed');
+      }
+
+      setCurrentStep('Building server preview...');
+      await wait(2000);
+    }
+
+    throw new Error('Server preview took too long to build');
+  };
+
   // Helper function to validate timestamp (not 0 or 1970-01-01)
   const isValidTimestamp = (timestamp: number): boolean => {
     if (!timestamp || timestamp === 0) return false;
@@ -1890,52 +1941,37 @@ export default function PromptPlayground() {
         }, 3000);
 
       } else {
-        // Fallback to server-side deployment
-        console.log('Deploying to server...');
+        // Fallback to server-hosted static preview for iOS/mobile browsers.
+        console.log('Deploying to server-hosted preview...');
         
         addChatMessage({
           role: 'assistant',
-          content: `Starting preview on the server...`,
+          content: `Starting server preview...`,
           timestamp: Date.now()
         });
 
-        // Call existing server-side deployment
-        const response = await apiFetch('/api/components/generate', {
-          method: 'POST',
-          headers: getAuthHeaders(sessionToken),
-          body: JSON.stringify({
-            componentName,
-            files,
-            deploymentType: 'local'
-          })
+        const serverPreviewUrl = await startServerHostedPreview(files, componentName);
+        if (isLocalPreviewUrl(serverPreviewUrl)) {
+          throw new Error('The server returned a local preview URL that cannot be opened from this browser.');
+        }
+
+        // Only auto-switch to preview if user is still on desktop tab
+        setActiveTab((currentTab) => {
+          if (currentTab === 'desktop') {
+            return 'preview';
+          }
+          return currentTab; // Keep current tab if user manually switched
         });
 
-        if (response.ok) {
-          const result = await safeJsonParse(response);
-          if (result.deploymentUrl) {
-            if (isLocalPreviewUrl(result.deploymentUrl)) {
-              throw new Error('The server returned a local preview URL that cannot be opened from this browser.');
-            }
+        setLivePreviewUrl(serverPreviewUrl);
+        setDevServerRunning(true);
+        completedDeploySignatureRef.current = deploySignature;
 
-            // Only auto-switch to preview if user is still on desktop tab
-            setActiveTab((currentTab) => {
-              if (currentTab === 'desktop') {
-                return 'preview';
-              }
-              return currentTab; // Keep current tab if user manually switched
-            });
-
-            setLivePreviewUrl(result.deploymentUrl);
-            setDevServerRunning(true);
-            completedDeploySignatureRef.current = deploySignature;
-
-            addChatMessage({
-              role: 'assistant',
-              content: `Preview is ready in the Preview tab.`,
-              timestamp: Date.now()
-            });
-          }
-        }
+        addChatMessage({
+          role: 'assistant',
+          content: `Preview is ready in the Preview tab.`,
+          timestamp: Date.now()
+        });
       }
     } catch (error) {
       console.error('Deployment failed:', error);
@@ -3617,6 +3653,12 @@ export default function PromptPlayground() {
                 setPreviewModalOpen={setPreviewModalOpen}
                 setLivePreviewUrl={setLivePreviewUrl}
                 webContainerSupport={webContainerSupport}
+                onStartServerPreview={async () => {
+                  if (!response?.files || response.files.length === 0) {
+                    throw new Error('No files were found in this project. Generate or add files first.');
+                  }
+                  await deployToRuntime(response.files, currentComponentName || 'App', { force: true });
+                }}
               />
             )}
 

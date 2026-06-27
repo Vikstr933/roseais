@@ -247,6 +247,24 @@ export const codeGenerationSessions = pgTable('code_generation_sessions', {
   metadata: jsonb('metadata').default({}),
 });
 
+export const previewSessions = pgTable('preview_sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('queued'), // queued, building, ready, failed, expired
+  previewUrl: text('preview_url'),
+  buildDir: text('build_dir'),
+  entryPath: text('entry_path'),
+  sourceHash: text('source_hash'),
+  logs: jsonb('logs').default([]),
+  errorMessage: text('error_message'),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  expiresAt: timestamp('expires_at').notNull(),
+  lastAccessedAt: timestamp('last_accessed_at'),
+});
+
 export const apiKeys = pgTable('api_keys', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -359,6 +377,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   workspaces: many(workspaces),
   agents: many(agents),
   apiKeys: many(apiKeys),
+  previewSessions: many(previewSessions),
   pluginConfigs: many(pluginConfigs),
   pluginKnowledge: many(pluginKnowledge),
   pluginActions: many(pluginActions),
@@ -386,6 +405,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   chatMessages: many(chatMessages),
   generationLocks: many(generationLocks),
   codeGenerationSessions: many(codeGenerationSessions),
+  previewSessions: many(previewSessions),
   members: many(projectMembers),
 }));
 
@@ -412,6 +432,11 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
   user: one(users, { fields: [chatMessages.userId], references: [users.id] }),
 }));
 
+export const previewSessionsRelations = relations(previewSessions, ({ one }) => ({
+  user: one(users, { fields: [previewSessions.userId], references: [users.id] }),
+  workspace: one(workspaces, { fields: [previewSessions.projectId], references: [workspaces.id] }),
+}));
+
 export const pluginConfigsRelations = relations(pluginConfigs, ({ one }) => ({
   user: one(users, { fields: [pluginConfigs.userId], references: [users.id] }),
 }));
@@ -433,6 +458,8 @@ export const insertAgentSchema = createInsertSchema(agents);
 export const selectAgentSchema = createSelectSchema(agents);
 export const insertSessionSchema = createInsertSchema(sessions);
 export const selectSessionSchema = createSelectSchema(sessions);
+export const insertPreviewSessionSchema = createInsertSchema(previewSessions);
+export const selectPreviewSessionSchema = createSelectSchema(previewSessions);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -445,6 +472,8 @@ export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type ProjectFile = typeof projectFiles.$inferSelect;
 export type NewProjectFile = typeof projectFiles.$inferInsert;
+export type PreviewSession = typeof previewSessions.$inferSelect;
+export type NewPreviewSession = typeof previewSessions.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type ProjectChatMessage = typeof projectChatMessages.$inferSelect;

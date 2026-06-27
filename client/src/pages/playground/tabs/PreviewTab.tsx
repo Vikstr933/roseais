@@ -17,6 +17,7 @@ interface PreviewTabProps {
   setPreviewModalOpen: (open: boolean) => void;
   setLivePreviewUrl?: (url: string | null) => void;
   webContainerSupport?: WebContainerSupport;
+  onStartServerPreview?: () => Promise<void>;
 }
 
 // Detailed Python project type detection
@@ -89,6 +90,7 @@ export function PreviewTab({
   setPreviewModalOpen,
   setLivePreviewUrl,
   webContainerSupport,
+  onStartServerPreview,
 }: PreviewTabProps) {
   const [forcePreviewType, setForcePreviewType] = useState<'auto' | 'web' | 'python-script' | 'python-server'>('auto');
   const [isServerRunning, setIsServerRunning] = useState<boolean>(!!livePreviewUrl);
@@ -275,6 +277,20 @@ export function PreviewTab({
     const currentSupport = webContainerSupport ?? webContainerService.getSupportStatus();
     if (!currentSupport.supported) {
       console.info('Live preview is not supported in this browser:', currentSupport);
+      if (onStartServerPreview) {
+        setIsStartingServer(true);
+        setPreviewNotice('Starting server preview...');
+        try {
+          await onStartServerPreview();
+          setIsServerRunning(true);
+          setPreviewNotice(null);
+        } catch (error) {
+          setPreviewNotice(error instanceof Error ? error.message : 'Server preview could not start.');
+        } finally {
+          setIsStartingServer(false);
+        }
+        return;
+      }
       setPreviewNotice(currentSupport.userMessage);
       return;
     }

@@ -54,6 +54,7 @@ import aiRouter from './routes/ai';
 import statsRouter from './routes/stats';
 import publicProjectsRouter from './routes/public-projects';
 import screenshotsRouter from './routes/screenshots';
+import previewsRouter from './routes/previews';
 import dataInsightsRouter from './routes/data-insights';
 import toolPermissionsRouter from './routes/tool-permissions';
 import sharedConnectorsRouter from './routes/shared-connectors';
@@ -518,6 +519,7 @@ const initializeApp = async () => {
     app.use('/api/stats', statsRouter); // Platform statistics
     app.use('/api/public-projects', publicProjectsRouter); // Public projects showcase
     app.use('/api/screenshots', screenshotsRouter); // Screenshot capture service
+    app.use('/api/previews', previewsRouter); // Server-hosted previews for iOS/mobile
     app.use('/api/data-insights', dataInsightsRouter); // Data insights and analytics
     app.use('/api/tool-permissions', toolPermissionsRouter); // Tool Permissions Management
     app.use('/api/shared-connectors', sharedConnectorsRouter); // Shared Connectors (workspace-wide API keys)

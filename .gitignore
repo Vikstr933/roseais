@@ -158,6 +158,7 @@ attached_assets/
 
 # Workspaces (generated during development)
 workspaces/
+preview-workspaces/
 
 # TypeScript build info
 *.tsbuildinfo
