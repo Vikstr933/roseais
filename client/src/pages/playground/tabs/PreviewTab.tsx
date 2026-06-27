@@ -82,6 +82,32 @@ function PreviewUnavailableState({ message }: { message: string }) {
   );
 }
 
+function ServerPreviewReadyState({
+  isStarting,
+  onStart,
+}: {
+  isStarting: boolean;
+  onStart: () => void;
+}) {
+  return (
+    <div className="h-full flex items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Server className="h-6 w-6" />
+        </div>
+        <h3 className="text-base font-semibold mb-2">Server preview is ready to start</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+          This browser cannot run the in-browser dev runtime, so the preview will be built on the server instead.
+        </p>
+        <Button onClick={onStart} disabled={isStarting} className="gap-2">
+          <Play className="h-4 w-4" />
+          {isStarting ? 'Starting server preview...' : 'Start server preview'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function PreviewTab({
   response,
   livePreviewUrl,
@@ -174,7 +200,9 @@ export function PreviewTab({
     return result;
   }, [response?.files, isPythonWebApp]);
 
-  const livePreviewUnavailable = isWebContainerProject && !supportStatus.supported && !livePreviewUrl;
+  const canStartPreview = supportStatus.supported || !!onStartServerPreview;
+  const usesServerHostedPreview = isWebContainerProject && !supportStatus.supported && !!onStartServerPreview;
+  const livePreviewUnavailable = isWebContainerProject && !supportStatus.supported && !livePreviewUrl && !onStartServerPreview;
 
   // Debug logging
   useEffect(() => {
@@ -451,10 +479,10 @@ export function PreviewTab({
               size="sm"
               className="h-7 text-xs"
               onClick={handleStartServer}
-              disabled={isStartingServer || !supportStatus.supported}
+              disabled={isStartingServer || !canStartPreview}
             >
               <Play className="h-3 w-3 mr-1" />
-              {!supportStatus.supported ? 'Check browser' : isStartingServer ? 'Starting...' : 'Start Server'}
+              {isStartingServer ? 'Starting...' : usesServerHostedPreview ? 'Start Server Preview' : 'Start Server'}
             </Button>
           )}
           {livePreviewUrl && (
@@ -464,7 +492,7 @@ export function PreviewTab({
           )}
           {!supportStatus.supported && (
             <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300">
-              Browser runtime unavailable
+              {usesServerHostedPreview ? 'Server preview available' : 'Browser runtime unavailable'}
             </Badge>
           )}
         </div>
@@ -513,10 +541,10 @@ export function PreviewTab({
                       size="sm"
                       className="text-xs h-7"
                       onClick={handleStartServer}
-                      disabled={isStartingServer || !supportStatus.supported}
+                      disabled={isStartingServer || !canStartPreview}
                     >
                       <Play className="h-3 w-3 mr-1" />
-                      {!supportStatus.supported ? 'Unavailable' : 'Start'}
+                      {isStartingServer ? 'Starting...' : usesServerHostedPreview ? 'Server' : 'Start'}
                     </Button>
                   )}
                 </>
@@ -537,6 +565,11 @@ export function PreviewTab({
               <PythonPreview files={response!.files!} />
             ) : activePreviewType === 'python-server' ? (
               <PythonServerPreview files={response!.files!} />
+            ) : usesServerHostedPreview && !livePreviewUrl ? (
+              <ServerPreviewReadyState
+                isStarting={isStartingServer}
+                onStart={handleStartServer}
+              />
             ) : livePreviewUnavailable ? (
               <PreviewUnavailableState message={supportStatus.userMessage} />
             ) : (
