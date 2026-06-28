@@ -423,6 +423,16 @@ export default function PromptPlayground() {
 
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+  const canFallbackToServerPreview = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error);
+    return (
+      message.includes('WebContainer did not provide a browser-accessible preview URL') ||
+      message.includes('no browser-accessible preview URL') ||
+      message.includes('preview server started locally') ||
+      message.includes('no browser-accessible preview URL was returned')
+    );
+  };
+
   const startServerHostedPreview = async (
     files: Array<{ path: string; content: string }>,
     componentName: string
@@ -1833,7 +1843,7 @@ export default function PromptPlayground() {
   async function deployToRuntime(
     files: Array<{ path: string; content: string }>,
     componentName: string,
-    options: { force?: boolean } = {}
+    options: { force?: boolean; preferServerPreview?: boolean } = {}
   ) {
     const deploySignature = createDeploymentSignature(files, componentName);
 
@@ -1852,7 +1862,7 @@ export default function PromptPlayground() {
     activeDeploySignatureRef.current = deploySignature;
 
     try {
-      if (webContainerReady) {
+      if (webContainerReady && !options.preferServerPreview) {
         console.log('Deploying to WebContainer...');
         
         addChatMessage({
@@ -1975,6 +1985,46 @@ export default function PromptPlayground() {
       }
     } catch (error) {
       console.error('Deployment failed:', error);
+      if (webContainerReady && !options.preferServerPreview && canFallbackToServerPreview(error)) {
+        try {
+          addChatMessage({
+            role: 'assistant',
+            content: `Browser preview did not expose a URL, so I'm starting a server preview instead...`,
+            timestamp: Date.now()
+          });
+
+          const serverPreviewUrl = await startServerHostedPreview(files, componentName);
+          if (isLocalPreviewUrl(serverPreviewUrl)) {
+            throw new Error('The server returned a local preview URL that cannot be opened from this browser.');
+          }
+
+          setActiveTab((currentTab) => {
+            if (currentTab === 'desktop') {
+              return 'preview';
+            }
+            return currentTab;
+          });
+
+          setLivePreviewUrl(serverPreviewUrl);
+          setDevServerRunning(true);
+          completedDeploySignatureRef.current = deploySignature;
+
+          addChatMessage({
+            role: 'assistant',
+            content: `Preview is ready in the Preview tab.`,
+            timestamp: Date.now()
+          });
+          return;
+        } catch (fallbackError) {
+          console.error('Server preview fallback failed:', fallbackError);
+          addChatMessage({
+            role: 'assistant',
+            content: `Preview could not start: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}. The generated files are still available to inspect and edit.`,
+            timestamp: Date.now()
+          });
+          return;
+        }
+      }
       addChatMessage({
         role: 'assistant',
         content: `Preview could not start: ${error instanceof Error ? error.message : 'Unknown error'}. The generated files are still available to inspect and edit.`,
@@ -3657,7 +3707,7 @@ export default function PromptPlayground() {
                   if (!response?.files || response.files.length === 0) {
                     throw new Error('No files were found in this project. Generate or add files first.');
                   }
-                  await deployToRuntime(response.files, currentComponentName || 'App', { force: true });
+                  await deployToRuntime(response.files, currentComponentName || 'App', { force: true, preferServerPreview: true });
                 }}
               />
             )}

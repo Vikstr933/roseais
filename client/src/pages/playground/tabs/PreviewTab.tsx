@@ -108,6 +108,16 @@ function ServerPreviewReadyState({
   );
 }
 
+function canFallbackToServerPreview(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('WebContainer did not provide a browser-accessible preview URL') ||
+    message.includes('no browser-accessible preview URL') ||
+    message.includes('preview server started locally') ||
+    message.includes('no browser-accessible preview URL was returned')
+  );
+}
+
 export function PreviewTab({
   response,
   livePreviewUrl,
@@ -384,6 +394,19 @@ export function PreviewTab({
       setIsServerRunning(true);
     } catch (error) {
       console.error('❌ Failed to start dev server:', error);
+      if (onStartServerPreview && canFallbackToServerPreview(error)) {
+        setPreviewNotice('Browser preview did not expose a URL. Starting server preview instead...');
+        try {
+          await onStartServerPreview();
+          setIsServerRunning(true);
+          setPreviewNotice(null);
+          return;
+        } catch (serverPreviewError) {
+          console.error('❌ Server preview fallback failed:', serverPreviewError);
+          setPreviewNotice(serverPreviewError instanceof Error ? serverPreviewError.message : 'Server preview could not start.');
+          return;
+        }
+      }
       // Show user-friendly error message
       setPreviewNotice(error instanceof Error ? error.message : 'Preview could not start. Please try again.');
     } finally {
