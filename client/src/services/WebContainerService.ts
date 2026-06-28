@@ -577,6 +577,8 @@ class WebContainerServiceClass {
         cwd: layout.backendCwd,
         env: {
           PORT: String(layout.backendPort),
+          HOST: '0.0.0.0',
+          NODE_ENV: 'development',
         },
       });
 
@@ -585,7 +587,9 @@ class WebContainerServiceClass {
         this.backendServerProcess,
         layout.backendPort,
         '🚀 Backend server',
-        onProgress
+        onProgress,
+        60000,
+        true
       );
       onProgress?.(`Backend ready at ${backendUrl}\n`);
     }
