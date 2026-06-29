@@ -1,4 +1,4 @@
-import { Eye, ChevronUp, Server, Play, Square, AlertTriangle } from "lucide-react";
+import { Eye, ChevronUp, Server, Play, Square, AlertTriangle, RotateCcw } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { AdvancedPreview } from "../../../components/AdvancedPreview";
 import { PythonPreview } from "../../../components/PythonPreview";
@@ -288,6 +288,24 @@ export function PreviewTab({
     }
   }, [onStartServerPreview]);
 
+  const resetPreviewStartup = useCallback(() => {
+    setIsStartingServer(false);
+    setIsServerPreviewFallbackActive(false);
+    setPreviewNotice('Preview startup was reset. You can start it again.');
+  }, []);
+
+  useEffect(() => {
+    if (!isStartingServer) return;
+
+    const timeout = window.setTimeout(() => {
+      setIsStartingServer(false);
+      setIsServerPreviewFallbackActive(false);
+      setPreviewNotice('Preview startup is taking longer than expected. You can start it again.');
+    }, 30000);
+
+    return () => window.clearTimeout(timeout);
+  }, [isStartingServer]);
+
   useEffect(() => {
     if (
       previewNotice &&
@@ -525,7 +543,18 @@ export function PreviewTab({
               disabled={isStartingServer || !canStartPreview}
             >
               <Play className="h-3 w-3 mr-1" />
-              {isStartingServer ? 'Starting...' : (usesServerHostedPreview || isServerPreviewFallbackActive) ? 'Start Hosted Preview' : 'Start Server'}
+              {isStartingServer ? 'Starting preview...' : (usesServerHostedPreview || isServerPreviewFallbackActive) ? 'Start Hosted Preview' : 'Start Server'}
+            </Button>
+          )}
+          {isStartingServer && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={resetPreviewStartup}
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset
             </Button>
           )}
           {livePreviewUrl && (
@@ -592,6 +621,17 @@ export function PreviewTab({
                     >
                       <Play className="h-3 w-3 mr-1" />
                       {isStartingServer ? 'Starting...' : (usesServerHostedPreview || isServerPreviewFallbackActive) ? 'Server' : 'Start'}
+                    </Button>
+                  )}
+                  {isStartingServer && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={resetPreviewStartup}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Reset
                     </Button>
                   )}
                 </>
