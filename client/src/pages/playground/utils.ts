@@ -263,6 +263,35 @@ export interface MissingLocalImport {
   importPath: string;
 }
 
+export interface PreviewContractIssue {
+  type: 'missing_required_file' | 'missing_local_import';
+  message: string;
+  file?: string;
+  line?: number;
+  importPath?: string;
+}
+
+export interface PreviewContractResult {
+  valid: boolean;
+  issues: PreviewContractIssue[];
+  missingRequiredFiles: string[];
+  missingImports: MissingLocalImport[];
+}
+
+export function getRequiredFrontendFiles(files: Array<{ path: string }>): string[] {
+  const paths = files.map(file => normalizePath(file.path));
+  const usesClientLayout = paths.some(path => path.startsWith('client/'));
+
+  return usesClientLayout
+    ? ['client/index.html', 'client/package.json', 'client/tsconfig.json', 'client/src/App.tsx', 'client/src/main.tsx']
+    : ['index.html', 'package.json', 'tsconfig.json', 'src/App.tsx', 'src/main.tsx'];
+}
+
+function hasGeneratedFile(files: Array<{ path: string }>, requiredPath: string): boolean {
+  const normalizedRequired = normalizePath(requiredPath);
+  return files.some(file => normalizePath(file.path) === normalizedRequired);
+}
+
 function resolveRelativeImport(fromFile: string, importPath: string): string[] {
   const fromParts = normalizePath(fromFile).split('/');
   fromParts.pop();
@@ -319,4 +348,48 @@ export function validateLocalImports(files: Array<{ path: string; content: strin
   }
 
   return missingImports;
+}
+
+export function validatePreviewContract(files: Array<{ path: string; content: string }>): PreviewContractResult {
+  const normalizedFiles = files.map(file => ({
+    ...file,
+    path: normalizePath(file.path),
+  }));
+  const requiredFiles = getRequiredFrontendFiles(normalizedFiles);
+  const missingRequiredFiles = requiredFiles.filter(required => !hasGeneratedFile(normalizedFiles, required));
+  const missingImports = validateLocalImports(normalizedFiles);
+
+  const issues: PreviewContractIssue[] = [
+    ...missingRequiredFiles.map(file => ({
+      type: 'missing_required_file' as const,
+      file,
+      message: `Missing required file: ${file}`,
+    })),
+    ...missingImports.map(item => ({
+      type: 'missing_local_import' as const,
+      file: item.file,
+      line: item.line,
+      importPath: item.importPath,
+      message: `${item.file}:${item.line} imports missing file ${item.importPath}`,
+    })),
+  ];
+
+  return {
+    valid: issues.length === 0,
+    issues,
+    missingRequiredFiles,
+    missingImports,
+  };
+}
+
+export function formatPreviewContractIssues(result: PreviewContractResult, limit = 6): string {
+  const preview = result.issues
+    .slice(0, limit)
+    .map(issue => `- ${issue.message}`)
+    .join('\n');
+  const remaining = result.issues.length - limit;
+
+  return remaining > 0
+    ? `${preview}\n- ...and ${remaining} more issue${remaining === 1 ? '' : 's'}`
+    : preview;
 }

@@ -75,7 +75,8 @@ import {
   toPlaygroundResponse,
   stripWorkspacePrefix,
   mapRawFilesToGenerated,
-  validateLocalImports,
+  validatePreviewContract,
+  formatPreviewContractIssues,
 } from "./playground/utils";
 
 // Extracted components
@@ -247,21 +248,17 @@ export default function PromptPlayground() {
     return `${componentName}:${files.length}:${fileSignature}`;
   };
 
-  const normalizeGeneratedPath = (path: string = ''): string =>
-    path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '');
+  const normalizeRuntimeFiles = (files: Array<{ path: string; content: string }>) => {
+    return files.map(file => {
+      const filename = file.path?.split('/').pop() || '';
+      const isRootConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
 
-  const getRequiredFrontendFiles = (files: Array<{ path: string }>): string[] => {
-    const paths = files.map(file => normalizeGeneratedPath(file.path));
-    const usesClientLayout = paths.some(path => path.startsWith('client/'));
-
-    return usesClientLayout
-      ? ['client/index.html', 'client/package.json', 'client/tsconfig.json', 'client/src/App.tsx', 'client/src/main.tsx']
-      : ['index.html', 'package.json', 'tsconfig.json', 'src/App.tsx', 'src/main.tsx'];
-  };
-
-  const hasGeneratedFile = (files: Array<{ path: string }>, requiredPath: string): boolean => {
-    const normalizedRequired = normalizeGeneratedPath(requiredPath);
-    return files.some(file => normalizeGeneratedPath(file.path) === normalizedRequired);
+      if (isRootConfigFile && file.path?.startsWith('src/')) {
+        console.log(`Moving ${file.path} to ${filename} (root level)`);
+        return { ...file, path: filename };
+      }
+      return file;
+    });
   };
 
   const isGenerationReadyForPreview = (result: GenerateResponse | any): boolean => {
@@ -1870,7 +1867,8 @@ export default function PromptPlayground() {
     componentName: string,
     options: { force?: boolean; preferServerPreview?: boolean } = {}
   ) {
-    const deploySignature = createDeploymentSignature(files, componentName);
+    const runtimeFiles = normalizeRuntimeFiles(files);
+    const deploySignature = createDeploymentSignature(runtimeFiles, componentName);
 
     if (!options.force) {
       if (activeDeploySignatureRef.current === deploySignature) {
@@ -1887,6 +1885,17 @@ export default function PromptPlayground() {
     activeDeploySignatureRef.current = deploySignature;
 
     try {
+      const previewContract = validatePreviewContract(runtimeFiles);
+      if (!previewContract.valid) {
+        console.warn('Skipping preview because generated files failed the preview contract', previewContract);
+        addChatMessage({
+          role: 'assistant',
+          content: `Preview is waiting because the generated app did not pass validation:\n${formatPreviewContractIssues(previewContract)}`,
+          timestamp: Date.now()
+        });
+        return;
+      }
+
       if (webContainerReady && !options.preferServerPreview) {
         console.log('Deploying to WebContainer...');
         
@@ -1896,34 +1905,8 @@ export default function PromptPlayground() {
           timestamp: Date.now()
         });
 
-        // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
-        const fixedFiles = files.map(file => {
-          const filename = file.path?.split('/').pop() || '';
-          const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
-          
-          if (isConfigFile && file.path?.startsWith('src/')) {
-            console.log(`Moving ${file.path} to ${filename} (root level)`);
-            return { ...file, path: filename };
-          }
-          return file;
-        });
-
-        const missingImports = validateLocalImports(fixedFiles);
-        if (missingImports.length > 0) {
-          const preview = missingImports
-            .slice(0, 5)
-            .map(item => `${item.file}:${item.line} imports ${item.importPath}`)
-            .join('\n');
-          addChatMessage({
-            role: 'assistant',
-            content: `Preview could not start because the generated app is missing component files:\n${preview}`,
-            timestamp: Date.now()
-          });
-          return;
-        }
-
         // Write files to WebContainer
-        await webContainerService.writeFiles(fixedFiles);
+        await webContainerService.writeFiles(runtimeFiles);
         console.log('Files written to WebContainer');
 
         // Install dependencies
@@ -1973,7 +1956,7 @@ export default function PromptPlayground() {
           timestamp: Date.now()
         });
 
-        const serverPreviewUrl = await startServerHostedPreview(files, componentName);
+        const serverPreviewUrl = await startServerHostedPreview(runtimeFiles, componentName);
         if (isLocalPreviewUrl(serverPreviewUrl)) {
           throw new Error('The server returned a local preview URL that cannot be opened from this browser.');
         }
@@ -2006,7 +1989,7 @@ export default function PromptPlayground() {
             timestamp: Date.now()
           });
 
-          const serverPreviewUrl = await startServerHostedPreview(files, componentName);
+          const serverPreviewUrl = await startServerHostedPreview(runtimeFiles, componentName);
           if (isLocalPreviewUrl(serverPreviewUrl)) {
             throw new Error('The server returned a local preview URL that cannot be opened from this browser.');
           }
@@ -2788,7 +2771,7 @@ export default function PromptPlayground() {
                       ...data.data
                     };
                     console.log('📁 Final result files:', finalResult.response?.files?.length);
-                    const canAutoPreview = isGenerationReadyForPreview(finalResult);
+                    const generationReady = isGenerationReadyForPreview(finalResult);
                     
                     // Show error summary if present
                     if (data.data?.errorSummary && data.data.errorSummary.total > 0) {
@@ -2803,15 +2786,28 @@ export default function PromptPlayground() {
                     }
 
                     // 🚀 Auto-deploy to WebContainer if files are available
-                    if (canAutoPreview && finalResult.response?.files && finalResult.response.files.length > 0) {
+                    if (finalResult.response?.files && finalResult.response.files.length > 0) {
                       const displayFiles = mapRawFilesToGenerated(finalResult.response.files);
                       const componentName = currentComponentName || 'App';
+                      const previewContract = validatePreviewContract(normalizeRuntimeFiles(displayFiles));
+                      const canAutoPreview = generationReady && previewContract.valid;
                       
-                      console.log('🚀 Auto-deploying to WebContainer after generation complete...');
-                      setTimeout(() => {
-                        deployToRuntime(displayFiles, componentName);
-                      }, 500);
-                    } else if (!canAutoPreview) {
+                      if (canAutoPreview) {
+                        console.log('🚀 Auto-deploying to WebContainer after generation complete...');
+                        setTimeout(() => {
+                          deployToRuntime(displayFiles, componentName);
+                        }, 500);
+                      } else if (!previewContract.valid) {
+                        console.warn('Skipping auto-preview because generated files failed preview contract', previewContract);
+                        addChatMessage({
+                          role: 'assistant',
+                          content: `Files were generated, but preview will wait until Elon fixes these blocking issues:\n${formatPreviewContractIssues(previewContract)}`,
+                          timestamp: Date.now()
+                        });
+                      } else {
+                        console.log('Skipping auto-preview because generation did not pass validation');
+                      }
+                    } else if (!generationReady) {
                       console.log('Skipping auto-preview because generation did not pass validation');
                     }
                   }
@@ -2874,7 +2870,7 @@ export default function PromptPlayground() {
 
         // âœ¨ Display files one by one with animation - BOLT.NEW STYLE!
         const displayFiles = mapRawFilesToGenerated(data.response.files);
-        const canAutoPreview = isGenerationReadyForPreview(data);
+        const generationReady = isGenerationReadyForPreview(data);
 
         console.log('ðŸ"‚ Files to display:', displayFiles.length);
 
@@ -2912,17 +2908,17 @@ export default function PromptPlayground() {
         // Log what files were generated for debugging
         console.log('ðŸ"¦ Files generated by AI:', fixedDisplayFiles.map((f: GeneratedFile) => f.path));
         
-        // Validate critical files exist (LOG ERRORS but don't add fallbacks)
-        const requiredFiles = getRequiredFrontendFiles(fixedDisplayFiles);
-        const missingFiles = requiredFiles.filter(required => !hasGeneratedFile(fixedDisplayFiles, required));
+        // Validate critical files and imports before preview is allowed.
+        const previewContract = validatePreviewContract(normalizeRuntimeFiles(fixedDisplayFiles));
+        const canAutoPreview = generationReady && previewContract.valid;
         
-        if (missingFiles.length > 0) {
-          console.error('âŒ MISSING REQUIRED FILES:', missingFiles);
+        if (!previewContract.valid) {
+          console.error('âŒ PREVIEW CONTRACT FAILED:', previewContract);
           console.error('Generated files:', fixedDisplayFiles.map((f: GeneratedFile) => f.path));
           
           addChatMessage({
             role: 'assistant',
-            content: `âš ï¸ Warning: AI missed some files: ${missingFiles.join(', ')}. The app might not work correctly. You may need to regenerate.`,
+            content: `Files were generated, but preview will wait until Elon fixes these blocking issues:\n${formatPreviewContractIssues(previewContract)}`,
             timestamp: Date.now()
           });
         }
@@ -2944,7 +2940,7 @@ export default function PromptPlayground() {
             content: `Files are ready. Starting the preview now...`,
             timestamp: Date.now()
           });
-        } else {
+        } else if (previewContract.valid) {
           addChatMessage({
             role: 'assistant',
             content: `Files were generated, but preview will stay off until the blocking validation errors are fixed.`,

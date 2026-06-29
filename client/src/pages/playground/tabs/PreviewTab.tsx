@@ -7,7 +7,7 @@ import { Badge } from "../../../components/ui/badge";
 import type { GeneratedFile } from "../types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { webContainerService, type WebContainerSupport } from "../../../services/WebContainerService";
-import { validateLocalImports } from "../utils";
+import { formatPreviewContractIssues, validatePreviewContract } from "../utils";
 
 interface PreviewTabProps {
   response: { type: string; files?: GeneratedFile[] } | null;
@@ -66,6 +66,19 @@ function detectProjectType(files: GeneratedFile[]): 'web' | 'python-script' | 'p
   if (hasPackageJson) return 'node';
   
   return 'unknown';
+}
+
+function normalizeRuntimeFiles<T extends { path: string; content: string }>(files: T[]): T[] {
+  return files.map(file => {
+    const filename = file.path?.split('/').pop() || '';
+    const isRootConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
+
+    if (isRootConfigFile && file.path?.startsWith('src/')) {
+      return { ...file, path: filename };
+    }
+
+    return file;
+  });
 }
 
 function PreviewUnavailableState({ message }: { message: string }) {
@@ -306,29 +319,10 @@ export function PreviewTab({
       try {
         console.log('📁 Auto-mounting files to WebContainer...');
         
-        // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
-        const fixedFiles = responseFiles.map(file => {
-          const filename = file.path?.split('/').pop() || '';
-          const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
-          
-          if (isConfigFile && file.path?.startsWith('src/')) {
-            return { ...file, path: filename };
-          }
-          return file;
-        });
-
-        // Do not create a synthetic App.tsx here. Missing App means generation is incomplete.
-        const hasMainTsx = fixedFiles.some(f => f.path === 'src/main.tsx' || f.path.endsWith('/main.tsx'));
-        const hasAppTsx = fixedFiles.some(f => f.path === 'src/App.tsx' || f.path.endsWith('/App.tsx'));
-        
-        if (hasMainTsx && !hasAppTsx) {
-          console.error('App.tsx missing but main.tsx exists - generation is incomplete');
-          return;
-        }
-
-        const missingImports = validateLocalImports(fixedFiles);
-        if (missingImports.length > 0) {
-          console.error('Cannot auto-mount files with missing local imports:', missingImports);
+        const fixedFiles = normalizeRuntimeFiles(responseFiles);
+        const previewContract = validatePreviewContract(fixedFiles);
+        if (!previewContract.valid) {
+          console.error('Cannot auto-mount files because preview contract failed:', previewContract);
           return;
         }
 
@@ -396,35 +390,11 @@ export function PreviewTab({
       await webContainerService.boot();
       console.log('✅ WebContainer booted');
       
-      // Fix file paths: move package.json, tsconfig.json, vite.config.ts to root
-      const fixedFiles = response.files.map(file => {
-        const filename = file.path?.split('/').pop() || '';
-        const isConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
-        
-        if (isConfigFile && file.path?.startsWith('src/')) {
-          return { ...file, path: filename };
-        }
-        return file;
-      });
-
-      // Missing App.tsx is a generation failure, not something the preview should hide.
-      const hasMainTsx = fixedFiles.some(f => f.path === 'src/main.tsx' || f.path.endsWith('/main.tsx'));
-      const hasAppTsx = fixedFiles.some(f => f.path === 'src/App.tsx' || f.path.endsWith('/App.tsx'));
-      
-      if (hasMainTsx && !hasAppTsx) {
-        console.error('Cannot start server: App.tsx missing but main.tsx imports it');
-        setPreviewNotice('Preview could not start because App.tsx is missing. The generated app needs to be fixed first.');
-        return;
-      }
-
-      const missingImports = validateLocalImports(fixedFiles);
-      if (missingImports.length > 0) {
-        const preview = missingImports
-          .slice(0, 5)
-          .map(item => `${item.file}:${item.line} imports ${item.importPath}`)
-          .join('\n');
-        console.error('Cannot start server: generated app has missing local imports', missingImports);
-        setPreviewNotice(`Preview could not start because the generated app is missing component files: ${preview}`);
+      const fixedFiles = normalizeRuntimeFiles(response.files);
+      const previewContract = validatePreviewContract(fixedFiles);
+      if (!previewContract.valid) {
+        console.error('Cannot start server: preview contract failed', previewContract);
+        setPreviewNotice(`Preview is waiting for generated files to pass validation: ${formatPreviewContractIssues(previewContract)}`);
         return;
       }
 
