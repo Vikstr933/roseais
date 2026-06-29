@@ -429,8 +429,33 @@ export default function PromptPlayground() {
       message.includes('WebContainer did not provide a browser-accessible preview URL') ||
       message.includes('no browser-accessible preview URL') ||
       message.includes('preview server started locally') ||
-      message.includes('no browser-accessible preview URL was returned')
+      message.includes('no browser-accessible preview URL was returned') ||
+      message.includes('signal is aborted')
     );
+  };
+
+  const formatPreviewError = (error: unknown): string => {
+    const message = error instanceof Error ? error.message : String(error);
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('signal is aborted') || normalized.includes('aborterror')) {
+      return 'Preview start was interrupted. Please try starting the preview again.';
+    }
+
+    if (
+      message.includes('WebContainer did not provide a browser-accessible preview URL') ||
+      message.includes('no browser-accessible preview URL') ||
+      message.includes('preview server started locally') ||
+      message.includes('no browser-accessible preview URL was returned')
+    ) {
+      return 'Browser preview did not expose a usable URL. You can start a hosted frontend preview instead.';
+    }
+
+    if (message.includes('Hosted preview took too long')) {
+      return 'Hosted preview is taking longer than expected. Please try again in a moment.';
+    }
+
+    return message || 'Unknown error';
   };
 
   const startServerHostedPreview = async (
@@ -1901,20 +1926,8 @@ export default function PromptPlayground() {
         await webContainerService.writeFiles(fixedFiles);
         console.log('Files written to WebContainer');
 
-        addChatMessage({
-          role: 'assistant',
-          content: `Installing dependencies for the preview...`,
-          timestamp: Date.now()
-        });
-
         // Install dependencies
         await webContainerService.installDependencies();
-
-        addChatMessage({
-          role: 'assistant',
-          content: `Starting the preview...`,
-          timestamp: Date.now()
-        });
 
         // Start dev server
         const devServerUrl = await webContainerService.startDevServer();
@@ -2019,7 +2032,7 @@ export default function PromptPlayground() {
           console.error('Hosted preview fallback failed:', fallbackError);
           addChatMessage({
             role: 'assistant',
-            content: `Preview could not start: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}. The generated files are still available to inspect and edit.`,
+            content: `Preview could not start: ${formatPreviewError(fallbackError)} The generated files are still available to inspect and edit.`,
             timestamp: Date.now()
           });
           return;
@@ -2027,7 +2040,7 @@ export default function PromptPlayground() {
       }
       addChatMessage({
         role: 'assistant',
-        content: `Preview could not start: ${error instanceof Error ? error.message : 'Unknown error'}. The generated files are still available to inspect and edit.`,
+        content: `Preview could not start: ${formatPreviewError(error)} The generated files are still available to inspect and edit.`,
         timestamp: Date.now()
       });
     } finally {

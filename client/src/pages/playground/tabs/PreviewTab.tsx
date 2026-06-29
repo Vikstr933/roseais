@@ -114,8 +114,24 @@ function canFallbackToServerPreview(error: unknown): boolean {
     message.includes('WebContainer did not provide a browser-accessible preview URL') ||
     message.includes('no browser-accessible preview URL') ||
     message.includes('preview server started locally') ||
-    message.includes('no browser-accessible preview URL was returned')
+    message.includes('no browser-accessible preview URL was returned') ||
+    message.includes('signal is aborted')
   );
+}
+
+function formatPreviewError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('signal is aborted') || normalized.includes('aborterror')) {
+    return 'Preview start was interrupted. Please try starting the preview again.';
+  }
+
+  if (canFallbackToServerPreview(error)) {
+    return 'Browser preview did not expose a usable URL. Try hosted preview instead.';
+  }
+
+  return message || 'Preview could not start. Please try again.';
 }
 
 export function PreviewTab({
@@ -250,7 +266,7 @@ export function PreviewTab({
       return true;
     } catch (error) {
       console.error('❌ Hosted preview fallback failed:', error);
-      setPreviewNotice(error instanceof Error ? error.message : 'Hosted preview could not start.');
+      setPreviewNotice(formatPreviewError(error));
       return false;
     } finally {
       setIsStartingServer(false);
@@ -436,7 +452,7 @@ export function PreviewTab({
         return;
       }
       // Show user-friendly error message
-      setPreviewNotice(error instanceof Error ? error.message : 'Preview could not start. Please try again.');
+      setPreviewNotice(formatPreviewError(error));
     } finally {
       setIsStartingServer(false);
     }
