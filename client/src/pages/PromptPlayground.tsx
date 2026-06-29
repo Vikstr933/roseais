@@ -77,6 +77,7 @@ import {
   mapRawFilesToGenerated,
   validatePreviewContract,
   formatPreviewContractIssues,
+  repairMissingPackageDependencies,
 } from "./playground/utils";
 
 // Extracted components
@@ -249,7 +250,7 @@ export default function PromptPlayground() {
   };
 
   const normalizeRuntimeFiles = (files: Array<{ path: string; content: string }>) => {
-    return files.map(file => {
+    const normalizedFiles = files.map(file => {
       const filename = file.path?.split('/').pop() || '';
       const isRootConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
 
@@ -259,6 +260,8 @@ export default function PromptPlayground() {
       }
       return file;
     });
+
+    return repairMissingPackageDependencies(normalizedFiles);
   };
 
   const isGenerationReadyForPreview = (result: GenerateResponse | any): boolean => {

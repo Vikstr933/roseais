@@ -13,6 +13,25 @@ import { ImportCompletenessContext, ImportCompletenessFixer } from './ImportComp
 
 const logger = new SimpleLogger('ProjectValidator');
 
+const DEPENDENCY_VERSION_OVERRIDES: Record<string, string> = {
+  '@vitejs/plugin-react': '^5.0.0',
+  vite: '^7.0.0',
+  typescript: '^5.7.0',
+  react: '^18.3.1',
+  'react-dom': '^18.3.1',
+  'lucide-react': '^0.468.0',
+  'framer-motion': '^11.13.1',
+  'react-router-dom': '^7.0.0',
+  recharts: '^2.13.0',
+  axios: '^1.7.7',
+  'date-fns': '^3.6.0',
+  clsx: '^2.1.1',
+  'class-variance-authority': '^0.7.0',
+  'tailwind-merge': '^2.5.4',
+  '@types/react': '^18.3.12',
+  '@types/react-dom': '^18.3.1',
+};
+
 export interface ValidationResult {
   isValid: boolean;
   canStart: boolean;
@@ -252,6 +271,7 @@ export class ProjectValidator {
     try {
       const packageJson = JSON.parse(packageJsonFile.content);
       const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+      const externalImports = this.detectExternalPackageImports(files, packageJsonFile.path);
 
       // Check for React projects
       const hasReactFiles = files.some(f => f.path.endsWith('.tsx') || f.path.endsWith('.jsx'));
@@ -272,6 +292,17 @@ export class ProjectValidator {
         errors.push('Missing vite dependencies');
         fixes.push({ path: packageJsonFile.path, dependency: 'vite', version: '^5.0.0' });
         fixes.push({ path: packageJsonFile.path, dependency: '@vitejs/plugin-react', version: '^5.0.0' });
+      }
+
+      for (const dependency of externalImports) {
+        if (!deps[dependency]) {
+          errors.push(`Missing dependency for generated import: ${dependency}`);
+          fixes.push({
+            path: packageJsonFile.path,
+            dependency,
+            version: this.getDependencyVersion(dependency),
+          });
+        }
       }
 
       // Check for dev script
@@ -486,6 +517,64 @@ export class ProjectValidator {
     }
 
     return result;
+  }
+
+  private detectExternalPackageImports(
+    files: Array<{ path: string; content: string }>,
+    packageJsonPath: string
+  ): string[] {
+    const frontendFiles = packageJsonPath === 'client/package.json'
+      ? files.filter(file => file.path.startsWith('client/'))
+      : files.filter(file => !file.path.startsWith('server/'));
+    const packageNames = new Set<string>();
+    const importRegex = /(?:import\s+(?:[\s\S]*?\s+from\s+)?|export\s+[\s\S]*?\s+from\s+|import\s*\()\s*['"]([^'"]+)['"]/g;
+
+    for (const file of frontendFiles) {
+      if (!/\.(tsx?|jsx?|mjs|cjs)$/.test(file.path)) {
+        continue;
+      }
+
+      for (const match of file.content.matchAll(importRegex)) {
+        const packageName = this.getPackageNameFromImport(match[1]);
+        if (packageName) {
+          packageNames.add(packageName);
+        }
+      }
+    }
+
+    return Array.from(packageNames).sort();
+  }
+
+  private getPackageNameFromImport(importPath: string): string | null {
+    if (
+      !importPath ||
+      importPath.startsWith('.') ||
+      importPath.startsWith('/') ||
+      importPath.startsWith('node:') ||
+      importPath.startsWith('virtual:')
+    ) {
+      return null;
+    }
+
+    const builtins = new Set([
+      'assert', 'buffer', 'child_process', 'crypto', 'events', 'fs', 'http',
+      'https', 'module', 'net', 'os', 'path', 'process', 'querystring',
+      'stream', 'timers', 'tty', 'url', 'util', 'zlib'
+    ]);
+    if (builtins.has(importPath)) {
+      return null;
+    }
+
+    if (importPath.startsWith('@')) {
+      const [scope, name] = importPath.split('/');
+      return scope && name ? `${scope}/${name}` : importPath;
+    }
+
+    return importPath.split('/')[0];
+  }
+
+  private getDependencyVersion(dependency: string): string {
+    return DEPENDENCY_VERSION_OVERRIDES[dependency] || 'latest';
   }
 
   /**

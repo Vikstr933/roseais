@@ -7,7 +7,7 @@ import { Badge } from "../../../components/ui/badge";
 import type { GeneratedFile } from "../types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { webContainerService, type WebContainerSupport } from "../../../services/WebContainerService";
-import { formatPreviewContractIssues, validatePreviewContract } from "../utils";
+import { formatPreviewContractIssues, repairMissingPackageDependencies, validatePreviewContract } from "../utils";
 
 interface PreviewTabProps {
   response: { type: string; files?: GeneratedFile[] } | null;
@@ -69,7 +69,7 @@ function detectProjectType(files: GeneratedFile[]): 'web' | 'python-script' | 'p
 }
 
 function normalizeRuntimeFiles<T extends { path: string; content: string }>(files: T[]): T[] {
-  return files.map(file => {
+  const normalizedFiles = files.map(file => {
     const filename = file.path?.split('/').pop() || '';
     const isRootConfigFile = ['package.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js'].includes(filename);
 
@@ -79,6 +79,8 @@ function normalizeRuntimeFiles<T extends { path: string; content: string }>(file
 
     return file;
   });
+
+  return repairMissingPackageDependencies(normalizedFiles);
 }
 
 function PreviewUnavailableState({ message }: { message: string }) {

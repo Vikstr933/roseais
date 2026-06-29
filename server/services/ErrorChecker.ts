@@ -297,7 +297,7 @@ export class ErrorChecker {
 
   private checkPackageJson(files: { path: string; content: string }[]): CodeError[] {
     const errors: CodeError[] = [];
-    const packageJsonFile = files.find(f => f.path === 'package.json');
+    const packageJsonFile = files.find(f => f.path === 'client/package.json' || f.path === 'package.json');
 
     if (!packageJsonFile) {
       return errors;
@@ -311,7 +311,7 @@ export class ErrorChecker {
       requiredDeps.forEach(dep => {
         if (!packageJson.dependencies?.[dep] && !packageJson.devDependencies?.[dep]) {
           errors.push({
-            file: 'package.json',
+            file: packageJsonFile.path,
             message: `Missing required dependency: ${dep}`,
             severity: 'warning',
             category: 'build',
@@ -326,7 +326,7 @@ export class ErrorChecker {
       requiredDevDeps.forEach(dep => {
         if (!packageJson.devDependencies?.[dep]) {
           errors.push({
-            file: 'package.json',
+            file: packageJsonFile.path,
             message: `Missing required devDependency: ${dep}`,
             severity: 'warning',
             category: 'build',
@@ -335,9 +335,23 @@ export class ErrorChecker {
           });
         }
       });
+
+      const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+      for (const dependency of this.detectExternalPackageImports(files, packageJsonFile.path)) {
+        if (!deps[dependency]) {
+          errors.push({
+            file: packageJsonFile.path,
+            message: `Missing dependency for generated import: ${dependency}`,
+            severity: 'error',
+            category: 'build',
+            suggestion: `Add "${dependency}" to dependencies`,
+            fixable: true
+          });
+        }
+      }
     } catch (e) {
       errors.push({
-        file: 'package.json',
+        file: packageJsonFile.path,
         message: 'Invalid JSON in package.json',
         severity: 'error',
         category: 'syntax',
@@ -347,6 +361,58 @@ export class ErrorChecker {
     }
 
     return errors;
+  }
+
+  private detectExternalPackageImports(
+    files: { path: string; content: string }[],
+    packageJsonPath: string
+  ): string[] {
+    const frontendFiles = packageJsonPath === 'client/package.json'
+      ? files.filter(file => file.path.startsWith('client/'))
+      : files.filter(file => !file.path.startsWith('server/'));
+    const packageNames = new Set<string>();
+    const importRegex = /(?:import\s+(?:[\s\S]*?\s+from\s+)?|export\s+[\s\S]*?\s+from\s+|import\s*\()\s*['"]([^'"]+)['"]/g;
+
+    for (const file of frontendFiles) {
+      if (!/\.(tsx?|jsx?|mjs|cjs)$/.test(file.path)) continue;
+
+      for (const match of file.content.matchAll(importRegex)) {
+        const packageName = this.getPackageNameFromImport(match[1]);
+        if (packageName) {
+          packageNames.add(packageName);
+        }
+      }
+    }
+
+    return Array.from(packageNames).sort();
+  }
+
+  private getPackageNameFromImport(importPath: string): string | null {
+    if (
+      !importPath ||
+      importPath.startsWith('.') ||
+      importPath.startsWith('/') ||
+      importPath.startsWith('node:') ||
+      importPath.startsWith('virtual:')
+    ) {
+      return null;
+    }
+
+    const builtins = new Set([
+      'assert', 'buffer', 'child_process', 'crypto', 'events', 'fs', 'http',
+      'https', 'module', 'net', 'os', 'path', 'process', 'querystring',
+      'stream', 'timers', 'tty', 'url', 'util', 'zlib'
+    ]);
+    if (builtins.has(importPath)) {
+      return null;
+    }
+
+    if (importPath.startsWith('@')) {
+      const [scope, name] = importPath.split('/');
+      return scope && name ? `${scope}/${name}` : importPath;
+    }
+
+    return importPath.split('/')[0];
   }
 
   private async getAISuggestions(

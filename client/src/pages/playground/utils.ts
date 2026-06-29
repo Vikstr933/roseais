@@ -263,12 +263,20 @@ export interface MissingLocalImport {
   importPath: string;
 }
 
+export interface MissingPackageDependency {
+  packageJsonPath: string;
+  dependency: string;
+  importPath: string;
+  importedBy: string;
+}
+
 export interface PreviewContractIssue {
-  type: 'missing_required_file' | 'missing_local_import';
+  type: 'missing_required_file' | 'missing_local_import' | 'missing_package_dependency';
   message: string;
   file?: string;
   line?: number;
   importPath?: string;
+  dependency?: string;
 }
 
 export interface PreviewContractResult {
@@ -276,7 +284,27 @@ export interface PreviewContractResult {
   issues: PreviewContractIssue[];
   missingRequiredFiles: string[];
   missingImports: MissingLocalImport[];
+  missingPackageDependencies: MissingPackageDependency[];
 }
+
+const DEPENDENCY_VERSION_OVERRIDES: Record<string, string> = {
+  '@vitejs/plugin-react': '^5.0.0',
+  vite: '^7.0.0',
+  typescript: '^5.7.0',
+  react: '^18.3.1',
+  'react-dom': '^18.3.1',
+  'lucide-react': '^0.468.0',
+  'framer-motion': '^11.13.1',
+  'react-router-dom': '^7.0.0',
+  recharts: '^2.13.0',
+  axios: '^1.7.7',
+  'date-fns': '^3.6.0',
+  clsx: '^2.1.1',
+  'class-variance-authority': '^0.7.0',
+  'tailwind-merge': '^2.5.4',
+  '@types/react': '^18.3.12',
+  '@types/react-dom': '^18.3.1',
+};
 
 export function getRequiredFrontendFiles(files: Array<{ path: string }>): string[] {
   const paths = files.map(file => normalizePath(file.path));
@@ -290,6 +318,134 @@ export function getRequiredFrontendFiles(files: Array<{ path: string }>): string
 function hasGeneratedFile(files: Array<{ path: string }>, requiredPath: string): boolean {
   const normalizedRequired = normalizePath(requiredPath);
   return files.some(file => normalizePath(file.path) === normalizedRequired);
+}
+
+function getPackageJsonPath(files: Array<{ path: string }>): string | null {
+  const paths = files.map(file => normalizePath(file.path));
+  if (paths.includes('client/package.json')) return 'client/package.json';
+  if (paths.includes('package.json')) return 'package.json';
+  return null;
+}
+
+function getPackageNameFromImport(importPath: string): string | null {
+  if (
+    !importPath ||
+    importPath.startsWith('.') ||
+    importPath.startsWith('/') ||
+    importPath.startsWith('node:') ||
+    importPath.startsWith('virtual:')
+  ) {
+    return null;
+  }
+
+  const builtins = new Set([
+    'assert', 'buffer', 'child_process', 'crypto', 'events', 'fs', 'http',
+    'https', 'module', 'net', 'os', 'path', 'process', 'querystring',
+    'stream', 'timers', 'tty', 'url', 'util', 'zlib'
+  ]);
+  if (builtins.has(importPath)) return null;
+
+  if (importPath.startsWith('@')) {
+    const [scope, name] = importPath.split('/');
+    return scope && name ? `${scope}/${name}` : importPath;
+  }
+
+  return importPath.split('/')[0];
+}
+
+function getDependencyVersion(dependency: string): string {
+  return DEPENDENCY_VERSION_OVERRIDES[dependency] || 'latest';
+}
+
+function isDevDependency(dependency: string): boolean {
+  return ['vite', '@vitejs/plugin-react', 'typescript', '@types/react', '@types/react-dom'].includes(dependency);
+}
+
+export function detectMissingPackageDependencies(
+  files: Array<{ path: string; content: string }>
+): MissingPackageDependency[] {
+  const normalizedFiles = files.map(file => ({
+    ...file,
+    path: normalizePath(file.path),
+  }));
+  const packageJsonPath = getPackageJsonPath(normalizedFiles);
+  if (!packageJsonPath) return [];
+
+  const packageJsonFile = normalizedFiles.find(file => file.path === packageJsonPath);
+  if (!packageJsonFile) return [];
+
+  let manifest: any;
+  try {
+    manifest = JSON.parse(packageJsonFile.content);
+  } catch {
+    return [];
+  }
+
+  const declaredDependencies = {
+    ...(manifest.dependencies || {}),
+    ...(manifest.devDependencies || {}),
+  };
+  const relevantFiles = packageJsonPath === 'client/package.json'
+    ? normalizedFiles.filter(file => file.path.startsWith('client/'))
+    : normalizedFiles.filter(file => !file.path.startsWith('server/'));
+  const missing = new Map<string, MissingPackageDependency>();
+  const importRegex = /(?:import\s+(?:[\s\S]*?\s+from\s+)?|export\s+[\s\S]*?\s+from\s+|import\s*\()\s*['"]([^'"]+)['"]/g;
+
+  for (const file of relevantFiles) {
+    if (!/\.(tsx?|jsx?|mjs|cjs)$/.test(file.path)) continue;
+
+    for (const match of file.content.matchAll(importRegex)) {
+      const importPath = match[1];
+      const dependency = getPackageNameFromImport(importPath);
+      if (!dependency || declaredDependencies[dependency] || missing.has(dependency)) continue;
+
+      missing.set(dependency, {
+        packageJsonPath,
+        dependency,
+        importPath,
+        importedBy: file.path,
+      });
+    }
+  }
+
+  return Array.from(missing.values()).sort((a, b) => a.dependency.localeCompare(b.dependency));
+}
+
+export function repairMissingPackageDependencies<T extends { path: string; content: string }>(files: T[]): T[] {
+  const missingDependencies = detectMissingPackageDependencies(files);
+  if (missingDependencies.length === 0) return files;
+
+  const dependenciesByManifest = new Map<string, MissingPackageDependency[]>();
+  for (const missing of missingDependencies) {
+    const existing = dependenciesByManifest.get(missing.packageJsonPath) || [];
+    dependenciesByManifest.set(missing.packageJsonPath, [...existing, missing]);
+  }
+
+  return files.map(file => {
+    const normalizedPath = normalizePath(file.path);
+    const missingForManifest = dependenciesByManifest.get(normalizedPath);
+    if (!missingForManifest) return file;
+
+    try {
+      const manifest = JSON.parse(file.content);
+      manifest.dependencies = manifest.dependencies || {};
+      manifest.devDependencies = manifest.devDependencies || {};
+
+      for (const missing of missingForManifest) {
+        const target = isDevDependency(missing.dependency)
+          ? manifest.devDependencies
+          : manifest.dependencies;
+        target[missing.dependency] = target[missing.dependency] || getDependencyVersion(missing.dependency);
+      }
+
+      return {
+        ...file,
+        content: JSON.stringify(manifest, null, 2),
+      };
+    } catch {
+      return file;
+    }
+  });
 }
 
 function resolveRelativeImport(fromFile: string, importPath: string): string[] {
@@ -358,6 +514,7 @@ export function validatePreviewContract(files: Array<{ path: string; content: st
   const requiredFiles = getRequiredFrontendFiles(normalizedFiles);
   const missingRequiredFiles = requiredFiles.filter(required => !hasGeneratedFile(normalizedFiles, required));
   const missingImports = validateLocalImports(normalizedFiles);
+  const missingPackageDependencies = detectMissingPackageDependencies(normalizedFiles);
 
   const issues: PreviewContractIssue[] = [
     ...missingRequiredFiles.map(file => ({
@@ -372,6 +529,13 @@ export function validatePreviewContract(files: Array<{ path: string; content: st
       importPath: item.importPath,
       message: `${item.file}:${item.line} imports missing file ${item.importPath}`,
     })),
+    ...missingPackageDependencies.map(item => ({
+      type: 'missing_package_dependency' as const,
+      file: item.packageJsonPath,
+      importPath: item.importPath,
+      dependency: item.dependency,
+      message: `${item.importedBy} imports ${item.importPath}, but ${item.dependency} is missing from ${item.packageJsonPath}`,
+    })),
   ];
 
   return {
@@ -379,6 +543,7 @@ export function validatePreviewContract(files: Array<{ path: string; content: st
     issues,
     missingRequiredFiles,
     missingImports,
+    missingPackageDependencies,
   };
 }
 
