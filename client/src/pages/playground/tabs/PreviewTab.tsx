@@ -5,7 +5,7 @@ import { PythonPreview } from "../../../components/PythonPreview";
 import { PythonServerPreview } from "../../../components/PythonServerPreview";
 import { Badge } from "../../../components/ui/badge";
 import type { GeneratedFile } from "../types";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { webContainerService, type WebContainerSupport } from "../../../services/WebContainerService";
 import { validateLocalImports } from "../utils";
 
@@ -132,6 +132,7 @@ export function PreviewTab({
   const [isServerRunning, setIsServerRunning] = useState<boolean>(!!livePreviewUrl);
   const [isStartingServer, setIsStartingServer] = useState<boolean>(false);
   const [isStoppingServer, setIsStoppingServer] = useState<boolean>(false);
+  const [isServerPreviewFallbackActive, setIsServerPreviewFallbackActive] = useState<boolean>(false);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
   const supportStatus = webContainerSupport ?? webContainerService.getSupportStatus();
   
@@ -213,6 +214,8 @@ export function PreviewTab({
   const canStartPreview = supportStatus.supported || !!onStartServerPreview;
   const usesServerHostedPreview = isWebContainerProject && !supportStatus.supported && !!onStartServerPreview;
   const livePreviewUnavailable = isWebContainerProject && !supportStatus.supported && !livePreviewUrl && !onStartServerPreview;
+  const shouldHideFallbackNotice = !!previewNotice && !!onStartServerPreview && canFallbackToServerPreview(previewNotice);
+  const displayPreviewNotice = shouldHideFallbackNotice ? null : previewNotice;
 
   // Debug logging
   useEffect(() => {
@@ -228,7 +231,51 @@ export function PreviewTab({
   // Update server running state when URL changes
   useEffect(() => {
     setIsServerRunning(!!livePreviewUrl);
+    if (livePreviewUrl) {
+      setIsServerPreviewFallbackActive(false);
+    }
   }, [livePreviewUrl]);
+
+  const startServerPreviewFallback = useCallback(async (message = 'Starting server preview...') => {
+    if (!onStartServerPreview) return false;
+
+    setIsServerPreviewFallbackActive(true);
+    setIsStartingServer(true);
+    setPreviewNotice(message);
+
+    try {
+      await onStartServerPreview();
+      setIsServerRunning(true);
+      setPreviewNotice(null);
+      return true;
+    } catch (error) {
+      console.error('❌ Server preview fallback failed:', error);
+      setPreviewNotice(error instanceof Error ? error.message : 'Server preview could not start.');
+      return false;
+    } finally {
+      setIsStartingServer(false);
+    }
+  }, [onStartServerPreview]);
+
+  useEffect(() => {
+    if (
+      previewNotice &&
+      onStartServerPreview &&
+      !livePreviewUrl &&
+      !isStartingServer &&
+      !isServerPreviewFallbackActive &&
+      canFallbackToServerPreview(previewNotice)
+    ) {
+      void startServerPreviewFallback('Browser preview did not expose a URL. Starting server preview instead...');
+    }
+  }, [
+    previewNotice,
+    onStartServerPreview,
+    livePreviewUrl,
+    isStartingServer,
+    isServerPreviewFallbackActive,
+    startServerPreviewFallback,
+  ]);
 
   // Auto-mount files to WebContainer when project is loaded
   useEffect(() => {
@@ -316,17 +363,7 @@ export function PreviewTab({
     if (!currentSupport.supported) {
       console.info('Live preview is not supported in this browser:', currentSupport);
       if (onStartServerPreview) {
-        setIsStartingServer(true);
-        setPreviewNotice('Starting server preview...');
-        try {
-          await onStartServerPreview();
-          setIsServerRunning(true);
-          setPreviewNotice(null);
-        } catch (error) {
-          setPreviewNotice(error instanceof Error ? error.message : 'Server preview could not start.');
-        } finally {
-          setIsStartingServer(false);
-        }
+        await startServerPreviewFallback('Starting server preview...');
         return;
       }
       setPreviewNotice(currentSupport.userMessage);
@@ -395,17 +432,8 @@ export function PreviewTab({
     } catch (error) {
       console.error('❌ Failed to start dev server:', error);
       if (onStartServerPreview && canFallbackToServerPreview(error)) {
-        setPreviewNotice('Browser preview did not expose a URL. Starting server preview instead...');
-        try {
-          await onStartServerPreview();
-          setIsServerRunning(true);
-          setPreviewNotice(null);
-          return;
-        } catch (serverPreviewError) {
-          console.error('❌ Server preview fallback failed:', serverPreviewError);
-          setPreviewNotice(serverPreviewError instanceof Error ? serverPreviewError.message : 'Server preview could not start.');
-          return;
-        }
+        await startServerPreviewFallback('Browser preview did not expose a URL. Starting server preview instead...');
+        return;
       }
       // Show user-friendly error message
       setPreviewNotice(error instanceof Error ? error.message : 'Preview could not start. Please try again.');
@@ -501,11 +529,15 @@ export function PreviewTab({
               variant="default"
               size="sm"
               className="h-7 text-xs"
-              onClick={handleStartServer}
+              onClick={
+                isServerPreviewFallbackActive || shouldHideFallbackNotice
+                  ? () => { void startServerPreviewFallback('Starting server preview...'); }
+                  : handleStartServer
+              }
               disabled={isStartingServer || !canStartPreview}
             >
               <Play className="h-3 w-3 mr-1" />
-              {isStartingServer ? 'Starting...' : usesServerHostedPreview ? 'Start Server Preview' : 'Start Server'}
+              {isStartingServer ? 'Starting...' : (usesServerHostedPreview || isServerPreviewFallbackActive) ? 'Start Server Preview' : 'Start Server'}
             </Button>
           )}
           {livePreviewUrl && (
@@ -521,11 +553,11 @@ export function PreviewTab({
         </div>
       )}
 
-      {(previewNotice || livePreviewUnavailable) && (
+      {(displayPreviewNotice || livePreviewUnavailable) && (
         <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-100">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <span>{previewNotice || supportStatus.userMessage}</span>
+            <span>{displayPreviewNotice || supportStatus.userMessage}</span>
           </div>
         </div>
       )}
@@ -563,11 +595,15 @@ export function PreviewTab({
                       variant="default"
                       size="sm"
                       className="text-xs h-7"
-                      onClick={handleStartServer}
+                      onClick={
+                        isServerPreviewFallbackActive || shouldHideFallbackNotice
+                          ? () => { void startServerPreviewFallback('Starting server preview...'); }
+                          : handleStartServer
+                      }
                       disabled={isStartingServer || !canStartPreview}
                     >
                       <Play className="h-3 w-3 mr-1" />
-                      {isStartingServer ? 'Starting...' : usesServerHostedPreview ? 'Server' : 'Start'}
+                      {isStartingServer ? 'Starting...' : (usesServerHostedPreview || isServerPreviewFallbackActive) ? 'Server' : 'Start'}
                     </Button>
                   )}
                 </>
@@ -588,10 +624,10 @@ export function PreviewTab({
               <PythonPreview files={response!.files!} />
             ) : activePreviewType === 'python-server' ? (
               <PythonServerPreview files={response!.files!} />
-            ) : usesServerHostedPreview && !livePreviewUrl ? (
+            ) : (usesServerHostedPreview || isServerPreviewFallbackActive || shouldHideFallbackNotice) && !livePreviewUrl ? (
               <ServerPreviewReadyState
                 isStarting={isStartingServer}
-                onStart={handleStartServer}
+                onStart={() => { void startServerPreviewFallback('Starting server preview...'); }}
               />
             ) : livePreviewUnavailable ? (
               <PreviewUnavailableState message={supportStatus.userMessage} />
