@@ -449,11 +449,11 @@ export default function PromptPlayground() {
 
     const createData = await safeJsonParse(createResponse);
     if (!createResponse.ok) {
-      throw new Error(createData?.message || createData?.error || 'Could not start server preview');
+      throw new Error(createData?.message || createData?.error || 'Could not start hosted preview');
     }
 
     if (!createData?.id) {
-      throw new Error('Server preview did not return a session id');
+      throw new Error('Hosted preview did not return a session id');
     }
 
     for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -464,7 +464,7 @@ export default function PromptPlayground() {
       const statusData = await safeJsonParse(statusResponse);
 
       if (!statusResponse.ok) {
-        throw new Error(statusData?.error || 'Could not check server preview status');
+        throw new Error(statusData?.error || 'Could not check hosted preview status');
       }
 
       if (statusData.status === 'ready' && statusData.previewUrl) {
@@ -472,14 +472,14 @@ export default function PromptPlayground() {
       }
 
       if (statusData.status === 'failed') {
-        throw new Error(statusData.errorMessage || 'Server preview build failed');
+        throw new Error(statusData.errorMessage || 'Hosted preview build failed');
       }
 
-      setCurrentStep('Building server preview...');
+      setCurrentStep('Building hosted preview...');
       await wait(2000);
     }
 
-    throw new Error('Server preview took too long to build');
+    throw new Error('Hosted preview took too long to build');
   };
 
   // Helper function to validate timestamp (not 0 or 1970-01-01)
@@ -1956,7 +1956,7 @@ export default function PromptPlayground() {
         
         addChatMessage({
           role: 'assistant',
-          content: `Starting server preview...`,
+          content: `Starting hosted preview...`,
           timestamp: Date.now()
         });
 
@@ -1989,7 +1989,7 @@ export default function PromptPlayground() {
         try {
           addChatMessage({
             role: 'assistant',
-            content: `Browser preview did not expose a URL, so I'm starting a server preview instead...`,
+            content: `Browser preview did not expose a URL, so I'm starting a hosted preview instead...`,
             timestamp: Date.now()
           });
 
@@ -2016,7 +2016,7 @@ export default function PromptPlayground() {
           });
           return;
         } catch (fallbackError) {
-          console.error('Server preview fallback failed:', fallbackError);
+          console.error('Hosted preview fallback failed:', fallbackError);
           addChatMessage({
             role: 'assistant',
             content: `Preview could not start: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}. The generated files are still available to inspect and edit.`,

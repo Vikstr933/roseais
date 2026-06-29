@@ -479,9 +479,11 @@ class WebContainerServiceClass {
     onProgress?: (message: string) => void
   ): Promise<void> {
     const layout = await this.detectPreviewLayout(webcontainer);
-    const installTargets = layout.isFullstack && layout.backendCwd
-      ? [layout.frontendCwd, layout.backendCwd]
-      : [layout.frontendCwd];
+    const installTargets = [layout.frontendCwd];
+
+    if (layout.isFullstack && layout.backendCwd) {
+      onProgress?.('Backend files are available in the editor and deployment flow. Preview installs the frontend only.\n');
+    }
 
     for (const cwd of installTargets) {
       onProgress?.(`Installing dependencies in ${cwd === '.' ? 'project root' : cwd}...\n`);
@@ -569,48 +571,16 @@ class WebContainerServiceClass {
       await this.stopDevServer();
     }
 
-    let backendUrl: string | null = null;
-
     if (layout.isFullstack && layout.backendCwd) {
-      onProgress?.('Starting backend API server...\n');
-      try {
-        this.backendServerProcess = await webcontainer.spawn('npm', ['run', 'dev'], {
-          cwd: layout.backendCwd,
-          env: {
-            PORT: String(layout.backendPort),
-            HOST: '0.0.0.0',
-            NODE_ENV: 'development',
-          },
-        });
-
-        backendUrl = await this.waitForServerUrl(
-          webcontainer,
-          this.backendServerProcess,
-          layout.backendPort,
-          '🚀 Backend server',
-          onProgress,
-          20000,
-          true
-        );
-        onProgress?.(`Backend ready at ${backendUrl}\n`);
-      } catch (error) {
-        console.warn('Backend preview URL was not available; continuing with frontend preview:', error);
-        backendUrl = null;
-        onProgress?.('Backend API preview was not available. Continuing with frontend preview...\n');
-      }
+      onProgress?.('Skipping backend API runtime for preview. Starting frontend preview only...\n');
     }
 
     onProgress?.('Starting frontend preview...\n');
-    const frontendEnv = backendUrl ? { VITE_API_URL: backendUrl } : undefined;
     const frontendArgs = ['run', 'dev', '--', '--port', layout.frontendPort.toString(), '--host'];
     if (layout.frontendCwd === '.') {
-      this.devServerProcess = frontendEnv
-        ? await webcontainer.spawn('npm', frontendArgs, { env: frontendEnv })
-        : await webcontainer.spawn('npm', frontendArgs);
+      this.devServerProcess = await webcontainer.spawn('npm', frontendArgs);
     } else {
-      this.devServerProcess = frontendEnv
-        ? await webcontainer.spawn('npm', frontendArgs, { cwd: layout.frontendCwd, env: frontendEnv })
-        : await webcontainer.spawn('npm', frontendArgs, { cwd: layout.frontendCwd });
+      this.devServerProcess = await webcontainer.spawn('npm', frontendArgs, { cwd: layout.frontendCwd });
     }
 
     const frontendUrl = await this.waitForServerUrl(

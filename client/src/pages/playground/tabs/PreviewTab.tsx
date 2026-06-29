@@ -95,13 +95,13 @@ function ServerPreviewReadyState({
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Server className="h-6 w-6" />
         </div>
-        <h3 className="text-base font-semibold mb-2">Server preview is ready to start</h3>
+        <h3 className="text-base font-semibold mb-2">Hosted frontend preview is ready to start</h3>
         <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-          This browser cannot run the in-browser dev runtime, so the preview will be built on the server instead.
+          The browser runtime could not expose a preview URL, so the frontend preview will be built separately.
         </p>
         <Button onClick={onStart} disabled={isStarting} className="gap-2">
           <Play className="h-4 w-4" />
-          {isStarting ? 'Starting server preview...' : 'Start server preview'}
+          {isStarting ? 'Starting hosted preview...' : 'Start hosted preview'}
         </Button>
       </div>
     </div>
@@ -236,7 +236,7 @@ export function PreviewTab({
     }
   }, [livePreviewUrl]);
 
-  const startServerPreviewFallback = useCallback(async (message = 'Starting server preview...') => {
+  const startServerPreviewFallback = useCallback(async (message = 'Starting hosted preview...') => {
     if (!onStartServerPreview) return false;
 
     setIsServerPreviewFallbackActive(true);
@@ -249,8 +249,8 @@ export function PreviewTab({
       setPreviewNotice(null);
       return true;
     } catch (error) {
-      console.error('❌ Server preview fallback failed:', error);
-      setPreviewNotice(error instanceof Error ? error.message : 'Server preview could not start.');
+      console.error('❌ Hosted preview fallback failed:', error);
+      setPreviewNotice(error instanceof Error ? error.message : 'Hosted preview could not start.');
       return false;
     } finally {
       setIsStartingServer(false);
@@ -266,7 +266,7 @@ export function PreviewTab({
       !isServerPreviewFallbackActive &&
       canFallbackToServerPreview(previewNotice)
     ) {
-      void startServerPreviewFallback('Browser preview did not expose a URL. Starting server preview instead...');
+      void startServerPreviewFallback('Browser preview did not expose a URL. Starting hosted preview instead...');
     }
   }, [
     previewNotice,
@@ -363,7 +363,7 @@ export function PreviewTab({
     if (!currentSupport.supported) {
       console.info('Live preview is not supported in this browser:', currentSupport);
       if (onStartServerPreview) {
-        await startServerPreviewFallback('Starting server preview...');
+        await startServerPreviewFallback('Starting hosted preview...');
         return;
       }
       setPreviewNotice(currentSupport.userMessage);
@@ -432,7 +432,7 @@ export function PreviewTab({
     } catch (error) {
       console.error('❌ Failed to start dev server:', error);
       if (onStartServerPreview && canFallbackToServerPreview(error)) {
-        await startServerPreviewFallback('Browser preview did not expose a URL. Starting server preview instead...');
+        await startServerPreviewFallback('Browser preview did not expose a URL. Starting hosted preview instead...');
         return;
       }
       // Show user-friendly error message
@@ -531,13 +531,13 @@ export function PreviewTab({
               className="h-7 text-xs"
               onClick={
                 isServerPreviewFallbackActive || shouldHideFallbackNotice
-                  ? () => { void startServerPreviewFallback('Starting server preview...'); }
+                  ? () => { void startServerPreviewFallback('Starting hosted preview...'); }
                   : handleStartServer
               }
               disabled={isStartingServer || !canStartPreview}
             >
               <Play className="h-3 w-3 mr-1" />
-              {isStartingServer ? 'Starting...' : (usesServerHostedPreview || isServerPreviewFallbackActive) ? 'Start Server Preview' : 'Start Server'}
+              {isStartingServer ? 'Starting...' : (usesServerHostedPreview || isServerPreviewFallbackActive) ? 'Start Hosted Preview' : 'Start Server'}
             </Button>
           )}
           {livePreviewUrl && (
@@ -547,7 +547,7 @@ export function PreviewTab({
           )}
           {!supportStatus.supported && (
             <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300">
-              {usesServerHostedPreview ? 'Server preview available' : 'Browser runtime unavailable'}
+              {usesServerHostedPreview ? 'Hosted preview available' : 'Browser runtime unavailable'}
             </Badge>
           )}
         </div>
@@ -597,7 +597,7 @@ export function PreviewTab({
                       className="text-xs h-7"
                       onClick={
                         isServerPreviewFallbackActive || shouldHideFallbackNotice
-                          ? () => { void startServerPreviewFallback('Starting server preview...'); }
+                          ? () => { void startServerPreviewFallback('Starting hosted preview...'); }
                           : handleStartServer
                       }
                       disabled={isStartingServer || !canStartPreview}
@@ -627,7 +627,7 @@ export function PreviewTab({
             ) : (usesServerHostedPreview || isServerPreviewFallbackActive || shouldHideFallbackNotice) && !livePreviewUrl ? (
               <ServerPreviewReadyState
                 isStarting={isStartingServer}
-                onStart={() => { void startServerPreviewFallback('Starting server preview...'); }}
+                onStart={() => { void startServerPreviewFallback('Starting hosted preview...'); }}
               />
             ) : livePreviewUnavailable ? (
               <PreviewUnavailableState message={supportStatus.userMessage} />
