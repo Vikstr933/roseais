@@ -70,7 +70,7 @@ export class ProjectValidator {
       }
 
       // Step 3: Ensure all critical files exist
-      const missingFiles = await this.missingFileGenerator.analyzeAndGenerateMissingFiles(validatedFiles);
+      const missingFiles = await this.missingFileGenerator.analyzeAndGenerateMissingFiles(validatedFiles, context);
       if (missingFiles.length > 0) {
         logger.info(`Generating ${missingFiles.length} missing critical files...`);
         validatedFiles = this.normalizeFiles([...validatedFiles, ...missingFiles]);
@@ -428,6 +428,7 @@ export class ProjectValidator {
       /Welcome to your new application/i,
       /This is a starter template/i,
       /Welcome to Your App/i,
+      /Your application is ready/i,
       /Start building your features here/i,
       /Customize this component to build your application/i
     ];

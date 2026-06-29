@@ -364,7 +364,11 @@ export class IncrementalOrchestrator {
         progressCallback('final', 95, 'Analyzing filesystem for missing files...');
       }
       
-      const missingFiles = await missingFileGenerator.analyzeAndGenerateMissingFiles(allFilesArray);
+      const missingFiles = await missingFileGenerator.analyzeAndGenerateMissingFiles(allFilesArray, {
+        userPrompt,
+        appName: plan.appName,
+        knowledgeContext
+      });
       
       if (missingFiles.length > 0) {
         this.logger.info(`Generated ${missingFiles.length} missing critical file(s) based on filesystem analysis`);

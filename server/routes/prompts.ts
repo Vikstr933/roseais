@@ -1929,13 +1929,15 @@ async function handleIncrementalGeneration(
       currentStep: plan.phases.length + 2
     });
 
-    const { ImportCompletenessFixer } = await import('../services/ImportCompletenessFixer');
-    const importCompletenessFixer = new ImportCompletenessFixer();
-    const importRepairResult = await importCompletenessFixer.repairMissingImports(result.allFiles, {
+    const repairContext = {
       userPrompt,
       appName: plan.appName,
       knowledgeContext: formatKnowledgeContext(knowledgeContext)
-    });
+    };
+
+    const { ImportCompletenessFixer } = await import('../services/ImportCompletenessFixer');
+    const importCompletenessFixer = new ImportCompletenessFixer();
+    const importRepairResult = await importCompletenessFixer.repairMissingImports(result.allFiles, repairContext);
 
     if (importRepairResult.generatedFiles.length > 0) {
       result.allFiles = importRepairResult.fixedFiles;
@@ -1948,11 +1950,28 @@ async function handleIncrementalGeneration(
       });
     }
 
+    const { ProjectValidator } = await import('../services/ProjectValidator');
+    const projectValidator = new ProjectValidator();
+    const projectValidationResult = await projectValidator.validateAndFixProject(result.allFiles, repairContext);
+
+    if (projectValidationResult.filesModified > 0 || projectValidationResult.issuesFixed > 0) {
+      result.allFiles = projectValidationResult.validatedFiles;
+      console.log(`✅ Project validator repaired ${projectValidationResult.issuesFixed} issue(s) before final syntax validation`);
+
+      sendSSEUpdate(req, 'AUTO_FIX_COMPLETE', {
+        message: `Completed project structure repairs automatically`,
+        remainingErrors: projectValidationResult.errors.length,
+        remainingWarnings: projectValidationResult.warnings.length
+      });
+    } else {
+      result.allFiles = projectValidationResult.validatedFiles;
+    }
+
     const { AISyntaxFixer } = await import('../services/AISyntaxFixer');
     const aiFixer = new AISyntaxFixer();
     
     // Validate and fix with AI (Sonnet 4.5) - this happens BEFORE users see any errors
-    const finalFixResult = await aiFixer.validateAndFix(result.allFiles, {
+    let finalFixResult = await aiFixer.validateAndFix(result.allFiles, {
       validateLocalImports: true
     });
     
@@ -1982,6 +2001,28 @@ async function handleIncrementalGeneration(
       });
     }
 
+    let finalProjectValidation = await projectValidator.validateAndFixProject(result.allFiles, repairContext);
+    if (finalProjectValidation.filesModified > 0 || finalProjectValidation.issuesFixed > 0) {
+      result.allFiles = finalProjectValidation.validatedFiles;
+      console.log(`✅ Final project validator repaired ${finalProjectValidation.issuesFixed} issue(s) after syntax fixing`);
+
+      sendSSEUpdate(req, 'AUTO_FIX_COMPLETE', {
+        message: `Completed final project repairs automatically`,
+        remainingErrors: finalProjectValidation.errors.length,
+        remainingWarnings: finalProjectValidation.warnings.length
+      });
+
+      finalFixResult = await aiFixer.validateAndFix(result.allFiles, {
+        validateLocalImports: true
+      });
+
+      result.allFiles = finalFixResult.fixedFiles;
+      finalProjectValidation = await projectValidator.validateAndFixProject(result.allFiles, repairContext);
+      result.allFiles = finalProjectValidation.validatedFiles;
+    } else {
+      result.allFiles = finalProjectValidation.validatedFiles;
+    }
+
     // Step 4: Create workspace and write the final fixed files
     const workspaceId = Date.now().toString();
     const workspaceDir = path.join(process.cwd(), 'workspaces', workspaceId);
@@ -2002,28 +2043,74 @@ async function handleIncrementalGeneration(
 
     // Step 5: Error Checking
     const errorCheckResult = await errorChecker.checkErrors(result.allFiles);
-    if (errorCheckResult.errors.length > 0) {
+
+    const projectValidationErrors = finalProjectValidation.errors.map(message => ({
+      file: 'project',
+      message,
+      severity: 'error' as const,
+      category: 'build' as const,
+      fixable: true
+    }));
+    const syntaxValidationErrors = finalFixResult.remainingErrors.map(error => ({
+      file: error.file,
+      line: error.line,
+      column: error.column,
+      message: error.message,
+      severity: 'error' as const,
+      category: 'syntax' as const,
+      fixable: true
+    }));
+    const projectValidationWarnings = finalProjectValidation.warnings.map(message => ({
+      file: 'project',
+      message,
+      severity: 'warning' as const,
+      category: 'build' as const,
+      fixable: true
+    }));
+    const finalErrors = [
+      ...projectValidationErrors,
+      ...syntaxValidationErrors,
+      ...errorCheckResult.errors
+    ];
+    const finalWarnings = [
+      ...projectValidationWarnings,
+      ...errorCheckResult.warnings
+    ];
+    const finalSummary = {
+      total: finalErrors.length + finalWarnings.length + errorCheckResult.info.length,
+      errors: finalErrors.length,
+      warnings: finalWarnings.length,
+      info: errorCheckResult.info.length,
+      fixable: [...finalErrors, ...finalWarnings, ...errorCheckResult.info].filter(error => error.fixable).length
+    };
+
+    const formatFinalError = (error: any) => {
+      const location = error.line ? `${error.file}:${error.line}` : error.file;
+      return `${location}: ${error.message}`;
+    };
+
+    if (finalErrors.length > 0) {
       result.success = false;
-      result.errors = [
-        ...(result.errors || []),
-        ...errorCheckResult.errors.map(error => `${error.file}: ${error.message}`)
-      ];
+      result.errors = finalErrors.map(formatFinalError);
+    } else {
+      result.success = true;
+      result.errors = undefined;
     }
     
     // Log error check results for debugging
     console.log('🔍 Error check results:', {
-      errors: errorCheckResult.errors.length,
-      warnings: errorCheckResult.warnings.length,
+      errors: finalErrors.length,
+      warnings: finalWarnings.length,
       info: errorCheckResult.info.length,
-      summary: errorCheckResult.summary
+      summary: finalSummary
     });
     
     // Ensure arrays are properly serialized
     const errorData = {
-      errors: Array.isArray(errorCheckResult.errors) ? errorCheckResult.errors : [],
-      warnings: Array.isArray(errorCheckResult.warnings) ? errorCheckResult.warnings : [],
+      errors: finalErrors,
+      warnings: finalWarnings,
       info: Array.isArray(errorCheckResult.info) ? errorCheckResult.info : [],
-      summary: errorCheckResult.summary || {
+      summary: finalSummary || {
         total: 0,
         errors: 0,
         warnings: 0,
@@ -2051,9 +2138,9 @@ async function handleIncrementalGeneration(
         duration: p.duration
       })),
       totalDuration: result.totalDuration,
-      errors: result.errors || errorCheckResult.errors,
-      warnings: errorCheckResult.warnings,
-      errorSummary: errorCheckResult.summary
+      errors: result.errors || finalErrors,
+      warnings: finalWarnings,
+      errorSummary: finalSummary
     });
 
     // Trigger browser analysis request (frontend will provide preview URL)
@@ -2085,9 +2172,9 @@ async function handleIncrementalGeneration(
         text: componentText,
         files: responseFiles
       },
-      errors: result.errors || errorCheckResult.errors,
-      warnings: errorCheckResult.warnings,
-      errorSummary: errorCheckResult.summary,
+      errors: result.errors || finalErrors,
+      warnings: finalWarnings,
+      errorSummary: finalSummary,
       metadata: {
         workspaceId,
         generationMode: 'incremental',

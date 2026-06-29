@@ -43,6 +43,12 @@ export interface MissingFile {
   suggestedContent?: string;
 }
 
+export interface MissingFileGenerationContext {
+  userPrompt?: string;
+  appName?: string;
+  knowledgeContext?: string;
+}
+
 export class MissingFileGenerator {
   private aiService: MultiModelAIService;
 
@@ -54,13 +60,14 @@ export class MissingFileGenerator {
    * Analyze filesystem and detect missing required files
    */
   async analyzeAndGenerateMissingFiles(
-    existingFiles: Array<{ path: string; content: string }>
+    existingFiles: Array<{ path: string; content: string }>,
+    context: MissingFileGenerationContext = {}
   ): Promise<Array<{ path: string; content: string }>> {
     logger.info('Analyzing filesystem for missing files...');
 
     const normalizedExistingFiles = this.normalizeFiles(existingFiles);
     const analysis = this.analyzeFileSystem(normalizedExistingFiles);
-    const missingFiles = this.detectMissingFiles(analysis, normalizedExistingFiles);
+    const missingFiles = this.detectMissingFiles(analysis, normalizedExistingFiles, context);
 
     if (missingFiles.length === 0) {
       logger.info('No missing files detected');
@@ -73,7 +80,7 @@ export class MissingFileGenerator {
 
     for (const missing of missingFiles) {
       if (missing.priority === 'critical' || missing.priority === 'high') {
-        const content = await this.generateFileContent(missing, analysis, normalizedExistingFiles);
+        const content = await this.generateFileContent(missing, analysis, normalizedExistingFiles, context);
         if (content) {
           generatedFiles.push({
             path: this.normalizePath(missing.path),
@@ -114,6 +121,12 @@ export class MissingFileGenerator {
 
     // Detect project type
     let projectType: FileSystemAnalysis['projectType'] = 'unknown';
+    const hasReactLikeFiles = normalizedFiles.some(f =>
+      /\.(tsx|jsx)$/.test(f.path) ||
+      /from\s+['"]react['"]|react-dom|createRoot|<\w+/i.test(f.content)
+    );
+    const hasTypeScriptFiles = normalizedFiles.some(f => /\.(ts|tsx)$/.test(f.path));
+
     if (packageJson) {
       const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
       if (deps.react || deps['react-dom']) {
@@ -123,6 +136,8 @@ export class MissingFileGenerator {
       } else if (deps.express || deps.fastify) {
         projectType = 'node';
       }
+    } else if (hasReactLikeFiles) {
+      projectType = hasTypeScriptFiles ? 'react-typescript' : 'react-javascript';
     } else if (normalizedFiles.some(f => f.path.endsWith('.py'))) {
       projectType = 'python';
     }
@@ -194,7 +209,8 @@ export class MissingFileGenerator {
    */
   private detectMissingFiles(
     analysis: FileSystemAnalysis,
-    files: Array<{ path: string; content: string }>
+    files: Array<{ path: string; content: string }>,
+    context: MissingFileGenerationContext = {}
   ): MissingFile[] {
     const missing: MissingFile[] = [];
     const rootDir = analysis.isMonorepo && analysis.hasClient ? 'client' : '';
@@ -203,6 +219,26 @@ export class MissingFileGenerator {
 
     // For React/TypeScript projects
     if (analysis.projectType === 'react-typescript' || analysis.projectType === 'react-javascript') {
+      const packageJsonPath = rootPath('package.json');
+      if (!analysis.existingFiles.has(packageJsonPath)) {
+        missing.push({
+          path: packageJsonPath,
+          reason: 'Required npm package manifest for installing and starting the generated app',
+          priority: 'critical',
+          suggestedContent: this.generatePackageJson(analysis, context)
+        });
+      }
+
+      const tsconfigPath = rootPath('tsconfig.json');
+      if (analysis.projectType === 'react-typescript' && !analysis.existingFiles.has(tsconfigPath)) {
+        missing.push({
+          path: tsconfigPath,
+          reason: 'Required TypeScript configuration for Vite/React compilation',
+          priority: 'critical',
+          suggestedContent: this.generateTsConfig()
+        });
+      }
+
       // Check index.html
       const indexHtmlPath = rootPath('index.html');
       if (!analysis.existingFiles.has(indexHtmlPath)) {
@@ -232,12 +268,12 @@ export class MissingFileGenerator {
           path: appPath,
           reason: 'Required App component (imported by main.tsx)',
           priority: 'critical',
-          suggestedContent: this.generateAppComponent(analysis)
+          suggestedContent: context.userPrompt ? undefined : this.generateAppComponent(analysis, context)
         });
       }
 
       // Check vite.config.ts
-      if (analysis.viteConfig && !analysis.viteConfig.exists && analysis.packageJson?.devDependencies?.vite) {
+      if (analysis.viteConfig && !analysis.viteConfig.exists) {
         missing.push({
           path: rootPath('vite.config.ts'),
           reason: 'Required Vite configuration',
@@ -267,7 +303,8 @@ export class MissingFileGenerator {
   private async generateFileContent(
     missing: MissingFile,
     analysis: FileSystemAnalysis,
-    existingFiles: Array<{ path: string; content: string }>
+    existingFiles: Array<{ path: string; content: string }>,
+    context: MissingFileGenerationContext = {}
   ): Promise<string | null> {
     // If we have suggested content, use it
     if (missing.suggestedContent) {
@@ -276,8 +313,8 @@ export class MissingFileGenerator {
 
     // Otherwise, use AI to generate based on context
     try {
-      const context = this.buildContext(missing, analysis, existingFiles);
-      const prompt = this.buildGenerationPrompt(missing, context);
+      const contextSummary = this.buildContext(missing, analysis, existingFiles);
+      const prompt = this.buildGenerationPrompt(missing, contextSummary, context);
 
       const response = await this.aiService.generate({
         prompt: prompt,
@@ -287,11 +324,72 @@ export class MissingFileGenerator {
         priority: 'quality'
       });
 
-      return response.content || null;
+      return response.content ? this.stripMarkdownCodeFence(response.content) : null;
     } catch (error) {
       logger.error('Failed to generate file content with AI', error as Error);
       return missing.suggestedContent || null;
     }
+  }
+
+  /**
+   * Generate package.json based on analysis
+   */
+  private generatePackageJson(_analysis: FileSystemAnalysis, context: MissingFileGenerationContext = {}): string {
+    const appName = (context.appName || 'generated-app')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'generated-app';
+
+    return JSON.stringify({
+      name: appName,
+      version: '1.0.0',
+      private: true,
+      type: 'module',
+      scripts: {
+        dev: 'vite --host 0.0.0.0',
+        build: 'vite build',
+        preview: 'vite preview --host 0.0.0.0'
+      },
+      dependencies: {
+        '@vitejs/plugin-react': '^5.0.0',
+        vite: '^7.0.0',
+        typescript: '^5.7.0',
+        react: '^18.3.1',
+        'react-dom': '^18.3.1',
+        'lucide-react': '^0.468.0'
+      },
+      devDependencies: {
+        '@types/react': '^18.3.12',
+        '@types/react-dom': '^18.3.1'
+      }
+    }, null, 2);
+  }
+
+  /**
+   * Generate tsconfig.json for Vite/React
+   */
+  private generateTsConfig(): string {
+    return JSON.stringify({
+      compilerOptions: {
+        target: 'ES2020',
+        useDefineForClassFields: true,
+        lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+        allowJs: false,
+        skipLibCheck: true,
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        strict: true,
+        forceConsistentCasingInFileNames: true,
+        module: 'ESNext',
+        moduleResolution: 'Node',
+        resolveJsonModule: true,
+        isolatedModules: true,
+        noEmit: true,
+        jsx: 'react-jsx'
+      },
+      include: ['src'],
+      references: []
+    }, null, 2);
   }
 
   /**
@@ -404,11 +502,11 @@ export default defineConfig({
   /**
    * Generate App component
    */
-  private generateAppComponent(analysis: FileSystemAnalysis): string {
-    const extension = analysis.projectType === 'react-typescript' ? 'tsx' : 'jsx';
+  private generateAppComponent(analysis: FileSystemAnalysis, context: MissingFileGenerationContext = {}): string {
     const importReact = analysis.projectType === 'react-typescript'
       ? "import React from 'react';"
       : "import React from 'react';";
+    const title = context.appName || 'Your App';
     
     return `${importReact}
 
@@ -417,16 +515,11 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Welcome to Your App
+          ${title}
         </h1>
         <p className="text-lg text-gray-600 mb-6">
-          Your application is ready! Start building your features here.
+          Your application is ready.
         </p>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            💡 <strong>Next steps:</strong> Customize this component to build your application.
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -457,6 +550,12 @@ body {
     }
 
     return Array.from(normalized.entries()).map(([path, content]) => ({ path, content }));
+  }
+
+  private stripMarkdownCodeFence(content: string): string {
+    const trimmed = content.trim();
+    const match = trimmed.match(/^```(?:[a-zA-Z0-9_-]+)?\s*\n([\s\S]*?)\n?```$/);
+    return match ? match[1].trim() : trimmed;
   }
 
   private normalizePath(filePath: string): string {
@@ -509,15 +608,29 @@ ${relevantFiles}`;
   /**
    * Build prompt for AI generation
    */
-  private buildGenerationPrompt(missing: MissingFile, context: string): string {
+  private buildGenerationPrompt(
+    missing: MissingFile,
+    context: string,
+    generationContext: MissingFileGenerationContext = {}
+  ): string {
     return `Generate the missing file: ${missing.path}
 
 Reason: ${missing.reason}
+
+App name:
+${generationContext.appName || 'Generated app'}
+
+Original user prompt:
+${generationContext.userPrompt || '(not provided)'}
+
+Knowledge context:
+${generationContext.knowledgeContext || '(none)'}
 
 Context:
 ${context}
 
 Generate a complete, functional file that works with the existing project structure.
+If this is the main App component, it must reflect the user's requested app rather than a generic placeholder.
 Return ONLY the file content, no explanations.`;
   }
 }
