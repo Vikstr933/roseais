@@ -1,26 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Separator } from './ui/separator';
-import { Switch } from './ui/switch';
-import { Label } from './ui/label';
-import { ScrollArea } from './ui/scroll-area';
 import {
   Monitor,
   Smartphone,
   Tablet,
   RefreshCw,
   ExternalLink,
-  Activity,
-  Globe,
-  Gauge,
   Settings,
-  Download,
-  Share2,
-  Code,
   Bug,
-  Maximize2,
   Grid3X3,
   Ruler,
 } from 'lucide-react';
@@ -38,16 +26,6 @@ interface DevicePreset {
   height: number;
   icon: React.ReactNode;
   userAgent?: string;
-}
-
-interface PerformanceMetrics {
-  loadTime: number;
-  bundleSize: number;
-  renderTime: number;
-  memoryUsage: number;
-  lcp: number;
-  fid: number;
-  cls: number;
 }
 
 const DEVICE_PRESETS: DevicePreset[] = [
@@ -86,7 +64,7 @@ const DEVICE_PRESETS: DevicePreset[] = [
   },
 ];
 
-export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: AdvancedPreviewProps) {
+export function AdvancedPreview({ previewUrl, projectName, onRefresh }: AdvancedPreviewProps) {
   const getDefaultDevice = () => {
     const width = window.innerWidth;
     if (width < 768) return DEVICE_PRESETS[3];
@@ -103,44 +81,9 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
   const [showGrid, setShowGrid] = useState(false);
   const [showRulers, setShowRulers] = useState(false);
   const [zoom, setZoom] = useState(window.innerWidth < 1440 ? 75 : 100);
-  const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics | null>(null);
-  const [consoleMessages, setConsoleMessages] = useState<Array<{ type: 'log' | 'error' | 'warn'; message: string; timestamp: Date }>>([]);
-  const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 1280);
   const [iframeError, setIframeError] = useState<string | null>(null);
   const [loadTimeout, setLoadTimeout] = useState<NodeJS.Timeout | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  // Listen for console messages from the iframe via postMessage
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      // Only accept messages from our preview iframe
-      if (!previewUrl || !event.origin) return;
-      
-      try {
-        const data = event.data;
-        if (data && data.type === 'console' && data.level && data.message) {
-          setConsoleMessages(prev => [
-            ...prev.slice(-99), // Keep last 100 messages
-            {
-              type: data.level as 'log' | 'error' | 'warn',
-              message: typeof data.message === 'string' ? data.message : JSON.stringify(data.message),
-              timestamp: new Date()
-            }
-          ]);
-        }
-      } catch (e) {
-        // Ignore invalid messages
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [previewUrl]);
-
-  // Clear console when URL changes
-  useEffect(() => {
-    setConsoleMessages([]);
-  }, [previewUrl]);
 
   useEffect(() => {
     console.log('🔍 AdvancedPreview URL updated:', previewUrl);
@@ -190,23 +133,6 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
   const currentWidth = isCustomSize ? customWidth : selectedDevice.width;
   const currentHeight = isCustomSize ? customHeight : selectedDevice.height;
 
-  useEffect(() => {
-    const simulateMetrics = () => {
-      setPerformanceMetrics({
-        loadTime: Math.random() * 2000 + 500,
-        bundleSize: Math.random() * 500 + 100,
-        renderTime: Math.random() * 100 + 20,
-        memoryUsage: Math.random() * 50 + 10,
-        lcp: Math.random() * 3000 + 1000,
-        fid: Math.random() * 100 + 10,
-        cls: Math.random() * 0.2,
-      });
-    };
-    simulateMetrics();
-    const interval = setInterval(simulateMetrics, 5000);
-    return () => clearInterval(interval);
-  }, [previewUrl]);
-
   const handleRefresh = () => {
     setIsLoading(true);
     onRefresh?.();
@@ -219,21 +145,6 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
   };
 
   const openInNewTab = () => window.open(previewUrl, '_blank');
-
-  const getMetricColor = (value: number, thresholds: { good: number; poor: number }, reverse = false) => {
-    if (reverse) {
-      if (value <= thresholds.good) return 'text-emerald-500';
-      if (value <= thresholds.poor) return 'text-amber-500';
-      return 'text-red-500';
-    } else {
-      if (value >= thresholds.good) return 'text-emerald-500';
-      if (value >= thresholds.poor) return 'text-amber-500';
-      return 'text-red-500';
-    }
-  };
-
-  const formatBytes = (bytes: number) => `${(bytes / 1024).toFixed(1)}KB`;
-  const formatTime = (ms: number) => `${ms.toFixed(0)}ms`;
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -359,16 +270,6 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
           >
             <ExternalLink className="h-3 w-3" />
           </Button>
-
-          <Button 
-            size="sm" 
-            variant="ghost" 
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="h-7 w-7 p-0 hidden xl:flex"
-            title="Toggle sidebar"
-          >
-            <Maximize2 className="h-3 w-3" />
-          </Button>
         </div>
       </div>
 
@@ -466,7 +367,7 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
                             // Check if body exists and has some content
                             if (body) {
                               const hasContent = body.children.length > 0 || 
-                                               body.textContent?.trim().length > 0 ||
+                                               (body.textContent?.trim().length ?? 0) > 0 ||
                                                body.innerHTML.trim().length > 0;
                               
                               if (!hasContent) {
@@ -588,131 +489,6 @@ export function AdvancedPreview({ previewUrl, files, projectName, onRefresh }: A
           </div>
         </div>
 
-        {/* Side Panel - Collapsible */}
-        {showSidebar && (
-          <div className="w-56 border-l bg-card flex-shrink-0 hidden xl:flex flex-col">
-            <Tabs defaultValue="performance" className="h-full flex flex-col">
-              <TabsList className="grid w-full grid-cols-3 h-8 rounded-none border-b">
-                <TabsTrigger value="performance" className="text-[10px] h-7 data-[state=active]:bg-muted">
-                  Perf
-                </TabsTrigger>
-                <TabsTrigger value="console" className="text-[10px] h-7 data-[state=active]:bg-muted">
-                  Console
-                </TabsTrigger>
-                <TabsTrigger value="info" className="text-[10px] h-7 data-[state=active]:bg-muted">
-                  Info
-                </TabsTrigger>
-              </TabsList>
-
-              <ScrollArea className="flex-1">
-                <TabsContent value="performance" className="p-2 space-y-3 mt-0">
-                  <div>
-                    <h3 className="text-[10px] font-semibold mb-2 flex items-center gap-1.5 text-muted-foreground uppercase tracking-wide">
-                      <Gauge className="h-3 w-3" />
-                      Core Web Vitals
-                    </h3>
-
-                    {performanceMetrics && (
-                      <div className="space-y-1.5">
-                        {[
-                          { label: 'LCP', value: formatTime(performanceMetrics.lcp), color: getMetricColor(performanceMetrics.lcp, { good: 2500, poor: 4000 }, true) },
-                          { label: 'FID', value: formatTime(performanceMetrics.fid), color: getMetricColor(performanceMetrics.fid, { good: 100, poor: 300 }, true) },
-                          { label: 'CLS', value: performanceMetrics.cls.toFixed(3), color: getMetricColor(performanceMetrics.cls, { good: 0.1, poor: 0.25 }, true) },
-                        ].map(({ label, value, color }) => (
-                          <div key={label} className="flex justify-between items-center py-1 px-2 rounded bg-muted/30">
-                            <span className="text-[10px] font-medium">{label}</span>
-                            <span className={`text-[10px] font-mono font-semibold ${color}`}>{value}</span>
-                          </div>
-                        ))}
-
-                        <Separator className="my-2" />
-
-                        {[
-                          { label: 'Load', value: formatTime(performanceMetrics.loadTime) },
-                          { label: 'Bundle', value: formatBytes(performanceMetrics.bundleSize) },
-                          { label: 'Memory', value: `${performanceMetrics.memoryUsage.toFixed(1)}MB` },
-                        ].map(({ label, value }) => (
-                          <div key={label} className="flex justify-between items-center py-1 px-2">
-                            <span className="text-[10px] text-muted-foreground">{label}</span>
-                            <span className="text-[10px] font-mono">{value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <Button size="sm" className="w-full h-7 text-[10px]" variant="outline">
-                    <Activity className="h-3 w-3 mr-1.5" />
-                    Run Lighthouse
-                  </Button>
-                </TabsContent>
-
-                <TabsContent value="console" className="p-2 mt-0">
-                  <h3 className="text-[10px] font-semibold mb-2 flex items-center gap-1.5 text-muted-foreground uppercase tracking-wide">
-                    <Bug className="h-3 w-3" />
-                    Console Output
-                  </h3>
-
-                  <div className="bg-zinc-900 text-emerald-400 p-2 rounded text-[9px] font-mono h-48 overflow-y-auto border border-zinc-700">
-                    {consoleMessages.length === 0 ? (
-                      <div className="text-zinc-500">No console messages</div>
-                    ) : (
-                      consoleMessages.map((msg, index) => (
-                        <div key={index} className={`mb-0.5 ${
-                          msg.type === 'error' ? 'text-red-400' :
-                          msg.type === 'warn' ? 'text-amber-400' :
-                          'text-emerald-400'
-                        }`}>
-                          <span className="text-zinc-600">[{msg.timestamp.toLocaleTimeString()}]</span> {msg.message}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="info" className="p-2 space-y-3 mt-0">
-                  <div>
-                    <h3 className="text-[10px] font-semibold mb-2 flex items-center gap-1.5 text-muted-foreground uppercase tracking-wide">
-                      <Globe className="h-3 w-3" />
-                      Project Info
-                    </h3>
-
-                    <div className="space-y-1">
-                      {[
-                        { label: 'Project', value: projectName },
-                        { label: 'Files', value: files.length.toString() },
-                        { label: 'Size', value: formatBytes(files.reduce((acc, f) => acc + f.content.length, 0)) },
-                        { label: 'Updated', value: new Date().toLocaleTimeString() },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="flex justify-between py-1 px-2 rounded bg-muted/30">
-                          <span className="text-[10px] text-muted-foreground">{label}</span>
-                          <span className="text-[10px] font-mono truncate max-w-[80px]">{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-1">
-                    <Button size="sm" variant="ghost" className="w-full h-7 text-[10px] justify-start">
-                      <Share2 className="h-3 w-3 mr-1.5" />
-                      Share Preview
-                    </Button>
-                    <Button size="sm" variant="ghost" className="w-full h-7 text-[10px] justify-start">
-                      <Code className="h-3 w-3 mr-1.5" />
-                      View Source
-                    </Button>
-                    <Button size="sm" variant="ghost" className="w-full h-7 text-[10px] justify-start">
-                      <Download className="h-3 w-3 mr-1.5" />
-                      Export Project
-                    </Button>
-                  </div>
-                </TabsContent>
-              </ScrollArea>
-            </Tabs>
-          </div>
-        )}
       </div>
     </div>
   );
