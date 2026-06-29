@@ -573,25 +573,31 @@ class WebContainerServiceClass {
 
     if (layout.isFullstack && layout.backendCwd) {
       onProgress?.('Starting backend API server...\n');
-      this.backendServerProcess = await webcontainer.spawn('npm', ['run', 'dev'], {
-        cwd: layout.backendCwd,
-        env: {
-          PORT: String(layout.backendPort),
-          HOST: '0.0.0.0',
-          NODE_ENV: 'development',
-        },
-      });
+      try {
+        this.backendServerProcess = await webcontainer.spawn('npm', ['run', 'dev'], {
+          cwd: layout.backendCwd,
+          env: {
+            PORT: String(layout.backendPort),
+            HOST: '0.0.0.0',
+            NODE_ENV: 'development',
+          },
+        });
 
-      backendUrl = await this.waitForServerUrl(
-        webcontainer,
-        this.backendServerProcess,
-        layout.backendPort,
-        '🚀 Backend server',
-        onProgress,
-        60000,
-        true
-      );
-      onProgress?.(`Backend ready at ${backendUrl}\n`);
+        backendUrl = await this.waitForServerUrl(
+          webcontainer,
+          this.backendServerProcess,
+          layout.backendPort,
+          '🚀 Backend server',
+          onProgress,
+          20000,
+          true
+        );
+        onProgress?.(`Backend ready at ${backendUrl}\n`);
+      } catch (error) {
+        console.warn('Backend preview URL was not available; continuing with frontend preview:', error);
+        backendUrl = null;
+        onProgress?.('Backend API preview was not available. Continuing with frontend preview...\n');
+      }
     }
 
     onProgress?.('Starting frontend preview...\n');
