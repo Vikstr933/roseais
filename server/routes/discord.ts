@@ -959,7 +959,9 @@ router.post('/interactions', express.raw({ type: 'application/json', limit: '10m
                 '**Available Commands:**\n' +
                 '`/help` - Show this help message\n' +
                 '`/projects` - List your projects\n' +
-                '`/status` - Check system status\n\n' +
+                '`/status` - Check system status\n' +
+                '`/play` - Play a song, Spotify link, or YouTube link\n' +
+                '`/skip`, `/stop`, `/pause`, `/resume`, `/queue`, `/nowplaying` - Music controls\n\n' +
                 '**Chat with Elon:**\n' +
                 'Just mention @Elon or send a DM to chat with me!\n\n' +
                 '**Need more help?**\n' +
@@ -1052,6 +1054,42 @@ router.post('/interactions', express.raw({ type: 'application/json', limit: '10m
                 `**Platform:** ✅ Operational\n\n` +
                 `Need help? Join our Discord: https://discord.gg/p7rsdJR2nM`,
               flags: 64,
+            },
+          });
+
+        case 'play': {
+          const queryOption = interaction.data?.options?.find((option: any) => option.name === 'query');
+          const query = String(queryOption?.value || '').trim();
+          if (!query) {
+            return res.json({
+              type: 4,
+              data: {
+                content: 'Skriv en låt, Spotify-länk eller YouTube-länk. Exempel: `/play query:Avicii Levels`',
+                flags: 64,
+              },
+            });
+          }
+
+          void discordBotService.handleMusicInteraction(interaction, { action: 'play', query });
+          return res.json({
+            type: 4,
+            data: {
+              content: `🎵 Letar efter **${query}** och försöker starta musiken...`,
+            },
+          });
+        }
+
+        case 'skip':
+        case 'stop':
+        case 'pause':
+        case 'resume':
+        case 'queue':
+        case 'nowplaying':
+          void discordBotService.handleMusicInteraction(interaction, { action: commandName as any });
+          return res.json({
+            type: 4,
+            data: {
+              content: '🎛️ Musikkommandot är mottaget.',
             },
           });
 
@@ -1171,4 +1209,3 @@ router.post('/interactions', express.raw({ type: 'application/json', limit: '10m
 });
 
 export default router;
-

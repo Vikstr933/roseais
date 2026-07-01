@@ -12,6 +12,7 @@ import { db } from '../../db';
 import { userCredentials, discordUserMappings } from '../../db/schema-pg';
 import { eq, and, sql } from 'drizzle-orm';
 import { Anthropic } from '@anthropic-ai/sdk';
+import { discordMusicService, ParsedMusicCommand } from './DiscordMusicService';
 
 const logger = new SimpleLogger('DiscordBotService');
 
@@ -61,6 +62,7 @@ export class DiscordBotService {
           GatewayIntentBits.GuildMessages,
           GatewayIntentBits.MessageContent,
           GatewayIntentBits.GuildMembers,
+          GatewayIntentBits.GuildVoiceStates,
         ],
       });
 
@@ -432,6 +434,12 @@ Generate ONLY the status message, nothing else.`
       }
       
       logger.info(`Processing message from ${message.author.tag}: "${userMessage}"`);
+
+      const musicCommand = discordMusicService.parseMusicCommand(userMessage);
+      if (musicCommand) {
+        await discordMusicService.handleMessageCommand(message, musicCommand);
+        return;
+      }
       
       // Get user ID from Discord
       const discordUserId = message.author.id;
@@ -769,6 +777,10 @@ Generate ONLY the status message, nothing else.`
       logger.error('Error sending message to Discord', error as Error);
       return false;
     }
+  }
+
+  async handleMusicInteraction(interaction: any, command: ParsedMusicCommand): Promise<void> {
+    await discordMusicService.handleInteractionCommand(this.client, interaction, command);
   }
 
   /**
@@ -1418,4 +1430,3 @@ Generate ONLY the status message, nothing else.`
 }
 
 export const discordBotService = DiscordBotService.getInstance();
-

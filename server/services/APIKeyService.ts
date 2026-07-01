@@ -8,6 +8,7 @@ import {
 import { eq, and, desc, sql, isNull } from 'drizzle-orm';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { isSimpleFrontendPrompt } from './GenerationClassifier';
 
 // Type definitions
 type APIKey = {
@@ -913,6 +914,10 @@ export class APIKeyService {
         if (!exists) requirements.push(key);
       }
     };
+
+    if (isSimpleFrontendPrompt(promptLower)) {
+      return [];
+    }
 
     // Check for AI/LLM usage
     if (

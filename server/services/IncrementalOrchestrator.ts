@@ -30,6 +30,7 @@ export interface GenerationPlan {
   };
   phases: GenerationPhase[];
   totalPhases: number;
+  speedMode?: 'fast_frontend' | 'standard';
 }
 
 export interface PhaseResult {
@@ -161,21 +162,25 @@ export class IncrementalOrchestrator {
               plan
             );
             
-            // AI-powered syntax fixing (replaces regex patterns)
-            // Instead of hardcoded regex patterns, we use AI to intelligently fix syntax errors.
-            // Benefits: AI understands context, handles edge cases, uses esbuild for real errors
-            this.logger.info(`Validating and fixing syntax errors in phase ${phase.phase} with AI...`);
-            const { AISyntaxFixer } = await import('./AISyntaxFixer');
-            const aiFixer = new AISyntaxFixer();
-            
-            const fixResult = await aiFixer.validateAndFix(phaseResult.files);
-            
-            if (fixResult.success) {
-              phaseResult.files = fixResult.fixedFiles;
-              this.logger.info(`✅ AI fixed all compilation errors in phase ${phase.phase} (${fixResult.fixAttempts} attempt(s))`);
-            } else if (fixResult.remainingErrors.length > 0) {
-              this.logger.warn(`AI fixed some errors but ${fixResult.remainingErrors.length} remain in phase ${phase.phase}`);
-              phaseResult.files = fixResult.fixedFiles; // Use partially fixed files
+            if (plan.speedMode !== 'fast_frontend') {
+              // AI-powered syntax fixing (replaces regex patterns)
+              // Instead of hardcoded regex patterns, we use AI to intelligently fix syntax errors.
+              // Benefits: AI understands context, handles edge cases, uses esbuild for real errors
+              this.logger.info(`Validating and fixing syntax errors in phase ${phase.phase} with AI...`);
+              const { AISyntaxFixer } = await import('./AISyntaxFixer');
+              const aiFixer = new AISyntaxFixer();
+
+              const fixResult = await aiFixer.validateAndFix(phaseResult.files);
+
+              if (fixResult.success) {
+                phaseResult.files = fixResult.fixedFiles;
+                this.logger.info(`✅ AI fixed all compilation errors in phase ${phase.phase} (${fixResult.fixAttempts} attempt(s))`);
+              } else if (fixResult.remainingErrors.length > 0) {
+                this.logger.warn(`AI fixed some errors but ${fixResult.remainingErrors.length} remain in phase ${phase.phase}`);
+                phaseResult.files = fixResult.fixedFiles; // Use partially fixed files
+              }
+            } else {
+              this.logger.info(`Fast frontend mode: skipping proactive AI syntax fixer for phase ${phase.phase}`);
             }
           }
 
@@ -337,7 +342,7 @@ export class IncrementalOrchestrator {
       results.forEach(({ phase, result }) => {
         phaseResults.push(result);
         completedPhases.add(phase);
-        
+
         if (progressCallback) {
           const completedCount = completedPhases.size;
           progressCallback(phase, (completedCount / plan.phases.length) * 100, `Completed ${phase}`);
@@ -364,11 +369,13 @@ export class IncrementalOrchestrator {
         progressCallback('final', 95, 'Analyzing filesystem for missing files...');
       }
       
-      const missingFiles = await missingFileGenerator.analyzeAndGenerateMissingFiles(allFilesArray, {
-        userPrompt,
-        appName: plan.appName,
-        knowledgeContext
-      });
+      const missingFiles = plan.speedMode === 'fast_frontend'
+        ? []
+        : await missingFileGenerator.analyzeAndGenerateMissingFiles(allFilesArray, {
+            userPrompt,
+            appName: plan.appName,
+            knowledgeContext
+          });
       
       if (missingFiles.length > 0) {
         this.logger.info(`Generated ${missingFiles.length} missing critical file(s) based on filesystem analysis`);
@@ -483,25 +490,35 @@ export class IncrementalOrchestrator {
 
     try {
       // Pre-research: Prepare optimal context before agent starts
-      const { ContextResearchService } = await import('./ContextResearchService');
-      const contextResearch = new ContextResearchService();
-      
-      this.logger.info(`Pre-research: Preparing context for phase ${phase.phase}...`);
-      const enhancedContext = await contextResearch.prepareContextForAgent(
-        phase.agentId,
-        userPrompt,
-        phase,
-        existingFiles,
-        plan
-      );
+      let optimizedFiles = existingFiles;
+      let optimizedKnowledge = knowledgeContext;
+      let patterns: Array<{ type: string; pattern: string; frequency: number; files: string[] }> | undefined;
 
-      if (!enhancedContext.isComplete && enhancedContext.missingInfo) {
-        this.logger.warn(`Context incomplete for phase ${phase.phase}: ${enhancedContext.missingInfo.join(', ')}`);
+      if (plan.speedMode !== 'fast_frontend') {
+        // Pre-research: Prepare optimal context before agent starts
+        const { ContextResearchService } = await import('./ContextResearchService');
+        const contextResearch = new ContextResearchService();
+
+        this.logger.info(`Pre-research: Preparing context for phase ${phase.phase}...`);
+        const enhancedContext = await contextResearch.prepareContextForAgent(
+          phase.agentId,
+          userPrompt,
+          phase,
+          existingFiles,
+          plan
+        );
+
+        if (!enhancedContext.isComplete && enhancedContext.missingInfo) {
+          this.logger.warn(`Context incomplete for phase ${phase.phase}: ${enhancedContext.missingInfo.join(', ')}`);
+        }
+
+        // Use enhanced context (summarized files, patterns, etc.)
+        optimizedFiles = enhancedContext.existingFiles;
+        optimizedKnowledge = enhancedContext.knowledge || knowledgeContext;
+        patterns = enhancedContext.patterns;
+      } else {
+        this.logger.info(`Fast frontend mode: skipping context pre-research for phase ${phase.phase}`);
       }
-
-      // Use enhanced context (summarized files, patterns, etc.)
-      const optimizedFiles = enhancedContext.existingFiles;
-      const optimizedKnowledge = enhancedContext.knowledge || knowledgeContext;
 
       // Build context-aware prompt with optimized context
       const phasePrompt = this.buildPhasePrompt(
@@ -510,7 +527,7 @@ export class IncrementalOrchestrator {
         optimizedKnowledge,
         optimizedFiles,
         plan,
-        enhancedContext.patterns
+        patterns
       );
 
       // Get agent configuration from database (cached)

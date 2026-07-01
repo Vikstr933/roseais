@@ -1,5 +1,6 @@
 import { SimpleLogger } from '../utils/SimpleLogger';
 import Anthropic from '@anthropic-ai/sdk';
+import { isSimpleFrontendPrompt } from './GenerationClassifier';
 
 const logger = new SimpleLogger('FullstackIntegrationService');
 
@@ -43,7 +44,10 @@ export class FullstackIntegrationService {
     files: Array<{ path: string; content: string }>
   ): Promise<FullstackConfig> {
     const promptLower = userPrompt.toLowerCase();
-    const features = this.detectFeatureFlags(promptLower);
+    const isFastFrontendPrompt = isSimpleFrontendPrompt(promptLower);
+    const features = isFastFrontendPrompt
+      ? { auth: false, uploads: false, persistence: false }
+      : this.detectFeatureFlags(promptLower);
     
     // Keywords that indicate backend is needed
     const backendKeywords = [
@@ -61,10 +65,12 @@ export class FullstackIntegrationService {
     ];
 
     const needsBackend =
-      backendKeywords.some(keyword => promptLower.includes(keyword)) ||
-      features.auth ||
-      features.uploads ||
-      features.persistence;
+      !isFastFrontendPrompt && (
+        backendKeywords.some(keyword => promptLower.includes(keyword)) ||
+        features.auth ||
+        features.uploads ||
+        features.persistence
+      );
 
     // Check existing files for backend indicators
     const hasBackendFiles = files.some(f => 
@@ -248,6 +254,10 @@ Respond with JSON:
   ): string[] {
     const endpoints: string[] = [];
     const promptLower = userPrompt.toLowerCase();
+    if (isSimpleFrontendPrompt(promptLower)) {
+      return endpoints;
+    }
+
     const features = this.detectFeatureFlags(promptLower);
 
     // Common endpoint patterns

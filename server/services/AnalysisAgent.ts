@@ -11,6 +11,7 @@ import { GenerationPlan, GenerationPhase } from './IncrementalOrchestrator';
 import { db } from '../../db';
 import { agents } from '../../db/schema-pg';
 import { eq, or, and } from 'drizzle-orm';
+import { getGenerationSpeedMode } from './GenerationClassifier';
 
 export class AnalysisAgent {
   private logger: SimpleLogger;
@@ -43,6 +44,13 @@ export class AnalysisAgent {
     const { fullstackIntegrationService } = await import('./FullstackIntegrationService');
     const fullstackConfig = await fullstackIntegrationService.detectFullstackNeeds(enrichedPrompt, existingFiles);
     this.logger.info(`Fullstack detection: needsBackend=${fullstackConfig.needsBackend}, backendType=${fullstackConfig.backendType}, endpoints=${fullstackConfig.apiEndpoints.length}, requiredApiKeys=${fullstackConfig.requiredApiKeys?.join(',') || 'none'}`);
+
+    const speedMode = getGenerationSpeedMode(enrichedPrompt);
+    if (speedMode === 'fast_frontend' && existingFiles.length === 0 && !fullstackConfig.needsBackend) {
+      const fastPlan = this.createFastFrontendPlan(enrichedPrompt);
+      this.logger.info(`Using fast frontend plan - appName: ${fastPlan.appName}, phases: ${fastPlan.phases.length}`);
+      return fastPlan;
+    }
 
     // Step 2: Find relevant agents (system + user-created) - use enrichedPrompt for better matching
     const relevantAgents = await this.findRelevantAgents(enrichedPrompt, userId);
@@ -142,6 +150,53 @@ export class AnalysisAgent {
       // Return a default plan as fallback
       return this.createDefaultPlan(userPrompt);
     }
+  }
+
+  private createFastFrontendPlan(userPrompt: string): GenerationPlan {
+    const appName = this.inferAppName(userPrompt);
+
+    return {
+      appName,
+      appType: 'frontend-tool',
+      techStack: {
+        framework: 'React',
+        buildTool: 'Vite',
+        language: 'TypeScript',
+      },
+      speedMode: 'fast_frontend',
+      phases: [
+        {
+          phase: 'fast-app',
+          description: 'Complete browser-only frontend application',
+          files: [
+            'package.json',
+            'tsconfig.json',
+            'vite.config.ts',
+            'index.html',
+            'src/main.tsx',
+            'src/App.tsx',
+            'src/index.css',
+          ],
+          dependencies: [],
+          agentId: 'component-developer',
+        },
+      ],
+      totalPhases: 1,
+    };
+  }
+
+  private inferAppName(userPrompt: string): string {
+    const promptLower = userPrompt.toLowerCase();
+    if (promptLower.includes('qr')) return 'QR Code Generator';
+    if (promptLower.includes('calculator') || promptLower.includes('räknare') || promptLower.includes('raknare')) return 'Calculator';
+    if (promptLower.includes('converter') || promptLower.includes('konverterare')) return 'Converter';
+    if (promptLower.includes('timer')) return 'Timer';
+    if (promptLower.includes('stopwatch')) return 'Stopwatch';
+    if (promptLower.includes('counter')) return 'Counter';
+    if (promptLower.includes('todo') || promptLower.includes('to-do')) return 'Todo App';
+    if (promptLower.includes('portfolio')) return 'Portfolio';
+    if (promptLower.includes('landing page')) return 'Landing Page';
+    return 'Frontend App';
   }
 
   /**

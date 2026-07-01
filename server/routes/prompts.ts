@@ -23,6 +23,7 @@ import { AnalysisAgent } from '../services/AnalysisAgent';
 import { errorChecker } from '../services/ErrorChecker';
 import { hasPaidEntitlement } from '../services/TierLimitsService';
 import { monetizationService } from '../services/MonetizationService';
+import { getGenerationSpeedMode } from '../services/GenerationClassifier';
 
 const aiCodeGenerator = new AICodeGenerator();
 const incrementalOrchestrator = new IncrementalOrchestrator();
@@ -638,7 +639,7 @@ async function generateWithAI(
       console.log('📝 [generateWithAI] Using direct API call (skipAICodeGenerator=true)');
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      
+
       const response = await anthropic.messages.create({
         model: model as any,
         max_tokens: 8000,
@@ -756,6 +757,7 @@ router.post(
         sessionId = null,
         chatHistory = [], // Chat history for context awareness (e.g., Python context from earlier messages)
       } = req.body;
+      const speedMode = getGenerationSpeedMode(userPrompt);
 
       const apiKeyRequirements = apiKeyService.analyzePromptForAPIKeys(userPrompt);
       if (apiKeyRequirements.length > 0) {
@@ -813,7 +815,10 @@ router.post(
 
       // Send initial status
       sendSSEUpdate(req, 'GENERATION_START', {
-        message: 'Starting multi-agent orchestration process',
+        message: speedMode === 'fast_frontend'
+          ? 'Starting fast frontend generation'
+          : 'Starting multi-agent orchestration process',
+        speedMode,
       });
 
       // Load existing project files (priority: direct from request > projectId lookup)
@@ -866,7 +871,15 @@ router.post(
 
       // Get knowledge context (automatic or manual selection)
       let knowledgeContext;
-      if (selectedKnowledge) {
+      if (speedMode === 'fast_frontend' && !selectedKnowledge && existingProjectFiles.length === 0) {
+        console.log('Fast frontend mode: skipping knowledge retrieval');
+        knowledgeContext = {
+          companies: [],
+          frameworks: [],
+          workspaces: [],
+          totalItems: 0,
+        };
+      } else if (selectedKnowledge) {
         // Use manually selected knowledge
         console.log('Using manually selected knowledge:', selectedKnowledge);
         knowledgeContext = await knowledgeService.getKnowledgeByIds(
@@ -894,8 +907,7 @@ router.post(
         knowledge: knowledgeContext,
       });
 
-      // Get active agents for orchestration (always used now)
-      const activeAgents = await getActiveAgents();
+      const activeAgents = speedMode === 'fast_frontend' ? [] : await getActiveAgents();
 
       // Initialize the orchestration plan
       const orchestrationPlan = {
@@ -904,15 +916,28 @@ router.post(
 
       let finalResponse: AIResponse;
 
-      // Analyze prompt to determine which agents are needed
-      console.log('🔍 Analyzing prompt to select required agents...');
-      const agentSelection = await agentSelector.analyzePrompt(userPrompt);
-      console.log(`📊 Prompt Analysis:`, {
-        complexity: agentSelection.complexity,
-        selectedAgents: agentSelection.selectedAgents,
-        reasoning: agentSelection.reasoning,
-        estimatedDuration: `${agentSelection.estimatedDuration}s`
-      });
+      // Analyze prompt to determine which agents are needed. Fast frontend mode
+      // skips this because AnalysisAgent creates a deterministic one-phase plan.
+      const agentSelection = speedMode === 'fast_frontend'
+        ? {
+            complexity: 'simple',
+            selectedAgents: ['component-developer'],
+            reasoning: 'Fast frontend app detected',
+            estimatedDuration: 20,
+          }
+        : await agentSelector.analyzePrompt(userPrompt);
+
+      if (speedMode !== 'fast_frontend') {
+        console.log('🔍 Analyzing prompt to select required agents...');
+        console.log(`📊 Prompt Analysis:`, {
+          complexity: agentSelection.complexity,
+          selectedAgents: agentSelection.selectedAgents,
+          reasoning: agentSelection.reasoning,
+          estimatedDuration: `${agentSelection.estimatedDuration}s`
+        });
+      } else {
+        console.log('⚡ Fast frontend mode: skipped agent selection');
+      }
 
       // Filter active agents to only include selected ones
       const requiredAgents = activeAgents.filter(agent =>
@@ -945,7 +970,7 @@ router.post(
           'app_generation',
           1000,
           sessionId || undefined,
-          { projectId, generationMode: 'incremental' }
+          { projectId, generationMode: speedMode === 'fast_frontend' ? 'fast_frontend' : 'incremental' }
         );
       }
 
@@ -1935,19 +1960,23 @@ async function handleIncrementalGeneration(
       knowledgeContext: formatKnowledgeContext(knowledgeContext)
     };
 
-    const { ImportCompletenessFixer } = await import('../services/ImportCompletenessFixer');
-    const importCompletenessFixer = new ImportCompletenessFixer();
-    const importRepairResult = await importCompletenessFixer.repairMissingImports(result.allFiles, repairContext);
+    if (plan.speedMode !== 'fast_frontend') {
+      const { ImportCompletenessFixer } = await import('../services/ImportCompletenessFixer');
+      const importCompletenessFixer = new ImportCompletenessFixer();
+      const importRepairResult = await importCompletenessFixer.repairMissingImports(result.allFiles, repairContext);
 
-    if (importRepairResult.generatedFiles.length > 0) {
-      result.allFiles = importRepairResult.fixedFiles;
-      console.log(`✅ Generated ${importRepairResult.generatedFiles.length} missing local import file(s) before final validation`);
+      if (importRepairResult.generatedFiles.length > 0) {
+        result.allFiles = importRepairResult.fixedFiles;
+        console.log(`✅ Generated ${importRepairResult.generatedFiles.length} missing local import file(s) before final validation`);
 
-      sendSSEUpdate(req, 'AUTO_FIX_COMPLETE', {
-        message: `Completed missing local modules automatically`,
-        remainingErrors: importRepairResult.remainingMissingImports.length,
-        remainingWarnings: 0
-      });
+        sendSSEUpdate(req, 'AUTO_FIX_COMPLETE', {
+          message: `Completed missing local modules automatically`,
+          remainingErrors: importRepairResult.remainingMissingImports.length,
+          remainingWarnings: 0
+        });
+      }
+    } else {
+      console.log('⚡ Fast frontend mode: skipped import completeness AI repair');
     }
 
     const { ProjectValidator } = await import('../services/ProjectValidator');
@@ -1967,13 +1996,31 @@ async function handleIncrementalGeneration(
       result.allFiles = projectValidationResult.validatedFiles;
     }
 
-    const { AISyntaxFixer } = await import('../services/AISyntaxFixer');
-    const aiFixer = new AISyntaxFixer();
-    
-    // Validate and fix with AI (Sonnet 4.5) - this happens BEFORE users see any errors
-    let finalFixResult = await aiFixer.validateAndFix(result.allFiles, {
-      validateLocalImports: true
-    });
+    let aiFixer: any = null;
+    let finalFixResult: {
+      success: boolean;
+      fixedFiles: { path: string; content: string }[];
+      remainingErrors: Array<{ file: string; line?: number; column?: number; message: string }>;
+      fixAttempts: number;
+    };
+
+    if (plan.speedMode === 'fast_frontend' && projectValidationResult.errors.length === 0) {
+      finalFixResult = {
+        success: true,
+        fixedFiles: result.allFiles,
+        remainingErrors: [],
+        fixAttempts: 0,
+      };
+      console.log('⚡ Fast frontend mode: skipped final AI syntax fixer after clean project validation');
+    } else {
+      const { AISyntaxFixer } = await import('../services/AISyntaxFixer');
+      aiFixer = new AISyntaxFixer();
+
+      // Validate and fix with AI (Sonnet 4.5) - this happens BEFORE users see any errors
+      finalFixResult = await aiFixer.validateAndFix(result.allFiles, {
+        validateLocalImports: true
+      });
+    }
     
     if (finalFixResult.success) {
       result.allFiles = finalFixResult.fixedFiles;
@@ -2002,7 +2049,10 @@ async function handleIncrementalGeneration(
     }
 
     let finalProjectValidation = await projectValidator.validateAndFixProject(result.allFiles, repairContext);
-    if (finalProjectValidation.filesModified > 0 || finalProjectValidation.issuesFixed > 0) {
+    if (
+      (finalProjectValidation.filesModified > 0 || finalProjectValidation.issuesFixed > 0) &&
+      (plan.speedMode !== 'fast_frontend' || finalProjectValidation.errors.length > 0)
+    ) {
       result.allFiles = finalProjectValidation.validatedFiles;
       console.log(`✅ Final project validator repaired ${finalProjectValidation.issuesFixed} issue(s) after syntax fixing`);
 
@@ -2011,6 +2061,11 @@ async function handleIncrementalGeneration(
         remainingErrors: finalProjectValidation.errors.length,
         remainingWarnings: finalProjectValidation.warnings.length
       });
+
+      if (!aiFixer) {
+        const { AISyntaxFixer } = await import('../services/AISyntaxFixer');
+        aiFixer = new AISyntaxFixer();
+      }
 
       finalFixResult = await aiFixer.validateAndFix(result.allFiles, {
         validateLocalImports: true

@@ -49,6 +49,42 @@ const commands = [
     name: 'status',
     description: 'Check system status and bot connection',
   },
+  {
+    name: 'play',
+    description: 'Play music from a song name, Spotify link, or YouTube link',
+    options: [
+      {
+        name: 'query',
+        description: 'Song name, Spotify link, or YouTube link',
+        type: 3,
+        required: true,
+      },
+    ],
+  },
+  {
+    name: 'skip',
+    description: 'Skip the currently playing song',
+  },
+  {
+    name: 'stop',
+    description: 'Stop music and leave the voice channel',
+  },
+  {
+    name: 'pause',
+    description: 'Pause the current song',
+  },
+  {
+    name: 'resume',
+    description: 'Resume the paused song',
+  },
+  {
+    name: 'queue',
+    description: 'Show the music queue',
+  },
+  {
+    name: 'nowplaying',
+    description: 'Show the currently playing song',
+  },
 ];
 
 const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
@@ -93,4 +129,3 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
     process.exit(1);
   }
 })();
-
