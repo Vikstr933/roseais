@@ -524,9 +524,12 @@ async function testGitHubCredentials(creds: any): Promise<{ valid: boolean; erro
 function getOAuthUrl(serviceName: string, state: string): string | null {
   const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
   const redirectUri = `${baseUrl}/api/credentials/oauth/${serviceName}/callback`;
+  const discordScopes = encodeURIComponent('bot applications.commands identify guilds');
+  // View Channel + Send Messages + Connect + Speak + Use Voice Activity.
+  const discordPermissions = '36703232';
 
   const configs: Record<string, string> = {
-    discord: `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=bot%20identify%20guilds&state=${state}`,
+    discord: `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${discordScopes}&permissions=${discordPermissions}&state=${state}`,
     slack: `https://slack.com/oauth/v2/authorize?client_id=${process.env.SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=channels:read,chat:write,users:read&state=${state}`,
     github: `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo,user&state=${state}`,
   };

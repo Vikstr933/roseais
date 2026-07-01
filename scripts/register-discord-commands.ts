@@ -2,7 +2,7 @@
  * Register Discord Slash Commands
  * 
  * This script registers slash commands with Discord so users can use
- * commands like /help, /projects, /status in Discord servers.
+ * commands like /help, /projects, /status, /play in Discord servers.
  * 
  * Run with: npx tsx scripts/register-discord-commands.ts
  */
@@ -21,6 +21,7 @@ dotenv.config({ path: join(__dirname, '../.env.discord') }); // Also try .env.di
 // Get from environment variables or command line arguments
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || process.argv[2];
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.argv[3];
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID || process.argv[4];
 
 if (!DISCORD_BOT_TOKEN) {
   console.error('❌ DISCORD_BOT_TOKEN is not set');
@@ -93,11 +94,16 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
   try {
     console.log('🔄 Registering slash commands with Discord...');
     console.log(`   Client ID: ${DISCORD_CLIENT_ID}`);
+    if (DISCORD_GUILD_ID) {
+      console.log(`   Guild ID: ${DISCORD_GUILD_ID}`);
+    }
     console.log(`   Commands: ${commands.map(c => c.name).join(', ')}`);
 
-    // Register commands globally (available in all servers)
+    // Guild commands show up immediately. Global commands can take several minutes to appear.
     const data = await rest.put(
-      Routes.applicationCommands(DISCORD_CLIENT_ID),
+      DISCORD_GUILD_ID
+        ? Routes.applicationGuildCommands(DISCORD_CLIENT_ID, DISCORD_GUILD_ID)
+        : Routes.applicationCommands(DISCORD_CLIENT_ID),
       { body: commands }
     ) as any[];
 
@@ -107,8 +113,13 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
       console.log(`   - /${cmd.name}: ${cmd.description}`);
     });
 
-    console.log('\n💡 Note: It may take a few minutes for commands to appear in Discord.');
-    console.log('   If commands don\'t appear, try restarting Discord or waiting a few minutes.');
+    if (DISCORD_GUILD_ID) {
+      console.log('\n💡 Guild commands should appear almost immediately in that server.');
+    } else {
+      console.log('\n💡 Note: Global commands may take several minutes to appear in Discord.');
+      console.log('   For instant testing, set DISCORD_GUILD_ID and run the script again.');
+    }
+    console.log('   If commands do not appear, re-invite the bot with the applications.commands scope.');
   } catch (error: any) {
     console.error('❌ Error registering slash commands:', error);
     
