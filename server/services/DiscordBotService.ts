@@ -13,6 +13,7 @@ import { userCredentials, discordUserMappings } from '../../db/schema-pg';
 import { eq, and, sql } from 'drizzle-orm';
 import { Anthropic } from '@anthropic-ai/sdk';
 import { discordMusicService, ParsedMusicCommand } from './DiscordMusicService';
+import { registerDiscordApplicationCommands } from './DiscordCommandRegistry';
 
 const logger = new SimpleLogger('DiscordBotService');
 
@@ -31,6 +32,7 @@ export class DiscordBotService {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private registeredCommandTargets = new Set<string>();
 
   private constructor() {
     // Use singleton instance to avoid circular dependency
@@ -129,6 +131,8 @@ export class DiscordBotService {
       } else {
         logger.info(`Server filter active - bot will only listen to server: ${this.config.serverId}`);
       }
+
+      await this.registerSlashCommands(readyClient);
     });
 
     // Message handler
@@ -216,6 +220,30 @@ export class DiscordBotService {
         logger.info(`Discord debug: ${info}`);
       }
     });
+  }
+
+  private async registerSlashCommands(readyClient: Client<true>): Promise<void> {
+    if (!this.config?.botToken) return;
+
+    const clientId = process.env.DISCORD_CLIENT_ID || readyClient.user.id;
+    const guildId = process.env.DISCORD_GUILD_ID || this.config.serverId;
+    const targetKey = guildId ? `guild:${guildId}` : 'global';
+
+    if (this.registeredCommandTargets.has(targetKey)) {
+      logger.info(`Discord slash commands already registered for ${targetKey}`);
+      return;
+    }
+
+    try {
+      await registerDiscordApplicationCommands({
+        botToken: this.config.botToken,
+        clientId,
+        guildId,
+      });
+      this.registeredCommandTargets.add(targetKey);
+    } catch (error) {
+      logger.error('Failed to register Discord slash commands on bot startup', error as Error);
+    }
   }
 
   /**

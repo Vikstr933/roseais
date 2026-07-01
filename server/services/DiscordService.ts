@@ -8,8 +8,9 @@
 
 import fetch from 'node-fetch';
 
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1442923180783173864/98HEPAFtzCbeBMquTrvTnU4rfxuYjYzfFX_avwgP9agtVwFyKnHZekekPfzQQfiHTtsk';
-const DISCORD_INVITE_LINK = process.env.DISCORD_INVITE_LINK || 'https://discord.gg/p7rsdJR2nM';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+const DISCORD_INVITE_LINK = process.env.DISCORD_INVITE_LINK;
+const DISCORD_BOT_PERMISSIONS = '36703232';
 
 export interface DiscordMessage {
   content?: string;
@@ -46,6 +47,11 @@ export class DiscordService {
    */
   async sendMessage(message: DiscordMessage): Promise<boolean> {
     try {
+      if (!DISCORD_WEBHOOK_URL) {
+        console.warn('[DiscordService] DISCORD_WEBHOOK_URL is not configured');
+        return false;
+      }
+
       const response = await fetch(DISCORD_WEBHOOK_URL, {
         method: 'POST',
         headers: {
@@ -112,9 +118,13 @@ export class DiscordService {
    * Get Discord invite link
    */
   getInviteLink(): string {
-    return DISCORD_INVITE_LINK;
+    if (process.env.DISCORD_CLIENT_ID) {
+      const scopes = encodeURIComponent('bot applications.commands');
+      return `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=${DISCORD_BOT_PERMISSIONS}&scope=${scopes}`;
+    }
+
+    return DISCORD_INVITE_LINK || '';
   }
 }
 
 export const discordService = DiscordService.getInstance();
-

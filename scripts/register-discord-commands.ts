@@ -7,10 +7,10 @@
  * Run with: npx tsx scripts/register-discord-commands.ts
  */
 
-import { REST, Routes } from 'discord.js';
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { discordApplicationCommands, registerDiscordApplicationCommands } from '../server/services/DiscordCommandRegistry';
 
 // Load .env file if it exists
 const __filename = fileURLToPath(import.meta.url);
@@ -37,59 +37,6 @@ if (!DISCORD_CLIENT_ID) {
   process.exit(1);
 }
 
-const commands = [
-  {
-    name: 'help',
-    description: 'Show help and available commands for Elon AI Assistant',
-  },
-  {
-    name: 'projects',
-    description: 'List your projects on the platform',
-  },
-  {
-    name: 'status',
-    description: 'Check system status and bot connection',
-  },
-  {
-    name: 'play',
-    description: 'Play music from a song name, Spotify link, or YouTube link',
-    options: [
-      {
-        name: 'query',
-        description: 'Song name, Spotify link, or YouTube link',
-        type: 3,
-        required: true,
-      },
-    ],
-  },
-  {
-    name: 'skip',
-    description: 'Skip the currently playing song',
-  },
-  {
-    name: 'stop',
-    description: 'Stop music and leave the voice channel',
-  },
-  {
-    name: 'pause',
-    description: 'Pause the current song',
-  },
-  {
-    name: 'resume',
-    description: 'Resume the paused song',
-  },
-  {
-    name: 'queue',
-    description: 'Show the music queue',
-  },
-  {
-    name: 'nowplaying',
-    description: 'Show the currently playing song',
-  },
-];
-
-const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
-
 (async () => {
   try {
     console.log('🔄 Registering slash commands with Discord...');
@@ -97,15 +44,13 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
     if (DISCORD_GUILD_ID) {
       console.log(`   Guild ID: ${DISCORD_GUILD_ID}`);
     }
-    console.log(`   Commands: ${commands.map(c => c.name).join(', ')}`);
+    console.log(`   Commands: ${discordApplicationCommands.map(c => c.name).join(', ')}`);
 
-    // Guild commands show up immediately. Global commands can take several minutes to appear.
-    const data = await rest.put(
-      DISCORD_GUILD_ID
-        ? Routes.applicationGuildCommands(DISCORD_CLIENT_ID, DISCORD_GUILD_ID)
-        : Routes.applicationCommands(DISCORD_CLIENT_ID),
-      { body: commands }
-    ) as any[];
+    const data = await registerDiscordApplicationCommands({
+      botToken: DISCORD_BOT_TOKEN,
+      clientId: DISCORD_CLIENT_ID,
+      guildId: DISCORD_GUILD_ID,
+    });
 
     console.log(`✅ Successfully registered ${data.length} slash command(s)!`);
     console.log('\n📋 Registered commands:');
