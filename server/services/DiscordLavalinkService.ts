@@ -44,6 +44,8 @@ export class DiscordLavalinkService {
       return;
     }
 
+    logger.info(`Initializing Lavalink node ${node.id} at ${node.secure ? 'wss' : 'ws'}://${node.host}:${node.port}`);
+
     this.manager = new LavalinkManager({
       nodes: [node],
       sendToShard: (guildId, payload) => {
@@ -52,7 +54,7 @@ export class DiscordLavalinkService {
       },
       autoSkip: true,
       client: {
-        id: process.env.DISCORD_CLIENT_ID || client.user.id,
+        id: client.user.id,
         username: client.user.username,
       },
       playerOptions: {
@@ -70,7 +72,7 @@ export class DiscordLavalinkService {
 
     this.attachEvents();
     await this.manager.init({
-      id: process.env.DISCORD_CLIENT_ID || client.user.id,
+      id: client.user.id,
       username: client.user.username,
     });
     this.initializedClientId = client.user.id;
@@ -223,24 +225,27 @@ export class DiscordLavalinkService {
   }
 
   private getNodeConfig(): any | null {
-    const url = process.env.LAVALINK_URL || process.env.LAVALINK_HOST;
+    const rawHost = process.env.LAVALINK_URL || process.env.LAVALINK_HOST;
     const password = process.env.LAVALINK_PASSWORD || process.env.LAVALINK_AUTHORIZATION || 'youshallnotpass';
-    if (!url) return null;
+    if (!rawHost) return null;
 
-    if (/^https?:\/\//i.test(url)) {
-      const parsed = new URL(url);
+    const value = rawHost.trim();
+    if (!value) return null;
+
+    if (/^https?:\/\//i.test(value)) {
+      const parsed = new URL(value);
       return {
-  id: process.env.LAVALINK_NODE_ID || 'Main Node',
-  host: url,
-  port: Number(process.env.LAVALINK_PORT || 443), // Tvingar till 443 för Railway
-  authorization: password,
-  secure: true // ◄ Ändra från getBooleanEnv till bara ordet true
-};
+        id: process.env.LAVALINK_NODE_ID || 'Main Node',
+        host: parsed.hostname,
+        port: Number(process.env.LAVALINK_PORT || parsed.port || (parsed.protocol === 'https:' ? 443 : 80)),
+        authorization: password,
+        secure: parsed.protocol === 'https:',
+      };
     }
 
     return {
       id: process.env.LAVALINK_NODE_ID || 'Main Node',
-      host: url,
+      host: value.replace(/\/+$/, ''),
       port: Number(process.env.LAVALINK_PORT || 2333),
       authorization: password,
       secure: this.getBooleanEnv(process.env.LAVALINK_SECURE),

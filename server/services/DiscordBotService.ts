@@ -134,7 +134,11 @@ export class DiscordBotService {
       }
 
       await this.registerSlashCommands(readyClient);
-      await discordLavalinkService.initialize(readyClient);
+      try {
+        await discordLavalinkService.initialize(readyClient);
+      } catch (error) {
+        logger.error('Failed to initialize Lavalink on Discord ready', error as Error);
+      }
     });
 
     this.client.on(Events.Raw, (data) => {
