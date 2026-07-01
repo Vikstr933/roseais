@@ -808,7 +808,26 @@ Generate ONLY the status message, nothing else.`
   }
 
   async handleMusicInteraction(interaction: any, command: ParsedMusicCommand): Promise<void> {
+    if (!this.isBotConnected()) {
+      logger.warn('Discord bot is not connected for music interaction; attempting env reconnect');
+      await this.connectFromEnvironment();
+    }
+
     await discordMusicService.handleInteractionCommand(this.client, interaction, command);
+  }
+
+  private async connectFromEnvironment(): Promise<boolean> {
+    if (this.isBotConnected()) {
+      return true;
+    }
+
+    const envConfig = DiscordBotService.loadConfigFromEnvironment();
+    if (!envConfig) {
+      logger.warn('Cannot auto-connect Discord bot: DISCORD_BOT_TOKEN is not configured');
+      return false;
+    }
+
+    return this.connect(envConfig);
   }
 
   /**
@@ -1373,6 +1392,20 @@ Generate ONLY the status message, nothing else.`
     }
   }
 
+  private static loadConfigFromEnvironment(): DiscordBotConfig | null {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    if (!botToken) {
+      return null;
+    }
+
+    return {
+      botToken,
+      channelId: process.env.DISCORD_CHANNEL_ID,
+      serverId: process.env.DISCORD_GUILD_ID || process.env.DISCORD_SERVER_ID,
+      userId: 'environment',
+    };
+  }
+
   /**
    * Auto-connect all active Discord bots on startup
    * This ensures bots stay online even after server restarts
@@ -1381,9 +1414,18 @@ Generate ONLY the status message, nothing else.`
     try {
       logger.info('Auto-connecting Discord bots on startup...');
       const configs = await DiscordBotService.loadAllActiveConfigs();
+      const envConfig = DiscordBotService.loadConfigFromEnvironment();
+
+      if (configs.length === 0 && envConfig) {
+        logger.info('No active Discord bot configuration found in database; using DISCORD_BOT_TOKEN from environment');
+        configs.push({
+          userId: envConfig.userId || 'environment',
+          config: envConfig,
+        });
+      }
 
       if (configs.length === 0) {
-        logger.info('No active Discord bot configurations found');
+        logger.info('No active Discord bot configurations found in database or environment');
         return;
       }
 

@@ -106,6 +106,10 @@ export class DiscordMusicService {
   ): Promise<void> {
     if (!client) {
       logger.warn('Discord client unavailable for music interaction');
+      await this.updateInteractionResponse(
+        interaction,
+        'Elon är inte inloggad i Discord just nu. Starta om backend eller kontrollera DISCORD_BOT_TOKEN.'
+      );
       return;
     }
 
