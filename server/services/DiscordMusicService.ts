@@ -1,5 +1,6 @@
 import { Message, TextChannel, VoiceBasedChannel, Client } from 'discord.js';
 import { SimpleLogger } from '../utils/SimpleLogger';
+import { discordLavalinkService } from './DiscordLavalinkService';
 
 const logger = new SimpleLogger('DiscordMusicService');
 
@@ -75,6 +76,22 @@ export class DiscordMusicService {
             return;
           }
 
+          if (discordLavalinkService.isConfigured()) {
+            const result = await discordLavalinkService.play({
+              client: message.client,
+              guildId: message.guild.id,
+              voiceChannel,
+              textChannelId: message.channel.id,
+              requestedBy: {
+                id: message.author.id,
+                username: message.author.username,
+              },
+              query: command.query || '',
+            });
+            await message.reply(result);
+            return;
+          }
+
           const result = await this.enqueue({
             guildId: message.guild.id,
             voiceChannel,
@@ -85,23 +102,31 @@ export class DiscordMusicService {
           await message.reply(result);
           return;
         }
-        case 'skip':
-          await message.reply(await this.skip(message.guild.id));
+        case 'skip': {
+          const lavalinkResult = await discordLavalinkService.skip(message.guild.id);
+          await message.reply(lavalinkResult || await this.skip(message.guild.id));
           return;
-        case 'stop':
-          await message.reply(await this.stop(message.guild.id));
+        }
+        case 'stop': {
+          const lavalinkResult = await discordLavalinkService.stop(message.guild.id);
+          await message.reply(lavalinkResult || await this.stop(message.guild.id));
           return;
-        case 'pause':
-          await message.reply(await this.pause(message.guild.id));
+        }
+        case 'pause': {
+          const lavalinkResult = await discordLavalinkService.pause(message.guild.id);
+          await message.reply(lavalinkResult || await this.pause(message.guild.id));
           return;
-        case 'resume':
-          await message.reply(await this.resume(message.guild.id));
+        }
+        case 'resume': {
+          const lavalinkResult = await discordLavalinkService.resume(message.guild.id);
+          await message.reply(lavalinkResult || await this.resume(message.guild.id));
           return;
+        }
         case 'queue':
-          await message.reply(this.getQueueMessage(message.guild.id));
+          await message.reply(discordLavalinkService.getQueueMessage(message.guild.id) || this.getQueueMessage(message.guild.id));
           return;
         case 'nowplaying':
-          await message.reply(this.getNowPlayingMessage(message.guild.id));
+          await message.reply(discordLavalinkService.getNowPlayingMessage(message.guild.id) || this.getNowPlayingMessage(message.guild.id));
           return;
       }
     } catch (error) {
@@ -144,6 +169,22 @@ export class DiscordMusicService {
             return;
           }
 
+          if (discordLavalinkService.isConfigured()) {
+            const result = await discordLavalinkService.play({
+              client,
+              guildId,
+              voiceChannel,
+              textChannelId,
+              requestedBy: {
+                id: member.user.id,
+                username: member.user.username,
+              },
+              query: command.query || '',
+            });
+            await this.updateInteractionResponse(interaction, result);
+            return;
+          }
+
           const result = await this.enqueue({
             guildId,
             voiceChannel,
@@ -155,22 +196,22 @@ export class DiscordMusicService {
           return;
         }
         case 'skip':
-          await this.updateInteractionResponse(interaction, await this.skip(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.skip(guildId) || await this.skip(guildId));
           return;
         case 'stop':
-          await this.updateInteractionResponse(interaction, await this.stop(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.stop(guildId) || await this.stop(guildId));
           return;
         case 'pause':
-          await this.updateInteractionResponse(interaction, await this.pause(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.pause(guildId) || await this.pause(guildId));
           return;
         case 'resume':
-          await this.updateInteractionResponse(interaction, await this.resume(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.resume(guildId) || await this.resume(guildId));
           return;
         case 'queue':
-          await this.updateInteractionResponse(interaction, this.getQueueMessage(guildId));
+          await this.updateInteractionResponse(interaction, discordLavalinkService.getQueueMessage(guildId) || this.getQueueMessage(guildId));
           return;
         case 'nowplaying':
-          await this.updateInteractionResponse(interaction, this.getNowPlayingMessage(guildId));
+          await this.updateInteractionResponse(interaction, discordLavalinkService.getNowPlayingMessage(guildId) || this.getNowPlayingMessage(guildId));
           return;
       }
     } catch (error) {
@@ -197,6 +238,11 @@ export class DiscordMusicService {
     }
 
     try {
+      const lavalinkChoices = await discordLavalinkService.autocomplete(trimmed);
+      if (lavalinkChoices.length > 0) {
+        return lavalinkChoices;
+      }
+
       const results = await this.searchYouTubeResults(trimmed, 10);
 
       return (results || [])

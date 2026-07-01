@@ -14,6 +14,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { Anthropic } from '@anthropic-ai/sdk';
 import { discordMusicService, ParsedMusicCommand } from './DiscordMusicService';
 import { registerDiscordApplicationCommands } from './DiscordCommandRegistry';
+import { discordLavalinkService } from './DiscordLavalinkService';
 
 const logger = new SimpleLogger('DiscordBotService');
 
@@ -133,6 +134,11 @@ export class DiscordBotService {
       }
 
       await this.registerSlashCommands(readyClient);
+      await discordLavalinkService.initialize(readyClient);
+    });
+
+    this.client.on(Events.Raw, (data) => {
+      void discordLavalinkService.sendRawData(data);
     });
 
     // Message handler
