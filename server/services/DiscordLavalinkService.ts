@@ -230,12 +230,12 @@ export class DiscordLavalinkService {
     if (/^https?:\/\//i.test(url)) {
       const parsed = new URL(url);
       return {
-        id: process.env.LAVALINK_NODE_ID || 'Main Node',
-        host: parsed.hostname,
-        port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80)),
-        authorization: password,
-        secure: parsed.protocol === 'https:',
-      };
+  id: process.env.LAVALINK_NODE_ID || 'Main Node',
+  host: url,
+  port: Number(process.env.LAVALINK_PORT || 443), // Tvingar till 443 för Railway
+  authorization: password,
+  secure: true // ◄ Ändra från getBooleanEnv till bara ordet true
+};
     }
 
     return {
