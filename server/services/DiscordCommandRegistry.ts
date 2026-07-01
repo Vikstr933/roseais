@@ -25,6 +25,7 @@ export const discordApplicationCommands = [
         description: 'Song name, Spotify link, or YouTube link',
         type: 3,
         required: true,
+        autocomplete: true,
       },
     ],
   },

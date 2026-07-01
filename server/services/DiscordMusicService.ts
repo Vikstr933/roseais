@@ -10,6 +10,11 @@ export interface ParsedMusicCommand {
   query?: string;
 }
 
+export interface MusicAutocompleteChoice {
+  name: string;
+  value: string;
+}
+
 interface MusicTrack {
   title: string;
   url: string;
@@ -174,6 +179,52 @@ export class DiscordMusicService {
     }
   }
 
+  async getAutocompleteChoices(query: string): Promise<MusicAutocompleteChoice[]> {
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 3) {
+      return [];
+    }
+
+    if (this.isPlayableHttpUrl(trimmed)) {
+      if (trimmed.length > 100) {
+        return [];
+      }
+
+      return [{
+        name: this.truncateChoiceText(`Använd länk: ${trimmed}`, 100),
+        value: trimmed,
+      }];
+    }
+
+    try {
+      const play = await this.loadPlayPackage();
+      const results = await play.search(trimmed, { limit: 5, source: { youtube: 'video' } });
+
+      return (results || [])
+        .map((result: any) => {
+          const url = this.getPlayableYouTubeUrl(result);
+          if (!url) return null;
+
+          const title = result.title || trimmed;
+          const duration = result.durationRaw ? ` (${result.durationRaw})` : '';
+          return {
+            name: this.truncateChoiceText(`${title}${duration}`, 100),
+            value: this.truncateChoiceText(url, 100),
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 5) as MusicAutocompleteChoice[];
+    } catch (error) {
+      if (this.isYouTubeRateLimitError(error)) {
+        logger.warn('YouTube autocomplete was rate limited', error as Error);
+        return [];
+      }
+
+      logger.warn('Failed to build music autocomplete choices', error as Error);
+      return [];
+    }
+  }
+
   private async updateInteractionResponse(interaction: any, content: string): Promise<void> {
     const applicationId = interaction.application_id;
     const token = interaction.token;
@@ -304,6 +355,9 @@ export class DiscordMusicService {
     try {
       const voice = await this.loadVoicePackage();
       const play = await this.loadPlayPackage();
+      if (!this.isPlayableHttpUrl(next.url)) {
+        throw new Error(`Ogiltig ljudkälla för "${next.title}".`);
+      }
       const streamInfo = await play.stream(next.url);
       const resource = voice.createAudioResource(streamInfo.stream, {
         inputType: streamInfo.type,
@@ -334,12 +388,30 @@ export class DiscordMusicService {
     if (this.isUrl(trimmed)) {
       const type = await play.validate(trimmed);
       if (type === 'yt_video') {
-        const info = await play.video_info(trimmed);
+        let info: any;
+        try {
+          info = await play.video_info(trimmed);
+        } catch (error) {
+          if (this.isYouTubeRateLimitError(error)) {
+            throw new Error(this.getYouTubeRateLimitMessage());
+          }
+          throw error;
+        }
         const details = info.video_details;
+        const playableUrl = this.isPlayableHttpUrl(details?.url) ? details.url : trimmed;
         return {
           title: details.title || trimmed,
-          url: details.url || trimmed,
+          url: playableUrl,
           duration: details.durationRaw,
+          requestedBy,
+          sourceQuery: trimmed,
+        };
+      }
+
+      if (this.isYouTubeUrl(trimmed)) {
+        return {
+          title: trimmed,
+          url: trimmed,
           requestedBy,
           sourceQuery: trimmed,
         };
@@ -400,19 +472,36 @@ export class DiscordMusicService {
       }
       throw error;
     }
-    const first = results?.[0];
+    const first = results?.find((result) => this.getPlayableYouTubeUrl(result));
+    const url = this.getPlayableYouTubeUrl(first);
 
-    if (!first?.url) {
+    if (!first || !url) {
       throw new Error(`Hittade ingen spelbar låt för "${query}".`);
     }
 
     return {
       title: first.title || query,
-      url: first.url,
+      url,
       duration: first.durationRaw,
       requestedBy,
       sourceQuery,
     };
+  }
+
+  private getPlayableYouTubeUrl(result: any): string | null {
+    if (!result) return null;
+
+    const directUrl = typeof result.url === 'string' ? result.url.trim() : '';
+    if (this.isPlayableHttpUrl(directUrl)) {
+      return directUrl;
+    }
+
+    const id = typeof result.id === 'string' ? result.id.trim() : '';
+    if (/^[a-zA-Z0-9_-]{11}$/.test(id)) {
+      return `https://www.youtube.com/watch?v=${id}`;
+    }
+
+    return null;
   }
 
   private async skip(guildId: string): Promise<string> {
@@ -539,10 +628,37 @@ export class DiscordMusicService {
       .filter(Boolean);
   }
 
+  private truncateChoiceText(value: string, maxLength: number): string {
+    if (value.length <= maxLength) return value;
+    return value.slice(0, maxLength - 1).trimEnd();
+  }
+
   private isUrl(value: string): boolean {
     try {
       new URL(value);
       return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private isPlayableHttpUrl(value: string | undefined | null): value is string {
+    if (!value || value === 'undefined' || value === 'null') {
+      return false;
+    }
+
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  private isYouTubeUrl(value: string): boolean {
+    try {
+      const host = new URL(value).hostname.toLowerCase();
+      return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
     } catch {
       return false;
     }

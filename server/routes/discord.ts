@@ -13,6 +13,7 @@ import { db, pool } from '../../db';
 import { userCredentials, discordUserMappings, oauthStates } from '../../db/schema-pg';
 import { eq, and, sql } from 'drizzle-orm';
 import { getCredentialVault } from '../services/CredentialVault';
+import { discordMusicService } from '../services/DiscordMusicService';
 import crypto from 'crypto';
 
 const router = Router();
@@ -941,6 +942,30 @@ router.post('/interactions', express.raw({ type: 'application/json', limit: '10m
     // PING - Discord sends this to verify the endpoint
     if (interactionType === 1) {
       return res.json({ type: 1 }); // PONG
+    }
+
+    // APPLICATION_COMMAND_AUTOCOMPLETE - Discord requests dropdown choices while typing
+    if (interactionType === 4) {
+      const commandName = interaction.data?.name;
+      if (commandName === 'play') {
+        const focusedOption = interaction.data?.options?.find((option: any) => option.focused);
+        const query = String(focusedOption?.value || '').trim();
+        const choices = await discordMusicService.getAutocompleteChoices(query);
+
+        return res.json({
+          type: 8,
+          data: {
+            choices,
+          },
+        });
+      }
+
+      return res.json({
+        type: 8,
+        data: {
+          choices: [],
+        },
+      });
     }
 
     // APPLICATION_COMMAND - Slash command
