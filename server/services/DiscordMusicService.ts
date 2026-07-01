@@ -197,8 +197,7 @@ export class DiscordMusicService {
     }
 
     try {
-      const play = await this.loadPlayPackage();
-      const results = await play.search(trimmed, { limit: 5, source: { youtube: 'video' } });
+      const results = await this.searchYouTubeResults(trimmed, 10);
 
       return (results || [])
         .map((result: any) => {
@@ -462,16 +461,7 @@ export class DiscordMusicService {
   }
 
   private async searchYouTube(query: string, requestedBy: string, sourceQuery: string): Promise<MusicTrack> {
-    const play = await this.loadPlayPackage();
-    let results: any[];
-    try {
-      results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
-    } catch (error) {
-      if (this.isYouTubeRateLimitError(error)) {
-        throw new Error(this.getYouTubeRateLimitMessage());
-      }
-      throw error;
-    }
+    const results = await this.searchYouTubeResults(query, 10);
     const first = results?.find((result) => this.getPlayableYouTubeUrl(result));
     const url = this.getPlayableYouTubeUrl(first);
 
@@ -486,6 +476,97 @@ export class DiscordMusicService {
       requestedBy,
       sourceQuery,
     };
+  }
+
+  private async searchYouTubeResults(query: string, limit: number): Promise<any[]> {
+    const play = await this.loadPlayPackage();
+    const searchQueries = this.buildMusicSearchQueries(query);
+    const seen = new Set<string>();
+    const results: any[] = [];
+
+    for (const searchQuery of searchQueries) {
+      try {
+        const found = await play.search(searchQuery, {
+          limit,
+          source: { youtube: 'video' },
+        });
+
+        for (const result of found || []) {
+          const url = this.getPlayableYouTubeUrl(result);
+          if (!url) continue;
+
+          const key = result.id || url;
+          if (seen.has(key)) continue;
+
+          seen.add(key);
+          results.push(result);
+        }
+      } catch (error) {
+        if (this.isYouTubeRateLimitError(error)) {
+          throw new Error(this.getYouTubeRateLimitMessage());
+        }
+
+        logger.warn(`YouTube search failed for "${searchQuery}"`, error as Error);
+      }
+
+      if (results.length >= limit) {
+        break;
+      }
+    }
+
+    return results
+      .sort((a, b) => this.scoreMusicSearchResult(b, query) - this.scoreMusicSearchResult(a, query))
+      .slice(0, limit);
+  }
+
+  private buildMusicSearchQueries(query: string): string[] {
+    const normalized = query.replace(/\s+/g, ' ').trim();
+    const queries: string[] = [];
+    const dashMatch = normalized.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+
+    if (dashMatch) {
+      const artist = dashMatch[1].trim();
+      const title = dashMatch[2].trim();
+      queries.push(`${artist} ${title} låt official audio`);
+      queries.push(`${artist} ${title} song`);
+    } else {
+      queries.push(`${normalized} låt official audio`);
+      queries.push(`${normalized} song`);
+    }
+
+    queries.push(normalized);
+
+    return Array.from(new Set(queries.filter(Boolean)));
+  }
+
+  private scoreMusicSearchResult(result: any, query: string): number {
+    const title = String(result?.title || '').toLowerCase();
+    const channel = String(result?.channel?.name || result?.channel?.title || '').toLowerCase();
+    const combined = `${title} ${channel}`;
+    const normalizedQuery = query.toLowerCase().replace(/\s+/g, ' ').trim();
+    const queryParts = this.getSearchTokens(normalizedQuery);
+    let score = 0;
+
+    for (const token of queryParts) {
+      if (combined.includes(token)) score += 8;
+      if (title.includes(token)) score += 4;
+    }
+
+    if (title.includes(normalizedQuery.replace(/\s*[-–—]\s*/g, ' '))) score += 20;
+    if (/\bofficial\b|\baudio\b|\blyrics?\b|\bmusic video\b|\btopic\b|\bprovided to youtube\b/i.test(combined)) score += 12;
+    if (/\bassembly\b|\breview\b|\btutorial\b|\bunboxing\b|\bmanual\b|\bhow to\b|\binstallation\b|\bguide\b|\bbaby\b|\bstroller\b|\b4\s*in\s*1\b|\beng\b/i.test(combined)) score -= 40;
+    if (result?.durationInSec && result.durationInSec > 45 && result.durationInSec < 900) score += 8;
+    if (result?.live || result?.upcoming) score -= 20;
+
+    return score;
+  }
+
+  private getSearchTokens(value: string): string[] {
+    return value
+      .replace(/[-–—]/g, ' ')
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 2 && !['the', 'and', 'official', 'audio', 'song', 'låt'].includes(token));
   }
 
   private getPlayableYouTubeUrl(result: any): string | null {
