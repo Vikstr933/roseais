@@ -29,6 +29,12 @@ interface GuildMusicState {
 
 export class DiscordMusicService {
   private states = new Map<string, GuildMusicState>();
+  private playTokensConfigured = false;
+  private unhandledRejectionHandlerInstalled = false;
+
+  constructor() {
+    this.installUnhandledRejectionHandler();
+  }
 
   parseMusicCommand(content: string): ParsedMusicCommand | null {
     const normalized = content.trim();
@@ -212,7 +218,10 @@ export class DiscordMusicService {
     state.queue.push(track);
 
     if (!state.current) {
-      await this.playNext(params.guildId);
+      const started = await this.playNext(params.guildId);
+      if (!started) {
+        throw new Error('Kunde inte starta låten.');
+      }
       return `🎶 Spelar nu: **${track.title}**`;
     }
 
@@ -250,13 +259,17 @@ export class DiscordMusicService {
 
     player.on(voice.AudioPlayerStatus.Idle, () => {
       state.current = undefined;
-      void this.playNext(guildId);
+      void this.playNext(guildId).catch((error) => {
+        logger.error('Failed to continue Discord music queue after idle', error as Error);
+      });
     });
 
     player.on('error', (error: Error) => {
       logger.error('Discord audio player error', error);
       state.current = undefined;
-      void this.playNext(guildId);
+      void this.playNext(guildId).catch((queueError) => {
+        logger.error('Failed to continue Discord music queue after player error', queueError as Error);
+      });
     });
 
     connection.on(voice.VoiceConnectionStatus.Disconnected, async () => {
@@ -273,9 +286,9 @@ export class DiscordMusicService {
     return state;
   }
 
-  private async playNext(guildId: string): Promise<void> {
+  private async playNext(guildId: string): Promise<boolean> {
     const state = this.states.get(guildId);
-    if (!state) return;
+    if (!state) return false;
 
     if (state.idleTimer) {
       clearTimeout(state.idleTimer);
@@ -285,7 +298,7 @@ export class DiscordMusicService {
     const next = state.queue.shift();
     if (!next) {
       state.idleTimer = setTimeout(() => this.destroyState(guildId), 120_000);
-      return;
+      return false;
     }
 
     try {
@@ -298,10 +311,14 @@ export class DiscordMusicService {
 
       state.current = next;
       state.player.play(resource);
+      return true;
     } catch (error) {
       logger.error(`Failed to play track ${next.title}`, error as Error);
       state.current = undefined;
-      await this.playNext(guildId);
+      if (this.isYouTubeRateLimitError(error)) {
+        throw new Error(this.getYouTubeRateLimitMessage());
+      }
+      return this.playNext(guildId);
     }
   }
 
@@ -374,7 +391,15 @@ export class DiscordMusicService {
 
   private async searchYouTube(query: string, requestedBy: string, sourceQuery: string): Promise<MusicTrack> {
     const play = await this.loadPlayPackage();
-    const results = await play.search(query, { limit: 1 });
+    let results: any[];
+    try {
+      results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
+    } catch (error) {
+      if (this.isYouTubeRateLimitError(error)) {
+        throw new Error(this.getYouTubeRateLimitMessage());
+      }
+      throw error;
+    }
     const first = results?.[0];
 
     if (!first?.url) {
@@ -466,10 +491,52 @@ export class DiscordMusicService {
     try {
       const packageName = 'play-dl';
       const mod = await import(packageName);
-      return mod.default || mod;
+      const play = mod.default || mod;
+      await this.configurePlayPackage(play);
+      return play;
     } catch {
       throw new Error('Music extractor saknas. Kör: npm install play-dl');
     }
+  }
+
+  private async configurePlayPackage(play: any): Promise<void> {
+    if (this.playTokensConfigured || typeof play?.setToken !== 'function') {
+      return;
+    }
+
+    const youtubeCookie =
+      process.env.PLAY_DL_YOUTUBE_COOKIE ||
+      process.env.YOUTUBE_COOKIE ||
+      process.env.YOUTUBE_COOKIES;
+    const userAgents = this.getConfiguredUserAgents();
+    const tokens: any = {
+      useragent: userAgents.length > 0 ? userAgents : [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+      ],
+    };
+
+    if (youtubeCookie?.trim()) {
+      tokens.youtube = { cookie: youtubeCookie.trim() };
+    }
+
+    try {
+      await play.setToken(tokens);
+      this.playTokensConfigured = true;
+      logger.info(`Configured play-dl YouTube tokens${tokens.youtube ? ' with cookie' : ' with user-agent fallback'}`);
+    } catch (error) {
+      this.playTokensConfigured = true;
+      logger.warn('Failed to configure play-dl tokens', error as Error);
+    }
+  }
+
+  private getConfiguredUserAgents(): string[] {
+    const raw = process.env.PLAY_DL_USER_AGENTS || process.env.YOUTUBE_USER_AGENTS || process.env.YOUTUBE_USER_AGENT;
+    if (!raw) return [];
+    return raw
+      .split(/\r?\n|\|/)
+      .map((value) => value.trim())
+      .filter(Boolean);
   }
 
   private isUrl(value: string): boolean {
@@ -486,8 +553,33 @@ export class DiscordMusicService {
   }
 
   private formatMusicError(error: unknown): string {
+    if (this.isYouTubeRateLimitError(error)) {
+      return `❌ ${this.getYouTubeRateLimitMessage()}`;
+    }
     const message = error instanceof Error ? error.message : String(error);
     return `❌ Kunde inte spela musiken: ${message}`;
+  }
+
+  private isYouTubeRateLimitError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /\b429\b|too many requests|rate.?limit/i.test(message);
+  }
+
+  private getYouTubeRateLimitMessage(): string {
+    return 'YouTube rate-limitade servern (429), så jag kunde inte hämta ljudet. Lägg till PLAY_DL_YOUTUBE_COOKIE eller YOUTUBE_COOKIE i backendens env, eller testa igen om en stund.';
+  }
+
+  private installUnhandledRejectionHandler(): void {
+    if (this.unhandledRejectionHandlerInstalled) return;
+    this.unhandledRejectionHandlerInstalled = true;
+
+    process.on('unhandledRejection', (reason) => {
+      if (this.isYouTubeRateLimitError(reason)) {
+        logger.warn(`Suppressed play-dl YouTube rate limit rejection: ${reason instanceof Error ? reason.message : String(reason)}`);
+        return;
+      }
+      logger.error('Unhandled promise rejection in Discord music service', reason instanceof Error ? reason : new Error(String(reason)));
+    });
   }
 }
 
