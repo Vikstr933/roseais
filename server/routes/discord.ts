@@ -1138,6 +1138,11 @@ router.post('/interactions', express.raw({ type: 'application/json', limit: '10m
 
       // Handle button clicks
       if (componentType === 2) { // BUTTON
+        if (discordMusicService.isMusicControlCustomId(customId)) {
+          void discordBotService.handleMusicControlInteraction(interaction);
+          return res.json({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+        }
+
         switch (customId) {
           case 'deploy_project':
             return res.json({

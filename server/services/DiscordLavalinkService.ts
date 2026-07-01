@@ -110,11 +110,10 @@ export class DiscordLavalinkService {
 
     await player.connect();
 
-    const result = await player.search(this.buildSearchQuery(query), params.requestedBy, false);
-    const tracks = (result?.tracks || []).filter((track: any) => this.isPlayableTrack(track));
+    const { tracks, lastResult } = await this.searchPlayableTracks(player, query, params.requestedBy);
 
     if (tracks.length === 0) {
-      throw new Error(`Lavalink hittade ingen spelbar låt för "${query}". Testa en direkt Spotify-/YouTube-länk eller välj i dropdownen.`);
+      throw new Error(this.getNoPlayableTrackMessage(query, lastResult));
     }
 
     const track = this.pickBestTrack(tracks, query);
@@ -157,7 +156,7 @@ export class DiscordLavalinkService {
         .slice(0, 5)
         .map((track: any) => ({
           name: this.truncate(`${track.info.title}${track.info.author ? ` - ${track.info.author}` : ''}`, 100),
-          value: this.truncate(track.info.uri || track.info.title, 100),
+          value: this.truncate(this.getAutocompleteValue(track), 100),
         }))
         .filter((choice: LavalinkSearchChoice) => Boolean(choice.value));
     } catch (error) {
@@ -283,12 +282,150 @@ export class DiscordLavalinkService {
     };
   }
 
+  private async searchPlayableTracks(
+    player: any,
+    query: string,
+    requester: LavalinkPlayParams['requestedBy']
+  ): Promise<{ tracks: any[]; lastResult: any | null }> {
+    const candidates = await this.buildSearchCandidates(query);
+    let lastResult: any | null = null;
+
+    for (const candidate of candidates) {
+      try {
+        const result = await player.search(candidate, requester, false);
+        lastResult = result;
+        const tracks = (result?.tracks || []).filter((track: any) => this.isPlayableTrack(track));
+
+        if (tracks.length > 0) {
+          return { tracks, lastResult };
+        }
+
+        this.logEmptySearchResult(query, candidate, result);
+      } catch (error) {
+        logger.warn(`Lavalink search failed for ${this.describeSearchCandidate(candidate)}`, error as Error);
+      }
+    }
+
+    return { tracks: [], lastResult };
+  }
+
+  private async buildSearchCandidates(query: string): Promise<any[]> {
+    const candidates = [this.buildSearchQuery(query)];
+
+    if (this.isYouTubeUrl(query)) {
+      const oEmbedQuery = await this.getYouTubeOEmbedSearchQuery(query);
+      if (oEmbedQuery) {
+        candidates.push({
+          query: oEmbedQuery,
+          source: this.getDefaultSearchSource() as any,
+        });
+      }
+
+      const videoId = this.extractYouTubeVideoId(query);
+      if (videoId) {
+        candidates.push({
+          query: videoId,
+          source: this.getDefaultSearchSource() as any,
+        });
+      }
+    }
+
+    const seen = new Set<string>();
+    return candidates.filter((candidate) => {
+      const key = JSON.stringify(candidate);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   private pickBestTrack(tracks: any[], query: string): any {
     return [...tracks].sort((a, b) => this.scoreTrack(b, query) - this.scoreTrack(a, query))[0];
   }
 
   private isPlayableTrack(track: any): boolean {
-    return Boolean(track?.encoded && track?.info?.title);
+    return Boolean((track?.encoded || track?.track) && track?.info?.title);
+  }
+
+  private getAutocompleteValue(track: any): string {
+    const title = String(track?.info?.title || '').trim();
+    const author = String(track?.info?.author || '').trim();
+    const source = String(track?.info?.sourceName || '').toLowerCase();
+
+    if (source === 'youtube' && title) {
+      return `${title}${author ? ` ${author}` : ''}`.trim();
+    }
+
+    return String(track?.info?.uri || title).trim();
+  }
+
+  private logEmptySearchResult(originalQuery: string, candidate: any, result: any): void {
+    const exception = result?.exception;
+    const message = exception?.message || exception?.cause || exception?.severity || '';
+    logger.warn(
+      `Lavalink returned no playable tracks for "${originalQuery}" via ${this.describeSearchCandidate(candidate)} ` +
+      `(loadType=${result?.loadType || 'unknown'}${message ? `, message=${message}` : ''})`
+    );
+  }
+
+  private getNoPlayableTrackMessage(query: string, result: any): string {
+    const exceptionText = `${result?.exception?.message || ''} ${result?.exception?.cause || ''}`.toLowerCase();
+    if (exceptionText.includes('requires login') || exceptionText.includes('login')) {
+      return `YouTube kräver inloggning för den länken. Testa att skriva artist + låtnamn i stället för direktlänk, eller välj en annan version i dropdownen.`;
+    }
+
+    return `Lavalink hittade ingen spelbar låt för "${query}". Testa artist + låtnamn, Spotify-länk eller välj i dropdownen.`;
+  }
+
+  private async getYouTubeOEmbedSearchQuery(url: string): Promise<string | null> {
+    try {
+      const response = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`);
+      if (!response.ok) return null;
+
+      const data = await response.json() as { title?: string; author_name?: string };
+      const title = String(data.title || '').trim();
+      const author = String(data.author_name || '').trim();
+
+      if (!title) return null;
+      return `${title}${author ? ` ${author}` : ''}`.trim();
+    } catch (error) {
+      logger.warn('Failed to resolve YouTube oEmbed fallback search query', error as Error);
+      return null;
+    }
+  }
+
+  private extractYouTubeVideoId(value: string): string | null {
+    try {
+      const url = new URL(value);
+      if (url.hostname.includes('youtu.be')) {
+        const id = url.pathname.split('/').filter(Boolean)[0];
+        return this.isValidYouTubeVideoId(id) ? id : null;
+      }
+
+      const id = url.searchParams.get('v');
+      return this.isValidYouTubeVideoId(id) ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private isYouTubeUrl(value: string): boolean {
+    try {
+      const hostname = new URL(value).hostname.toLowerCase();
+      return hostname.includes('youtube.com') || hostname.includes('youtu.be');
+    } catch {
+      return false;
+    }
+  }
+
+  private isValidYouTubeVideoId(value: string | null | undefined): value is string {
+    return /^[a-zA-Z0-9_-]{11}$/.test(value || '');
+  }
+
+  private describeSearchCandidate(candidate: any): string {
+    if (typeof candidate === 'string') return candidate;
+    if (candidate?.source) return `${candidate.source}:${candidate.query}`;
+    return String(candidate?.query || 'unknown');
   }
 
   private scoreTrack(track: any, query: string): number {

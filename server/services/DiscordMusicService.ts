@@ -5,6 +5,7 @@ import { discordLavalinkService } from './DiscordLavalinkService';
 const logger = new SimpleLogger('DiscordMusicService');
 
 type MusicAction = 'play' | 'skip' | 'stop' | 'pause' | 'resume' | 'queue' | 'nowplaying';
+type MusicControlAction = Exclude<MusicAction, 'play'>;
 
 export interface ParsedMusicCommand {
   action: MusicAction;
@@ -37,6 +38,7 @@ export class DiscordMusicService {
   private states = new Map<string, GuildMusicState>();
   private playTokensConfigured = false;
   private unhandledRejectionHandlerInstalled = false;
+  private readonly controlCustomIdPrefix = 'music:';
 
   constructor() {
     this.installUnhandledRejectionHandler();
@@ -88,7 +90,7 @@ export class DiscordMusicService {
               },
               query: command.query || '',
             });
-            await message.reply(result);
+            await message.reply({ content: result, components: this.buildControlComponents() } as any);
             return;
           }
 
@@ -99,34 +101,34 @@ export class DiscordMusicService {
             requestedBy: message.author.username,
             query: command.query || '',
           });
-          await message.reply(result);
+          await message.reply({ content: result, components: this.buildControlComponents() } as any);
           return;
         }
         case 'skip': {
           const lavalinkResult = await discordLavalinkService.skip(message.guild.id);
-          await message.reply(lavalinkResult || await this.skip(message.guild.id));
+          await message.reply({ content: lavalinkResult || await this.skip(message.guild.id), components: this.buildControlComponents() } as any);
           return;
         }
         case 'stop': {
           const lavalinkResult = await discordLavalinkService.stop(message.guild.id);
-          await message.reply(lavalinkResult || await this.stop(message.guild.id));
+          await message.reply({ content: lavalinkResult || await this.stop(message.guild.id), components: this.buildControlComponents(true) } as any);
           return;
         }
         case 'pause': {
           const lavalinkResult = await discordLavalinkService.pause(message.guild.id);
-          await message.reply(lavalinkResult || await this.pause(message.guild.id));
+          await message.reply({ content: lavalinkResult || await this.pause(message.guild.id), components: this.buildControlComponents() } as any);
           return;
         }
         case 'resume': {
           const lavalinkResult = await discordLavalinkService.resume(message.guild.id);
-          await message.reply(lavalinkResult || await this.resume(message.guild.id));
+          await message.reply({ content: lavalinkResult || await this.resume(message.guild.id), components: this.buildControlComponents() } as any);
           return;
         }
         case 'queue':
-          await message.reply(discordLavalinkService.getQueueMessage(message.guild.id) || this.getQueueMessage(message.guild.id));
+          await message.reply({ content: discordLavalinkService.getQueueMessage(message.guild.id) || this.getQueueMessage(message.guild.id), components: this.buildControlComponents() } as any);
           return;
         case 'nowplaying':
-          await message.reply(discordLavalinkService.getNowPlayingMessage(message.guild.id) || this.getNowPlayingMessage(message.guild.id));
+          await message.reply({ content: discordLavalinkService.getNowPlayingMessage(message.guild.id) || this.getNowPlayingMessage(message.guild.id), components: this.buildControlComponents() } as any);
           return;
       }
     } catch (error) {
@@ -181,7 +183,7 @@ export class DiscordMusicService {
               },
               query: command.query || '',
             });
-            await this.updateInteractionResponse(interaction, result);
+            await this.updateInteractionResponse(interaction, result, this.buildControlComponents());
             return;
           }
 
@@ -192,31 +194,63 @@ export class DiscordMusicService {
             requestedBy: member.user.username,
             query: command.query || '',
           });
-          await this.updateInteractionResponse(interaction, result);
+          await this.updateInteractionResponse(interaction, result, this.buildControlComponents());
           return;
         }
         case 'skip':
-          await this.updateInteractionResponse(interaction, await discordLavalinkService.skip(guildId) || await this.skip(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.skip(guildId) || await this.skip(guildId), this.buildControlComponents());
           return;
         case 'stop':
-          await this.updateInteractionResponse(interaction, await discordLavalinkService.stop(guildId) || await this.stop(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.stop(guildId) || await this.stop(guildId), this.buildControlComponents(true));
           return;
         case 'pause':
-          await this.updateInteractionResponse(interaction, await discordLavalinkService.pause(guildId) || await this.pause(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.pause(guildId) || await this.pause(guildId), this.buildControlComponents());
           return;
         case 'resume':
-          await this.updateInteractionResponse(interaction, await discordLavalinkService.resume(guildId) || await this.resume(guildId));
+          await this.updateInteractionResponse(interaction, await discordLavalinkService.resume(guildId) || await this.resume(guildId), this.buildControlComponents());
           return;
         case 'queue':
-          await this.updateInteractionResponse(interaction, discordLavalinkService.getQueueMessage(guildId) || this.getQueueMessage(guildId));
+          await this.updateInteractionResponse(interaction, discordLavalinkService.getQueueMessage(guildId) || this.getQueueMessage(guildId), this.buildControlComponents());
           return;
         case 'nowplaying':
-          await this.updateInteractionResponse(interaction, discordLavalinkService.getNowPlayingMessage(guildId) || this.getNowPlayingMessage(guildId));
+          await this.updateInteractionResponse(interaction, discordLavalinkService.getNowPlayingMessage(guildId) || this.getNowPlayingMessage(guildId), this.buildControlComponents());
           return;
       }
     } catch (error) {
       logger.error('Music interaction failed', error as Error);
       await this.updateInteractionResponse(interaction, this.formatMusicError(error));
+    }
+  }
+
+  isMusicControlCustomId(customId: string | undefined): boolean {
+    return Boolean(customId?.startsWith(this.controlCustomIdPrefix));
+  }
+
+  async handleControlInteraction(client: Client | null, interaction: any): Promise<void> {
+    if (!client) {
+      await this.updateInteractionResponse(
+        interaction,
+        'Elon är inte inloggad i Discord just nu. Starta om backend eller kontrollera DISCORD_BOT_TOKEN.'
+      );
+      return;
+    }
+
+    const guildId = interaction.guild_id;
+    const customId = String(interaction.data?.custom_id || '');
+    const action = this.getControlAction(customId);
+
+    if (!guildId || !action) {
+      await this.updateInteractionResponse(interaction, 'Kunde inte läsa musikknappen.');
+      return;
+    }
+
+    try {
+      const result = await this.executeControlAction(guildId, action);
+      const disabled = action === 'stop';
+      await this.updateInteractionResponse(interaction, result, this.buildControlComponents(disabled));
+    } catch (error) {
+      logger.error('Music control interaction failed', error as Error);
+      await this.updateInteractionResponse(interaction, this.formatMusicError(error), this.buildControlComponents());
     }
   }
 
@@ -270,7 +304,7 @@ export class DiscordMusicService {
     }
   }
 
-  private async updateInteractionResponse(interaction: any, content: string): Promise<void> {
+  private async updateInteractionResponse(interaction: any, content: string, components?: any[]): Promise<void> {
     const applicationId = interaction.application_id;
     const token = interaction.token;
 
@@ -285,7 +319,10 @@ export class DiscordMusicService {
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({
+            content,
+            components: components || [],
+          }),
         }
       );
 
@@ -295,6 +332,70 @@ export class DiscordMusicService {
     } catch (error) {
       logger.error('Failed to update Discord interaction response', error as Error);
     }
+  }
+
+  private getControlAction(customId: string): MusicControlAction | null {
+    if (!customId.startsWith(this.controlCustomIdPrefix)) return null;
+    const action = customId.slice(this.controlCustomIdPrefix.length);
+    if (['skip', 'stop', 'pause', 'resume', 'queue', 'nowplaying'].includes(action)) {
+      return action as MusicControlAction;
+    }
+    return null;
+  }
+
+  private async executeControlAction(guildId: string, action: MusicControlAction): Promise<string> {
+    switch (action) {
+      case 'skip':
+        return await discordLavalinkService.skip(guildId) || await this.skip(guildId);
+      case 'stop':
+        return await discordLavalinkService.stop(guildId) || await this.stop(guildId);
+      case 'pause':
+        return await discordLavalinkService.pause(guildId) || await this.pause(guildId);
+      case 'resume':
+        return await discordLavalinkService.resume(guildId) || await this.resume(guildId);
+      case 'queue':
+        return discordLavalinkService.getQueueMessage(guildId) || this.getQueueMessage(guildId);
+      case 'nowplaying':
+        return discordLavalinkService.getNowPlayingMessage(guildId) || this.getNowPlayingMessage(guildId);
+    }
+  }
+
+  private buildControlComponents(disabled = false): any[] {
+    return [
+      {
+        type: 1,
+        components: [
+          this.buildControlButton('pause', 'Pause', '⏸️', 2, disabled),
+          this.buildControlButton('resume', 'Resume', '▶️', 3, disabled),
+          this.buildControlButton('skip', 'Skip', '⏭️', 1, disabled),
+          this.buildControlButton('stop', 'Stop', '⏹️', 4, disabled),
+        ],
+      },
+      {
+        type: 1,
+        components: [
+          this.buildControlButton('queue', 'Queue', '📜', 2, disabled),
+          this.buildControlButton('nowplaying', 'Now', '🎧', 2, disabled),
+        ],
+      },
+    ];
+  }
+
+  private buildControlButton(
+    action: MusicControlAction,
+    label: string,
+    emoji: string,
+    style: number,
+    disabled: boolean
+  ): any {
+    return {
+      type: 2,
+      style,
+      custom_id: `${this.controlCustomIdPrefix}${action}`,
+      label,
+      emoji: { name: emoji },
+      disabled,
+    };
   }
 
   private async enqueue(params: {

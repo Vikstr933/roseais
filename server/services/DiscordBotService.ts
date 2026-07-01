@@ -826,6 +826,15 @@ Generate ONLY the status message, nothing else.`
     await discordMusicService.handleInteractionCommand(this.client, interaction, command);
   }
 
+  async handleMusicControlInteraction(interaction: any): Promise<void> {
+    if (!this.isBotConnected()) {
+      logger.warn('Discord bot is not connected for music control interaction; attempting env reconnect');
+      await this.connectFromEnvironment();
+    }
+
+    await discordMusicService.handleControlInteraction(this.client, interaction);
+  }
+
   private async connectFromEnvironment(): Promise<boolean> {
     if (this.isBotConnected()) {
       return true;
