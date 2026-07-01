@@ -119,59 +119,75 @@ export class DiscordMusicService {
     }
 
     try {
-      const channel = await client.channels.fetch(textChannelId);
-      const textChannel = channel instanceof TextChannel ? channel : null;
-      if (!textChannel) return;
-
       switch (command.action) {
         case 'play': {
           const guild = await client.guilds.fetch(guildId);
           const member = await guild.members.fetch(userId);
           const voiceChannel = member.voice?.channel;
           if (!voiceChannel) {
-            await textChannel.send('Gå in i en voice channel först, så hoppar jag in där.');
+            await this.updateInteractionResponse(interaction, 'Gå in i en voice channel först, så hoppar jag in där.');
             return;
           }
 
           const result = await this.enqueue({
             guildId,
             voiceChannel,
-            textChannel,
+            textChannel: null,
             requestedBy: member.user.username,
             query: command.query || '',
           });
-          await textChannel.send(result);
+          await this.updateInteractionResponse(interaction, result);
           return;
         }
         case 'skip':
-          await textChannel.send(await this.skip(guildId));
+          await this.updateInteractionResponse(interaction, await this.skip(guildId));
           return;
         case 'stop':
-          await textChannel.send(await this.stop(guildId));
+          await this.updateInteractionResponse(interaction, await this.stop(guildId));
           return;
         case 'pause':
-          await textChannel.send(await this.pause(guildId));
+          await this.updateInteractionResponse(interaction, await this.pause(guildId));
           return;
         case 'resume':
-          await textChannel.send(await this.resume(guildId));
+          await this.updateInteractionResponse(interaction, await this.resume(guildId));
           return;
         case 'queue':
-          await textChannel.send(this.getQueueMessage(guildId));
+          await this.updateInteractionResponse(interaction, this.getQueueMessage(guildId));
           return;
         case 'nowplaying':
-          await textChannel.send(this.getNowPlayingMessage(guildId));
+          await this.updateInteractionResponse(interaction, this.getNowPlayingMessage(guildId));
           return;
       }
     } catch (error) {
       logger.error('Music interaction failed', error as Error);
-      try {
-        const channel = await client.channels.fetch(textChannelId);
-        if (channel instanceof TextChannel) {
-          await channel.send(this.formatMusicError(error));
+      await this.updateInteractionResponse(interaction, this.formatMusicError(error));
+    }
+  }
+
+  private async updateInteractionResponse(interaction: any, content: string): Promise<void> {
+    const applicationId = interaction.application_id;
+    const token = interaction.token;
+
+    if (!applicationId || !token) {
+      logger.warn('Cannot update Discord interaction response without application_id and token');
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://discord.com/api/v10/webhooks/${applicationId}/${token}/messages/@original`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
         }
-      } catch {
-        // Ignore secondary Discord send failures.
+      );
+
+      if (!response.ok) {
+        logger.warn(`Failed to update Discord interaction response: ${response.status} ${response.statusText}`);
       }
+    } catch (error) {
+      logger.error('Failed to update Discord interaction response', error as Error);
     }
   }
 
