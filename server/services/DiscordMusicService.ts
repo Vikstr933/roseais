@@ -368,6 +368,9 @@ export class DiscordMusicService {
     } catch (error) {
       logger.error(`Failed to play track ${next.title}`, error as Error);
       state.current = undefined;
+      if (this.isYouTubeBotCheckError(error)) {
+        throw new Error(this.getYouTubeBotCheckMessage());
+      }
       if (this.isYouTubeRateLimitError(error)) {
         throw new Error(this.getYouTubeRateLimitMessage());
       }
@@ -462,11 +465,13 @@ export class DiscordMusicService {
 
   private async searchYouTube(query: string, requestedBy: string, sourceQuery: string): Promise<MusicTrack> {
     const results = await this.searchYouTubeResults(query, 10);
-    const first = results?.find((result) => this.getPlayableYouTubeUrl(result));
+    const first = results?.find((result) =>
+      this.getPlayableYouTubeUrl(result) && this.scoreMusicSearchResult(result, query) > 0
+    );
     const url = this.getPlayableYouTubeUrl(first);
 
     if (!first || !url) {
-      throw new Error(`Hittade ingen spelbar låt för "${query}".`);
+      throw new Error(`Hittade ingen relevant låt för "${query}". Testa artist + låtnamn, en Spotify-länk eller välj rätt låt i dropdownen.`);
     }
 
     return {
@@ -515,6 +520,7 @@ export class DiscordMusicService {
     }
 
     return results
+      .filter((result) => this.scoreMusicSearchResult(result, query) > 0)
       .sort((a, b) => this.scoreMusicSearchResult(b, query) - this.scoreMusicSearchResult(a, query))
       .slice(0, limit);
   }
@@ -554,7 +560,7 @@ export class DiscordMusicService {
 
     if (title.includes(normalizedQuery.replace(/\s*[-–—]\s*/g, ' '))) score += 20;
     if (/\bofficial\b|\baudio\b|\blyrics?\b|\bmusic video\b|\btopic\b|\bprovided to youtube\b/i.test(combined)) score += 12;
-    if (/\bassembly\b|\breview\b|\btutorial\b|\bunboxing\b|\bmanual\b|\bhow to\b|\binstallation\b|\bguide\b|\bbaby\b|\bstroller\b|\b4\s*in\s*1\b|\beng\b/i.test(combined)) score -= 40;
+    if (/\bassembly\b|\breview\b|\btutorial\b|\bunboxing\b|\bmanual\b|\bhow to\b|\binstallation\b|\bguide\b|\bbaby\b|\bstroller\b|\b4\s*in\s*1\b|\beng\b/i.test(combined)) score -= 60;
     if (result?.durationInSec && result.durationInSec > 45 && result.durationInSec < 900) score += 8;
     if (result?.live || result?.upcoming) score -= 20;
 
@@ -750,6 +756,9 @@ export class DiscordMusicService {
   }
 
   private formatMusicError(error: unknown): string {
+    if (this.isYouTubeBotCheckError(error)) {
+      return `❌ ${this.getYouTubeBotCheckMessage()}`;
+    }
     if (this.isYouTubeRateLimitError(error)) {
       return `❌ ${this.getYouTubeRateLimitMessage()}`;
     }
@@ -762,8 +771,17 @@ export class DiscordMusicService {
     return /\b429\b|too many requests|rate.?limit/i.test(message);
   }
 
+  private isYouTubeBotCheckError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /sign in to confirm|not a bot|confirm you.?re not a bot|unusual traffic/i.test(message);
+  }
+
   private getYouTubeRateLimitMessage(): string {
     return 'YouTube rate-limitade servern (429), så jag kunde inte hämta ljudet. Lägg till PLAY_DL_YOUTUBE_COOKIE eller YOUTUBE_COOKIE i backendens env, eller testa igen om en stund.';
+  }
+
+  private getYouTubeBotCheckMessage(): string {
+    return 'YouTube kräver bot-verifiering för servern, så jag kunde inte hämta ljudet. Testa en färsk PLAY_DL_YOUTUBE_COOKIE från ett separat YouTube-konto; om det fortsätter behövs Lavalink med youtube-source OAuth/poToken.';
   }
 
   private installUnhandledRejectionHandler(): void {
@@ -773,6 +791,10 @@ export class DiscordMusicService {
     process.on('unhandledRejection', (reason) => {
       if (this.isYouTubeRateLimitError(reason)) {
         logger.warn(`Suppressed play-dl YouTube rate limit rejection: ${reason instanceof Error ? reason.message : String(reason)}`);
+        return;
+      }
+      if (this.isYouTubeBotCheckError(reason)) {
+        logger.warn(`Suppressed play-dl YouTube bot-check rejection: ${reason instanceof Error ? reason.message : String(reason)}`);
         return;
       }
       logger.error('Unhandled promise rejection in Discord music service', reason instanceof Error ? reason : new Error(String(reason)));
